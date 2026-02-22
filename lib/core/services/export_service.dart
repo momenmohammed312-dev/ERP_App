@@ -1724,6 +1724,94 @@ class ExportService {
     );
   }
 
+  /// Export expenses to Excel
+  static Future<void> exportExpensesToExcel(
+    List<Expense> expenses, {
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      debugPrint('Starting expenses export to Excel...');
+
+      // Create Excel file
+      final excel = Excel.createExcel();
+      final sheet = excel['المصروفات'];
+
+      // Add headers
+      final headers = ['التاريخ', 'الوصف', 'التصنيف', 'المبلغ', 'ملاحظات'];
+
+      for (int i = 0; i < headers.length; i++) {
+        sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0))
+            .value = TextCellValue(
+          headers[i],
+        );
+      }
+
+      // Add data
+      for (int i = 0; i < expenses.length; i++) {
+        final expense = expenses[i];
+        sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: i + 1))
+            .value = TextCellValue(
+          DateFormat('yyyy-MM-dd HH:mm').format(expense.date),
+        );
+        sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: i + 1))
+            .value = TextCellValue(
+          expense.description,
+        );
+        sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: i + 1))
+            .value = TextCellValue(
+          expense.category,
+        );
+        sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: i + 1))
+            .value = DoubleCellValue(
+          expense.amount,
+        );
+        sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: i + 1))
+            .value = TextCellValue(
+          expense.notes ?? '',
+        );
+      }
+
+      // Add summary row
+      final totalRow = expenses.length + 2;
+      final totalAmount = expenses.fold<double>(
+        0.0,
+        (sum, expense) => sum + expense.amount,
+      );
+
+      sheet
+          .cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: totalRow))
+          .value = TextCellValue(
+        'الإجمالي:',
+      );
+      sheet
+          .cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: totalRow))
+          .value = DoubleCellValue(
+        totalAmount,
+      );
+
+      // Save file
+      final directory = await getApplicationDocumentsDirectory();
+      final fileName =
+          'expenses_report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx';
+      final file = File('${directory.path}/$fileName');
+
+      final fileBytes = excel.save();
+      await file.writeAsBytes(fileBytes!);
+
+      debugPrint('Expenses exported successfully to: ${file.path}');
+    } catch (e) {
+      debugPrint('Error exporting expenses to Excel: $e');
+      rethrow;
+    }
+  }
+
   pw.Widget _buildTableHeader(String text, pw.Font? font) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(5),

@@ -43,8 +43,6 @@ dependencies:
   flutter_riverpod: ^2.6.1
   hooks_riverpod: ^2.6.1
   shared_preferences: ^2.3.2
-  integration_test:
-    sdk: flutter
   http: ^1.6.0
   mobile_scanner: ^5.2.3
   uuid: ^4.5.1
@@ -59,11 +57,17 @@ dependencies:
   platform_device_id: ^1.0.1
   
   # Secure Storage
-  flutter_secure_storage: ^9.0.0
+  flutter_secure_storage: ^9.2.2
   
-  # Auto-Updater
+  # Firebase for Activation
+  firebase_core: ^3.10.1
+  cloud_firestore: ^5.6.0
+  firebase_auth: ^5.4.1
+  firebase_storage: ^12.4.1
+
+  # Dio for HTTP requests
   dio: ^5.4.0
-  
+
   # State Management (if not exists)
   get: ^4.6.6
   
@@ -71,6 +75,9 @@ dependencies:
   provider: ^6.1.2
   collection: ^1.19.0
   archive: ^3.6.1
+  
+  # Admin Dashboard Charts
+  fl_chart: ^0.69.2
 
 dev_dependencies:
   flutter_test:
@@ -80,6 +87,8 @@ dev_dependencies:
 
   flutter_lints: ^6.0.0
   test: ^1.26.2
+  integration_test:
+    sdk: flutter
 
 
 flutter: 
@@ -88,9 +97,8 @@ flutter:
 
   assets:
     - assets/logo/
-    - assets/logo/app_logo.png
     - assets/recipt/
-    - assets/recipt/recipt logo.png
+    - assets/recipt/recipt_logo.png
     - assets/svg/
 
   fonts:

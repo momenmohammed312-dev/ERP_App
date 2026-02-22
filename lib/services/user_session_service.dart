@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'license_manager.dart';
 import 'audit_service.dart';
+import '../core/database/database_singleton.dart';
 
 class UserSessionService {
   static const String _activeSessionsKey = 'active_user_sessions';
@@ -90,6 +91,8 @@ class UserSessionService {
     String? deviceId,
   }) async {
     try {
+      final db = await DatabaseSingleton.getInstance();
+
       final prefs = await SharedPreferences.getInstance();
       final activeSessions = await getActiveSessions();
 
@@ -116,6 +119,7 @@ class UserSessionService {
 
       // Log the login
       await AuditService.log(
+        db: db,
         userId: int.tryParse(userId) ?? 0,
         action: AuditAction.login,
         tableName: 'users',
@@ -154,6 +158,8 @@ class UserSessionService {
   /// Logout a user session
   static Future<void> logoutUser(String userId) async {
     try {
+      final db = await DatabaseSingleton.getInstance();
+
       final activeSessions = await getActiveSessions();
       activeSessions.removeWhere((session) => session['userId'] == userId);
       await _saveActiveSessions(activeSessions);
@@ -164,6 +170,7 @@ class UserSessionService {
 
       // Log the logout
       await AuditService.log(
+        db: db,
         userId: int.tryParse(userId) ?? 0,
         action: AuditAction.logout,
         tableName: 'users',
@@ -255,6 +262,8 @@ class UserSessionService {
   /// Clean up expired sessions (older than 24 hours)
   static Future<void> _cleanupExpiredSessions() async {
     try {
+      final db = await DatabaseSingleton.getInstance();
+
       final activeSessions = await getActiveSessions();
       final now = DateTime.now();
       final cutoff = now.subtract(const Duration(hours: 24));
@@ -270,6 +279,7 @@ class UserSessionService {
           } else {
             // Log expired session removal
             await AuditService.log(
+              db: db,
               userId: int.tryParse(session['userId'] ?? '') ?? 0,
               action: AuditAction.logout,
               tableName: 'users',

@@ -1,4 +1,6 @@
 // ignore: depend_on_referenced_packages
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'package:desktop_window/desktop_window.dart';
@@ -12,14 +14,23 @@ import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/services/anti_tamper_service.dart';
 import 'package:pos_offline_desktop/services/integrity_checker.dart';
 import 'package:pos_offline_desktop/services/user_session_service.dart';
-import 'package:pos_offline_desktop/services/auto_backup_trigger.dart';
+import 'package:pos_offline_desktop/services/user_backup_service.dart';
 import 'package:pos_offline_desktop/screens/license/activation_screen.dart';
 import 'package:pos_offline_desktop/screens/license/activation_success_screen.dart';
 import 'package:pos_offline_desktop/screens/license/license_info_screen.dart';
 import 'package:pos_offline_desktop/screens/license/tamper_detected_screen.dart';
 
+// import 'package:firebase_core/firebase_core.dart';
+// import 'firebase_options.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // // Initialize Firebase
+  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Check for clock tampering FIRST
   final isTampered = await AntiTamperService.detectClockTampering();
@@ -36,9 +47,15 @@ void main() async {
   // Start background services
   UserSessionService.startSessionCleanup();
   IntegrityChecker.startPeriodicCheck();
-  AutoBackupTrigger.start();
+  AutoBackupService.start();
 
-  await DesktopWindow.setMinWindowSize(const Size(800, 800));
+  if (!kIsWeb) {
+    try {
+      await DesktopWindow.setMinWindowSize(const Size(800, 800));
+    } catch (e) {
+      // Desktop window not supported on this platform
+    }
+  }
 
   // Show splash screen first, then navigate based on license status
   runApp(ProviderScope(child: MyApp(isLicenseValid: isLicenseValid)));
@@ -62,14 +79,14 @@ class MyApp extends ConsumerWidget {
       ],
       theme: AppTheme.getLightTheme().copyWith(
         textTheme: AppTheme.getLightTheme().textTheme.apply(
-          fontFamily: 'Arabic',
+          fontFamily: 'NotoSansArabic',
           bodyColor: Colors.white,
           displayColor: Colors.white,
         ),
       ),
       darkTheme: AppTheme.getDarkTheme().copyWith(
         textTheme: AppTheme.getDarkTheme().textTheme.apply(
-          fontFamily: 'Arabic',
+          fontFamily: 'NotoSansArabic',
           bodyColor: Colors.white,
           displayColor: Colors.white,
         ),
@@ -106,19 +123,7 @@ class MyApp extends ConsumerWidget {
           path: '/tamper-detected',
           builder: (context, state) => TamperDetectedScreen(),
         ),
-        GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
       ],
-    );
-  }
-}
-
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: Text('Home Screen - License Valid')),
     );
   }
 }

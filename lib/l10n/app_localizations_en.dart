@@ -955,4 +955,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get payable_label => 'Payable / علينا';
+
+  @override
+  String get export_success => 'Export completed successfully';
+
+  @override
+  String get export_error => 'Export error';
 }

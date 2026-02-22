@@ -20,11 +20,11 @@ dart run test/quick_test_license.dart
 dart run test/test_data_generator.dart
 ```
 ينشئ ملفات JSON للبيانات:
-- `test_products.json` - 50 منتج اختبار
-- `test_customers.json` - 30 عميل اختبار
-- `test_suppliers.json` - 20 مورد اختبار
-- `test_sales_invoices.json` - 25 فاتورة مبيعات
-- `test_purchase_invoices.json` - 15 فاتورة مشتريات
+- `test/fixtures/test_products.json` - 50 منتج اختبار
+- `test/fixtures/test_customers.json` - 30 عميل اختبار
+- `test/fixtures/test_suppliers.json` - 20 مورد اختبار
+- `test/fixtures/test_sales_invoices.json` - 25 فاتورة مبيعات
+- `test/fixtures/test_purchase_invoices.json` - 15 فاتورة مشتريات
 
 ### 3. `quick_test_runner.dart`
 مشغل اختبارات سريع
@@ -37,7 +37,7 @@ dart run test/quick_test_runner.dart
 
 1. **إنشاء تراخيص الاختبار:**
    ```bash
-   dart run test/quick_test_license.dart
+   dart run tools/licensing/quick_test_license.dart
    ```
 
 2. **إنشاء بيانات الاختبار:**

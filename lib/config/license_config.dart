@@ -22,89 +22,81 @@ class LicenseConfig {
 
   // Available features
   static const List<String> availableFeatures = [
-    'pos', // Point of Sale
-    'inventory', // Inventory Management
+    'cash_sales', // Cash sales only
+    'credit_sales', // Credit sales for customers
     'customers', // Customer Management
     'suppliers', // Supplier Management
-    'reports', // Reports & Analytics
-    'accounting', // Accounting Module
-    'users', // User Management
+    'purchases', // Purchase/Supply management
+    'inventory', // Inventory Management
+    'reports', // Basic Reports
+    'advanced_reports', // Advanced Reports & Analytics
     'backup', // Backup & Restore
-    'export', // Data Export
-    'admin', // Administrator privileges
+    'auto_backup', // Automatic backup
+    'staff_management', // Staff management (Enterprise only)
+    'attendance', // Attendance system
+    'payroll', // Payroll and salaries
+    'admin_dashboard', // Admin dashboard web
+    'api_access', // API for integration
   ];
 
-  // License types with user limits
+  // License types with 3 packages as per updated plan
   static const Map<String, Map<String, dynamic>> licenseTypes = {
     'basic': {
       'name': 'Basic',
+      'name_arabic': 'أساسي',
       'max_users': 1,
-      'features': ['pos', 'inventory', 'customers', 'reports', 'backup'],
-      'price': 500,
+      'features': ['cash_sales', 'inventory', 'reports', 'backup'],
+      'price': 250,
+      'description': 'فواتير نقدية فقط + مخزون بسيط',
+      'description_arabic': 'فواتير نقدية فقط + مخزون بسيط',
+      'ideal_for': 'محل صغير، خضروات، كشك',
+      'ideal_for_arabic': 'محل صغير، خضروات، كشك',
     },
     'standard': {
       'name': 'Standard',
-      'max_users': 3,
+      'name_arabic': 'قياسي',
+      'max_users': 1,
       'features': [
-        'pos',
-        'inventory',
+        'cash_sales',
+        'credit_sales',
         'customers',
         'suppliers',
+        'purchases',
+        'inventory',
         'reports',
-        'backup',
-        'export',
+        'advanced_reports',
+        'auto_backup',
       ],
-      'price': 1500,
+      'price': 400,
+      'description': 'عملاء + موردين + مشتريات + تقارير',
+      'description_arabic': 'عملاء + موردين + مشتريات + تقارير',
+      'ideal_for': 'محل متوسط، سوبر ماركت صغير',
+      'ideal_for_arabic': 'محل متوسط، سوبر ماركت صغير',
     },
     'professional': {
       'name': 'Professional',
-      'max_users': 5,
+      'name_arabic': 'احترافي',
+      'max_users': 1,
       'features': [
-        'pos',
-        'inventory',
+        'cash_sales',
+        'credit_sales',
         'customers',
         'suppliers',
-        'reports',
-        'accounting',
-        'users',
-        'backup',
-        'export',
-      ],
-      'price': 3000,
-    },
-    'enterprise': {
-      'name': 'Enterprise',
-      'max_users': 10,
-      'features': [
-        'pos',
+        'purchases',
         'inventory',
-        'customers',
-        'suppliers',
-        'reports',
-        'accounting',
-        'users',
-        'backup',
-        'export',
+        'advanced_reports',
+        'auto_backup',
+        'staff_management',
+        'attendance',
+        'payroll',
+        'admin_dashboard',
+        'api_access',
       ],
-      'price': 7000,
-    },
-    'admin': {
-      'name': 'Administrator',
-      'max_users': 999,
-      'features': [
-        'pos',
-        'inventory',
-        'customers',
-        'suppliers',
-        'reports',
-        'accounting',
-        'users',
-        'backup',
-        'export',
-        'admin',
-      ],
-      'price': 0, // Free for administrators
-      'lifetime': true,
+      'price': 600,
+      'description': 'كل شيء + إدارة موظفين كاملة',
+      'description_arabic': 'كل شيء + إدارة موظفين كاملة',
+      'ideal_for': 'سوبر ماركت كبير، مطعم، محل به موظفين',
+      'ideal_for_arabic': 'سوبر ماركت كبير، مطعم، محل به موظفين',
     },
   };
 

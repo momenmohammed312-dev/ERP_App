@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:drift/drift.dart' hide Column;
+import 'package:drift/drift.dart' as drift hide Column;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 
 class CustomersSummaryWidget extends ConsumerWidget {
@@ -125,13 +125,13 @@ class CustomersSummaryWidget extends ConsumerWidget {
 
           // Get transactions for this month to calculate paid amount
           final monthlyTransactions =
-              await (db.select(db.ledgerTransactions)..where(
-                    (t) =>
-                        (t.entityType.equals('Customer') &
-                        t.refId.equals(customer.id) &
-                        t.date.isBiggerOrEqualValue(currentMonthStart) &
-                        t.credit.isBiggerThanValue(0)),
-                  ))
+              await (db.select(db.ledgerTransactions)
+                    ..where((t) => t.entityType.equals('Customer'))
+                    ..where((t) => t.refId.equals(customer.id))
+                    ..where(
+                      (t) => t.date.isBetweenValues(currentMonthStart, now),
+                    )
+                    ..where((t) => t.credit.isBiggerThanValue(0.0)))
                   .get();
 
           for (final transaction in monthlyTransactions) {

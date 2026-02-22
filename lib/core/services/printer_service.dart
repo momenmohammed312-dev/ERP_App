@@ -1025,6 +1025,267 @@ class PrinterService {
     ).format(amount);
   }
 
+  /// Print expenses report
+  static Future<void> printExpensesReport(
+    Map<String, dynamic> reportData,
+  ) async {
+    try {
+      debugPrint('Printing expenses report...');
+
+      final pdf = pw.Document();
+      await _loadFonts();
+      final arabicFont = _arabicFont ?? pw.Font.helvetica();
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(20),
+          textDirection: pw.TextDirection.rtl,
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // Header
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.black),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      pw.Text(
+                        reportData['title'] ?? 'تقرير المصروفات',
+                        style: pw.TextStyle(
+                          font: _arabicFont,
+                          fontSize: 18,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                        textDirection: pw.TextDirection.rtl,
+                        textAlign: pw.TextAlign.center,
+                      ),
+                      pw.SizedBox(height: 5),
+                      pw.Text(
+                        reportData['period'] ?? '',
+                        style: pw.TextStyle(font: _arabicFont, fontSize: 12),
+                        textDirection: pw.TextDirection.rtl,
+                        textAlign: pw.TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 20),
+
+                // Summary
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.black),
+                  ),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(
+                        'الإجمالي:',
+                        style: pw.TextStyle(
+                          font: _arabicFont,
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                        textDirection: pw.TextDirection.rtl,
+                      ),
+                      pw.Text(
+                        _formatCurrency(reportData['total'] ?? 0.0),
+                        style: pw.TextStyle(
+                          font: _arabicFont,
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.red,
+                        ),
+                        textDirection: pw.TextDirection.rtl,
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 20),
+
+                // Expenses Table
+                pw.Container(
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.black),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      // Table Header
+                      pw.Container(
+                        padding: const pw.EdgeInsets.all(8),
+                        decoration: const pw.BoxDecoration(
+                          color: PdfColors.grey300,
+                        ),
+                        child: pw.Row(
+                          children: [
+                            pw.Expanded(
+                              flex: 2,
+                              child: pw.Text(
+                                'التاريخ',
+                                style: pw.TextStyle(
+                                  font: _arabicFont,
+                                  fontSize: 10,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                                textDirection: pw.TextDirection.rtl,
+                              ),
+                            ),
+                            pw.Expanded(
+                              flex: 3,
+                              child: pw.Text(
+                                'الوصف',
+                                style: pw.TextStyle(
+                                  font: _arabicFont,
+                                  fontSize: 10,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                                textDirection: pw.TextDirection.rtl,
+                              ),
+                            ),
+                            pw.Expanded(
+                              flex: 2,
+                              child: pw.Text(
+                                'التصنيف',
+                                style: pw.TextStyle(
+                                  font: _arabicFont,
+                                  fontSize: 10,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                                textDirection: pw.TextDirection.rtl,
+                              ),
+                            ),
+                            pw.Expanded(
+                              flex: 2,
+                              child: pw.Text(
+                                'المبلغ',
+                                style: pw.TextStyle(
+                                  font: _arabicFont,
+                                  fontSize: 10,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                                textDirection: pw.TextDirection.rtl,
+                                textAlign: pw.TextAlign.left,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Table Data
+                      ...((reportData['expenses'] as List<dynamic>?) ?? []).map(
+                        (expense) => pw.Container(
+                          padding: const pw.EdgeInsets.all(8),
+                          decoration: pw.BoxDecoration(
+                            border: pw.Border(
+                              bottom: pw.BorderSide(color: PdfColors.grey300),
+                            ),
+                          ),
+                          child: pw.Row(
+                            children: [
+                              pw.Expanded(
+                                flex: 2,
+                                child: pw.Text(
+                                  expense['date'] ?? '',
+                                  style: pw.TextStyle(
+                                    font: _arabicFont,
+                                    fontSize: 9,
+                                  ),
+                                  textDirection: pw.TextDirection.rtl,
+                                ),
+                              ),
+                              pw.Expanded(
+                                flex: 3,
+                                child: pw.Text(
+                                  expense['description'] ?? '',
+                                  style: pw.TextStyle(
+                                    font: _arabicFont,
+                                    fontSize: 9,
+                                  ),
+                                  textDirection: pw.TextDirection.rtl,
+                                ),
+                              ),
+                              pw.Expanded(
+                                flex: 2,
+                                child: pw.Text(
+                                  expense['category'] ?? '',
+                                  style: pw.TextStyle(
+                                    font: _arabicFont,
+                                    fontSize: 9,
+                                  ),
+                                  textDirection: pw.TextDirection.rtl,
+                                ),
+                              ),
+                              pw.Expanded(
+                                flex: 2,
+                                child: pw.Text(
+                                  _formatCurrency(
+                                    (expense['amount'] ?? 0.0).toDouble(),
+                                  ),
+                                  style: pw.TextStyle(
+                                    font: _arabicFont,
+                                    fontSize: 9,
+                                    color: PdfColors.red,
+                                  ),
+                                  textDirection: pw.TextDirection.rtl,
+                                  textAlign: pw.TextAlign.left,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 30),
+
+                // Footer
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(10),
+                  child: pw.Column(
+                    children: [
+                      pw.Text(
+                        'تم الطباعة في: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())}',
+                        style: pw.TextStyle(font: _arabicFont, fontSize: 10),
+                        textDirection: pw.TextDirection.rtl,
+                      ),
+                      pw.SizedBox(height: 5),
+                      pw.Text(
+                        'Developed by MO2',
+                        style: pw.TextStyle(
+                          font: _arabicFont,
+                          fontSize: 10,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                        textDirection: pw.TextDirection.rtl,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      // Print the PDF
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) => pdf.save(),
+        name:
+            'expenses_report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf',
+      );
+
+      debugPrint('Expenses report printed successfully');
+    } catch (e) {
+      debugPrint('Error printing expenses report: $e');
+      rethrow;
+    }
+  }
+
   // Print duplicate invoice using UnifiedPrintService
   static Future<void> printDuplicateInvoice({
     required Map<String, dynamic> invoice,

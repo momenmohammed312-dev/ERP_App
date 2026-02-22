@@ -13,7 +13,7 @@ import 'dart:io';
 /// NO EXCEPTIONS - Every export must use this service
 class UnifiedPrintService {
   static const String _branding = 'Developed by MO2';
-  static const String _logoAssetPath = 'assets/recipt/recipt logo.png';
+  static const String _logoAssetPath = 'assets/recipt/recipt_logo.png';
 
   /// 1. GENERATE UNIFIED DOCUMENT
   /// Central method for all document types (Sales, Purchases, Customers, Suppliers)

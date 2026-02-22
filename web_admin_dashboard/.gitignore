@@ -1,0 +1,29 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Web
+# /web/ - Commented out to allow web folder access
+/build/web/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.ipr
+
+# OS
+Thumbs.db
+ehthumbs.db

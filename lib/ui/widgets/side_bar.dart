@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
 import 'package:pos_offline_desktop/ui/pages/sidebar_page.dart';
-import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
+import 'package:pos_offline_desktop/widgets/permission_guard.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
+import '../../services/feature_gate_service.dart';
 
 class SideBarMenu extends StatelessWidget {
   final SideBarPage selectedPage;
@@ -18,32 +20,50 @@ class SideBarMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        // الرئيسية - متاحة للجميع
         _buildMenuItem(
           context,
           svgAssetPath: 'assets/svg/house.svg',
           title: context.l10n.home,
           page: SideBarPage.home,
         ),
-        _buildMenuItem(
-          context,
-          svgAssetPath: 'assets/svg/product.svg',
-          title: context.l10n.products,
-          page: SideBarPage.products,
+
+        // المنتجات - يتطلب صلاحية عرض المنتجات
+        PermissionGuard(
+          permission: Permission.viewProducts,
+          child: _buildMenuItem(
+            context,
+            svgAssetPath: 'assets/svg/product.svg',
+            title: context.l10n.products,
+            page: SideBarPage.products,
+          ),
         ),
-        _buildMenuItem(
-          context,
-          svgAssetPath: 'assets/svg/customer.svg',
-          title: context.l10n.customers,
-          page: SideBarPage.customers,
+
+        // العملاء - يتطلب صلاحية عرض العملاء
+        PermissionGuard(
+          permission: Permission.viewCustomers,
+          child: _buildMenuItem(
+            context,
+            svgAssetPath: 'assets/svg/customer.svg',
+            title: context.l10n.customers,
+            page: SideBarPage.customers,
+          ),
         ),
-        _buildMenuItem(
-          context,
-          svgAssetPath: 'assets/svg/invoice.svg',
-          title: context.l10n.sales_and_invoices,
-          page: SideBarPage.invoice,
+
+        // المبيعات والفواتير - يتطلب صلاحية عرض المبيعات
+        PermissionGuard(
+          permission: Permission.viewSales,
+          child: _buildMenuItem(
+            context,
+            svgAssetPath: 'assets/svg/invoice.svg',
+            title: context.l10n.sales_and_invoices,
+            page: SideBarPage.invoice,
+          ),
         ),
-        FeatureGuard(
-          featureName: 'suppliers',
+
+        // الموردين - يتطلب صلاحية عرض الموردين
+        PermissionGuard(
+          permission: Permission.viewSuppliers,
           child: _buildMenuItem(
             context,
             svgAssetPath: 'assets/svg/customer.svg',
@@ -51,8 +71,10 @@ class SideBarMenu extends StatelessWidget {
             page: SideBarPage.suppliers,
           ),
         ),
-        FeatureGuard(
-          featureName: 'suppliers',
+
+        // المشتريات - يتطلب صلاحية عرض المشتريات
+        PermissionGuard(
+          permission: Permission.viewPurchases,
           child: _buildMenuItem(
             context,
             svgAssetPath: 'assets/svg/graph.svg',
@@ -60,8 +82,10 @@ class SideBarMenu extends StatelessWidget {
             page: SideBarPage.purchases,
           ),
         ),
-        FeatureGuard(
-          featureName: 'reports',
+
+        // التقارير - يتطلب صلاحية عرض التقارير
+        PermissionGuard(
+          permission: Permission.viewReports,
           child: _buildMenuItem(
             context,
             svgAssetPath: 'assets/svg/graph.svg',
@@ -69,11 +93,68 @@ class SideBarMenu extends StatelessWidget {
             page: SideBarPage.reports,
           ),
         ),
+
+        // الكاشير - يتطلب صلاحية عرض المبيعات
+        PermissionGuard(
+          permission: Permission.viewSales,
+          child: _buildMenuItem(
+            context,
+            svgAssetPath: 'assets/svg/customer.svg',
+            title: context.l10n.cashier,
+            page: SideBarPage.cashier,
+          ),
+        ),
+
+        // إدارة المستخدمين - يتطلب صلاحية عرض المستخدمين
+        PermissionGuard(
+          permission: Permission.viewUsers,
+          child: _buildMenuItem(
+            context,
+            svgAssetPath: 'assets/svg/admin_panel_settings.svg',
+            title: 'إدارة المستخدمين',
+            page: SideBarPage.users,
+          ),
+        ),
+
+        // إدارة الموظفين - يتطلب باقة Enterprise
+        ConditionalWidget(
+          feature: 'staff_management',
+          child: _buildMenuItem(
+            context,
+            svgAssetPath: 'assets/svg/people.svg',
+            title: 'الموظفين',
+            page: SideBarPage.staff,
+          ),
+        ),
+
+        // الإعدادات - يتطلب صلاحية عرض الإعدادات
+        PermissionGuard(
+          permission: Permission.viewSettings,
+          child: _buildMenuItem(
+            context,
+            svgAssetPath: 'assets/svg/settings.svg',
+            title: 'الإعدادات',
+            page: SideBarPage.settings,
+          ),
+        ),
+
+        // النسخ الاحتياطي - متاحة للجميع
         _buildMenuItem(
           context,
-          svgAssetPath: 'assets/svg/customer.svg',
-          title: context.l10n.cashier,
-          page: SideBarPage.cashier,
+          svgAssetPath: 'assets/svg/backup.svg',
+          title: 'النسخ الاحتياطي',
+          page: SideBarPage.backup,
+        ),
+
+        // لوحة تحكم المدير - تتطلب صلاحية إدارية
+        PermissionGuard(
+          permission: Permission.viewUsers,
+          child: _buildMenuItem(
+            context,
+            svgAssetPath: 'assets/svg/admin_panel_settings.svg',
+            title: 'لوحة التحكم',
+            page: SideBarPage.admin,
+          ),
         ),
       ],
     );

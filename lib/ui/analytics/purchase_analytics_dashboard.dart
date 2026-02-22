@@ -40,14 +40,13 @@ class _PurchaseAnalyticsDashboardScreenState
       });
     } catch (e) {
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ في تحميل البيانات: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ في تحميل البيانات: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -593,82 +592,88 @@ class _PurchaseAnalyticsDashboardScreenState
                       ),
                     ),
                   ]
-                : topSuppliers.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final supplier = entry.value;
-                    final stats = supplier.value;
+                : topSuppliers
+                      .whereType<MapEntry<String, Map<String, dynamic>>>()
+                      .toList()
+                      .asMap()
+                      .entries
+                      .map((entry) {
+                        final index = entry.key;
+                        final supplier = entry.value;
+                        final stats = supplier.value;
 
-                    return Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: Row(
-                        children: [
-                          // Rank
-                          Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: _getRankColor(index),
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${index + 1}',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 12),
-
-                          // Supplier Name
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  supplier.key,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Text(
-                                  '${stats['count']} فواتير',
-                                  style: TextStyle(
-                                    color: Colors.grey[400],
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Total Amount
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                        return Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: Row(
                             children: [
-                              Text(
-                                '${stats['total'].toStringAsFixed(0)} ج.م',
-                                style: TextStyle(
-                                  color: Colors.purple,
-                                  fontWeight: FontWeight.bold,
+                              // Rank
+                              Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: _getRankColor(index),
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ),
-                              Text(
-                                'متوسط: ${stats['average'].toStringAsFixed(0)} ج.م',
-                                style: TextStyle(
-                                  color: Colors.grey[400],
-                                  fontSize: 12,
+                              SizedBox(width: 12),
+
+                              // Supplier Name
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      supplier.key,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${stats['count']} فواتير',
+                                      style: TextStyle(
+                                        color: Colors.grey[400],
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
                                 ),
+                              ),
+
+                              // Total Amount
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '${stats['total'].toStringAsFixed(0)} ج.م',
+                                    style: TextStyle(
+                                      color: Colors.purple,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    'متوسط: ${stats['average'].toStringAsFixed(0)} ج.م',
+                                    style: TextStyle(
+                                      color: Colors.grey[400],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+                        );
+                      })
+                      .toList(),
           ),
         ),
       ],
@@ -723,6 +728,9 @@ class _PurchaseAnalyticsDashboardScreenState
     String count,
     Color color,
   ) {
+    final safePercent = percentage.isNaN || percentage.isInfinite
+        ? 0.0
+        : (percentage.clamp(0.0, 100.0));
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -740,9 +748,9 @@ class _PurchaseAnalyticsDashboardScreenState
           CircularPercentIndicator(
             radius: 40.0,
             lineWidth: 8.0,
-            percent: percentage / 100,
+            percent: safePercent / 100,
             center: Text(
-              '${percentage.toStringAsFixed(1)}%',
+              '${safePercent.toStringAsFixed(1)}%',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -789,7 +797,8 @@ class CircularPercentIndicator extends StatelessWidget {
   final Widget center;
   final Color progressColor;
 
-  const CircularPercentIndicator({super.key, 
+  const CircularPercentIndicator({
+    super.key,
     required this.radius,
     required this.lineWidth,
     required this.percent,

@@ -3,9 +3,8 @@ import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 
 class DatabaseEncryptionService {
   static final _key = encrypt_pkg.Key.fromUtf8(
-    'POS2026-DB-ENCRYPTION-32-CHARS!!', // Exactly 32 characters
+    'POS2026-PROD-ENCRYPT-32-SECURE!!', // Production encryption key
   );
-  static final _iv = encrypt_pkg.IV.fromLength(16);
   static final _encrypter = encrypt_pkg.Encrypter(
     encrypt_pkg.AES(_key, mode: encrypt_pkg.AESMode.cbc),
   );
@@ -13,8 +12,10 @@ class DatabaseEncryptionService {
   /// Encrypt sensitive data
   static String encryptData(String plainText) {
     try {
-      final encrypted = _encrypter.encrypt(plainText, iv: _iv);
-      return encrypted.base64;
+      final iv = encrypt_pkg.IV.fromSecureRandom(16);
+      final encrypted = _encrypter.encrypt(plainText, iv: iv);
+      final combined = iv.bytes + encrypted.bytes;
+      return base64Encode(combined);
     } catch (e) {
       throw Exception('Encryption failed: $e');
     }
@@ -23,8 +24,12 @@ class DatabaseEncryptionService {
   /// Decrypt data
   static String decryptData(String encryptedText) {
     try {
-      final encrypted = encrypt_pkg.Encrypted.fromBase64(encryptedText);
-      return _encrypter.decrypt(encrypted, iv: _iv);
+      final combined = base64Decode(encryptedText);
+      final ivBytes = combined.sublist(0, 16);
+      final encryptedBytes = combined.sublist(16);
+      final iv = encrypt_pkg.IV(ivBytes);
+      final encrypted = encrypt_pkg.Encrypted(encryptedBytes);
+      return _encrypter.decrypt(encrypted, iv: iv);
     } catch (e) {
       throw Exception('Decryption failed: $e');
     }

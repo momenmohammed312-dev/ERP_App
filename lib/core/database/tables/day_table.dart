@@ -9,7 +9,4 @@ class Days extends Table {
   TextColumn get notes => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get closedAt => dateTime().nullable()();
-
-  @override
-  Set<Column> get primaryKey => {id};
 }

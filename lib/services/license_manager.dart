@@ -1,192 +1,364 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:crypto/crypto.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/foundation.dart';
-import '../config/license_config.dart';
-import '../models/license_model.dart';
-import 'hardware_fingerprint_service.dart';
-import 'anti_tamper_service.dart';
+import 'package:encrypt/encrypt.dart' as encrypt_pkg;
+
+enum LicenseType {
+  trial, // تجريبي - 7 أيام - مستخدم واحد
+  basic, // أساسي - مستخدم واحد
+  standard, // قياسي - 3 مستخدمين
+  professional, // احترافي - 5 مستخدمين
+  enterprise, // مؤسسي - 10 مستخدمين
+}
+
+class License {
+  final String licenseKey;
+  final String deviceFingerprint;
+  final LicenseType type;
+  final DateTime issueDate;
+  final DateTime expiryDate;
+  final List<String> features;
+  final int maxUsers;
+  final String companyName;
+  final String contactEmail;
+
+  License({
+    required this.licenseKey,
+    required this.deviceFingerprint,
+    required this.type,
+    required this.issueDate,
+    required this.expiryDate,
+    required this.features,
+    required this.maxUsers,
+    required this.companyName,
+    required this.contactEmail,
+  });
+
+  bool get isExpired => DateTime.now().isAfter(expiryDate);
+  bool get isValid => !isExpired;
+
+  int get daysRemaining {
+    if (isExpired) return 0;
+    return expiryDate.difference(DateTime.now()).inDays;
+  }
+
+  String get licenseType => type.toString().split('.').last;
+
+  Map<String, dynamic> toJson() => {
+    'license_key': licenseKey,
+    'device': deviceFingerprint,
+    'type': type.toString().split('.').last,
+    'issue_date': issueDate.toIso8601String(),
+    'expiry': expiryDate.toIso8601String(),
+    'features': features,
+    'max_users': maxUsers,
+    'company_name': companyName,
+    'contact_email': contactEmail,
+  };
+
+  factory License.fromJson(Map<String, dynamic> json) {
+    return License(
+      licenseKey: json['license_key'],
+      deviceFingerprint: json['device'],
+      type: LicenseType.values.firstWhere(
+        (e) => e.toString().split('.').last == json['type'],
+      ),
+      issueDate: DateTime.parse(json['issue_date']),
+      expiryDate: DateTime.parse(json['expiry']),
+      features: List<String>.from(json['features']),
+      maxUsers: json['max_users'],
+      companyName: json['company_name'],
+      contactEmail: json['contact_email'],
+    );
+  }
+}
 
 class LicenseManager {
-  static const String _licenseKey = 'app_license_key';
-  static const String _deviceIdKey = 'device_fingerprint';
-  static const String _activationDateKey = 'activation_date';
+  static const String _storageKey = 'app_license';
+  static const String _secretKey =
+      '56brUU7JWZlH7p61WtPSpzfPjGZDQAAO1faJju4lvjw';
 
-  /// Generate a license key (ADMIN ONLY - Use separate tool)
+  // Singleton
+  static final LicenseManager _instance = LicenseManager._internal();
+  factory LicenseManager() => _instance;
+  LicenseManager._internal();
+
+  // ════════════════════════════════════════════════════════════════════
+  // توليد بصمة الجهاز (Device Fingerprinting)
+  // ════════════════════════════════════════════════════════════════════
+
+  Future<String> generateDeviceFingerprint() async {
+    final deviceInfo = DeviceInfoPlugin();
+    String fingerprint = '';
+
+    try {
+      if (Platform.isWindows) {
+        final windowsInfo = await deviceInfo.windowsInfo;
+        fingerprint =
+            '${windowsInfo.computerName}-'
+            '${windowsInfo.numberOfCores}-'
+            '${windowsInfo.systemMemoryInMegabytes}';
+      } else if (Platform.isLinux) {
+        final linuxInfo = await deviceInfo.linuxInfo;
+        fingerprint = '${linuxInfo.machineId}-${linuxInfo.name}';
+      } else if (Platform.isMacOS) {
+        final macInfo = await deviceInfo.macOsInfo;
+        fingerprint = '${macInfo.systemGUID}-${macInfo.model}';
+      }
+
+      // تشفير البصمة
+      final bytes = utf8.encode(fingerprint);
+      final digest = sha256.convert(bytes);
+      return digest.toString();
+    } catch (e) {
+      throw Exception('فشل في توليد بصمة الجهاز: $e');
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // توليد مفتاح ترخيص (للاستخدام من طرفك فقط)
+  // ════════════════════════════════════════════════════════════════════
+
   String generateLicenseKey({
     required String deviceFingerprint,
-    required DateTime expiryDate,
+    required LicenseType type,
+    required int validityDays,
     required List<String> features,
-    required int maxUsers,
-    required String licenseType,
+    required String companyName,
+    required String contactEmail,
   }) {
+    final now = DateTime.now();
+    final expiry = now.add(Duration(days: validityDays));
+
+    final maxUsers = _getMaxUsersForType(type);
+
     final licenseData = {
       'device': deviceFingerprint,
-      'expiry': expiryDate.toIso8601String(),
+      'type': type.toString().split('.').last,
+      'issue_date': now.toIso8601String(),
+      'expiry': expiry.toIso8601String(),
       'features': features,
       'max_users': maxUsers,
-      'license_type': licenseType,
-      'created': DateTime.now().toIso8601String(),
-      'version': LicenseConfig.appVersion,
+      'company_name': companyName,
+      'contact_email': contactEmail,
+      'version': '1.0',
     };
 
     final jsonString = jsonEncode(licenseData);
-    final bytes = utf8.encode(jsonString);
+    final encryptedData = _encrypt(jsonString);
+    final signature = _generateSignature(encryptedData);
 
-    // Encode with Base64
-    final encoded = base64.encode(bytes);
-
-    // Create HMAC signature
-    final hmacBytes = utf8.encode(LicenseConfig.secretKey);
-    final hmac = Hmac(sha256, hmacBytes);
-    final signature = hmac.convert(utf8.encode(encoded));
-
-    // Return: BASE64_PAYLOAD.SIGNATURE
-    return '$encoded.${signature.toString()}';
+    return '$encryptedData.$signature';
   }
 
-  /// Validate license key
+  // ════════════════════════════════════════════════════════════════════
+  // التحقق من صحة الترخيص
+  // ════════════════════════════════════════════════════════════════════
+
   Future<LicenseValidationResult> validateLicense(String licenseKey) async {
     try {
-      // Split license key
+      // فصل البيانات المشفرة والتوقيع
       final parts = licenseKey.split('.');
       if (parts.length != 2) {
-        return LicenseValidationResult.invalid('Invalid license format');
+        return LicenseValidationResult.invalid('صيغة مفتاح الترخيص غير صحيحة');
       }
 
-      final encoded = parts[0];
+      final encryptedData = parts[0];
       final providedSignature = parts[1];
 
-      // Verify signature
-      final hmacBytes = utf8.encode(LicenseConfig.secretKey);
-      final hmac = Hmac(sha256, hmacBytes);
-      final calculatedSignature = hmac.convert(utf8.encode(encoded));
-
-      if (calculatedSignature.toString() != providedSignature) {
+      // التحقق من التوقيع
+      final calculatedSignature = _generateSignature(encryptedData);
+      if (calculatedSignature != providedSignature) {
         return LicenseValidationResult.invalid(
-          'License signature verification failed',
+          'مفتاح الترخيص غير صحيح (توقيع خاطئ)',
         );
       }
 
-      // Decode payload
-      final jsonString = utf8.decode(base64.decode(encoded));
-      final licenseData = jsonDecode(jsonString) as Map<String, dynamic>;
+      // فك التشفير
+      final decryptedJson = _decrypt(encryptedData);
+      final licenseData = jsonDecode(decryptedJson) as Map<String, dynamic>;
 
-      // Verify device fingerprint
-      final storedFingerprint = licenseData['device'] as String?;
-      if (storedFingerprint == null) {
+      // التحقق من بصمة الجهاز
+      final currentFingerprint = await generateDeviceFingerprint();
+      if (licenseData['device'] != currentFingerprint) {
         return LicenseValidationResult.invalid(
-          'Invalid license format: missing device fingerprint',
+          'هذا الترخيص غير صالح لهذا الجهاز',
         );
       }
 
-      final isDeviceValid = await HardwareFingerprintService.verifyFingerprint(
-        storedFingerprint,
-      );
-
-      if (!isDeviceValid) {
-        return LicenseValidationResult.invalid(
-          'License not valid for this device',
-        );
-      }
-
-      // Check expiry
-      final expiryString = licenseData['expires'] as String?;
-      if (expiryString == null) {
-        return LicenseValidationResult.invalid(
-          'Invalid license format: missing expiry date',
-        );
-      }
-
-      final expiryDate = DateTime.parse(expiryString);
+      // التحقق من تاريخ الانتهاء
+      final expiryDate = DateTime.parse(licenseData['expiry']);
       if (DateTime.now().isAfter(expiryDate)) {
-        return LicenseValidationResult.invalid('License has expired');
+        return LicenseValidationResult.expired(
+          'انتهت صلاحية الترخيص في ${_formatDate(expiryDate)}',
+        );
       }
 
-      // Create license model
-      final license = LicenseModel(
+      // إنشاء كائن License
+      final license = License(
         licenseKey: licenseKey,
-        deviceFingerprint: storedFingerprint,
-        licenseType: licenseData['license_type'] as String? ?? 'unknown',
-        maxUsers: licenseData['max_users'] as int? ?? 1,
-        features: List<String>.from(licenseData['features'] as List? ?? []),
-        createdAt: DateTime.parse(
-          licenseData['created'] as String? ?? DateTime.now().toIso8601String(),
+        deviceFingerprint: licenseData['device'],
+        type: LicenseType.values.firstWhere(
+          (e) => e.toString().split('.').last == licenseData['type'],
         ),
-        expiresAt: expiryDate,
+        issueDate: DateTime.parse(licenseData['issue_date']),
+        expiryDate: expiryDate,
+        features: List<String>.from(licenseData['features']),
+        maxUsers: licenseData['max_users'],
+        companyName: licenseData['company_name'],
+        contactEmail: licenseData['contact_email'],
       );
 
-      // Save license locally
+      // حفظ الترخيص
       await _saveLicense(license);
 
       return LicenseValidationResult.valid(license);
     } catch (e) {
-      return LicenseValidationResult.invalid('Error validating license: $e');
+      return LicenseValidationResult.invalid('خطأ في التحقق من الترخيص: $e');
     }
   }
 
-  /// Save validated license
-  Future<void> _saveLicense(LicenseModel license) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_licenseKey, license.licenseKey);
-    await prefs.setString(_deviceIdKey, license.deviceFingerprint);
-    await prefs.setString(_activationDateKey, DateTime.now().toIso8601String());
-    await prefs.setString('license_data', jsonEncode(license.toJson()));
-  }
+  // ════════════════════════════════════════════════════════════════════
+  // التحقق من الترخيص المحفوظ
+  // ════════════════════════════════════════════════════════════════════
 
-  /// Check if valid license exists
-  Future<bool> isLicenseValid() async {
-    // STEP 1: Check for clock tampering FIRST
-    final isTampered = await AntiTamperService.detectClockTampering();
-    if (isTampered) {
-      print('❌ License invalid: Clock tampering detected');
-      return false;
-    }
-
-    // STEP 2: Normal license checks
+  Future<bool> isLicenseActive() async {
     final license = await getCurrentLicense();
     if (license == null) return false;
-
-    // Verify not expired
-    if (license.isExpired) return false;
-
-    // Verify device
-    final isDeviceValid = await HardwareFingerprintService.verifyFingerprint(
-      license.deviceFingerprint,
-    );
-    if (!isDeviceValid) return false;
-
-    return true;
+    return license.isValid;
   }
 
-  /// Get current license
-  Future<LicenseModel?> getCurrentLicense() async {
+  Future<bool> isLicenseValid() async {
+    return await isLicenseActive();
+  }
+
+  Future<bool> isFeatureEnabled(String feature) async {
+    return await hasFeature(feature);
+  }
+
+  Future<void> deactivateLicense() async {
+    await deactivate();
+  }
+
+  Future<License?> getCurrentLicense() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final licenseDataStr = prefs.getString('license_data');
-      if (licenseDataStr == null) return null;
+      final licenseJson = prefs.getString(_storageKey);
 
-      final licenseData = jsonDecode(licenseDataStr) as Map<String, dynamic>;
-      return LicenseModel.fromJson(licenseData);
+      if (licenseJson == null) return null;
+
+      final data = jsonDecode(licenseJson);
+      return License.fromJson(data);
     } catch (e) {
-      debugPrint('Error getting current license: $e');
       return null;
     }
   }
 
-  /// Deactivate license
-  Future<void> deactivateLicense() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_licenseKey);
-    await prefs.remove(_deviceIdKey);
-    await prefs.remove(_activationDateKey);
-    await prefs.remove('license_data');
+  // ════════════════════════════════════════════════════════════════════
+  // التحقق من الميزة
+  // ════════════════════════════════════════════════════════════════════
+
+  Future<bool> hasFeature(String featureName) async {
+    final license = await getCurrentLicense();
+    if (license == null || !license.isValid) return false;
+    return license.features.contains(featureName);
   }
 
-  /// Check if feature is enabled
-  Future<bool> isFeatureEnabled(String feature) async {
+  // ════════════════════════════════════════════════════════════════════
+  // التحقق من عدد المستخدمين
+  // ════════════════════════════════════════════════════════════════════
+
+  Future<bool> canAddUser(int currentUserCount) async {
     final license = await getCurrentLicense();
-    if (license == null) return false;
-    return license.hasFeature(feature);
+    if (license == null || !license.isValid) return false;
+    return currentUserCount < license.maxUsers;
   }
+
+  // ════════════════════════════════════════════════════════════════════
+  // إلغاء التفعيل
+  // ════════════════════════════════════════════════════════════════════
+
+  Future<void> deactivate() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_storageKey);
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // دوال مساعدة خاصة
+  // ════════════════════════════════════════════════════════════════════
+
+  Future<void> _saveLicense(License license) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_storageKey, jsonEncode(license.toJson()));
+  }
+
+  String _encrypt(String plainText) {
+    final key = encrypt_pkg.Key.fromUtf8(_secretKey);
+    final iv = encrypt_pkg.IV.fromLength(16);
+    final encrypter = encrypt_pkg.Encrypter(
+      encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
+    );
+
+    final encrypted = encrypter.encrypt(plainText, iv: iv);
+    return encrypted.base64;
+  }
+
+  String _decrypt(String encryptedText) {
+    final key = encrypt_pkg.Key.fromUtf8(_secretKey);
+    final iv = encrypt_pkg.IV.fromLength(16);
+    final encrypter = encrypt_pkg.Encrypter(
+      encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
+    );
+
+    final encrypted = encrypt_pkg.Encrypted.fromBase64(encryptedText);
+    return encrypter.decrypt(encrypted, iv: iv);
+  }
+
+  String _generateSignature(String data) {
+    final bytes = utf8.encode(data + _secretKey);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  int _getMaxUsersForType(LicenseType type) {
+    switch (type) {
+      case LicenseType.trial:
+      case LicenseType.basic:
+        return 1;
+      case LicenseType.standard:
+        return 3;
+      case LicenseType.professional:
+        return 5;
+      case LicenseType.enterprise:
+        return 10;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// 3. نتيجة التحقق
+// ════════════════════════════════════════════════════════════════════════
+
+class LicenseValidationResult {
+  final bool isValid;
+  final String? errorMessage;
+  final License? license;
+
+  LicenseValidationResult.valid(this.license)
+    : isValid = true,
+      errorMessage = null;
+
+  LicenseValidationResult.invalid(this.errorMessage)
+    : isValid = false,
+      license = null;
+
+  LicenseValidationResult.expired(this.errorMessage)
+    : isValid = false,
+      license = null;
 }

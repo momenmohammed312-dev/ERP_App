@@ -51,7 +51,7 @@ class FeatureGuard extends StatelessWidget {
           Icon(Icons.lock, size: 64, color: Colors.grey[400]),
           const SizedBox(height: 16),
           Text(
-            'Feature Locked',
+            'الميزة مقفولة',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -60,7 +60,7 @@ class FeatureGuard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Upgrade your license to access this feature',
+            'قم بترقية رخصتك للوصول إلى هذه الميزة',
             style: TextStyle(color: Colors.grey[500]),
           ),
           const SizedBox(height: 24),
@@ -69,7 +69,7 @@ class FeatureGuard extends StatelessWidget {
               // Show upgrade dialog or contact support
               _showUpgradeDialog(context);
             },
-            child: const Text('Upgrade License'),
+            child: const Text('ترقية الرخصة'),
           ),
         ],
       ),
@@ -80,17 +80,17 @@ class FeatureGuard extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Upgrade Required'),
+        title: const Text('الترقية مطلوبة'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('The "$featureName" feature requires a license upgrade.'),
+            Text('ميزة "$featureName" تتطلب ترقية الرخصة.'),
             const SizedBox(height: 16),
-            const Text('Contact support for upgrade options:'),
+            const Text('تواصل مع الدعم لخيارات الترقية:'),
             const SizedBox(height: 8),
             const SelectableText(
-              'Email: support@yourcompany.com\nPhone: +20 XXX XXX XXXX',
+              'البريد الإلكتروني: support@yourcompany.com\nالهاتف: +20 XXX XXX XXXX',
               style: TextStyle(fontFamily: 'monospace'),
             ),
           ],
@@ -98,7 +98,7 @@ class FeatureGuard extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: const Text('موافق'),
           ),
         ],
       ),

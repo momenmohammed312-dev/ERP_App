@@ -317,5 +317,7 @@
   "from_date": "من تاريخ",
   "to_date": "إلى تاريخ",
   "receivable_label": "مدين / لنا",
-  "payable_label": "دائن / علينا"
+  "payable_label": "دائن / علينا",
+  "export_success": "تم التصدير بنجاح",
+  "export_error": "خطأ في التصدير"
 }

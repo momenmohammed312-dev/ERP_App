@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // قواعد حماية العملاء (Clients)
+    match /clients/{clientId} {
+      // الأدمن فقط يمكنه القراءة والكتابة
+      allow read, write: if request.auth != null;
+    }
+    
+    // قواعد حماية التراخيص (Licenses)
+    match /licenses/{licenseId} {
+      // الأدمن يمكنه القراءة والكتابة
+      allow read, write: if request.auth != null;
+      
+      // تطبيق POS يمكنه القراءة فقط للبحث عن مفتاح الترخيص (عبر Hardware ID أو المفتاح نفسه)
+      // في نظام الـ Offline، تطبيق الـ POS لا يحتاج لـ Auth في البداية ولكن يفضل استخدامه
+      allow read: if true; 
+      
+      // تطبيق POS يمكنه تحديث الـ hardwareId مرة واحدة فقط عند التفعيل
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['hardwareId', 'activatedAt', 'status'])
+        && resource.data.hardwareId == null;
+    }
+    
+    // منع أي وصول آخر بشكل افتراضي
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

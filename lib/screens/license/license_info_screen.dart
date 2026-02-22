@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/license_manager.dart';
-import '../../models/license_model.dart';
 
 class LicenseInfoScreen extends StatefulWidget {
   const LicenseInfoScreen({super.key});
@@ -11,7 +10,7 @@ class LicenseInfoScreen extends StatefulWidget {
 }
 
 class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
-  LicenseModel? _license;
+  License? _license;
   bool _isLoading = true;
 
   @override
@@ -23,7 +22,7 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
   Future<void> _loadLicenseInfo() async {
     final licenseManager = LicenseManager();
     final license = await licenseManager.getCurrentLicense();
-    
+
     setState(() {
       _license = license;
       _isLoading = false;
@@ -32,7 +31,7 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
 
   Color _getStatusColor() {
     if (_license == null) return Colors.grey;
-    
+
     if (_license!.isExpired) return Colors.red;
     if (_license!.daysRemaining < 30) return Colors.orange;
     return Colors.green;
@@ -40,7 +39,7 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
 
   IconData _getStatusIcon() {
     if (_license == null) return Icons.error_outline;
-    
+
     if (_license!.isExpired) return Icons.error;
     if (_license!.daysRemaining < 30) return Icons.warning;
     return Icons.check_circle;
@@ -48,7 +47,7 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
 
   String _getStatusText() {
     if (_license == null) return 'لا توجد رخصة';
-    
+
     if (_license!.isExpired) return 'منتهية الصلاحية';
     if (_license!.daysRemaining < 30) return 'تنتهي قريباً';
     return 'سارية المفعول';
@@ -56,13 +55,13 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
 
   String _getDurationText() {
     if (_license == null) return 'غير محدد';
-    
+
     final days = _license!.daysRemaining;
     if (days >= 36500) return 'مدى الحياة';
-    
+
     final years = days ~/ 365;
     final remainingDays = days % 365;
-    
+
     if (years > 0) {
       return '$years سنة و $remainingDays يوم';
     } else {
@@ -88,8 +87,8 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _license == null
-              ? _buildNoLicenseScreen()
-              : _buildLicenseInfoScreen(),
+          ? _buildNoLicenseScreen()
+          : _buildLicenseInfoScreen(),
     );
   }
 
@@ -100,11 +99,7 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 80,
-              color: Colors.grey.shade400,
-            ),
+            Icon(Icons.error_outline, size: 80, color: Colors.grey.shade400),
             const SizedBox(height: 24),
             Text(
               'لا توجد رخصة نشطة',
@@ -117,10 +112,7 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
             const SizedBox(height: 12),
             Text(
               'يرجى تفعيل الرخصة لاستخدام النظام',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
@@ -131,7 +123,10 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue.shade800,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
                 textStyle: const TextStyle(fontSize: 16),
               ),
             ),
@@ -194,9 +189,9 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
               ),
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // License Details Grid
           GridView.count(
             shrinkWrap: true,
@@ -226,15 +221,15 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
               ),
               _buildDetailCard(
                 'تاريخ الانتهاء',
-                _license!.expiresAt.toString().split(' ')[0],
+                _license!.expiryDate.toString().split(' ')[0],
                 Icons.event,
                 _license!.daysRemaining < 30 ? Colors.red : Colors.purple,
               ),
             ],
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Features Section
           Card(
             elevation: 4,
@@ -245,11 +240,7 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
                 children: [
                   Row(
                     children: [
-                      Icon(
-                        Icons.star,
-                        color: Colors.amber,
-                        size: 24,
-                      ),
+                      Icon(Icons.star, color: Colors.amber, size: 24),
                       const SizedBox(width: 8),
                       Text(
                         'الميزات المتاحة',
@@ -280,9 +271,9 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
               ),
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Warning Card (if expiring soon)
           if (_license!.daysRemaining < 30 && !_license!.isExpired)
             Card(
@@ -325,7 +316,7 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
                 ),
               ),
             ),
-          
+
           // Lifetime Indicator
           if (_license!.daysRemaining >= 36500)
             Card(
@@ -373,7 +364,12 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
     );
   }
 
-  Widget _buildDetailCard(String title, String value, IconData icon, Color color) {
+  Widget _buildDetailCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -427,7 +423,7 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
       'export': 'تصدير البيانات',
       'admin': 'صلاحيات المدير',
     };
-    
+
     return featureNames[feature] ?? feature;
   }
 }

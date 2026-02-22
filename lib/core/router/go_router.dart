@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/ui/home/modern_home.dart';
 import 'package:pos_offline_desktop/screens/license/activation_screen.dart';
 import 'package:pos_offline_desktop/ui/purchase/widgets/enhanced_purchase_invoice_page.dart';
+import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
+import 'package:pos_offline_desktop/ui/admin/admin_dashboard_page.dart';
+import 'package:pos_offline_desktop/ui/signup/login.dart';
 
 // Simple splash screen widget
 class SplashScreen extends ConsumerStatefulWidget {
@@ -138,12 +142,33 @@ final routerProvider = Provider<GoRouter>((ref) {
   final db = ref.watch(appDatabaseProvider);
 
   return GoRouter(
-    initialLocation: '/splash', // Start with splash screen
+    initialLocation: '/splash',
+    redirect: (context, state) async {
+      // التحقق من وجود جلسة مفتوحة
+      final storage = FlutterSecureStorage();
+      final userId = await storage.read(key: 'current_user_id');
+
+      final isOnLoginPage = state.fullPath == '/login';
+      final isOnSplash = state.fullPath == '/splash';
+
+      // إذا لم يكن مسجل دخول ومش على صفحة login → وجّه للـ login
+      if (userId == null && !isOnLoginPage && !isOnSplash) {
+        return '/login';
+      }
+
+      // إذا كان مسجل دخول وعلى login → وجّه للـ home
+      if (userId != null && isOnLoginPage) {
+        return '/';
+      }
+
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/splash',
         builder: (context, state) => const SplashScreen(),
       ),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/activation',
         builder: (context, state) => const ActivationScreen(),
@@ -156,11 +181,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/new-supply-invoice',
         builder: (context, state) => EnhancedPurchaseInvoicePage(db: db),
       ),
+      GoRoute(
+        path: '/backup',
+        builder: (context, state) => EnhancedBackupScreen(),
+      ),
+      GoRoute(
+        path: '/admin',
+        builder: (context, state) => const AdminDashboardPage(),
+      ),
     ],
-    redirect: (context, state) {
-      // No redirect needed - splash screen handles navigation
-      return null;
-    },
   );
 });
 

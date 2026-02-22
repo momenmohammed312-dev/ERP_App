@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:drift/wasm.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../database/app_database.dart';
@@ -21,20 +23,29 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final dbDir = Directory(
-      p.join(dbFolder.path, 'pos_offline_desktop_database'),
-    );
+    if (kIsWeb) {
+      final result = await WasmDatabase.open(
+        databaseName: 'pos_offline_desktop_database',
+        sqlite3Uri: Uri.parse('/sqlite3.wasm'),
+        driftWorkerUri: Uri.parse('/drift_worker.dart.js'),
+      );
+      return result.resolvedExecutor;
+    } else {
+      final dbFolder = await getApplicationDocumentsDirectory();
+      final dbDir = Directory(
+        p.join(dbFolder.path, 'pos_offline_desktop_database'),
+      );
 
-    if (!await dbDir.exists()) {
-      await dbDir.create(recursive: true);
+      if (!await dbDir.exists()) {
+        await dbDir.create(recursive: true);
+      }
+
+      final file = File(
+        p.join(dbDir.path, 'pos_offline_desktop_database.sqlite'),
+      );
+
+      return NativeDatabase(file);
     }
-
-    final file = File(
-      p.join(dbDir.path, 'pos_offline_desktop_database.sqlite'),
-    );
-
-    return NativeDatabase(file);
   });
 }
 

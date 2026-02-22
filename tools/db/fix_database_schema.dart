@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
-import 'lib/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/app_database.dart';
 
 /// Script to fix missing totalAmount column in invoices table
 Future<void> main() async {

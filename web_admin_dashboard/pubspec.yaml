@@ -1,0 +1,50 @@
+name: pos_admin_dashboard
+description: POS Admin Dashboard Web Application
+version: 1.0.0
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # الرسوم البيانية
+  fl_chart: ^0.65.0
+  
+  # التاريخ والوقت
+  intl: ^0.18.1
+  
+  # إدارة الحالة
+  get: ^4.6.6
+  
+  # HTTP requests
+  http: ^1.1.0
+  
+  # Local storage
+  shared_preferences: ^2.2.2
+  
+  # Firebase
+  firebase_core: ^3.1.0
+  cloud_firestore: ^5.0.1
+  firebase_auth: ^5.1.0
+  
+  # UUID for license keys
+  uuid: ^4.2.1
+  
+  # Crypto for license validation
+  crypto: ^3.0.3
+  
+  # Device information
+  device_info_plus: ^9.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/

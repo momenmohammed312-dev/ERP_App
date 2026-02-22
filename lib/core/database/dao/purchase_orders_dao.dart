@@ -1,54 +1,80 @@
-// Purchase Orders DAO - Basic implementation
-// Note: This requires build_runner to generate drift code for PurchaseOrders tables
-// For now, this provides the basic structure that can be used when tables are added to database
+import 'package:drift/drift.dart';
+import '../app_database.dart';
+import '../tables/purchase_orders_tables.dart';
 
-/// Basic Purchase Orders DAO stub
-/// This will be fully functional when PurchaseOrders tables are added to AppDatabase
-/// and build_runner is executed to generate the necessary drift code
-class PurchaseOrdersDao {
-  // Basic stub implementation - will be fully functional when drift generation is available
-  // These methods will be fully functional after adding PurchaseOrders tables to AppDatabase
+part 'purchase_orders_dao.g.dart';
 
-  /// Get all purchase orders
-  Future<List<dynamic>> getAllPurchaseOrders() async {
-    // Implementation pending drift generation
-    return [];
+@DriftAccessor(
+  tables: [PurchaseOrders, PurchaseOrderItems, PurchaseOrderStatuses],
+)
+class PurchaseOrdersDao extends DatabaseAccessor<AppDatabase>
+    with _$PurchaseOrdersDaoMixin {
+  PurchaseOrdersDao(super.db);
+
+  // ── Get All ──────────────────────────────────────────────────
+  Future<List<PurchaseOrder>> getAllOrders() => select(db.purchaseOrders).get();
+
+  Stream<List<PurchaseOrder>> watchAllOrders() =>
+      select(db.purchaseOrders).watch();
+
+  // ── Get By ID ─────────────────────────────────────────────────
+  Future<PurchaseOrder?> getOrderById(int id) => (select(
+    db.purchaseOrders,
+  )..where((o) => o.id.equals(id))).getSingleOrNull();
+
+  // ── Get By Supplier ──────────────────────────────────────────
+  Stream<List<PurchaseOrder>> watchOrdersBySupplier(int supplierId) => (select(
+    db.purchaseOrders,
+  )..where((o) => o.supplierId.equals(supplierId))).watch();
+
+  // ── Get By Status ────────────────────────────────────────────
+  Stream<List<PurchaseOrder>> watchOrdersByStatus(String status) => (select(
+    db.purchaseOrders,
+  )..where((o) => o.status.equals(status))).watch();
+
+  // ── Create ────────────────────────────────────────────────────
+  Future<int> createOrder(PurchaseOrdersCompanion order) =>
+      into(db.purchaseOrders).insert(order);
+
+  // ── Update ────────────────────────────────────────────────────
+  Future<bool> updateOrder(PurchaseOrder order) =>
+      update(db.purchaseOrders).replace(order);
+
+  // ── Update Status ─────────────────────────────────────────────
+  Future<void> updateOrderStatus(int orderId, String newStatus) =>
+      (update(db.purchaseOrders)..where((o) => o.id.equals(orderId))).write(
+        PurchaseOrdersCompanion(
+          status: Value(newStatus),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  // ── Delete ────────────────────────────────────────────────────
+  Future<int> deleteOrder(int id) =>
+      (delete(db.purchaseOrders)..where((o) => o.id.equals(id))).go();
+
+  // ── Order Items ───────────────────────────────────────────────
+  Future<List<PurchaseOrderItem>> getOrderItems(int orderId) => (select(
+    db.purchaseOrderItems,
+  )..where((i) => i.orderId.equals(orderId))).get();
+
+  Future<int> addOrderItem(PurchaseOrderItemsCompanion item) =>
+      into(db.purchaseOrderItems).insert(item);
+
+  Future<int> deleteOrderItems(int orderId) => (delete(
+    db.purchaseOrderItems,
+  )..where((i) => i.orderId.equals(orderId))).go();
+
+  // ── Statistics ─────────────────────────────────────────────────
+  Future<double> getTotalOrdersValue() async {
+    final orders = await getAllOrders();
+    return orders.fold<double>(0.0, (sum, o) => sum + o.totalAmount);
   }
 
-  /// Get purchase order by ID
-  Future<dynamic> getPurchaseOrderById(int id) async {
-    // Implementation pending drift generation
-    return null;
-  }
-
-  /// Create new purchase order
-  Future<int> createPurchaseOrder(Map<String, dynamic> orderData) async {
-    // Implementation pending drift generation
-    return 0;
-  }
-
-  /// Update purchase order
-  Future<void> updatePurchaseOrder(
-    int id,
-    Map<String, dynamic> orderData,
-  ) async {
-    // Implementation pending drift generation
-  }
-
-  /// Delete purchase order
-  Future<void> deletePurchaseOrder(int id) async {
-    // Implementation pending drift generation
-  }
-
-  /// Get purchase orders by supplier
-  Future<List<dynamic>> getPurchaseOrdersBySupplier(int supplierId) async {
-    // Implementation pending drift generation
-    return [];
-  }
-
-  /// Get purchase orders by status
-  Future<List<dynamic>> getPurchaseOrdersByStatus(String status) async {
-    // Implementation pending drift generation
-    return [];
+  Future<int> getPendingOrdersCount() async {
+    final orders = await (select(
+      db.purchaseOrders,
+    )..where((o) => o.status.equals('draft') | o.status.equals('sent'))).get();
+    return orders.length;
   }
 }

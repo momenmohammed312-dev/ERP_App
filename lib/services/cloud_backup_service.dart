@@ -1,10 +1,13 @@
 import 'dart:io';
 // Removed unused imports to reduce warnings and improve tree-shaking
 import 'package:crypto/crypto.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'local_backup_service.dart';
 
 class CloudBackupService {
-  static const String _cloudServerUrl = 'https://yourserver.com/api/backups';
+  static final FirebaseStorage _storage = FirebaseStorage.instance;
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static Future<bool> uploadToCloud(
     String backupPath, {
     String? customerId,
@@ -19,19 +22,33 @@ class CloudBackupService {
       final backupBytes = await backupFile.readAsBytes();
       final checksum = sha256.convert(backupBytes).toString();
 
-      // For now, just simulate cloud upload
-      // In production, implement actual HTTP upload
-      print(
-        '✅ Simulating cloud upload for: ${backupFile.path} to $_cloudServerUrl',
+      // Create unique filename
+      final fileName =
+          'backup_${DateTime.now().millisecondsSinceEpoch}_${backupFile.uri.pathSegments.last}';
+      final customerPath = customerId ?? 'anonymous';
+      final storageRef = _storage.ref().child(
+        'backups/$customerPath/$fileName',
       );
-      print('📊 File size: ${backupBytes.length} bytes');
-      print('🔐 Checksum: $checksum');
-      print('👤 Customer: ${customerId ?? 'anonymous'}');
 
-      // Simulate upload delay
-      await Future.delayed(Duration(seconds: 2));
+      // Upload to Firebase Storage
+      final uploadTask = storageRef.putData(backupBytes);
+      final snapshot = await uploadTask.whenComplete(() => null);
 
-      print('✅ Cloud upload completed successfully');
+      // Get download URL
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+
+      // Save metadata to Firestore
+      await _firestore.collection('backups').doc(fileName).set({
+        'fileName': fileName,
+        'customerId': customerId ?? 'anonymous',
+        'created': DateTime.now().toIso8601String(),
+        'size': backupBytes.length,
+        'checksum': checksum,
+        'downloadUrl': downloadUrl,
+        'version': '2.0.0',
+      });
+
+      print('✅ Cloud upload completed successfully: $fileName');
       return true;
     } catch (e) {
       print('Cloud upload error: $e');
@@ -39,20 +56,34 @@ class CloudBackupService {
     }
   }
 
-  /// Download backup from cloud (simplified version)
+  /// Download backup from cloud
   static Future<String?> downloadFromCloud(
     String backupId,
     String localPath,
   ) async {
     try {
-      // For now, just simulate cloud download
-      print('✅ Simulating cloud download for backup: $backupId');
-      print('💾 Download path: $localPath');
+      // Get backup metadata from Firestore
+      final doc = await _firestore.collection('backups').doc(backupId).get();
+      if (!doc.exists) {
+        throw Exception('Backup not found in cloud');
+      }
 
-      // Simulate download delay
-      await Future.delayed(Duration(seconds: 3));
+      final data = doc.data()!;
+      final downloadUrl = data['downloadUrl'] as String;
 
-      print('✅ Cloud download completed successfully');
+      // Download from Firebase Storage
+      final ref = _storage.refFromURL(downloadUrl);
+      final bytes = await ref.getData();
+
+      if (bytes == null) {
+        throw Exception('Failed to download backup data');
+      }
+
+      // Save to local path
+      final localFile = File(localPath);
+      await localFile.writeAsBytes(bytes);
+
+      print('✅ Cloud download completed successfully: $backupId');
       return localPath;
     } catch (e) {
       print('Cloud download error: $e');
@@ -60,51 +91,57 @@ class CloudBackupService {
     }
   }
 
-  /// List cloud backups (simplified version)
+  /// List cloud backups
   static Future<List<CloudBackupInfo>> listCloudBackups({
     String? customerId,
   }) async {
     try {
-      // For now, return simulated data
-      print(
-        '📋 Simulating cloud backup list for customer: ${customerId ?? 'all'}',
-      );
+      Query query = _firestore.collection('backups');
 
-      await Future.delayed(Duration(seconds: 1));
+      if (customerId != null) {
+        query = query.where('customerId', isEqualTo: customerId);
+      }
 
-      // Return simulated backup list
-      return [
-        CloudBackupInfo(
-          id: 'backup_001',
-          fileName: 'pos_backup_2026_02_03.zip',
-          created: DateTime.now().subtract(Duration(days: 1)),
-          size: 1024 * 1024 * 5, // 5MB
-          customerId: customerId ?? 'demo_customer',
-          version: '2.0.0',
-        ),
-        CloudBackupInfo(
-          id: 'backup_002',
-          fileName: 'pos_backup_2026_02_02.zip',
-          created: DateTime.now().subtract(Duration(days: 2)),
-          size: (1024 * 1024 * 4.8).toInt(), // 4.8MB
-          customerId: customerId ?? 'demo_customer',
-          version: '2.0.0',
-        ),
-      ];
+      final snapshot = await query.get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return CloudBackupInfo(
+          id: doc.id,
+          fileName: data['fileName'] as String,
+          created: DateTime.parse(data['created'] as String),
+          size: data['size'] as int,
+          customerId: data['customerId'] as String,
+          version: data['version'] as String,
+          downloadUrl: data['downloadUrl'] as String,
+        );
+      }).toList();
     } catch (e) {
       print('Error listing cloud backups: $e');
       return [];
     }
   }
 
-  /// Delete cloud backup (simplified version)
+  /// Delete cloud backup
   static Future<bool> deleteCloudBackup(String backupId) async {
     try {
-      print('🗑️ Simulating cloud backup deletion: $backupId');
+      // Get backup metadata from Firestore
+      final doc = await _firestore.collection('backups').doc(backupId).get();
+      if (!doc.exists) {
+        throw Exception('Backup not found in cloud');
+      }
 
-      await Future.delayed(Duration(seconds: 1));
+      final data = doc.data()!;
+      final downloadUrl = data['downloadUrl'] as String;
 
-      print('✅ Cloud backup deleted successfully');
+      // Delete from Firebase Storage
+      final ref = _storage.refFromURL(downloadUrl);
+      await ref.delete();
+
+      // Delete metadata from Firestore
+      await _firestore.collection('backups').doc(backupId).delete();
+
+      print('✅ Cloud backup deleted successfully: $backupId');
       return true;
     } catch (e) {
       print('Error deleting cloud backup: $e');

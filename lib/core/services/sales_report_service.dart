@@ -86,7 +86,7 @@ class SalesReportService {
     var query = db.select(db.invoices);
 
     if (startDate != null) {
-      query = query..where((tbl) => tbl.date.isBiggerOrEqualValue(startDate));
+      query = query..where((tbl) => tbl.date.isBiggerThanValue(startDate));
     }
 
     if (endDate != null) {
@@ -98,7 +98,7 @@ class SalesReportService {
         59,
         59,
       );
-      query = query..where((tbl) => tbl.date.isSmallerOrEqualValue(endOfDay));
+      query = query..where((tbl) => tbl.date.isSmallerThanValue(endOfDay));
     }
 
     if (customerId != null && customerId.isNotEmpty) {

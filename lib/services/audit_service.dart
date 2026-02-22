@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import '../core/database/database_singleton.dart';
 import '../core/database/app_database.dart';
 
 enum AuditAction {
@@ -19,6 +18,7 @@ enum AuditAction {
 class AuditService {
   /// Log an action
   static Future<void> log({
+    required AppDatabase db,
     int? userId,
     required AuditAction action,
     required String tableName,
@@ -26,7 +26,6 @@ class AuditService {
     Map<String, dynamic>? details,
   }) async {
     try {
-      final db = await DatabaseSingleton.getInstance();
       final auditDao = db.auditDao;
       await auditDao.logAudit(
         userId: userId,
@@ -43,6 +42,7 @@ class AuditService {
 
   /// Get audit logs
   static Future<List<AuditLogData>> getAuditLogs({
+    required AppDatabase db,
     int? userId,
     String? tableName,
     DateTime? startDate,
@@ -50,7 +50,6 @@ class AuditService {
     int limit = 100,
   }) async {
     try {
-      final db = await DatabaseSingleton.getInstance();
       final auditDao = db.auditDao;
       return await auditDao.getAuditLogs(
         userId: userId,

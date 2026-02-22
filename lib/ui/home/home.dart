@@ -3,20 +3,27 @@ import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/services/auth_service.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
+import 'package:pos_offline_desktop/ui/user/user_management_page.dart';
+import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
 import 'package:pos_offline_desktop/ui/cashier/cashier_page.dart';
 import 'package:pos_offline_desktop/ui/customer/customer.dart';
 import 'package:pos_offline_desktop/ui/dashboard/dashboard_page.dart';
-import 'package:pos_offline_desktop/ui/expense/expense_page.dart';
+import 'package:pos_offline_desktop/ui/setting/settings.dart';
 import 'package:pos_offline_desktop/ui/invoice/invoice.dart';
 import 'package:pos_offline_desktop/ui/invoice/new_invoice_page.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/enhanced_invoice_page.dart';
-import 'package:pos_offline_desktop/ui/pages/sidebar_page.dart';
+import 'package:pos_offline_desktop/ui/expense/expense_page.dart';
 import 'package:pos_offline_desktop/ui/product/product.dart';
 import 'package:pos_offline_desktop/ui/supplier/suppliers_page.dart';
 import 'package:pos_offline_desktop/ui/purchase/purchase_page.dart';
+import 'package:pos_offline_desktop/ui/admin/admin_dashboard_page.dart'
+    as admin;
 import 'package:pos_offline_desktop/ui/reports/reports_page.dart';
+import 'package:pos_offline_desktop/ui/pages/sidebar_page.dart';
 import 'package:pos_offline_desktop/ui/widgets/side_bar.dart';
+import '../staff/staff_list_page.dart';
 
 class HomeScreen extends StatefulHookConsumerWidget {
   const HomeScreen({super.key});
@@ -31,6 +38,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final db = ref.watch(appDatabaseProvider);
+    final authService = AuthService(db);
 
     return Scaffold(
       body: Row(
@@ -135,6 +143,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return CashierPage(db: db);
       case SideBarPage.reports:
         return const ReportsPage();
+      case SideBarPage.users:
+        return UserManagementPage(database: db, authService: AuthService(db));
+      case SideBarPage.staff:
+        return const StaffListPage();
+      case SideBarPage.settings:
+        return const SettingsScreen();
+      case SideBarPage.backup:
+        return EnhancedBackupScreen();
+      case SideBarPage.admin:
+        return const admin.AdminDashboardPage();
     }
   }
 }

@@ -89,7 +89,8 @@ class InventoryNotificationService {
       final products =
           await (_database.select(_database.products)..where(
                 (p) =>
-                    p.quantity.isBetweenValues(1, 9) &
+                    (p.quantity.isBiggerThanValue(0) &
+                        p.quantity.isSmallerThanValue(10)) &
                     p.status.equals('Active'),
               ))
               .get();

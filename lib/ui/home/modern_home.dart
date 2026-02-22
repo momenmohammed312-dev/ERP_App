@@ -9,6 +9,9 @@ import 'package:pos_offline_desktop/ui/home/widgets/suppliers_widget.dart';
 import 'package:pos_offline_desktop/ui/reports/reports_page.dart';
 import 'package:pos_offline_desktop/ui/purchase/purchase_page.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/enhanced_new_invoice_page.dart';
+import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
+import 'package:pos_offline_desktop/ui/staff/staff_list_page.dart';
+import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
 
 class ModernHomeScreen extends StatefulWidget {
   final AppDatabase db;
@@ -25,7 +28,7 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   @override
@@ -227,6 +230,7 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
                   icon: const Icon(Icons.account_balance_wallet_outlined),
                   text: l10n.cash,
                 ),
+                Tab(icon: const Icon(Icons.badge_outlined), text: 'الموظفين'),
               ],
             ),
           ),
@@ -236,29 +240,34 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
             child: TabBarView(
               controller: _tabController,
               children: [
-                // Control Panel - Simplified with 3 buttons only
+                // Control Panel - Simplified with functional buttons
                 Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        'لوحة التحكم',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Gap(40),
+                        const Text(
+                          'لوحة التحكم',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      const Gap(40),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          // New Invoice Button
-                          SizedBox(
-                            width: 200,
-                            height: 150,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
+                        const Gap(40),
+                        Wrap(
+                          spacing: 20,
+                          runSpacing: 20,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            // New Invoice Button
+                            _buildLauncherButton(
+                              context,
+                              'فاتورة جديدة',
+                              Icons.receipt_long,
+                              Colors.blue,
+                              () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -267,71 +276,62 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
                                   ),
                                 );
                               },
-                              icon: const Icon(Icons.receipt_long, size: 40),
-                              label: const Text(
-                                'فاتورة جديدة',
-                                style: TextStyle(fontSize: 16),
+                            ),
+                            // Add/Edit Customer Button
+                            _buildLauncherButton(
+                              context,
+                              'العملاء',
+                              Icons.person_add,
+                              Colors.green,
+                              () => _tabController.animateTo(2),
+                            ),
+                            // Add/Edit Product Button
+                            _buildLauncherButton(
+                              context,
+                              'المنتجات',
+                              Icons.inventory,
+                              Colors.orange,
+                              () => _tabController.animateTo(1),
+                            ),
+                            // Staff Management Button - Guarded
+                            FeatureGuard(
+                              featureName: 'staff_management',
+                              lockedWidget: _buildLauncherButton(
+                                context,
+                                'الموظفين (مغلق)',
+                                Icons.badge_outlined,
+                                Colors.grey,
+                                () => _tabController.animateTo(6),
                               ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
+                              child: _buildLauncherButton(
+                                context,
+                                'الموظفين',
+                                Icons.badge_outlined,
+                                Colors.indigo,
+                                () => _tabController.animateTo(6),
                               ),
                             ),
-                          ),
-                          // Add/Edit Customer Button
-                          SizedBox(
-                            width: 200,
-                            height: 150,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                _tabController.animateTo(
-                                  2,
-                                ); // Go to Customer tab
+                            // Backup Button
+                            _buildLauncherButton(
+                              context,
+                              'النسخ الاحتياطي',
+                              Icons.backup,
+                              Colors.purple,
+                              () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        EnhancedBackupScreen(),
+                                  ),
+                                );
                               },
-                              icon: const Icon(Icons.person_add, size: 40),
-                              label: const Text(
-                                'إضافة/تعديل عميل',
-                                style: TextStyle(fontSize: 16),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
                             ),
-                          ),
-                          // Add/Edit Product Button
-                          SizedBox(
-                            width: 200,
-                            height: 150,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                _tabController.animateTo(
-                                  1,
-                                ); // Go to Products tab
-                              },
-                              icon: const Icon(Icons.inventory, size: 40),
-                              label: const Text(
-                                'إضافة/تعديل منتج',
-                                style: TextStyle(fontSize: 16),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                        const Gap(40),
+                      ],
+                    ),
                   ),
                 ),
                 ProductScreen(db: widget.db),
@@ -339,10 +339,39 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
                 SuppliersWidget(db: widget.db),
                 PurchasePage(db: widget.db),
                 CashierPage(db: widget.db),
+                FeatureGuard(
+                  featureName: 'staff_management',
+                  child: const StaffListPage(),
+                ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLauncherButton(
+    BuildContext context,
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return SizedBox(
+      width: 180,
+      height: 140,
+      child: ElevatedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 35),
+        label: Text(label, style: const TextStyle(fontSize: 14)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
       ),
     );
   }

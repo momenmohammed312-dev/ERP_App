@@ -4,6 +4,7 @@ import 'license_manager.dart';
 import 'anti_tamper_service.dart';
 import 'audit_service.dart';
 import 'user_session_service.dart';
+import '../core/database/database_singleton.dart';
 
 class IntegrityChecker {
   static Timer? _periodicCheckTimer;
@@ -45,6 +46,8 @@ class IntegrityChecker {
       debugPrint('🔍 Performing integrity check...');
       _lastCheckTime = DateTime.now();
 
+      final db = await DatabaseSingleton.getInstance();
+
       // Check 1: License validity
       final licenseValid = await _checkLicenseValidity();
 
@@ -80,6 +83,7 @@ class IntegrityChecker {
 
       // Log the check result
       await AuditService.log(
+        db: db,
         action: AuditAction.read,
         tableName: 'system_integrity',
         details: {
@@ -97,7 +101,10 @@ class IntegrityChecker {
       _consecutiveFailures++;
       debugPrint('❌ Integrity check error: $e');
 
+      final db = await DatabaseSingleton.getInstance();
+
       await AuditService.log(
+        db: db,
         action: AuditAction.read,
         tableName: 'system_integrity',
         details: {
@@ -112,6 +119,8 @@ class IntegrityChecker {
   /// Check license validity
   static Future<bool> _checkLicenseValidity() async {
     try {
+      final db = await DatabaseSingleton.getInstance();
+
       final licenseManager = LicenseManager();
       final isValid = await licenseManager.isLicenseValid();
 
@@ -122,6 +131,7 @@ class IntegrityChecker {
         final currentLicense = await licenseManager.getCurrentLicense();
         if (currentLicense != null) {
           await AuditService.log(
+            db: db,
             action: AuditAction.licenseDeactivate,
             tableName: 'license',
             details: {
@@ -148,6 +158,8 @@ class IntegrityChecker {
     bool sessionsValid,
     Map<String, dynamic> sessionStats,
   ) async {
+    final db = await DatabaseSingleton.getInstance();
+
     debugPrint('🚨 INTEGRITY BREACH DETECTED!');
     debugPrint('  License Valid: $licenseValid');
     debugPrint('  Clock Tampered: $clockTampered');
@@ -158,6 +170,7 @@ class IntegrityChecker {
 
     // Log security incident
     await AuditService.log(
+      db: db,
       action: AuditAction.licenseDeactivate,
       tableName: 'security_incident',
       details: {
@@ -178,9 +191,12 @@ class IntegrityChecker {
 
   /// Handle critical integrity failure
   static Future<void> _handleCriticalFailure() async {
+    final db = await DatabaseSingleton.getInstance();
+
     debugPrint('🚨 CRITICAL INTEGRITY FAILURE - Taking protective action');
 
     await AuditService.log(
+      db: db,
       action: AuditAction.licenseDeactivate,
       tableName: 'security_incident',
       details: {

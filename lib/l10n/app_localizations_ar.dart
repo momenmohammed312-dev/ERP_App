@@ -952,4 +952,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get payable_label => 'دائن / علينا';
+
+  @override
+  String get export_success => 'تم التصدير بنجاح';
+
+  @override
+  String get export_error => 'خطأ في التصدير';
 }

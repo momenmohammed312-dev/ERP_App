@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_encryption_service.dart';
 import '../services/audit_service.dart';
+import '../core/database/database_singleton.dart';
 
 class AntiTamperService {
   static const String _lastDateKey = 'last_known_date_encrypted';
@@ -16,6 +17,8 @@ class AntiTamperService {
         await _storeCurrentDate();
         return false; // No tampering
       }
+
+      final db = await DatabaseSingleton.getInstance();
 
       // Decrypt last known date
       final lastDateStr = DatabaseEncryptionService.decryptData(
@@ -37,6 +40,7 @@ class AntiTamperService {
 
         // Log the tampering attempt
         await AuditService.log(
+          db: db,
           action: AuditAction.licenseDeactivate,
           tableName: 'system',
           details: {

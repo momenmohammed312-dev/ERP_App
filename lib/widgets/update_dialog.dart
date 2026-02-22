@@ -3,9 +3,9 @@ import '../services/update_service.dart';
 
 class UpdateDialog extends StatefulWidget {
   final UpdateInfo update;
-  
+
   const UpdateDialog({super.key, required this.update});
-  
+
   @override
   State<UpdateDialog> createState() => _UpdateDialogState();
 }
@@ -14,7 +14,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
   bool _isDownloading = false;
   double _downloadProgress = 0.0;
   String _statusMessage = '';
-  
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -27,9 +27,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              widget.update.isCritical
-                  ? 'تحديث مهم متاح'
-                  : 'تحديث جديد متاح',
+              widget.update.isCritical ? 'تحديث مهم متاح' : 'تحديث جديد متاح',
             ),
           ),
         ],
@@ -42,17 +40,14 @@ class _UpdateDialogState extends State<UpdateDialog> {
             // Version info
             Text(
               'الإصدار ${widget.update.version}',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 4),
             Text(
               'الحجم: ${widget.update.sizeString}',
               style: TextStyle(color: Colors.grey[600]),
             ),
-            
+
             if (widget.update.isCritical) ...[
               SizedBox(height: 16),
               Container(
@@ -76,26 +71,25 @@ class _UpdateDialogState extends State<UpdateDialog> {
                 ),
               ),
             ],
-            
+
             SizedBox(height: 16),
-            
+
             // Changelog
-            Text(
-              'ما الجديد:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            Text('ما الجديد:', style: TextStyle(fontWeight: FontWeight.bold)),
             SizedBox(height: 8),
-            ...widget.update.changelog.map((item) => Padding(
-              padding: EdgeInsets.only(bottom: 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('• '),
-                  Expanded(child: Text(item)),
-                ],
+            ...widget.update.changelog.map(
+              (item) => Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('• '),
+                    Expanded(child: Text(item)),
+                  ],
+                ),
               ),
-            )),
-            
+            ),
+
             // Features
             if (widget.update.features.isNotEmpty) ...[
               SizedBox(height: 16),
@@ -104,19 +98,21 @@ class _UpdateDialogState extends State<UpdateDialog> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 8),
-              ...widget.update.features.map((item) => Padding(
-                padding: EdgeInsets.only(bottom: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.star, size: 16, color: Colors.orange),
-                    SizedBox(width: 4),
-                    Expanded(child: Text(item)),
-                  ],
+              ...widget.update.features.map(
+                (item) => Padding(
+                  padding: EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.star, size: 16, color: Colors.orange),
+                      SizedBox(width: 4),
+                      Expanded(child: Text(item)),
+                    ],
+                  ),
                 ),
-              )),
+              ),
             ],
-            
+
             // Download progress
             if (_isDownloading) ...[
               SizedBox(height: 16),
@@ -145,57 +141,57 @@ class _UpdateDialogState extends State<UpdateDialog> {
             ],
     );
   }
-  
+
   Future<void> _downloadAndInstall() async {
     setState(() {
       _isDownloading = true;
       _statusMessage = 'جاري التحميل...';
     });
-    
+
     try {
       final updateService = UpdateService();
-      
+
       // Download
-      final file = await updateService.downloadUpdate(
-        widget.update,
-        (progress) {
-          setState(() {
-            _downloadProgress = progress;
-            _statusMessage = 'تحميل: ${(progress * 100).toStringAsFixed(0)}%';
-          });
-        },
-      );
-      
+      final file = await updateService.downloadUpdate(widget.update, (
+        progress,
+      ) {
+        setState(() {
+          _downloadProgress = progress;
+          _statusMessage = 'تحميل: ${(progress * 100).toStringAsFixed(0)}%';
+        });
+      });
+
       if (file == null) {
         throw Exception('Download failed');
       }
-      
+
       setState(() {
         _statusMessage = 'جاري التثبيت...';
       });
-      
+
       // Install (will exit app)
       await updateService.installUpdate(file);
-      
     } catch (e) {
       setState(() {
         _isDownloading = false;
         _statusMessage = '';
       });
-      
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text('خطأ'),
-          content: Text('فشل التحديث: $e'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('حسناً'),
-            ),
-          ],
-        ),
-      );
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('خطأ'),
+            content: Text('فشل التحديث: $e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('حسناً'),
+              ),
+            ],
+          ),
+        );
+      }
     }
   }
 }

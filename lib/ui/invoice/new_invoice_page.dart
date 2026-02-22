@@ -249,9 +249,7 @@ class _NewInvoicePageState extends ConsumerState<NewInvoicePage> {
         InvoicesCompanion(
           customerName: Value(customerName),
           customerContact: Value(
-            (customerContact != null && customerContact.isNotEmpty)
-                ? customerContact
-                : 'N/A',
+            (customerContact?.isNotEmpty == true) ? customerContact : 'N/A',
           ),
           customerAddress: Value(customerAddress ?? ''),
           customerId: Value(customerId),

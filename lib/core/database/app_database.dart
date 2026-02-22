@@ -1,4 +1,6 @@
 import 'dart:developer';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
 
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
@@ -34,6 +36,26 @@ part 'app_database.g.dart';
     InventoryMovements,
     AuditLog,
     Categories,
+    Users,
+    // Staff management tables (Enterprise only)
+    StaffTable,
+    AttendanceTable,
+    Vacations,
+    StaffAdvances,
+    PayrollTable,
+    RewardsPenalties,
+    PerformanceReviews,
+    StaffDocuments,
+    // Purchase Orders tables
+    PurchaseOrders,
+    PurchaseOrderItems,
+    PurchaseOrderStatuses,
+    // Purchase Returns tables
+    PurchaseReturns,
+    PurchaseReturnItems,
+    PurchaseRefunds,
+    // User Activity Log
+    UserActivityLog,
   ],
   daos: [
     ProductDao,
@@ -49,13 +71,21 @@ part 'app_database.g.dart';
     PurchaseBudgetDao,
     InventoryMovementDao,
     AuditDao,
+    UserDao,
+    StaffManagementDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
+  String _hashPassword(String password) {
+    final bytes = utf8.encode('${password}pos_prod_salt_2026');
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
   @override
-  int get schemaVersion => 32;
+  int get schemaVersion => 35;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -984,6 +1014,27 @@ class AppDatabase extends _$AppDatabase {
           log(
             'Migration v31: Index on inventory_movements.movement_type error: $e',
           );
+        }
+      }
+
+      if (from < 33) {
+        // Create users table for role-based access control
+        try {
+          await m.createTable(users);
+          log('Migration v33: Created users table');
+
+          // Create default admin user
+          final adminPassword = _hashPassword('admin123');
+          await customStatement(
+            '''
+            INSERT INTO users (username, password_hash, full_name, role, is_active, created_at, updated_at)
+            VALUES ('admin', ?, 'مدير النظام', 0, 1, datetime('now'), datetime('now'))
+          ''',
+            [adminPassword],
+          );
+          log('Migration v33: Created default admin user');
+        } catch (e) {
+          log('Migration v33: Users table already exists or error: $e');
         }
       }
 

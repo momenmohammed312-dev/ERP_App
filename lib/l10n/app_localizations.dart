@@ -1963,6 +1963,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Payable / علينا'**
   String get payable_label;
+
+  /// No description provided for @export_success.
+  ///
+  /// In en, this message translates to:
+  /// **'Export completed successfully'**
+  String get export_success;
+
+  /// No description provided for @export_error.
+  ///
+  /// In en, this message translates to:
+  /// **'Export error'**
+  String get export_error;
 }
 
 class _AppLocalizationsDelegate

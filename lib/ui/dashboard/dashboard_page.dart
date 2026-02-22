@@ -3,14 +3,17 @@ import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
-import 'package:pos_offline_desktop/core/database/dao/enhanced_purchase_dao.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/enhanced_new_invoice_page.dart';
 import 'package:pos_offline_desktop/ui/purchase/widgets/enhanced_purchase_invoice_page.dart';
-import 'package:pos_offline_desktop/ui/customer/widgets/customer_dashboard.dart';
+import 'package:pos_offline_desktop/ui/suppliers/widgets/supplier_dashboard.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
 import 'package:pos_offline_desktop/widgets/dashboard/sales_summary_widget.dart';
 import 'package:pos_offline_desktop/widgets/dashboard/sales_purchase_comparison_card.dart';
 import 'package:pos_offline_desktop/widgets/dashboard/daily_sales_performance_widget.dart';
+import 'package:pos_offline_desktop/widgets/dashboard/inventory_alerts_widget.dart';
+import 'package:pos_offline_desktop/ui/customer/widgets/customer_dashboard.dart';
+import 'package:pos_offline_desktop/core/database/dao/enhanced_purchase_dao.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -26,7 +29,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,6 +93,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             ),
             const Gap(24),
 
+            // Charts Section
+            _buildChartsSection(context),
+
+            const Gap(24),
+
             // Customer Dashboard Section
             CustomerDashboard(
               db: db,
@@ -126,90 +134,26 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             const Gap(24),
 
             // Suppliers Dashboard Section
-            Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
+            SupplierDashboard(
+              db: db,
+              onSupplierSelected: (supplier) {
+                // Navigate to supplier details
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('تم اختيار المورد: ${supplier.businessName}'),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                   ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'ملخص الموردين',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                        ),
-                        IconButton(
-                          onPressed: () {
-                            // Refresh suppliers data
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('تم تحديث بيانات الموردين'),
-                                backgroundColor: Colors.blue,
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.refresh),
-                          tooltip: 'تحديث بيانات الموردين',
-                        ),
-                      ],
-                    ),
-                    const Gap(16),
-                    StreamBuilder<int>(
-                      stream: db.supplierDao.watchSuppliersCount(),
-                      builder: (context, snapshot) {
-                        final count = snapshot.data ?? 0;
-                        return Row(
-                          children: [
-                            Expanded(
-                              child: _buildMetricCard(
-                                'إجمالي الموردين',
-                                count.toString(),
-                                Icons.local_shipping,
-                                Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
-                            const Gap(16),
-                            Expanded(
-                              child: StreamBuilder<double>(
-                                stream: db.supplierDao
-                                    .watchTotalSuppliersDues(),
-                                builder: (context, snapshot) {
-                                  final totalDues = snapshot.data ?? 0.0;
-                                  return _buildMetricCard(
-                                    'مستحقات الموردين',
-                                    '${totalDues.toStringAsFixed(2)} ج.م',
-                                    Icons.account_balance,
-                                    Colors.orange,
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
+                );
+              },
+              onRefresh: () {
+                // Refresh dashboard data
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('تم تحديث البيانات'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              },
             ),
 
             const Gap(24),
@@ -265,8 +209,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     FutureBuilder<PurchaseStats>(
                       future: _getPurchaseStats(db),
                       builder: (context, snapshot) {
-                        if (!snapshot.hasData) {
-                          return Center(child: CircularProgressIndicator());
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        } else if (snapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              'خطأ في تحميل إحصائيات المشتريات: ${snapshot.error}',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          );
+                        } else if (!snapshot.hasData) {
+                          return Center(child: Text('لا توجد بيانات مشتريات'));
                         }
 
                         final stats = snapshot.data!;
@@ -392,6 +348,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 ),
               ),
             ),
+
+            const Gap(24),
+
+            // Inventory Alerts Section
+            InventoryAlertsWidget(db: db),
 
             const Gap(24),
 
@@ -802,7 +763,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     );
   }
 
-  // Purchase statistics methods
   Future<PurchaseStats> _getPurchaseStats(AppDatabase db) async {
     final purchaseDao = EnhancedPurchaseDao(db);
 
@@ -839,6 +799,163 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       return [];
     }
   }
+
+  Widget _buildChartsSection(BuildContext context) {
+    // Dummy data for demonstration
+    final salesData = [
+      DailySalesData(
+        date: DateTime.now().subtract(Duration(days: 6)),
+        totalSales: 1500,
+      ),
+      DailySalesData(
+        date: DateTime.now().subtract(Duration(days: 5)),
+        totalSales: 2000,
+      ),
+      DailySalesData(
+        date: DateTime.now().subtract(Duration(days: 4)),
+        totalSales: 1800,
+      ),
+      DailySalesData(
+        date: DateTime.now().subtract(Duration(days: 3)),
+        totalSales: 2500,
+      ),
+      DailySalesData(
+        date: DateTime.now().subtract(Duration(days: 2)),
+        totalSales: 2200,
+      ),
+      DailySalesData(
+        date: DateTime.now().subtract(Duration(days: 1)),
+        totalSales: 2800,
+      ),
+      DailySalesData(date: DateTime.now(), totalSales: 3000),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'الرسوم البيانية',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const Gap(16),
+          Row(
+            children: [
+              Expanded(child: _buildSalesChart(salesData)),
+              const Gap(16),
+              Expanded(child: _buildPaymentTypePieChart(5000, 3000)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSalesChart(List<DailySalesData> salesData) {
+    if (salesData.isEmpty) {
+      return const Center(child: Text('لا توجد بيانات'));
+    }
+
+    final spots = salesData.asMap().entries.map((entry) {
+      return FlSpot(entry.key.toDouble(), entry.value.totalSales);
+    }).toList();
+
+    return Container(
+      height: 200,
+      padding: const EdgeInsets.all(16),
+      child: LineChart(
+        LineChartData(
+          gridData: FlGridData(show: true, horizontalInterval: 500),
+          titlesData: FlTitlesData(
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) {
+                  final index = value.toInt();
+                  if (index >= 0 && index < salesData.length) {
+                    return Text(
+                      '${salesData[index].date.day}/${salesData[index].date.month}',
+                      style: const TextStyle(fontSize: 10),
+                    );
+                  }
+                  return const Text('');
+                },
+              ),
+            ),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) => Text(
+                  '${value.toInt()}',
+                  style: const TextStyle(fontSize: 10),
+                ),
+              ),
+            ),
+            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          ),
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              color: const Color(0xFF4ECDC4),
+              barWidth: 3,
+              dotData: FlDotData(show: spots.length < 15),
+              belowBarData: BarAreaData(
+                show: true,
+                color: const Color(0xFF4ECDC4).withValues(alpha: 0.1),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentTypePieChart(double cash, double credit) {
+    final total = cash + credit;
+    if (total == 0) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 180,
+      child: PieChart(
+        PieChartData(
+          sections: [
+            PieChartSectionData(
+              value: cash,
+              title: 'نقدي\n${(cash / total * 100).toStringAsFixed(0)}%',
+              color: Colors.green,
+              radius: 60,
+            ),
+            PieChartSectionData(
+              value: credit,
+              title: 'آجل\n${(credit / total * 100).toStringAsFixed(0)}%',
+              color: Colors.orange,
+              radius: 60,
+            ),
+          ],
+          centerSpaceRadius: 40,
+        ),
+      ),
+    );
+  }
 }
 
 // Purchase statistics data class
@@ -852,4 +969,12 @@ class PurchaseStats {
     required this.creditPurchases,
     required this.cashPurchases,
   });
+}
+
+// Daily sales data class for charts
+class DailySalesData {
+  final DateTime date;
+  final double totalSales;
+
+  DailySalesData({required this.date, required this.totalSales});
 }

@@ -10,26 +10,26 @@ void main() async {
 
   // إنشاء منتجات اختبار
   await generateTestProducts();
-  
+
   // إنشاء عملاء اختبار
   await generateTestCustomers();
-  
+
   // إنشاء موردين اختبار
   await generateTestSuppliers();
-  
+
   // إنشاء فواتير مبيعات اختبار
   await generateTestSalesInvoices();
-  
+
   // إنشاء فواتير مشتريات اختبار
   await generateTestPurchaseInvoices();
 
   print('\n✅ تم إنشاء بيانات الاختبار بنجاح!');
   print('\nالملفات التي تم إنشاؤها:');
-  print('📄 test_products.json - منتجات اختبار');
-  print('📄 test_customers.json - عملاء اختبار');
-  print('📄 test_suppliers.json - موردين اختبار');
-  print('📄 test_sales_invoices.json - فواتير مبيعات اختبار');
-  print('📄 test_purchase_invoices.json - فواتير مشتريات اختبار');
+  print('📄 test/fixtures/test_products.json - منتجات اختبار');
+  print('📄 test/fixtures/test_customers.json - عملاء اختبار');
+  print('📄 test/fixtures/test_suppliers.json - موردين اختبار');
+  print('📄 test/fixtures/test_sales_invoices.json - فواتير مبيعات اختبار');
+  print('📄 test/fixtures/test_purchase_invoices.json - فواتير مشتريات اختبار');
 }
 
 Future<void> generateTestProducts() async {
@@ -45,7 +45,7 @@ Future<void> generateTestProducts() async {
       'stock': 25,
       'minStock': 5,
       'description': 'لابتوس ديل أسود 15 بوصة',
-      'image': 'laptop.jpg'
+      'image': 'laptop.jpg',
     },
     {
       'name': 'ماوس لوجيتك',
@@ -58,7 +58,7 @@ Future<void> generateTestProducts() async {
       'stock': 100,
       'minStock': 20,
       'description': 'ماوس لاسلكي من لوجيتك',
-      'image': 'mouse.jpg'
+      'image': 'mouse.jpg',
     },
     {
       'name': 'كيبورد ميكانيكي',
@@ -71,7 +71,7 @@ Future<void> generateTestProducts() async {
       'stock': 45,
       'minStock': 10,
       'description': 'كيبورد ميكانيكي RGB',
-      'image': 'keyboard.jpg'
+      'image': 'keyboard.jpg',
     },
     {
       'name': 'شاشة سامسونج 24"',
@@ -84,7 +84,7 @@ Future<void> generateTestProducts() async {
       'stock': 15,
       'minStock': 3,
       'description': 'شاشة LED سامسونج 24 بوصة',
-      'image': 'monitor.jpg'
+      'image': 'monitor.jpg',
     },
     {
       'name': 'طابعة HP',
@@ -97,7 +97,7 @@ Future<void> generateTestProducts() async {
       'stock': 8,
       'minStock': 2,
       'description': 'طابعة HP ليزر ملونة',
-      'image': 'printer.jpg'
+      'image': 'printer.jpg',
     },
     {
       'name': 'هارد خارجي 1TB',
@@ -110,7 +110,7 @@ Future<void> generateTestProducts() async {
       'stock': 60,
       'minStock': 15,
       'description': 'هارد خارجي USB 3.0 سعة 1 تيرا',
-      'image': 'harddrive.jpg'
+      'image': 'harddrive.jpg',
     },
     {
       'name': 'كاميرا ويب لوجيتك',
@@ -123,7 +123,7 @@ Future<void> generateTestProducts() async {
       'stock': 35,
       'minStock': 8,
       'description': 'كاميرا ويب HD 1080p',
-      'image': 'webcam.jpg'
+      'image': 'webcam.jpg',
     },
     {
       'name': 'سماعات بلوتوث',
@@ -136,7 +136,7 @@ Future<void> generateTestProducts() async {
       'stock': 50,
       'minStock': 12,
       'description': 'سماعات بلوتوث لاسلكية',
-      'image': 'headphones.jpg'
+      'image': 'headphones.jpg',
     },
     {
       'name': 'USB فلاش 32GB',
@@ -149,7 +149,7 @@ Future<void> generateTestProducts() async {
       'stock': 200,
       'minStock': 50,
       'description': 'فلاش USB 3.0 سعة 32 جيجا',
-      'image': 'usb.jpg'
+      'image': 'usb.jpg',
     },
     {
       'name': 'ماك بوك برو',
@@ -162,11 +162,11 @@ Future<void> generateTestProducts() async {
       'stock': 5,
       'minStock': 1,
       'description': 'ماك بوك برو 13 بوصة M2',
-      'image': 'macbook.jpg'
-    }
+      'image': 'macbook.jpg',
+    },
   ];
 
-  await _saveToFile('test_products.json', products);
+  await _saveToFile('test/fixtures/test_products.json', products);
   print('💾 تم إنشاء ${products.length} منتج اختبار');
 }
 
@@ -181,7 +181,7 @@ Future<void> generateTestCustomers() async {
       'addressEn': 'Cairo, Egypt',
       'balance': 1500.00,
       'creditLimit': 5000.00,
-      'isActive': true
+      'isActive': true,
     },
     {
       'name': 'فاطمة علي',
@@ -192,7 +192,7 @@ Future<void> generateTestCustomers() async {
       'addressEn': 'Riyadh, Saudi Arabia',
       'balance': 800.00,
       'creditLimit': 3000.00,
-      'isActive': true
+      'isActive': true,
     },
     {
       'name': 'محمد عبدالله',
@@ -203,7 +203,7 @@ Future<void> generateTestCustomers() async {
       'addressEn': 'Dubai, UAE',
       'balance': 2200.00,
       'creditLimit': 10000.00,
-      'isActive': true
+      'isActive': true,
     },
     {
       'name': 'مريم حسن',
@@ -214,7 +214,7 @@ Future<void> generateTestCustomers() async {
       'addressEn': 'Cairo, Egypt',
       'balance': 0.00,
       'creditLimit': 2000.00,
-      'isActive': true
+      'isActive': true,
     },
     {
       'name': 'خالد سعيد',
@@ -225,11 +225,11 @@ Future<void> generateTestCustomers() async {
       'addressEn': 'Jeddah, Saudi Arabia',
       'balance': 3500.00,
       'creditLimit': 8000.00,
-      'isActive': true
-    }
+      'isActive': true,
+    },
   ];
 
-  await _saveToFile('test_customers.json', customers);
+  await _saveToFile('test/fixtures/test_customers.json', customers);
   print('💾 تم إنشاء ${customers.length} عميل اختبار');
 }
 
@@ -245,7 +245,7 @@ Future<void> generateTestSuppliers() async {
       'contactPerson': 'أيمن سامي',
       'contactPersonEn': 'Ayman Samy',
       'balance': 12000.00,
-      'isActive': true
+      'isActive': true,
     },
     {
       'name': 'مؤسسة الإلكترونيات الحديثة',
@@ -257,7 +257,7 @@ Future<void> generateTestSuppliers() async {
       'contactPerson': 'سالم أحمد',
       'contactPersonEn': 'Salem Ahmed',
       'balance': 8500.00,
-      'isActive': true
+      'isActive': true,
     },
     {
       'name': 'شركة المستوردون الموثوقون',
@@ -269,11 +269,11 @@ Future<void> generateTestSuppliers() async {
       'contactPerson': 'راشد محمد',
       'contactPersonEn': 'Rashid Mohamed',
       'balance': 15000.00,
-      'isActive': true
-    }
+      'isActive': true,
+    },
   ];
 
-  await _saveToFile('test_suppliers.json', suppliers);
+  await _saveToFile('test/fixtures/test_suppliers.json', suppliers);
   print('💾 تم إنشاء ${suppliers.length} مورد اختبار');
 }
 
@@ -281,20 +281,20 @@ Future<void> generateTestSalesInvoices() async {
   final invoices = [];
   final random = Random();
   final now = DateTime.now();
-  
+
   final customerNames = [
     'أحمد محمد',
     'فاطمة علي',
     'محمد سعيد',
     'نورا خالد',
-    'عمر حسن'
+    'عمر حسن',
   ];
 
   for (int i = 1; i <= 15; i++) {
     final invoiceDate = now.subtract(Duration(days: random.nextInt(30)));
     final isCredit = random.nextBool();
     final customerIndex = random.nextInt(5);
-    
+
     final invoice = <String, dynamic>{
       'invoiceNumber': 'SALE-${now.year}-${i.toString().padLeft(4, '0')}',
       'customerId': customerIndex + 1,
@@ -307,7 +307,7 @@ Future<void> generateTestSalesInvoices() async {
       'tax': 0.0,
       'total': 0.0,
       'paid': 0.0,
-      'remaining': 0.0
+      'remaining': 0.0,
     };
 
     // إضافة عناصر عشوائية للفاتورة
@@ -317,23 +317,42 @@ Future<void> generateTestSalesInvoices() async {
     for (int j = 0; j < itemCount; j++) {
       final productIndex = random.nextInt(10);
       final quantity = random.nextInt(3) + 1;
-      final price = [3500.0, 85.0, 250.0, 1200.0, 450.0, 180.0, 120.0, 95.0, 25.0, 8500.0][productIndex];
+      final price = [
+        3500.0,
+        85.0,
+        250.0,
+        1200.0,
+        450.0,
+        180.0,
+        120.0,
+        95.0,
+        25.0,
+        8500.0,
+      ][productIndex];
       final productName = [
-        'لابتوس ديل', 'ماوس لوجيتك', 'كيبورد ميكانيكي', 'شاشة سامسونج 24"',
-        'طابعة HP', 'هارد خارجي 1TB', 'كاميرا ويب لوجيتك', 'سماعات بلوتوث',
-        'USB فلاش 32GB', 'ماك بوك برو'
+        'لابتوس ديل',
+        'ماوس لوجيتك',
+        'كيبورد ميكانيكي',
+        'شاشة سامسونج 24"',
+        'طابعة HP',
+        'هارد خارجي 1TB',
+        'كاميرا ويب لوجيتك',
+        'سماعات بلوتوث',
+        'USB فلاش 32GB',
+        'ماك بوك برو',
       ][productIndex];
 
       final itemTotal = price * quantity;
       subtotal += itemTotal;
 
       invoice['items']?.add({
-        'productId': productIndex + 1,
-        'productName': productName,
-        'quantity': quantity,
-        'price': price,
-        'total': itemTotal
-      }) ?? [];
+            'productId': productIndex + 1,
+            'productName': productName,
+            'quantity': quantity,
+            'price': price,
+            'total': itemTotal,
+          }) ??
+          [];
     }
 
     invoice['subtotal'] = subtotal;
@@ -352,7 +371,7 @@ Future<void> generateTestSalesInvoices() async {
     invoices.add(invoice);
   }
 
-  await _saveToFile('test_sales_invoices.json', invoices);
+  await _saveToFile('test/fixtures/test_sales_invoices.json', invoices);
   print('💾 تم إنشاء ${invoices.length} فاتورة مبيعات اختبار');
 }
 
@@ -365,12 +384,14 @@ Future<void> generateTestPurchaseInvoices() async {
     final invoiceDate = now.subtract(Duration(days: random.nextInt(20)));
     final isCredit = random.nextBool();
     final supplierIndex = random.nextInt(3);
-    
+
     final invoice = <String, dynamic>{
       'invoiceNumber': 'PUR-${now.year}-${i.toString().padLeft(4, '0')}',
       'supplierId': supplierIndex + 1,
       'supplierName': [
-        'شركة التقنية المتقدمة', 'مؤسسة الإلكترونيات الحديثة', 'شركة المستوردون الموثوقون'
+        'شركة التقنية المتقدمة',
+        'مؤسسة الإلكترونيات الحديثة',
+        'شركة المستوردون الموثوقون',
       ][supplierIndex],
       'invoiceDate': invoiceDate.toIso8601String(),
       'paymentType': isCredit ? 'credit' : 'cash',
@@ -380,7 +401,7 @@ Future<void> generateTestPurchaseInvoices() async {
       'total': 0.0,
       'paid': 0.0,
       'remaining': 0.0,
-      'items': <Map<String, dynamic>>[]
+      'items': <Map<String, dynamic>>[],
     };
 
     // إضافة عناصر عشوائية للفاتورة
@@ -390,23 +411,42 @@ Future<void> generateTestPurchaseInvoices() async {
     for (int j = 0; j < itemCount; j++) {
       final productIndex = random.nextInt(10);
       final quantity = random.nextInt(10) + 5; // كميات أكبر في المشتريات
-      final cost = [2800.0, 60.0, 180.0, 950.0, 350.0, 120.0, 85.0, 65.0, 15.0, 7200.0][productIndex];
+      final cost = [
+        2800.0,
+        60.0,
+        180.0,
+        950.0,
+        350.0,
+        120.0,
+        85.0,
+        65.0,
+        15.0,
+        7200.0,
+      ][productIndex];
       final productName = [
-        'لابتوس ديل', 'ماوس لوجيتك', 'كيبورد ميكانيكي', 'شاشة سامسونج 24"',
-        'طابعة HP', 'هارد خارجي 1TB', 'كاميرا ويب لوجيتك', 'سماعات بلوتوث',
-        'USB فلاش 32GB', 'ماك بوك برو'
+        'لابتوس ديل',
+        'ماوس لوجيتك',
+        'كيبورد ميكانيكي',
+        'شاشة سامسونج 24"',
+        'طابعة HP',
+        'هارد خارجي 1TB',
+        'كاميرا ويب لوجيتك',
+        'سماعات بلوتوث',
+        'USB فلاش 32GB',
+        'ماك بوك برو',
       ][productIndex];
 
       final itemTotal = cost * quantity;
       subtotal += itemTotal;
 
       invoice['items']?.add({
-        'productId': productIndex + 1,
-        'productName': productName,
-        'quantity': quantity,
-        'cost': cost,
-        'total': itemTotal
-      }) ?? [];
+            'productId': productIndex + 1,
+            'productName': productName,
+            'quantity': quantity,
+            'cost': cost,
+            'total': itemTotal,
+          }) ??
+          [];
     }
 
     invoice['subtotal'] = subtotal;
@@ -425,7 +465,7 @@ Future<void> generateTestPurchaseInvoices() async {
     invoices.add(invoice);
   }
 
-  await _saveToFile('test_purchase_invoices.json', invoices);
+  await _saveToFile('test/fixtures/test_purchase_invoices.json', invoices);
   print('💾 تم إنشاء ${invoices.length} فاتورة مشتريات اختبار');
 }
 

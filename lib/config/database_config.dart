@@ -11,7 +11,7 @@ class DatabaseConfig {
   }
   
   // Database name
-  static const String databaseName = 'pos_system_encrypted.db';
+  static const String databaseName = 'pos_offline_desktop_database.sqlite';
   
   // Version
   static const int databaseVersion = 33; // Incremented for encryption

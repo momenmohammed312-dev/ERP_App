@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/license_manager.dart';
-import '../../services/hardware_fingerprint_service.dart';
+import '../../services/activation_service.dart';
 
 class ActivationScreen extends StatefulWidget {
   const ActivationScreen({super.key});
@@ -13,8 +13,10 @@ class ActivationScreen extends StatefulWidget {
 class _ActivationScreenState extends State<ActivationScreen> {
   final _licenseKeyController = TextEditingController();
   final _licenseManager = LicenseManager();
+  final _activationService = ActivationService();
   bool _isLoading = false;
   String? _errorMessage;
+  String? _successMessage;
   String _deviceFingerprint = '';
 
   @override
@@ -24,16 +26,23 @@ class _ActivationScreenState extends State<ActivationScreen> {
   }
 
   Future<void> _getDeviceFingerprint() async {
-    final fingerprint = await HardwareFingerprintService.generateFingerprint();
-    setState(() {
-      _deviceFingerprint = fingerprint;
-    });
+    try {
+      final fingerprint = await _licenseManager.generateDeviceFingerprint();
+      setState(() {
+        _deviceFingerprint = fingerprint;
+      });
+    } catch (e) {
+      setState(() {
+        _deviceFingerprint = 'Error generating fingerprint';
+      });
+    }
   }
 
   Future<void> _activateLicense() async {
-    if (_licenseKeyController.text.trim().isEmpty) {
+    final key = _licenseKeyController.text.trim();
+    if (key.isEmpty) {
       setState(() {
-        _errorMessage = 'Please enter a license key';
+        _errorMessage = 'يرجى إدخال مفتاح الترخيص';
       });
       return;
     }
@@ -41,27 +50,34 @@ class _ActivationScreenState extends State<ActivationScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _successMessage = null;
     });
 
     try {
-      final result = await _licenseManager.validateLicense(
-        _licenseKeyController.text.trim(),
-      );
+      final result = await _activationService.activate(key);
 
-      if (result.isValid) {
-        // Navigate to home - use GoRouter
+      if (result.isSuccess) {
+        setState(() {
+          _successMessage = result.message;
+          _isLoading = false;
+        });
+
+        // Wait a bit to show success message then navigate
+        await Future.delayed(const Duration(seconds: 2));
+
         if (mounted) {
-          context.go('/');
+          // Force app restart or navigate to home
+          context.go('/activation-success');
         }
       } else {
         setState(() {
-          _errorMessage = result.errorMessage;
+          _errorMessage = result.message;
           _isLoading = false;
         });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Activation error: $e';
+        _errorMessage = 'خطأ غير متوقع: $e';
         _isLoading = false;
       });
     }
@@ -92,7 +108,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
               Icon(Icons.lock_open, size: 64, color: Colors.blue.shade900),
               const SizedBox(height: 24),
               const Text(
-                'License Activation',
+                'تفعيل الرخصة',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -101,7 +117,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Enter your license key to activate the POS system',
+                'أدخل مفتاح الترخيص لتفعيل نظام نقاط البيع',
                 style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
                 textAlign: TextAlign.center,
               ),
@@ -117,7 +133,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Device ID:',
+                      'معرف الجهاز:',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -127,7 +143,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
                     const SizedBox(height: 4),
                     SelectableText(
                       _deviceFingerprint.isEmpty
-                          ? 'Loading...'
+                          ? 'جاري التحميل...'
                           : _deviceFingerprint,
                       style: const TextStyle(
                         fontSize: 14,
@@ -143,13 +159,29 @@ class _ActivationScreenState extends State<ActivationScreen> {
                 controller: _licenseKeyController,
                 maxLines: 3,
                 decoration: InputDecoration(
-                  labelText: 'License Key',
-                  hintText: 'Paste your license key here...',
+                  labelText: 'مفتاح الترخيص',
+                  hintText: 'الصق مفتاح الترخيص هنا...',
                   border: const OutlineInputBorder(),
                   errorText: _errorMessage,
                 ),
               ),
               const SizedBox(height: 24),
+              if (_successMessage != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green),
+                  ),
+                  child: Text(
+                    _successMessage!,
+                    style: const TextStyle(color: Colors.green),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              if (_successMessage != null) const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -177,11 +209,11 @@ class _ActivationScreenState extends State<ActivationScreen> {
                               ),
                             ),
                             SizedBox(width: 12),
-                            Text('Activating...'),
+                            Text('جاري التفعيل...'),
                           ],
                         )
                       : const Text(
-                          'Activate License',
+                          'تفعيل الرخصة',
                           style: TextStyle(fontSize: 16),
                         ),
                 ),

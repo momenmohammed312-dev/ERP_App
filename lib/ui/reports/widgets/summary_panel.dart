@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../services/export_service_simple.dart';
 
 class SummaryPanel extends StatelessWidget {
@@ -53,6 +54,11 @@ class SummaryPanel extends StatelessWidget {
 
             // Summary statistics
             _buildSummaryStatistics(context),
+
+            const SizedBox(height: 16),
+
+            // Charts section
+            if (_shouldShowCharts()) _buildChartsSection(context),
 
             const SizedBox(height: 16),
 
@@ -527,5 +533,249 @@ class SummaryPanel extends StatelessWidget {
       default:
         return Icons.info_outline;
     }
+  }
+
+  bool _shouldShowCharts() {
+    return data.isNotEmpty &&
+        ['sales', 'customers', 'products', 'financial'].contains(reportType);
+  }
+
+  Widget _buildChartsSection(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'الرسوم البيانية',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(height: 250, child: _buildChart()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChart() {
+    switch (reportType) {
+      case 'sales':
+        return _buildSalesChart();
+      case 'customers':
+        return _buildCustomersChart();
+      case 'products':
+        return _buildProductsChart();
+      case 'financial':
+        return _buildFinancialChart();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildSalesChart() {
+    // Simple bar chart showing top sales amounts
+    final topSales = data.take(5).toList();
+
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: topSales.isNotEmpty
+            ? topSales
+                      .map((e) => e['totalAmount'] as double? ?? 0.0)
+                      .reduce((a, b) => a > b ? a : b) *
+                  1.2
+            : 1000,
+        barGroups: topSales.asMap().entries.map((entry) {
+          final index = entry.key;
+          final item = entry.value;
+          final amount = item['totalAmount'] as double? ?? 0.0;
+
+          return BarChartGroupData(
+            x: index,
+            barRods: [
+              BarChartRodData(toY: amount, color: Colors.blue, width: 20),
+            ],
+          );
+        }).toList(),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                if (value.toInt() < topSales.length) {
+                  return Text(
+                    topSales[value.toInt()]['invoiceNumber']?.toString() ?? '',
+                    style: const TextStyle(fontSize: 10),
+                  );
+                }
+                return const Text('');
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+          ),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: false),
+        gridData: FlGridData(show: true),
+      ),
+    );
+  }
+
+  Widget _buildCustomersChart() {
+    // Pie chart showing customer balance distribution
+    final positiveBalance = data
+        .where((item) => (item['balance'] as double? ?? 0.0) > 0)
+        .length;
+    final negativeBalance = data
+        .where((item) => (item['balance'] as double? ?? 0.0) < 0)
+        .length;
+    final zeroBalance = data.length - positiveBalance - negativeBalance;
+
+    final sections = <PieChartSectionData>[];
+
+    if (positiveBalance > 0) {
+      sections.add(
+        PieChartSectionData(
+          value: positiveBalance.toDouble(),
+          title: '$positiveBalance',
+          color: Colors.red,
+          radius: 60,
+        ),
+      );
+    }
+
+    if (negativeBalance > 0) {
+      sections.add(
+        PieChartSectionData(
+          value: negativeBalance.toDouble(),
+          title: '$negativeBalance',
+          color: Colors.green,
+          radius: 60,
+        ),
+      );
+    }
+
+    if (zeroBalance > 0) {
+      sections.add(
+        PieChartSectionData(
+          value: zeroBalance.toDouble(),
+          title: '$zeroBalance',
+          color: Colors.grey,
+          radius: 60,
+        ),
+      );
+    }
+
+    return PieChart(
+      PieChartData(sections: sections, sectionsSpace: 2, centerSpaceRadius: 40),
+    );
+  }
+
+  Widget _buildProductsChart() {
+    // Bar chart showing inventory levels
+    final topProducts = data.take(5).toList();
+
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: topProducts.isNotEmpty
+            ? topProducts
+                      .map((e) => e['quantity'] as int? ?? 0)
+                      .reduce((a, b) => a > b ? a : b) *
+                  1.2
+            : 100,
+        barGroups: topProducts.asMap().entries.map((entry) {
+          final index = entry.key;
+          final item = entry.value;
+          final quantity = item['quantity'] as int? ?? 0;
+
+          return BarChartGroupData(
+            x: index,
+            barRods: [
+              BarChartRodData(
+                toY: quantity.toDouble(),
+                color: Colors.teal,
+                width: 20,
+              ),
+            ],
+          );
+        }).toList(),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                if (value.toInt() < topProducts.length) {
+                  return Text(
+                    topProducts[value.toInt()]['name']?.toString().substring(
+                          0,
+                          5,
+                        ) ??
+                        '',
+                    style: const TextStyle(fontSize: 8),
+                  );
+                }
+                return const Text('');
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+          ),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: false),
+        gridData: FlGridData(show: true),
+      ),
+    );
+  }
+
+  Widget _buildFinancialChart() {
+    // Pie chart showing income vs expenses
+    final summary = _calculateSummary();
+    final income = summary['totalIncome'] as double? ?? 0.0;
+    final expenses = summary['totalExpenses'] as double? ?? 0.0;
+
+    final sections = <PieChartSectionData>[];
+
+    if (income > 0) {
+      sections.add(
+        PieChartSectionData(
+          value: income,
+          title: '${income.toStringAsFixed(0)}',
+          color: Colors.green,
+          radius: 60,
+        ),
+      );
+    }
+
+    if (expenses > 0) {
+      sections.add(
+        PieChartSectionData(
+          value: expenses,
+          title: '${expenses.toStringAsFixed(0)}',
+          color: Colors.red,
+          radius: 60,
+        ),
+      );
+    }
+
+    return PieChart(
+      PieChartData(sections: sections, sectionsSpace: 2, centerSpaceRadius: 40),
+    );
   }
 }
