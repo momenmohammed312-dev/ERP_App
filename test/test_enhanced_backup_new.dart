@@ -2,13 +2,17 @@
 // اختبار نظام النسخ الاحتياطي المحسن
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'lib/core/services/backup_service.dart';
-import 'lib/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/services/backup_service.dart';
+import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 
 void main() async {
-  print('═════════════════════════════════════════════════════════════════════════');
+  print(
+    '═════════════════════════════════════════════════════════════════════════',
+  );
   print('   اختبار نظام النسخ الاحتياطي المحسن - Enhanced Backup Test');
-  print('═════════════════════════════════════════════════════════════════════════\n');
+  print(
+    '═════════════════════════════════════════════════════════════════════════\n',
+  );
 
   // Initialize database and backup service
   final container = ProviderContainer();
@@ -32,14 +36,18 @@ void main() async {
     final backups = await backupService.listBackups();
     print('✅ تم العثور على ${backups.length} نسخة احتياطية');
     for (var i = 0; i < backups.length; i++) {
-      print('   ${i + 1}. ${backups[i].filename} - ${backups[i].formattedSize} - ${backups[i].type}');
+      print(
+        '   ${i + 1}. ${backups[i].filename} - ${backups[i].formattedSize} - ${backups[i].type}',
+      );
     }
     print('');
 
     // Test 3: Get Backup Info
     if (backups.isNotEmpty) {
       print('ℹ️ اختبار 3: معلومات النسخة الاحتياطية');
-      final backupInfo = await backupService.getBackupInfo(backups.first.filename);
+      final backupInfo = await backupService.getBackupInfo(
+        backups.first.filename,
+      );
       if (backupInfo != null) {
         print('✅ معلومات النسخة:');
         print('   📁 الملف: ${backupInfo['filename']}');
@@ -53,12 +61,14 @@ void main() async {
 
     // Test 4: Auto Backup Scheduling
     print('⏰ اختبار 4: جدولة النسخ الاحتياطي التلقائي');
-    backupService.startAutoBackup(interval: Duration(seconds: 5)); // Test with 5 seconds
+    backupService.startAutoBackup(
+      interval: Duration(seconds: 5),
+    ); // Test with 5 seconds
     print('✅ تم تفعيل النسخ الاحتياطي التلقائي (كل 5 ثواني للاختبار)');
-    
+
     // Wait for one auto backup
     await Future.delayed(Duration(seconds: 6));
-    
+
     // Check if new backup was created
     final newBackups = await backupService.listBackups();
     if (newBackups.length > backups.length) {
@@ -66,7 +76,7 @@ void main() async {
     } else {
       print('⚠️ لم يتم إنشاء نسخة احتياطية تلقائية بعد');
     }
-    
+
     // Stop auto backup
     backupService.stopAutoBackup();
     print('⏹️ تم إيقاف النسخ الاحتياطي التلقائي\n');
@@ -84,7 +94,7 @@ void main() async {
     print('🧹 اختبار 6: تنظيف النسخ القديمة');
     final finalBackups = await backupService.listBackups();
     print('✅ قبل التنظيف: ${finalBackups.length} نسخة احتياطية');
-    
+
     // Note: The cleanup happens automatically, so we just verify it works
     print('✅ نظام التنظيف التلقائي يعمل بشكل صحيح\n');
 
@@ -99,10 +109,13 @@ void main() async {
     }
     print('');
 
-    print('═════════════════════════════════════════════════════════════════════════');
+    print(
+      '═════════════════════════════════════════════════════════════════════════',
+    );
     print('   🎉 جميع اختبارات النظام الاحتياطي المحسن اكتملت بنجاح!');
-    print('═════════════════════════════════════════════════════════════════════════');
-
+    print(
+      '═════════════════════════════════════════════════════════════════════════',
+    );
   } catch (e, stackTrace) {
     print('❌ خطأ في الاختبار: $e');
     print('Stack trace: $stackTrace');

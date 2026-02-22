@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'lib/services/user_backup_service.dart';
+import 'package:pos_offline_desktop/services/user_backup_service.dart';
 
 void main() {
   // Initialize Flutter binding for tests

@@ -1,5 +1,4 @@
 // ignore: depend_on_referenced_packages
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
