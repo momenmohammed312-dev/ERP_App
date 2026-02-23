@@ -116,36 +116,62 @@ class _ClientsManagementState extends State<ClientsManagement> {
 
   Widget _buildStatsCards() {
     final stats = _dataService.getClientsCountByPackage();
-    return Row(
-      children: [
-        _buildStatCard(
-          'إجمالي العملاء',
-          _dataService.getClients().length.toString(),
-          Icons.people,
-          AppColors.accentColor,
-        ),
-        const SizedBox(width: 16),
-        _buildStatCard(
-          'أساسي',
-          (stats['basic'] ?? 0).toString(),
-          Icons.star_border,
-          AppColors.basicColor,
-        ),
-        const SizedBox(width: 16),
-        _buildStatCard(
-          'قياسي',
-          (stats['standard'] ?? 0).toString(),
-          Icons.star_half,
-          AppColors.standardColor,
-        ),
-        const SizedBox(width: 16),
-        _buildStatCard(
-          'احترافي',
-          (stats['professional'] ?? 0).toString(),
-          Icons.star,
-          AppColors.professionalColor,
-        ),
-      ],
+
+    final cards = <Widget>[
+      _buildStatCard(
+        'إجمالي العملاء',
+        _dataService.getClients().length.toString(),
+        Icons.people,
+        AppColors.accentColor,
+      ),
+      _buildStatCard(
+        'أساسي',
+        (stats['basic'] ?? 0).toString(),
+        Icons.star_border,
+        AppColors.basicColor,
+      ),
+      _buildStatCard(
+        'قياسي',
+        (stats['standard'] ?? 0).toString(),
+        Icons.star_half,
+        AppColors.standardColor,
+      ),
+      _buildStatCard(
+        'احترافي',
+        (stats['professional'] ?? 0).toString(),
+        Icons.star,
+        AppColors.professionalColor,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 900;
+        if (isWide) {
+          return Row(
+            children: [
+              for (int i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(width: 16),
+                Expanded(child: cards[i]),
+              ],
+            ],
+          );
+        }
+
+        final width = constraints.maxWidth;
+        final crossAxisCount = width >= 600 ? 2 : 1;
+        const spacing = 16.0;
+        final cardWidth = crossAxisCount == 1
+            ? width
+            : (width - (spacing * (crossAxisCount - 1))) / crossAxisCount;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children:
+              cards.map((c) => SizedBox(width: cardWidth, child: c)).toList(),
+        );
+      },
     );
   }
 

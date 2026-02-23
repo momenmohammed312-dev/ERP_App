@@ -132,43 +132,66 @@ class _LicensesManagementState extends State<LicensesManagement> {
     final expiringSoon = _dataService.getExpiringSoonLicenses().length;
     final expired = _dataService.getExpiredLicenses().length;
 
-    return Row(
-      children: [
-        _buildStatCard(
-          'التراخيص النشطة',
-          _dataService.activeLicensesCount.toString(),
-          Icons.verified,
-          AppColors.successColor,
-        ),
-        const SizedBox(width: 16),
-        _buildStatCard(
-          'التجريبية',
-          _dataService.trialLicensesCount.toString(),
-          Icons.hourglass_bottom,
-          AppColors.warningColor,
-        ),
-        const SizedBox(width: 16),
-        _buildStatCard(
-          'ينتهي قريباً',
-          expiringSoon.toString(),
-          Icons.warning_amber,
-          AppColors.warningColor,
-        ),
-        const SizedBox(width: 16),
-        _buildStatCard(
-          'منتهية',
-          expired.toString(),
-          Icons.cancel,
-          AppColors.errorColor,
-        ),
-        const SizedBox(width: 16),
-        _buildStatCard(
-          'إجمالي الإيرادات',
-          '${_dataService.totalRevenue.toInt()} ج',
-          Icons.attach_money,
-          AppColors.accentColor,
-        ),
-      ],
+    final cards = <Widget>[
+      _buildStatCard(
+        'التراخيص النشطة',
+        _dataService.activeLicensesCount.toString(),
+        Icons.verified,
+        AppColors.successColor,
+      ),
+      _buildStatCard(
+        'التجريبية',
+        _dataService.trialLicensesCount.toString(),
+        Icons.hourglass_bottom,
+        AppColors.warningColor,
+      ),
+      _buildStatCard(
+        'ينتهي قريباً',
+        expiringSoon.toString(),
+        Icons.warning_amber,
+        AppColors.warningColor,
+      ),
+      _buildStatCard(
+        'منتهية',
+        expired.toString(),
+        Icons.cancel,
+        AppColors.errorColor,
+      ),
+      _buildStatCard(
+        'إجمالي الإيرادات',
+        '${_dataService.totalRevenue.toInt()} ج',
+        Icons.attach_money,
+        AppColors.accentColor,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 900;
+        if (isWide) {
+          return Row(
+            children: [
+              for (int i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(width: 16),
+                Expanded(child: cards[i]),
+              ],
+            ],
+          );
+        }
+
+        final width = constraints.maxWidth;
+        final crossAxisCount = width >= 600 ? 3 : 2;
+        const spacing = 16.0;
+        final cardWidth =
+            (width - (spacing * (crossAxisCount - 1))) / crossAxisCount;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children:
+              cards.map((c) => SizedBox(width: cardWidth, child: c)).toList(),
+        );
+      },
     );
   }
 

@@ -1313,30 +1313,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.10.1"
-  sqflite_common:
-    dependency: transitive
-    description:
-      name: sqflite_common
-      sha256: "6ef422a4525ecc601db6c0a2233ff448c731307906e92cabc9ba292afaae16a6"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.5.6"
-  sqflite_sqlcipher:
-    dependency: "direct main"
-    description:
-      name: sqflite_sqlcipher
-      sha256: e1dfb55bf21ee5a18c43f28faa4291272a801da4ab34a6ba9973b6c0e1ed77da
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.2.1"
   sqlite3:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: sqlite3
-      sha256: "3145bd74dcdb4fd6f5c6dda4d4e4490a8087d7f286a14dee5d37087290f0f8a2"
+      sha256: "072128763f1547e3e9b4735ce846bfd226d68019ccda54db4cd427b12dfdedc9"
       url: "https://pub.dev"
     source: hosted
-    version: "2.9.4"
+    version: "2.4.0"
   sqlite3_flutter_libs:
     dependency: transitive
     description:
@@ -1401,14 +1385,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.3.1"
-  synchronized:
-    dependency: transitive
-    description:
-      name: synchronized
-      sha256: c254ade258ec8282947a0acbbc90b9575b4f19673533ee46f2f6e9b3aeefd7c0
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.4.0"
   term_glyph:
     dependency: transitive
     description:

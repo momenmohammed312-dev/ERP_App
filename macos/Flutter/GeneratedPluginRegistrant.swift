@@ -20,7 +20,6 @@ import platform_device_id
 import printing
 import share_plus
 import shared_preferences_foundation
-import sqflite_sqlcipher
 import sqlite3_flutter_libs
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
@@ -39,6 +38,5 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   PrintingPlugin.register(with: registry.registrar(forPlugin: "PrintingPlugin"))
   SharePlusMacosPlugin.register(with: registry.registrar(forPlugin: "SharePlusMacosPlugin"))
   SharedPreferencesPlugin.register(with: registry.registrar(forPlugin: "SharedPreferencesPlugin"))
-  SqfliteSqlCipherPlugin.register(with: registry.registrar(forPlugin: "SqfliteSqlCipherPlugin"))
   Sqlite3FlutterLibsPlugin.register(with: registry.registrar(forPlugin: "Sqlite3FlutterLibsPlugin"))
 }
