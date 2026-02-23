@@ -4,9 +4,14 @@ import 'dart:io';
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 
 Future<void> exportInvoicesToExcel(AppDatabase db, BuildContext context) async {
+  if (kIsWeb) {
+    showSnack(context, 'Export not supported on web platform');
+    return;
+  }
   try {
     final invoices = await db.invoiceDao.getAllInvoices();
 

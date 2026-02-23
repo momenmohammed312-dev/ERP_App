@@ -1,15 +1,20 @@
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'license_manager.dart';
 import 'audit_service.dart';
-import '../core/database/database_singleton.dart';
+import '../core/provider/app_database_provider.dart';
+import '../core/database/app_database.dart';
 
 class UserSessionService {
   static const String _activeSessionsKey = 'active_user_sessions';
   static const String _sessionStartPrefix = 'session_start_';
 
   static Timer? _cleanupTimer;
+
+  static final _container = ProviderContainer();
+  static AppDatabase get _db => _container.read(appDatabaseProvider);
 
   /// Start the session cleanup timer
   static void startSessionCleanup() {
@@ -91,7 +96,7 @@ class UserSessionService {
     String? deviceId,
   }) async {
     try {
-      final db = await DatabaseSingleton.getInstance();
+      final db = _db;
 
       final prefs = await SharedPreferences.getInstance();
       final activeSessions = await getActiveSessions();
@@ -158,7 +163,7 @@ class UserSessionService {
   /// Logout a user session
   static Future<void> logoutUser(String userId) async {
     try {
-      final db = await DatabaseSingleton.getInstance();
+      final db = _db;
 
       final activeSessions = await getActiveSessions();
       activeSessions.removeWhere((session) => session['userId'] == userId);
@@ -262,7 +267,7 @@ class UserSessionService {
   /// Clean up expired sessions (older than 24 hours)
   static Future<void> _cleanupExpiredSessions() async {
     try {
-      final db = await DatabaseSingleton.getInstance();
+      final db = _db;
 
       final activeSessions = await getActiveSessions();
       final now = DateTime.now();

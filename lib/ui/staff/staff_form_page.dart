@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
-import '../../core/database/database_singleton.dart';
-import '../../core/database/dao/staff_management_dao.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
+import '../../core/provider/app_database_provider.dart';
+import '../../core/database/dao/staff_management_dao.dart';
 import '../../services/staff_management_service_simple.dart';
 
-class StaffFormPage extends StatefulWidget {
+class StaffFormPage extends ConsumerStatefulWidget {
   final Staff? staff;
 
   const StaffFormPage({super.key, this.staff});
 
   @override
-  State<StaffFormPage> createState() => _StaffFormPageState();
+  ConsumerState<StaffFormPage> createState() => _StaffFormPageState();
 }
 
-class _StaffFormPageState extends State<StaffFormPage> {
+class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   final _formKey = GlobalKey<FormState>();
   late StaffManagementService _service;
 
@@ -44,9 +45,8 @@ class _StaffFormPageState extends State<StaffFormPage> {
   }
 
   Future<void> _initializeService() async {
-    _service = StaffManagementService(
-      StaffManagementDao(await DatabaseSingleton.getInstance()),
-    );
+    final db = ref.read(appDatabaseProvider);
+    _service = StaffManagementService(StaffManagementDao(db));
     if (widget.staff != null) {
       _populateForm(widget.staff!);
     }
@@ -104,15 +104,15 @@ class _StaffFormPageState extends State<StaffFormPage> {
           TextButton(
             onPressed: _isLoading ? null : _saveForm,
             child: _isLoading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : const Text('حفظ', style: TextStyle(color: Colors.white)),
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text('حفظ', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

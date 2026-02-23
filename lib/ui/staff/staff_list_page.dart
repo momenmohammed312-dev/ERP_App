@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
-import '../../core/database/database_singleton.dart';
+import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
 import '../../services/staff_management_service_simple.dart';
 import 'staff_form_page.dart';
 import 'staff_details_page.dart';
 import 'attendance_page.dart';
 
-class StaffListPage extends StatefulWidget {
+class StaffListPage extends ConsumerStatefulWidget {
   const StaffListPage({super.key});
 
   @override
-  State<StaffListPage> createState() => _StaffListPageState();
+  ConsumerState<StaffListPage> createState() => _StaffListPageState();
 }
 
-class _StaffListPageState extends State<StaffListPage> {
+class _StaffListPageState extends ConsumerState<StaffListPage> {
   late StaffManagementService _service;
   late StaffManagementDao _dao;
   List<Staff> _staffList = [];
@@ -31,7 +32,8 @@ class _StaffListPageState extends State<StaffListPage> {
   }
 
   Future<void> _initializeService() async {
-    _dao = StaffManagementDao(await DatabaseSingleton.getInstance());
+    final db = ref.read(appDatabaseProvider);
+    _dao = StaffManagementDao(db);
     _service = StaffManagementService(_dao);
   }
 
@@ -493,7 +495,9 @@ class _StaffListPageState extends State<StaffListPage> {
         );
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في إنهاء الخدمة: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('خطأ في إنهاء الخدمة: $e')));
       }
     }
   }
@@ -503,10 +507,14 @@ class _StaffListPageState extends State<StaffListPage> {
       await _service.updateStaffInfo(staffId: staff.staffId, status: 'active');
       _loadStaff();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تفعيل الموظف بنجاح')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم تفعيل الموظف بنجاح')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في تفعيل الموظف: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('خطأ في تفعيل الموظف: $e')));
     }
   }
 }

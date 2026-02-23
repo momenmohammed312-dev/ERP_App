@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
+import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
-import '../../core/database/database_singleton.dart';
 import 'package:intl/intl.dart';
 
-class AttendancePage extends StatefulWidget {
+class AttendancePage extends ConsumerStatefulWidget {
   final Staff staff;
 
   const AttendancePage({super.key, required this.staff});
 
   @override
-  State<AttendancePage> createState() => _AttendancePageState();
+  ConsumerState<AttendancePage> createState() => _AttendancePageState();
 }
 
-class _AttendancePageState extends State<AttendancePage> {
+class _AttendancePageState extends ConsumerState<AttendancePage> {
   late StaffManagementDao _dao;
   List<Attendance> _attendanceList = [];
   bool _isLoading = true;
@@ -26,7 +27,8 @@ class _AttendancePageState extends State<AttendancePage> {
 
   Future<void> _loadAttendance() async {
     setState(() => _isLoading = true);
-    _dao = StaffManagementDao(await DatabaseSingleton.getInstance());
+    final db = ref.read(appDatabaseProvider);
+    _dao = StaffManagementDao(db);
     try {
       final attendance = await _dao.getAttendanceByStaff(widget.staff.staffId);
       setState(() {
@@ -36,7 +38,9 @@ class _AttendancePageState extends State<AttendancePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في تحميل سجل الحضور: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('خطأ في تحميل سجل الحضور: $e')));
     }
   }
 

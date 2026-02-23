@@ -9,10 +9,10 @@ class DatabaseConfig {
     final p4 = 'Y0^vL5*';
     return p1 + p2 + p3 + p4;
   }
-  
+
   // Database name
   static const String databaseName = 'pos_offline_desktop_database.sqlite';
-  
+
   // Version
-  static const int databaseVersion = 33; // Incremented for encryption
+  static const int databaseVersion = 35; // Incremented for encryption
 }

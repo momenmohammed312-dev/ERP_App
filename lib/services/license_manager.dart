@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
+import 'package:flutter/foundation.dart';
 
 enum LicenseType {
   trial, // تجريبي - 7 أيام - مستخدم واحد
@@ -77,8 +78,8 @@ class License {
 
 class LicenseManager {
   static const String _storageKey = 'app_license';
-  static const String _secretKey =
-      '56brUU7JWZlH7p61WtPSpzfPjGZDQAAO1faJju4lvjw';
+  static String get _secretKey =>
+      const String.fromEnvironment('LICENSE_SECRET_KEY');
 
   // Singleton
   static final LicenseManager _instance = LicenseManager._internal();
@@ -90,6 +91,10 @@ class LicenseManager {
   // ════════════════════════════════════════════════════════════════════
 
   Future<String> generateDeviceFingerprint() async {
+    if (kIsWeb) {
+      // Web doesn't support device fingerprinting, return a generic one
+      return 'web-device-fingerprint';
+    }
     final deviceInfo = DeviceInfoPlugin();
     String fingerprint = '';
 

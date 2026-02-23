@@ -30,6 +30,9 @@ class BackupService {
     String? description,
     int? createdBy,
   }) async {
+    if (kIsWeb) {
+      throw Exception('Backup operations not supported on web platform');
+    }
     try {
       print('📦 بدء النسخ الاحتياطي...');
 
@@ -112,6 +115,9 @@ class BackupService {
   /// Restore database from encrypted backup file
   /// استعادة قاعدة البيانات من ملف النسخ الاحتياطي المشفر
   Future<void> restoreBackup(String filename) async {
+    if (kIsWeb) {
+      throw Exception('Backup restore not supported on web platform');
+    }
     try {
       print('📥 بدء الاستعادة من: $filename');
 
@@ -179,6 +185,9 @@ class BackupService {
   /// Get enhanced backup information
   /// الحصول على معلومات النسخة الاحتياطية المحسنة
   Future<Map<String, dynamic>?> getBackupInfo(String filename) async {
+    if (kIsWeb) {
+      return null; // Backup info not available on web
+    }
     try {
       final backupDirectory = await _getBackupDirectory();
       final backupPath = path.join(backupDirectory.path, filename);
@@ -222,6 +231,9 @@ class BackupService {
   /// List all encrypted backup files
   /// قائمة جميع ملفات النسخ الاحتياطي المشفرة
   Future<List<BackupInfo>> listBackups() async {
+    if (kIsWeb) {
+      return []; // No backups available on web
+    }
     try {
       final backupDirectory = await _getBackupDirectory();
       final files = await backupDirectory
@@ -281,6 +293,9 @@ class BackupService {
   /// Delete an encrypted backup file
   /// حذف ملف نسخ احتياطي مشفر
   Future<void> deleteBackup(String filename) async {
+    if (kIsWeb) {
+      throw Exception('Backup deletion not supported on web platform');
+    }
     try {
       final backupDirectory = await _getBackupDirectory();
       final backupPath = path.join(backupDirectory.path, filename);
@@ -345,6 +360,9 @@ class BackupService {
   /// Get backup directory
   /// الحصول على مجلد النسخ الاحتياطية
   Future<Directory> _getBackupDirectory() async {
+    if (kIsWeb) {
+      throw Exception('File system operations not supported on web platform');
+    }
     final appDir = await getApplicationDocumentsDirectory();
     final backupDir = Directory(path.join(appDir.path, _backupDir));
 

@@ -19,17 +19,13 @@ import 'package:pos_offline_desktop/screens/license/activation_success_screen.da
 import 'package:pos_offline_desktop/screens/license/license_info_screen.dart';
 import 'package:pos_offline_desktop/screens/license/tamper_detected_screen.dart';
 
-// import 'package:firebase_core/firebase_core.dart';
-// import 'firebase_options.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
-  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // // Initialize Firebase
-  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Check for clock tampering FIRST
   final isTampered = await AntiTamperService.detectClockTampering();

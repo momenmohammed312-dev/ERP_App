@@ -1,11 +1,15 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
+import 'package:flutter/foundation.dart';
 import 'local_backup_service.dart';
 
 class ManualBackupService {
   /// Export backup to user-selected location
   static Future<String?> exportToUserLocation() async {
+    if (kIsWeb) {
+      throw Exception('Manual backup export not supported on web platform');
+    }
     try {
       // Create backup first
       final backupPath = await LocalBackupService.createManualBackup(

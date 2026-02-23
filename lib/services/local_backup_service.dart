@@ -4,6 +4,7 @@ import 'package:path/path.dart' as path;
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 class LocalBackupService {
   static const String _backupDir = 'backups';
@@ -42,6 +43,9 @@ class LocalBackupService {
 
   /// Create backup
   static Future<String> createBackup(String backupName) async {
+    if (kIsWeb) {
+      throw Exception('Backup operations not supported on web platform');
+    }
     try {
       // Get backup directory
       final backupDir = await _getBackupDirectory();
@@ -109,6 +113,9 @@ class LocalBackupService {
 
   /// Restore from backup
   static Future<bool> restoreFromBackup(String backupPath) async {
+    if (kIsWeb) {
+      throw Exception('Backup restore not supported on web platform');
+    }
     try {
       final backupFile = File(backupPath);
       if (!await backupFile.exists()) {
@@ -182,6 +189,9 @@ class LocalBackupService {
 
   /// Get list of available backups
   static Future<List<BackupInfo>> getAvailableBackups() async {
+    if (kIsWeb) {
+      return []; // No backups available on web
+    }
     try {
       final backupDir = await _getBackupDirectory();
       final backupFiles = await backupDir
@@ -214,6 +224,9 @@ class LocalBackupService {
 
   /// Delete backup
   static Future<bool> deleteBackup(String backupPath) async {
+    if (kIsWeb) {
+      throw Exception('Backup deletion not supported on web platform');
+    }
     try {
       final file = File(backupPath);
       if (await file.exists()) {
@@ -230,6 +243,9 @@ class LocalBackupService {
 
   /// Get backup directory
   static Future<Directory> _getBackupDirectory() async {
+    if (kIsWeb) {
+      throw Exception('File system operations not supported on web platform');
+    }
     final appDir = await getApplicationDocumentsDirectory();
     final backupDir = Directory(path.join(appDir.path, _backupDir));
 
@@ -242,6 +258,9 @@ class LocalBackupService {
 
   /// Get database file
   static Future<File> _getDatabaseFile() async {
+    if (kIsWeb) {
+      throw Exception('File system operations not supported on web platform');
+    }
     final appDir = await getApplicationDocumentsDirectory();
     final dbDir = Directory(
       path.join(appDir.path, 'pos_offline_desktop_database'),

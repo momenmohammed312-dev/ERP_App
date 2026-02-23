@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'local_backup_service.dart';
 
 class CloudBackupService {
@@ -12,6 +13,9 @@ class CloudBackupService {
     String backupPath, {
     String? customerId,
   }) async {
+    if (kIsWeb) {
+      throw Exception('Cloud backup upload not supported on web platform');
+    }
     try {
       final backupFile = File(backupPath);
       if (!await backupFile.exists()) {

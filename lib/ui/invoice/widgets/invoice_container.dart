@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:number_to_words/number_to_words.dart';
@@ -48,6 +49,14 @@ class _InvoiceContainerState extends State<InvoiceContainer> {
 
   // Save invoice as PDF
   Future<void> _saveInvoiceAsPdf(Invoice invoice) async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('PDF saving not supported on web platform'),
+        ),
+      );
+      return;
+    }
     final items = await widget.db.invoiceDao.getItemsWithProductsByInvoice(
       invoice.id,
     );

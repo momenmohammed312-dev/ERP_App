@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
+import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
-import '../../core/database/database_singleton.dart';
 import '../../core/utils/currency_helper.dart';
 import 'package:intl/intl.dart';
 
-class AdvancesPage extends StatefulWidget {
+class AdvancesPage extends ConsumerStatefulWidget {
   final Staff staff;
 
   const AdvancesPage({super.key, required this.staff});
 
   @override
-  State<AdvancesPage> createState() => _AdvancesPageState();
+  ConsumerState<AdvancesPage> createState() => _AdvancesPageState();
 }
 
-class _AdvancesPageState extends State<AdvancesPage> {
+class _AdvancesPageState extends ConsumerState<AdvancesPage> {
   late StaffManagementDao _dao;
   List<StaffAdvance> _advances = [];
   bool _isLoading = true;
@@ -27,7 +28,7 @@ class _AdvancesPageState extends State<AdvancesPage> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final db = await DatabaseSingleton.getInstance();
+    final db = ref.read(appDatabaseProvider);
     _dao = StaffManagementDao(db);
     try {
       final advances = await _dao.getAdvancesByStaff(widget.staff.staffId);

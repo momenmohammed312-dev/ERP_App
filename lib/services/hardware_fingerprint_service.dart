@@ -2,10 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 
 class HardwareFingerprintService {
   /// Generate unique device fingerprint
   static Future<String> generateFingerprint() async {
+    if (kIsWeb) {
+      // Web doesn't support device fingerprinting, return a generic one
+      return 'web-device-fingerprint';
+    }
     final deviceInfo = DeviceInfoPlugin();
     String fingerprint = '';
 

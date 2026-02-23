@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
+import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
-import '../../core/database/database_singleton.dart';
 import 'package:intl/intl.dart';
 
-class VacationsPage extends StatefulWidget {
+class VacationsPage extends ConsumerStatefulWidget {
   final Staff staff;
 
   const VacationsPage({super.key, required this.staff});
 
   @override
-  State<VacationsPage> createState() => _VacationsPageState();
+  ConsumerState<VacationsPage> createState() => _VacationsPageState();
 }
 
-class _VacationsPageState extends State<VacationsPage> {
+class _VacationsPageState extends ConsumerState<VacationsPage> {
   late StaffManagementDao _dao;
   List<Vacation> _vacations = [];
   bool _isLoading = true;
@@ -26,7 +27,7 @@ class _VacationsPageState extends State<VacationsPage> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final db = await DatabaseSingleton.getInstance();
+    final db = ref.read(appDatabaseProvider);
     _dao = StaffManagementDao(db);
     try {
       final vacations = await _dao.getVacationsByStaff(widget.staff.staffId);
@@ -37,7 +38,9 @@ class _VacationsPageState extends State<VacationsPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في تحميل سجل الإجازات: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('خطأ في تحميل سجل الإجازات: $e')));
     }
   }
 

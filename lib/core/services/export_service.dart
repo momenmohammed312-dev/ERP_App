@@ -1,5 +1,5 @@
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart';
 import 'package:excel/excel.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -67,6 +67,9 @@ class ExportService {
     required List<String> columns,
     String? fileName,
   }) async {
+    if (kIsWeb) {
+      throw Exception('PDF export not supported on web platform');
+    }
     final pdf = pw.Document();
 
     // 1. Load Fonts
@@ -143,6 +146,9 @@ class ExportService {
     required List<InvoiceReportDTO> data,
     String? fileName,
   }) async {
+    if (kIsWeb) {
+      throw Exception('Sales report export not supported on web platform');
+    }
     final pdf = pw.Document();
 
     // 1. Load Fonts (Arabic and Fallbacks)
@@ -359,6 +365,9 @@ class ExportService {
     required List<String> columns,
     String? fileName,
   }) async {
+    if (kIsWeb) {
+      throw Exception('Excel export not supported on web platform');
+    }
     final excel = Excel.createExcel();
     final sheet = excel['Sheet1'];
 
@@ -608,6 +617,11 @@ class ExportService {
     required double openingBalance,
     required double currentBalance,
   }) async {
+    if (kIsWeb) {
+      throw Exception(
+        'Customer statement export not supported on web platform',
+      );
+    }
     // Validate inputs
     final safeCustomerName = customerName.isNotEmpty
         ? customerName

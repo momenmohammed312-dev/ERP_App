@@ -1,11 +1,15 @@
 import 'dart:io';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 import '../config/database_config.dart';
 
 class DatabaseMigrationService {
   /// Migrate from old unencrypted DB to new encrypted DB
   static Future<void> migrateToEncrypted() async {
+    if (kIsWeb) {
+      throw Exception('Database migration not supported on web platform');
+    }
     try {
       final dbFolder = await getApplicationDocumentsDirectory();
       final dbDir = Directory(

@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
+import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
-import '../../core/database/database_singleton.dart';
 import 'package:intl/intl.dart';
 
-class PerformancePage extends StatefulWidget {
+class PerformancePage extends ConsumerStatefulWidget {
   final Staff staff;
 
   const PerformancePage({super.key, required this.staff});
 
   @override
-  State<PerformancePage> createState() => _PerformancePageState();
+  ConsumerState<PerformancePage> createState() => _PerformancePageState();
 }
 
-class _PerformancePageState extends State<PerformancePage> {
+class _PerformancePageState extends ConsumerState<PerformancePage> {
   late StaffManagementDao _dao;
   List<PerformanceReview> _reviews = [];
   bool _isLoading = true;
@@ -26,7 +27,7 @@ class _PerformancePageState extends State<PerformancePage> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final db = await DatabaseSingleton.getInstance();
+    final db = ref.read(appDatabaseProvider);
     _dao = StaffManagementDao(db);
     try {
       final reviews = await _dao.getReviewsByStaff(widget.staff.staffId);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import '../../../core/database/app_database.dart';
@@ -303,6 +304,12 @@ class _ReportsMainPageState extends ConsumerState<ReportsMainPage> {
   }
 
   void _exportData(List<Map<String, dynamic>> data) async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Export not supported on web platform')),
+      );
+      return;
+    }
     try {
       // Get the directory for saving files
       final directory = await getApplicationDocumentsDirectory();

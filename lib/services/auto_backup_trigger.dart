@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'local_backup_service.dart';
 import 'audit_service.dart';
-import '../core/database/database_singleton.dart';
+import '../core/database/app_database.dart';
+import '../core/provider/app_database_provider.dart';
 
 class AutoBackupTrigger {
   static Timer? _dailyBackupTimer;
@@ -11,6 +13,9 @@ class AutoBackupTrigger {
   static const int _transactionThreshold = 100;
   static const int _retentionDays = 7;
   static bool _isRunning = false;
+
+  static final _container = ProviderContainer();
+  static AppDatabase get _db => _container.read(appDatabaseProvider);
 
   /// Start automatic backup system
   static void start() {
@@ -92,7 +97,7 @@ class AutoBackupTrigger {
   /// Perform daily backup
   static Future<void> _performDailyBackup() async {
     try {
-      final db = await DatabaseSingleton.getInstance();
+      final db = _db;
 
       debugPrint('🔄 Performing daily automatic backup...');
 
@@ -116,7 +121,7 @@ class AutoBackupTrigger {
       debugPrint('❌ Error in daily backup: $e');
 
       try {
-        final db = await DatabaseSingleton.getInstance();
+        final db = _db;
         await AuditService.log(
           db: db,
           action: AuditAction.create,
@@ -136,7 +141,7 @@ class AutoBackupTrigger {
   /// Perform transaction-based backup
   static Future<void> _performTransactionBackup() async {
     try {
-      final db = await DatabaseSingleton.getInstance();
+      final db = _db;
 
       debugPrint('🔄 Performing transaction-based backup...');
 
@@ -207,7 +212,7 @@ class AutoBackupTrigger {
   /// Force immediate backup
   static Future<String?> forceBackup({String? description}) async {
     try {
-      final db = await DatabaseSingleton.getInstance();
+      final db = _db;
 
       debugPrint('🔄 Forcing immediate backup...');
 

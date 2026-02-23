@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'license_manager.dart';
 import 'anti_tamper_service.dart';
 import 'audit_service.dart';
 import 'user_session_service.dart';
-import '../core/database/database_singleton.dart';
+import '../core/provider/app_database_provider.dart';
+import '../core/database/app_database.dart';
 
 class IntegrityChecker {
   static Timer? _periodicCheckTimer;
@@ -12,6 +14,9 @@ class IntegrityChecker {
   static bool _lastCheckResult = true;
   static DateTime? _lastCheckTime;
   static int _consecutiveFailures = 0;
+
+  static final _container = ProviderContainer();
+  static AppDatabase get _db => _container.read(appDatabaseProvider);
 
   /// Start periodic integrity checks
   static void startPeriodicCheck() {
@@ -46,7 +51,7 @@ class IntegrityChecker {
       debugPrint('🔍 Performing integrity check...');
       _lastCheckTime = DateTime.now();
 
-      final db = await DatabaseSingleton.getInstance();
+      final db = _db;
 
       // Check 1: License validity
       final licenseValid = await _checkLicenseValidity();
@@ -101,7 +106,7 @@ class IntegrityChecker {
       _consecutiveFailures++;
       debugPrint('❌ Integrity check error: $e');
 
-      final db = await DatabaseSingleton.getInstance();
+      final db = _db;
 
       await AuditService.log(
         db: db,
@@ -119,7 +124,7 @@ class IntegrityChecker {
   /// Check license validity
   static Future<bool> _checkLicenseValidity() async {
     try {
-      final db = await DatabaseSingleton.getInstance();
+      final db = _db;
 
       final licenseManager = LicenseManager();
       final isValid = await licenseManager.isLicenseValid();
@@ -158,7 +163,7 @@ class IntegrityChecker {
     bool sessionsValid,
     Map<String, dynamic> sessionStats,
   ) async {
-    final db = await DatabaseSingleton.getInstance();
+    final db = _db;
 
     debugPrint('🚨 INTEGRITY BREACH DETECTED!');
     debugPrint('  License Valid: $licenseValid');
@@ -191,7 +196,7 @@ class IntegrityChecker {
 
   /// Handle critical integrity failure
   static Future<void> _handleCriticalFailure() async {
-    final db = await DatabaseSingleton.getInstance();
+    final db = _db;
 
     debugPrint('🚨 CRITICAL INTEGRITY FAILURE - Taking protective action');
 

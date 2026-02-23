@@ -115,6 +115,9 @@ class EnhancedBackupService {
     int? createdBy,
     bool encrypt = true,
   }) async {
+    if (kIsWeb) {
+      throw Exception('Backup operations not supported on web platform');
+    }
     try {
       debugPrint('📦 بدء النسخ الاحتياطي المحسّن...');
 
@@ -231,6 +234,9 @@ class EnhancedBackupService {
     String filename, {
     bool createPreRestoreBackup = true,
   }) async {
+    if (kIsWeb) {
+      throw Exception('Backup restore not supported on web platform');
+    }
     try {
       debugPrint('📥 بدء الاستعادة من: $filename');
 
@@ -330,6 +336,9 @@ class EnhancedBackupService {
   // ════════════════════════════════════════════════════════════════════
 
   Future<List<EnhancedBackupInfo>> listBackups() async {
+    if (kIsWeb) {
+      return []; // No backups available on web
+    }
     try {
       final backupDirectory = await _getBackupDirectory();
       if (!await backupDirectory.exists()) {
@@ -365,6 +374,9 @@ class EnhancedBackupService {
   // ════════════════════════════════════════════════════════════════════
 
   Future<bool> deleteBackup(String filename) async {
+    if (kIsWeb) {
+      throw Exception('Backup deletion not supported on web platform');
+    }
     try {
       final backupDirectory = await _getBackupDirectory();
       final backupPath = path.join(backupDirectory.path, filename);
@@ -387,6 +399,9 @@ class EnhancedBackupService {
   // ════════════════════════════════════════════════════════════════════
 
   Future<bool> verifyBackupIntegrity(String filename) async {
+    if (kIsWeb) {
+      return false; // Cannot verify on web
+    }
     try {
       final backupDirectory = await _getBackupDirectory();
       final backupPath = path.join(backupDirectory.path, filename);
@@ -429,11 +444,17 @@ class EnhancedBackupService {
   // ════════════════════════════════════════════════════════════════════
 
   Future<Directory> _getBackupDirectory() async {
+    if (kIsWeb) {
+      throw Exception('File system operations not supported on web platform');
+    }
     final appDir = await getApplicationDocumentsDirectory();
     return Directory(path.join(appDir.path, _backupDir));
   }
 
   Future<String> _getDatabasePath() async {
+    if (kIsWeb) {
+      throw Exception('File system operations not supported on web platform');
+    }
     final appDir = await getApplicationDocumentsDirectory();
     return path.join(
       appDir.path,

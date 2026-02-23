@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
+import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
-import '../../core/database/database_singleton.dart';
 import '../../core/utils/currency_helper.dart';
 import 'package:intl/intl.dart';
 
-class PayrollPage extends StatefulWidget {
+class PayrollPage extends ConsumerStatefulWidget {
   final Staff staff;
 
   const PayrollPage({super.key, required this.staff});
 
   @override
-  State<PayrollPage> createState() => _PayrollPageState();
+  ConsumerState<PayrollPage> createState() => _PayrollPageState();
 }
 
-class _PayrollPageState extends State<PayrollPage> {
+class _PayrollPageState extends ConsumerState<PayrollPage> {
   late StaffManagementDao _dao;
   List<Payroll> _payrollHistory = [];
   bool _isLoading = true;
@@ -27,7 +28,7 @@ class _PayrollPageState extends State<PayrollPage> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final db = await DatabaseSingleton.getInstance();
+    final db = ref.read(appDatabaseProvider);
     _dao = StaffManagementDao(db);
     try {
       final history = await _dao.getPayrollByStaff(widget.staff.staffId);
@@ -38,7 +39,9 @@ class _PayrollPageState extends State<PayrollPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في تحميل سجل المرتبات: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('خطأ في تحميل سجل المرتبات: $e')));
     }
   }
 

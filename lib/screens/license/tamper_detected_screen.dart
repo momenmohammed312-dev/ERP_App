@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 class TamperDetectedScreen extends StatelessWidget {
   const TamperDetectedScreen({super.key});
@@ -63,8 +64,11 @@ class TamperDetectedScreen extends StatelessWidget {
               SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () {
-                  // Exit app
-                  exit(0);
+                  // Exit app only on desktop
+                  if (!kIsWeb) {
+                    exit(0);
+                  }
+                  // On web, do nothing or show a message
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,

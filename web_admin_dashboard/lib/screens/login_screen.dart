@@ -106,9 +106,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             const SizedBox(height: 28),
                             TextFormField(
                               controller: _usernameController,
+                              keyboardType: TextInputType.emailAddress,
                               decoration: InputDecoration(
-                                labelText: 'اسم المستخدم',
-                                prefixIcon: const Icon(Icons.person),
+                                labelText: 'البريد الإلكتروني',
+                                prefixIcon: const Icon(Icons.email),
                                 filled: true,
                                 fillColor: Colors.grey[50],
                                 border: OutlineInputBorder(
@@ -123,7 +124,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'يرجى إدخال اسم المستخدم';
+                                  return 'يرجى إدخال البريد الإلكتروني';
+                                }
+                                if (!value.contains('@')) {
+                                  return 'يرجى إدخال بريد إلكتروني صحيح';
                                 }
                                 return null;
                               },
@@ -222,32 +226,24 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _login() {
+  Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
       });
 
-      // Simulate login process
-      Future.delayed(const Duration(seconds: 2), () {
-        setState(() {
-          _isLoading = false;
-        });
-
-        // Simple authentication check
-        if (_usernameController.text == 'admin' &&
-            _passwordController.text == 'admin123') {
-          Get.offAll(() => const AdminDashboardScreen());
-        } else {
-          Get.snackbar(
-            'خطأ',
-            'اسم المستخدم أو كلمة المرور غير صحيحة',
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-            duration: const Duration(seconds: 3),
-          );
-        }
-      });
+      try {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: _usernameController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+        Get.offAll(() => const AdminDashboardScreen());
+      } on FirebaseAuthException catch (e) {
+        Get.snackbar('خطأ', e.message ?? 'بيانات غير صحيحة',
+            backgroundColor: Colors.red, colorText: Colors.white);
+      } finally {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

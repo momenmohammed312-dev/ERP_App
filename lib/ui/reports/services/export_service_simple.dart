@@ -9,6 +9,9 @@ class ExportService {
     required String reportType,
     required String fileName,
   }) async {
+    if (kIsWeb) {
+      throw Exception('Export not supported on web platform');
+    }
     try {
       if (data.isEmpty) {
         throw Exception('لا توجد بيانات للتصدير');

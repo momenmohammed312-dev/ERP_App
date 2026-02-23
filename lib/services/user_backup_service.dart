@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive_io.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
 
 // ════════════════════════════════════════════════════════════════════════
 // 1. نموذج النسخة الاحتياطية
@@ -68,6 +69,9 @@ class BackupService {
     String? description,
     int? createdBy,
   }) async {
+    if (kIsWeb) {
+      throw Exception('Backup operations not supported on web platform');
+    }
     try {
       print('📦 بدء النسخ الاحتياطي...');
 

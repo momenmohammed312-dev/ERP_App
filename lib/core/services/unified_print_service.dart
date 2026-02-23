@@ -7,12 +7,12 @@ import 'package:pos_offline_desktop/core/utils/arabic_helper.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 /// SOP 4.0: Global Unified System Redesign & Financial Reporting
 /// MANDATORY: Single service for ALL document generation
 /// NO EXCEPTIONS - Every export must use this service
 class UnifiedPrintService {
-  static const String _branding = 'Developed by MO2';
   static const String _logoAssetPath = 'assets/recipt/recipt_logo.png';
 
   /// 1. GENERATE UNIFIED DOCUMENT
@@ -108,6 +108,9 @@ class UnifiedPrintService {
     Map<String, dynamic>? additionalData,
     String? fileName,
   }) async {
+    if (kIsWeb) {
+      throw Exception('PDF export not supported on web platform');
+    }
     final pdf = await generateUnifiedDocument(
       documentType: documentType,
       data: data,
@@ -153,29 +156,6 @@ class UnifiedPrintService {
   ) {
     return pw.Column(
       children: [
-        /// Logo (Centered at top)
-        if (logoImage != null)
-          pw.Center(
-            child: pw.Image(
-              logoImage,
-              height: 100, // Enlarged from 60pt to 100pt
-              fit: pw.BoxFit.contain,
-            ),
-          )
-        else
-          // Fallback to text branding if logo fails to load
-          pw.Center(
-            child: pw.Text(
-              _branding,
-              style: pw.TextStyle(
-                fontSize: 12,
-                color: PdfColors.grey600,
-                font: arabicFont,
-              ),
-            ),
-          ),
-        pw.SizedBox(height: 10),
-
         /// Company Info (from StoreInfoTable)
         if (storeInfo != null) ...[
           pw.Center(

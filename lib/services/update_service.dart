@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 
 class UpdateService {
   static const String updateCheckUrl =
@@ -11,6 +12,9 @@ class UpdateService {
 
   /// Check if update is available
   Future<UpdateInfo?> checkForUpdate() async {
+    if (kIsWeb) {
+      return null; // Updates not available on web
+    }
     try {
       print('Checking for updates...');
 

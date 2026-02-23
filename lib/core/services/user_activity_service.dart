@@ -2,13 +2,17 @@ import '../database/app_database.dart';
 import '../database/dao/user_activity_dao.dart';
 
 class UserActivityService {
-  final AppDatabase _database;
   final UserActivityDao _activityDao;
 
-  UserActivityService(this._database) : _activityDao = UserActivityDao(_database);
+  UserActivityService(AppDatabase database)
+    : _activityDao = UserActivityDao(database);
 
   /// Log user login
-  Future<void> logLogin(int userId, {String? ipAddress, String? sessionId}) async {
+  Future<void> logLogin(
+    int userId, {
+    String? ipAddress,
+    String? sessionId,
+  }) async {
     await _activityDao.logActivity(
       userId: userId,
       action: 'login',
@@ -29,7 +33,11 @@ class UserActivityService {
   }
 
   /// Log user creation
-  Future<void> logUserCreated(int createdBy, int newUserId, String username) async {
+  Future<void> logUserCreated(
+    int createdBy,
+    int newUserId,
+    String username,
+  ) async {
     await _activityDao.logActivity(
       userId: createdBy,
       action: 'create_user',
@@ -51,7 +59,11 @@ class UserActivityService {
   }
 
   /// Log user deletion
-  Future<void> logUserDeleted(int deletedBy, int userId, String username) async {
+  Future<void> logUserDeleted(
+    int deletedBy,
+    int userId,
+    String username,
+  ) async {
     await _activityDao.logActivity(
       userId: deletedBy,
       action: 'delete_user',
@@ -66,7 +78,8 @@ class UserActivityService {
     await _activityDao.logActivity(
       userId: userId,
       action: 'create_sale',
-      description: 'Created sale invoice #$invoiceId for ${amount.toStringAsFixed(2)} ج.م',
+      description:
+          'Created sale invoice #$invoiceId for ${amount.toStringAsFixed(2)} ج.م',
       entityType: 'Invoice',
       entityId: invoiceId,
     );
@@ -88,14 +101,19 @@ class UserActivityService {
     await _activityDao.logActivity(
       userId: userId,
       action: 'delete_sale',
-      description: 'Deleted sale invoice #$invoiceId for ${amount.toStringAsFixed(2)} ج.م',
+      description:
+          'Deleted sale invoice #$invoiceId for ${amount.toStringAsFixed(2)} ج.م',
       entityType: 'Invoice',
       entityId: invoiceId,
     );
   }
 
   /// Log customer creation
-  Future<void> logCustomerCreated(int userId, int customerId, String customerName) async {
+  Future<void> logCustomerCreated(
+    int userId,
+    int customerId,
+    String customerName,
+  ) async {
     await _activityDao.logActivity(
       userId: userId,
       action: 'create_customer',
@@ -106,7 +124,11 @@ class UserActivityService {
   }
 
   /// Log customer update
-  Future<void> logCustomerUpdated(int userId, int customerId, String changes) async {
+  Future<void> logCustomerUpdated(
+    int userId,
+    int customerId,
+    String changes,
+  ) async {
     await _activityDao.logActivity(
       userId: userId,
       action: 'update_customer',
@@ -117,7 +139,11 @@ class UserActivityService {
   }
 
   /// Log product creation
-  Future<void> logProductCreated(int userId, int productId, String productName) async {
+  Future<void> logProductCreated(
+    int userId,
+    int productId,
+    String productName,
+  ) async {
     await _activityDao.logActivity(
       userId: userId,
       action: 'create_product',
@@ -128,7 +154,11 @@ class UserActivityService {
   }
 
   /// Log product update
-  Future<void> logProductUpdated(int userId, int productId, String changes) async {
+  Future<void> logProductUpdated(
+    int userId,
+    int productId,
+    String changes,
+  ) async {
     await _activityDao.logActivity(
       userId: userId,
       action: 'update_product',
