@@ -1,15 +1,17 @@
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/database_encryption_service.dart';
 import '../services/audit_service.dart';
 import '../core/database/app_database.dart';
-import '../core/provider/app_database_provider.dart';
 
 class AntiTamperService {
   static const String _lastDateKey = 'last_known_date_encrypted';
 
-  static final _container = ProviderContainer();
-  static AppDatabase get _db => _container.read(appDatabaseProvider);
+  static AppDatabase? _dbInstance;
+  static void init(AppDatabase db) {
+    _dbInstance = db;
+  }
+
+  static AppDatabase get _db => _dbInstance!;
 
   /// Check if system clock was tampered
   static Future<bool> detectClockTampering() async {
@@ -64,7 +66,9 @@ class AntiTamperService {
       return false; // No tampering
     } catch (e) {
       print('Error in tamper detection: $e');
-      // On error, assume no tampering to avoid false positives
+      // If decryption fails, the data is likely corrupted or from an incompatible version
+      // Reset it to avoid persistent errors and allow the system to re-initialize
+      await resetTamperCheck();
       return false;
     }
   }

@@ -10,6 +10,7 @@ import 'package:pos_offline_desktop/core/config/theme.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/router/go_router.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
+import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/services/anti_tamper_service.dart';
 import 'package:pos_offline_desktop/services/integrity_checker.dart';
@@ -28,10 +29,17 @@ void main() async {
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Check for clock tampering FIRST
+  // Create shared container for all services
+  final container = ProviderContainer();
+  final db = container.read(appDatabaseProvider);
+
+  // Initialize services with shared database
+  AntiTamperService.init(db);
+  UserSessionService.init(db);
+
+  // Check for clock tampering (now that services are initialized)
   final isTampered = await AntiTamperService.detectClockTampering();
   if (isTampered) {
-    // Show tamper detected screen
     runApp(const TamperDetectedApp());
     return;
   }
@@ -39,10 +47,6 @@ void main() async {
   // Check license validity
   final licenseManager = LicenseManager();
   final isLicenseValid = await licenseManager.isLicenseValid();
-
-  // Create shared container for all services
-  final container = ProviderContainer();
-  final db = container.read(appDatabaseProvider);
 
   // Start background services with shared database
   UserSessionService.startSessionCleanup();
@@ -57,22 +61,23 @@ void main() async {
     }
   }
 
-  // Show splash screen first, then navigate based on license status
-  runApp(
-    UncontrolledProviderScope(
-      container: container,
-      child: MyApp(isLicenseValid: isLicenseValid),
-    ),
-  );
+  runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
 }
 
 class MyApp extends ConsumerWidget {
-  final bool isLicenseValid;
-
-  const MyApp({super.key, required this.isLicenseValid});
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final licenseState = ref.watch(licenseStateProvider);
+
+    // Determine if license is valid from the provider state
+    final isLicenseValid = licenseState.when(
+      data: (valid) => valid,
+      loading: () => false, // Default to false while loading
+      error: (_, _) => false,
+    );
+
     return MaterialApp.router(
       title: 'POS System - Developed by MO2',
       debugShowCheckedModeBanner: false,
@@ -103,7 +108,7 @@ class MyApp extends ConsumerWidget {
       ],
       locale: const Locale('ar'), // Set Arabic as default
       routerConfig: isLicenseValid
-          ? ref.read(routerProvider)
+          ? ref.watch(routerProvider)
           : _createActivationRouter(),
     );
   }

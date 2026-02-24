@@ -7,7 +7,6 @@ import 'package:pos_offline_desktop/ui/cashier/cashier_page.dart';
 import 'package:pos_offline_desktop/ui/home/widgets/customer_transactions_widget.dart';
 import 'package:pos_offline_desktop/ui/home/widgets/suppliers_widget.dart';
 import 'package:pos_offline_desktop/ui/reports/reports_page.dart';
-import 'package:pos_offline_desktop/ui/purchase/purchase_page.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/enhanced_new_invoice_page.dart';
 import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
 import 'package:pos_offline_desktop/ui/staff/staff_list_page.dart';
@@ -28,7 +27,7 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -222,15 +221,11 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
                   icon: const Icon(Icons.inventory_outlined),
                   text: l10n.suppliers,
                 ),
-                Tab(
-                  icon: const Icon(Icons.shopping_basket_outlined),
-                  text: 'المشتريات',
-                ),
+                Tab(icon: const Icon(Icons.badge_outlined), text: 'الموظفين'),
                 Tab(
                   icon: const Icon(Icons.account_balance_wallet_outlined),
                   text: l10n.cash,
                 ),
-                Tab(icon: const Icon(Icons.badge_outlined), text: 'الموظفين'),
               ],
             ),
           ),
@@ -301,14 +296,14 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
                                 'الموظفين (مغلق)',
                                 Icons.badge_outlined,
                                 Colors.grey,
-                                () => _tabController.animateTo(6),
+                                () => _tabController.animateTo(4),
                               ),
                               child: _buildLauncherButton(
                                 context,
                                 'الموظفين',
                                 Icons.badge_outlined,
                                 Colors.indigo,
-                                () => _tabController.animateTo(6),
+                                () => _tabController.animateTo(4),
                               ),
                             ),
                             // Backup Button
@@ -337,12 +332,11 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
                 ProductScreen(db: widget.db),
                 CustomerTransactionsWidget(db: widget.db),
                 SuppliersWidget(db: widget.db),
-                PurchasePage(db: widget.db),
-                CashierPage(db: widget.db),
                 FeatureGuard(
                   featureName: 'staff_management',
                   child: const StaffListPage(),
                 ),
+                CashierPage(db: widget.db),
               ],
             ),
           ),

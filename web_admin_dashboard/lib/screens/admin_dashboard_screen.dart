@@ -44,7 +44,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    // _dataService.init(); // Commented out to avoid Firestore crash during local testing
+    _dataService.init();
   }
 
   @override

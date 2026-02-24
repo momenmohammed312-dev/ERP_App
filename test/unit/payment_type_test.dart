@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/main.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:drift/native.dart';
 import 'package:drift/drift.dart';
@@ -40,8 +41,11 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [appDatabaseProvider.overrideWithValue(db)],
-          child: MyApp(isLicenseValid: true),
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            licenseStateProvider.overrideWith((ref) => true),
+          ],
+          child: const MyApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -83,8 +87,11 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [appDatabaseProvider.overrideWithValue(db)],
-          child: MyApp(isLicenseValid: true),
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            licenseStateProvider.overrideWith((ref) => true),
+          ],
+          child: const MyApp(),
         ),
       );
       await tester.pumpAndSettle();

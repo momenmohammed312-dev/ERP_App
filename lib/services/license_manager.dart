@@ -302,7 +302,7 @@ class LicenseManager {
   String _encrypt(String plainText) {
     final keyBytes = md5.convert(utf8.encode(_secretKey)).bytes;
     final key = encrypt_pkg.Key(Uint8List.fromList(keyBytes));
-    final iv = encrypt_pkg.IV.fromLength(16);
+    final iv = encrypt_pkg.IV(Uint8List(16));
     final encrypter = encrypt_pkg.Encrypter(
       encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
     );
@@ -314,7 +314,7 @@ class LicenseManager {
   String _decrypt(String encryptedText) {
     final keyBytes = md5.convert(utf8.encode(_secretKey)).bytes;
     final key = encrypt_pkg.Key(Uint8List.fromList(keyBytes));
-    final iv = encrypt_pkg.IV.fromLength(16);
+    final iv = encrypt_pkg.IV(Uint8List(16));
     final encrypter = encrypt_pkg.Encrypter(
       encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
     );

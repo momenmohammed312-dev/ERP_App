@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../models/client_model.dart';
 import '../models/license_model.dart';
 import '../services/data_service.dart';
+import '../services/pos_license_generator.dart';
 import '../utils/constants.dart';
 import 'package:uuid/uuid.dart';
 
@@ -780,6 +781,7 @@ class _ClientsManagementState extends State<ClientsManagement> {
     SubscriptionDuration selectedDuration = SubscriptionDuration.monthly;
     String selectedPackage =
         client.packageType.isNotEmpty ? client.packageType : 'basic';
+    final hardwareIdController = TextEditingController();
 
     showDialog(
       context: context,
@@ -944,6 +946,23 @@ class _ClientsManagementState extends State<ClientsManagement> {
                           visualDensity: VisualDensity.compact,
                         );
                       }),
+
+                      const SizedBox(height: 16),
+                      const Text('معرّف الجهاز (Hardware ID):',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: hardwareIdController,
+                        decoration: InputDecoration(
+                          hintText: 'أدخل معرّف الجهاز من تطبيق POS',
+                          prefixIcon: const Icon(Icons.important_devices),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -963,11 +982,42 @@ class _ClientsManagementState extends State<ClientsManagement> {
                     return;
                   }
 
-                  final license = await _dataService.generateLicense(
+                  if (hardwareIdController.text.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('يرجى إدخال معرّف الجهاز')),
+                    );
+                    return;
+                  }
+
+                  final expiresAt =
+                      LicenseKeyGenerator.getExpiryDate(selectedDuration);
+                  final price = LicenseKeyGenerator.getPrice(
+                      selectedPackage, selectedDuration);
+
+                  final licenseKey = POSLicenseGenerator.generateLicenseKey(
+                    deviceFingerprint: hardwareIdController.text.trim(),
+                    type: selectedPackage,
+                    expiryDate: expiresAt,
+                    features: [
+                      'sales',
+                      'inventory',
+                      'customers',
+                      'suppliers',
+                      if (selectedPackage != 'basic') 'staff_management',
+                      if (selectedPackage == 'professional') 'multi_user',
+                    ],
+                    companyName: client.name,
+                    contactEmail: client.email,
+                  );
+
+                  final license = await _dataService.generateLicenseWithKey(
                     clientId: client.id,
                     clientName: client.name,
                     packageType: selectedPackage,
-                    duration: selectedDuration,
+                    licenseKey: licenseKey,
+                    expiresAt: expiresAt,
+                    price: price,
+                    hardwareId: hardwareIdController.text.trim(),
                   );
 
                   if (client.packageType != selectedPackage) {

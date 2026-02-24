@@ -13,8 +13,12 @@ class UserSessionService {
 
   static Timer? _cleanupTimer;
 
-  static final _container = ProviderContainer();
-  static AppDatabase get _db => _container.read(appDatabaseProvider);
+  static AppDatabase? _dbInstance;
+  static void init(AppDatabase db) {
+    _dbInstance = db;
+  }
+
+  static AppDatabase get _db => _dbInstance!;
 
   /// Start the session cleanup timer
   static void startSessionCleanup() {

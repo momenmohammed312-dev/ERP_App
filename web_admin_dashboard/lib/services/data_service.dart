@@ -233,6 +233,64 @@ class DataService {
     return license;
   }
 
+  /// Generate new license for client with a pre-generated key
+  Future<LicenseRecord> generateLicenseWithKey({
+    required String clientId,
+    required String clientName,
+    required String packageType,
+    required String licenseKey,
+    required DateTime expiresAt,
+    required double price,
+    String? hardwareId,
+    String? notes,
+  }) async {
+    final Map<String, dynamic> licenseData = {
+      'licenseKey': licenseKey,
+      'clientId': clientId,
+      'clientName': clientName,
+      'packageType': packageType,
+      'duration': SubscriptionDuration.monthly.index, // Default for manual
+      'createdAt': Timestamp.fromDate(DateTime.now()),
+      'expiresAt': Timestamp.fromDate(expiresAt),
+      'activatedAt':
+          hardwareId != null ? Timestamp.fromDate(DateTime.now()) : null,
+      'hardwareId': hardwareId,
+      'status': LicenseStatus.active.index,
+      'price': price,
+      'notes': notes,
+    };
+
+    if (_useLocal) {
+      final localId = DateTime.now().microsecondsSinceEpoch.toString();
+      final license = LicenseRecord.fromJson({...licenseData, 'id': localId});
+      _licenses = [..._licenses, license];
+
+      final client = getClientById(clientId);
+      if (client != null) {
+        await updateClient(client.copyWith(
+          currentLicenseId: license.id,
+          totalPaid: client.totalPaid + price,
+        ));
+      }
+
+      return license;
+    }
+
+    final docRef =
+        await _firestore!.collection(_licensesCollection).add(licenseData);
+    final license = LicenseRecord.fromJson({...licenseData, 'id': docRef.id});
+
+    final client = getClientById(clientId);
+    if (client != null) {
+      await updateClient(client.copyWith(
+        currentLicenseId: license.id,
+        totalPaid: client.totalPaid + price,
+      ));
+    }
+
+    return license;
+  }
+
   /// Activate license (from Web Dashboard perspective - usually done by POS)
   Future<void> updateLicenseStatus(String id, LicenseStatus status) async {
     if (_useLocal) {

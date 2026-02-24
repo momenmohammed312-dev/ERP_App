@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/provider/license_provider.dart';
 
-class ActivationSuccessScreen extends StatefulWidget {
+class ActivationSuccessScreen extends ConsumerStatefulWidget {
   const ActivationSuccessScreen({super.key});
 
   @override
-  State<ActivationSuccessScreen> createState() => _ActivationSuccessScreenState();
+  ConsumerState<ActivationSuccessScreen> createState() =>
+      _ActivationSuccessScreenState();
 }
 
-class _ActivationSuccessScreenState extends State<ActivationSuccessScreen>
+class _ActivationSuccessScreenState
+    extends ConsumerState<ActivationSuccessScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
@@ -17,34 +21,33 @@ class _ActivationSuccessScreenState extends State<ActivationSuccessScreen>
   @override
   void initState() {
     super.initState();
-    
+
     _animationController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
     );
 
-    _scaleAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.elasticOut,
-    ));
+    _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
+    );
 
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.3, 1.0, curve: Curves.easeIn),
-    ));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeIn),
+      ),
+    );
 
     _animationController.forward();
 
-    // Auto-navigate to home after 2 seconds
-    Future.delayed(const Duration(seconds: 2), () {
+    // Refresh license provider then navigate
+    Future.delayed(const Duration(seconds: 2), () async {
       if (mounted) {
-        context.go('/home');
+        // Trigger refresh to update MyApp's router configuration
+        ref.invalidate(licenseStateProvider);
+
+        // Wait for it to update or just go to /splash (which will now show home)
+        context.go('/splash');
       }
     });
   }
@@ -78,7 +81,7 @@ class _ActivationSuccessScreenState extends State<ActivationSuccessScreen>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                          color: Colors.green.withValues(alpha: 0.3),
+                            color: Colors.green.withValues(alpha: 0.3),
                             blurRadius: 20,
                             spreadRadius: 5,
                           ),
@@ -93,9 +96,9 @@ class _ActivationSuccessScreenState extends State<ActivationSuccessScreen>
                   );
                 },
               ),
-              
+
               const SizedBox(height: 40),
-              
+
               // Success Message with Fade Animation
               AnimatedBuilder(
                 animation: _fadeAnimation,
@@ -109,7 +112,7 @@ class _ActivationSuccessScreenState extends State<ActivationSuccessScreen>
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
-                           color: Colors.green.shade800,
+                            color: Colors.green.shade800,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -136,9 +139,9 @@ class _ActivationSuccessScreenState extends State<ActivationSuccessScreen>
                   );
                 },
               ),
-              
+
               const SizedBox(height: 60),
-              
+
               // Loading Spinner
               AnimatedBuilder(
                 animation: _fadeAnimation,
@@ -150,7 +153,9 @@ class _ActivationSuccessScreenState extends State<ActivationSuccessScreen>
                       height: 24,
                       child: CircularProgressIndicator(
                         strokeWidth: 3,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.green.shade600),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.green.shade600,
+                        ),
                       ),
                     ),
                   );
