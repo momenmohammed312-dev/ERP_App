@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/config/theme.dart';
+import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/router/go_router.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 import 'package:pos_offline_desktop/services/license_manager.dart';
@@ -39,9 +40,13 @@ void main() async {
   final licenseManager = LicenseManager();
   final isLicenseValid = await licenseManager.isLicenseValid();
 
-  // Start background services
+  // Create shared container for all services
+  final container = ProviderContainer();
+  final db = container.read(appDatabaseProvider);
+
+  // Start background services with shared database
   UserSessionService.startSessionCleanup();
-  IntegrityChecker.startPeriodicCheck();
+  IntegrityChecker.startPeriodicCheck(db);
   AutoBackupService.start();
 
   if (!kIsWeb) {
@@ -53,7 +58,12 @@ void main() async {
   }
 
   // Show splash screen first, then navigate based on license status
-  runApp(ProviderScope(child: MyApp(isLicenseValid: isLicenseValid)));
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
+      child: MyApp(isLicenseValid: isLicenseValid),
+    ),
+  );
 }
 
 class MyApp extends ConsumerWidget {

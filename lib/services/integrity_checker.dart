@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'license_manager.dart';
 import 'anti_tamper_service.dart';
 import 'audit_service.dart';
 import 'user_session_service.dart';
-import '../core/provider/app_database_provider.dart';
 import '../core/database/app_database.dart';
 
 class IntegrityChecker {
@@ -15,15 +13,16 @@ class IntegrityChecker {
   static DateTime? _lastCheckTime;
   static int _consecutiveFailures = 0;
 
-  static final _container = ProviderContainer();
-  static AppDatabase get _db => _container.read(appDatabaseProvider);
+  static AppDatabase? _db;
 
   /// Start periodic integrity checks
-  static void startPeriodicCheck() {
+  static void startPeriodicCheck(AppDatabase db) {
     if (_isRunning) {
       debugPrint('Integrity checker already running');
       return;
     }
+
+    _db = db;
 
     _isRunning = true;
     debugPrint('🔍 Starting integrity checker (every 30 minutes)');
@@ -51,7 +50,7 @@ class IntegrityChecker {
       debugPrint('🔍 Performing integrity check...');
       _lastCheckTime = DateTime.now();
 
-      final db = _db;
+      final db = _db!;
 
       // Check 1: License validity
       final licenseValid = await _checkLicenseValidity();
@@ -106,7 +105,7 @@ class IntegrityChecker {
       _consecutiveFailures++;
       debugPrint('❌ Integrity check error: $e');
 
-      final db = _db;
+      final db = _db!;
 
       await AuditService.log(
         db: db,
@@ -124,7 +123,7 @@ class IntegrityChecker {
   /// Check license validity
   static Future<bool> _checkLicenseValidity() async {
     try {
-      final db = _db;
+      final db = _db!;
 
       final licenseManager = LicenseManager();
       final isValid = await licenseManager.isLicenseValid();
@@ -163,7 +162,7 @@ class IntegrityChecker {
     bool sessionsValid,
     Map<String, dynamic> sessionStats,
   ) async {
-    final db = _db;
+    final db = _db!;
 
     debugPrint('🚨 INTEGRITY BREACH DETECTED!');
     debugPrint('  License Valid: $licenseValid');
@@ -196,7 +195,7 @@ class IntegrityChecker {
 
   /// Handle critical integrity failure
   static Future<void> _handleCriticalFailure() async {
-    final db = _db;
+    final db = _db!;
 
     debugPrint('🚨 CRITICAL INTEGRITY FAILURE - Taking protective action');
 

@@ -1,0 +1,12 @@
+LICENSE INFORMATION
+===================
+Generated: 2026-02-24 15:35:11.995207
+Device ID: db16569b055a26d5789151f1021b895e4106bdf9cf2045fbfc91e8313eeab023
+Type: enterprise
+Max Users: 999
+Duration: LIFETIME
+Expires: Never (lifetime license)
+Features: pos, inventory, customers, suppliers, reports, accounting, users, backup, export, admin
+
+LICENSE KEY:
+EYpXxtubDFXU4ZqTjbUwRZtrEjVZYaoZJZlEQUQUvSTHQtpHU+WJ63zg+KJ53f8jQ9BZEa+KiK66ikDW6R6zX6nWONiS7Tb51JVw7vNKRCKU7JJV7oreck5xMdH3WUr66EjlbPxwG6DXTTfzq848/F05HoKsCFjUtekIxVa821mD5y1xANRIZvbkTD8/fJnx1XZHN+rzidwx8ix9ng1/pFvRspA+KCmZdZrYbHgw3SoeaIL9C15+AyZbb2sgYYwgpFuZ83JfPhGNP01t/WfIKgZ1ttFJAf4avmMBnIrh75xHmBeYHw+82y7yGrlkO27TVisSx61HWe9+zJp/SxwmJ2iqdefvbSF3u+cl7A/U2oMXnsufAiflVaLC/iRKcNwQX2uQNqfJJKqG067n7NS85SRyrq21Gual8J5QfkDymG9kTOs+c7XyH0PdLFU4vUmbYzMzuLGxK7LDOn21PW4lzWvG6bjfgq08wKJ7vNCFphLHRPhw696GnjmFVCH1WGD7TIXs9ztnWwxT4FDa2Avujw==.8a223d5bebe0f04ae0b71f56726b6b395239fc803ec3cc68451f6be6934447a7

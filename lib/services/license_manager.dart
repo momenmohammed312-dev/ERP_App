@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -78,8 +79,7 @@ class License {
 
 class LicenseManager {
   static const String _storageKey = 'app_license';
-  static String get _secretKey =>
-      const String.fromEnvironment('LICENSE_SECRET_KEY');
+  static const String _secretKey = 'POS-SaaS-2026-PROD-SECURE-K3Y-F0R-L1C3NS3!';
 
   // Singleton
   static final LicenseManager _instance = LicenseManager._internal();
@@ -300,7 +300,8 @@ class LicenseManager {
   }
 
   String _encrypt(String plainText) {
-    final key = encrypt_pkg.Key.fromUtf8(_secretKey);
+    final keyBytes = md5.convert(utf8.encode(_secretKey)).bytes;
+    final key = encrypt_pkg.Key(Uint8List.fromList(keyBytes));
     final iv = encrypt_pkg.IV.fromLength(16);
     final encrypter = encrypt_pkg.Encrypter(
       encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
@@ -311,7 +312,8 @@ class LicenseManager {
   }
 
   String _decrypt(String encryptedText) {
-    final key = encrypt_pkg.Key.fromUtf8(_secretKey);
+    final keyBytes = md5.convert(utf8.encode(_secretKey)).bytes;
+    final key = encrypt_pkg.Key(Uint8List.fromList(keyBytes));
     final iv = encrypt_pkg.IV.fromLength(16);
     final encrypter = encrypt_pkg.Encrypter(
       encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),

@@ -1,9 +1,8 @@
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../utils/constants.dart';
 import '../widgets/dashboard_overview.dart';
-import '../widgets/clients_management.dart';
+import '../widgets/customer_management.dart';
 import '../widgets/licenses_management.dart';
 import '../widgets/revenue_dashboard.dart';
 import '../services/data_service.dart';
@@ -45,7 +44,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _dataService.init();
+    // _dataService.init(); // Commented out to avoid Firestore crash during local testing
   }
 
   @override
@@ -54,50 +53,48 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final isTablet = MediaQuery.of(context).size.width > 800 &&
         MediaQuery.of(context).size.width <= 1200;
 
-    return Directionality(
-      textDirection: ui.TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: AppColors.backgroundColor,
-        appBar: AppBar(
-          title: const Text(
-            'لوحة تحكم MO2',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
+    return Scaffold(
+      backgroundColor: AppColors.backgroundColor,
+      appBar: AppBar(
+        title: const Text(
+          'لوحة تحكم MO2',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
           ),
-          backgroundColor: AppColors.primaryColor,
-          elevation: 0,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.notifications, color: Colors.white),
-              onPressed: () {
-                _showExpiringLicensesDialog();
-              },
-            ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: Colors.white),
-              onSelected: (value) {
-                if (value == 'logout') {
-                  _logout();
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'logout',
-                  child: Row(
-                    children: [
-                      Icon(Icons.logout, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('تسجيل الخروج'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
         ),
-        body: Row(
+        backgroundColor: AppColors.primaryColor,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications, color: Colors.white),
+            onPressed: () {
+              _showExpiringLicensesDialog();
+            },
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) {
+              if (value == 'logout') {
+                _logout();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('تسجيل الخروج'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      body: Row(
         children: [
           // Sidebar (Desktop)
           if (isDesktop)
@@ -164,7 +161,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       // Bottom Navigation (Mobile/Tablet)
       bottomNavigationBar: isDesktop ? null : _buildBottomNavigationBar(),
       floatingActionButton: isTablet ? _buildFloatingActionButton() : null,
-      ),
     );
   }
 
@@ -276,7 +272,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case 0:
         return const DashboardOverview();
       case 1:
-        return const ClientsManagement();
+        return const CustomerManagement();
       case 2:
         return const LicensesManagement();
       case 3:
@@ -292,13 +288,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   void _showExpiringLicensesDialog() {
     final expiring = _dataService.getExpiringSoonLicenses();
-    
+
     showDialog(
       context: context,
       builder: (context) => Directionality(
-        textDirection: ui.TextDirection.rtl,
+        textDirection: TextDirection.rtl,
         child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
               Icon(Icons.warning_amber, color: AppColors.warningColor),
@@ -321,7 +318,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           child: Text('${license.daysRemaining}'),
                         ),
                         title: Text(license.clientName),
-                        subtitle: Text('ينتهي خلال ${license.daysRemaining} يوم'),
+                        subtitle:
+                            Text('ينتهي خلال ${license.daysRemaining} يوم'),
                       );
                     },
                   ),
@@ -349,4 +347,3 @@ class NavigationItem {
     required this.route,
   });
 }
-

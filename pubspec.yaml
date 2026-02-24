@@ -36,7 +36,7 @@ dependencies:
 
   desktop_window: ^0.4.2
 
-  drift: ^2.26.0
+  drift: 2.26.1
   drift_flutter: ^0.2.4
 
   riverpod: ^2.6.1
@@ -81,7 +81,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  drift_dev: ^2.26.0
+  drift_dev: 2.26.1
   build_runner: ^2.4.15
 
   flutter_lints: ^6.0.0
@@ -111,4 +111,4 @@ flutter:
   
 
 dependency_overrides:
-  sqlite3: 2.4.0
+  sqlite3: 2.9.0

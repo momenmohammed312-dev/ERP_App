@@ -1,52 +1,40 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
+// ignore_for_file: depend_on_referenced_packages
+import 'package:drift/drift.dart';
+import 'package:drift_flutter/drift_flutter.dart'; // ← Solution: handles Web/Windows/macOS automatically
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:drift/wasm.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import '../database/app_database.dart';
 
+// ════════════════════════════════════════════════════════════════════════════
 // Singleton provider for AppDatabase
+// drift_flutter's driftDatabase() handles platform-conditional imports
+// internally — no need to import drift/wasm.dart or drift/native.dart manually
+// ════════════════════════════════════════════════════════════════════════════
+
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase(_openConnection());
   ref.onDispose(() => db.close());
   return db;
 });
 
-// Helper provider for database access in widgets that don't have direct provider access
+// Helper provider for database access in widgets
 final databaseProvider = Provider<AppDatabase>((ref) {
   return ref.watch(appDatabaseProvider);
 });
 
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    if (kIsWeb) {
-      final result = await WasmDatabase.open(
-        databaseName: 'pos_offline_desktop_database',
-        sqlite3Uri: Uri.parse('/sqlite3.wasm'),
-        driftWorkerUri: Uri.parse('/drift_worker.dart.js'),
-      );
-      return result.resolvedExecutor;
-    } else {
-      final dbFolder = await getApplicationDocumentsDirectory();
-      final dbDir = Directory(
-        p.join(dbFolder.path, 'pos_offline_desktop_database'),
-      );
-
-      if (!await dbDir.exists()) {
-        await dbDir.create(recursive: true);
-      }
-
-      final file = File(
-        p.join(dbDir.path, 'pos_offline_desktop_database.sqlite'),
-      );
-
-      return NativeDatabase(file);
-    }
-  });
+QueryExecutor _openConnection() {
+  // driftDatabase() automatically selects the right backend:
+  // • Windows/macOS/Linux → NativeDatabase (dart:io)
+  // • Web → WasmDatabase (drift/wasm.dart) — compiled separately
+  // No more "dart:html not available on this platform" errors!
+  return driftDatabase(
+    name: 'pos_offline_desktop_database',
+    native: const DriftNativeOptions(shareAcrossIsolates: true),
+    web: DriftWebOptions(
+      sqlite3Wasm: Uri.parse('/sqlite3.wasm'),
+      driftWorker: Uri.parse('/drift_worker.dart.js'),
+    ),
+  );
 }
 
 // ملاحظات مهمة

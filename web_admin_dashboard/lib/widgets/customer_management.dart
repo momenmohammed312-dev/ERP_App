@@ -13,6 +13,39 @@ class _CustomerManagementState extends State<CustomerManagement> {
   String _selectedFilter = 'الكل';
   final List<String> _filters = ['الكل', 'نشط', 'غير نشط', 'مدين'];
 
+  final List<Map<String, dynamic>> _customers = [
+    {
+      'name': 'أحمد محمد',
+      'phone': '0501234567',
+      'balance': '1,234.50',
+      'status': 'نشط',
+    },
+    {
+      'name': 'فاطمة علي',
+      'phone': '0507654321',
+      'balance': '-450.00',
+      'status': 'نشط',
+    },
+    {
+      'name': 'محمد سعيد',
+      'phone': '0509876543',
+      'balance': '2,456.75',
+      'status': 'نشط',
+    },
+    {
+      'name': 'خالد أحمد',
+      'phone': '0502345678',
+      'balance': '-890.25',
+      'status': 'مدين',
+    },
+    {
+      'name': 'عمر خالد',
+      'phone': '0503456789',
+      'balance': '567.25',
+      'status': 'نشط',
+    },
+  ];
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -225,42 +258,8 @@ class _CustomerManagementState extends State<CustomerManagement> {
   }
 
   Widget _buildCustomersList() {
-    // Mock data - في التطبيق الحقيقي سيتم جلب البيانات من API
-    final customers = [
-      {
-        'name': 'أحمد محمد',
-        'phone': '0501234567',
-        'balance': '1,234.50',
-        'status': 'نشط',
-      },
-      {
-        'name': 'فاطمة علي',
-        'phone': '0507654321',
-        'balance': '-450.00',
-        'status': 'نشط',
-      },
-      {
-        'name': 'محمد سعيد',
-        'phone': '0509876543',
-        'balance': '2,456.75',
-        'status': 'نشط',
-      },
-      {
-        'name': 'خالد أحمد',
-        'phone': '0502345678',
-        'balance': '-890.25',
-        'status': 'مدين',
-      },
-      {
-        'name': 'عمر خالد',
-        'phone': '0503456789',
-        'balance': '567.25',
-        'status': 'نشط',
-      },
-    ];
-
     // Filter customers
-    var filteredCustomers = customers.where((customer) {
+    var filteredCustomers = _customers.where((customer) {
       final matchesSearch = _searchQuery.isEmpty ||
           (customer['name'] as String)
               .toLowerCase()
@@ -381,18 +380,65 @@ class _CustomerManagementState extends State<CustomerManagement> {
   }
 
   void _addNewCustomer() {
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController();
+    final balanceController = TextEditingController();
+    String status = 'نشط';
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('إضافة عميل جديد'),
-        content: const Text('نموذج إضافة عميل جديد - قيد التطوير'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'اسم العميل'),
+            ),
+            TextField(
+              controller: phoneController,
+              decoration: const InputDecoration(labelText: 'الهاتف'),
+            ),
+            TextField(
+              controller: balanceController,
+              decoration: const InputDecoration(labelText: 'الرصيد'),
+            ),
+            DropdownButton<String>(
+              value: status,
+              items: ['نشط', 'غير نشط', 'مدين'].map((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  status = value!;
+                });
+              },
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('إلغاء'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              setState(() {
+                _customers.add({
+                  'name': nameController.text,
+                  'phone': phoneController.text,
+                  'balance': balanceController.text,
+                  'status': status,
+                });
+              });
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم إضافة العميل بنجاح')),
+              );
+            },
             child: const Text('إضافة'),
           ),
         ],
@@ -427,18 +473,63 @@ class _CustomerManagementState extends State<CustomerManagement> {
   }
 
   void _editCustomer(Map<String, dynamic> customer) {
+    final nameController = TextEditingController(text: customer['name']);
+    final phoneController = TextEditingController(text: customer['phone']);
+    final balanceController = TextEditingController(text: customer['balance']);
+    String status = customer['status'];
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('تعديل العميل: ${customer['name']}'),
-        content: const Text('نموذج تعديل العميل - قيد التطوير'),
+        title: const Text('تعديل العميل'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'اسم العميل'),
+            ),
+            TextField(
+              controller: phoneController,
+              decoration: const InputDecoration(labelText: 'الهاتف'),
+            ),
+            TextField(
+              controller: balanceController,
+              decoration: const InputDecoration(labelText: 'الرصيد'),
+            ),
+            DropdownButton<String>(
+              value: status,
+              items: ['نشط', 'غير نشط', 'مدين'].map((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  status = value!;
+                });
+              },
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('إلغاء'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              setState(() {
+                customer['name'] = nameController.text;
+                customer['phone'] = phoneController.text;
+                customer['balance'] = balanceController.text;
+                customer['status'] = status;
+              });
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم تعديل العميل بنجاح')),
+              );
+            },
             child: const Text('حفظ'),
           ),
         ],
@@ -459,6 +550,9 @@ class _CustomerManagementState extends State<CustomerManagement> {
           ),
           TextButton(
             onPressed: () {
+              setState(() {
+                _customers.remove(customer);
+              });
               Navigator.of(context).pop();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(

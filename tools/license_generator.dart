@@ -2,7 +2,9 @@
 // Run with: dart run tools/license_generator.dart
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
+import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 
 // Copy these values from lib/config/license_config.dart
 const String secretKey = 'POS-SaaS-2026-PROD-SECURE-K3Y-F0R-L1C3NS3!';
@@ -13,6 +15,23 @@ const Map<String, Map<String, dynamic>> licenseDurations = {
   'yearly': {'name': 'سنوي', 'days': 365, 'price_multiplier': 10.0},
   'lifetime': {'name': 'مدى الحياة', 'days': 36500, 'price_multiplier': 20.0},
 };
+
+String _encrypt(String plainText) {
+  final keyBytes = md5.convert(utf8.encode(secretKey)).bytes;
+  final key = encrypt_pkg.Key(Uint8List.fromList(keyBytes));
+  final iv = encrypt_pkg.IV.fromLength(16);
+  final encrypter = encrypt_pkg.Encrypter(
+    encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
+  );
+  final encrypted = encrypter.encrypt(plainText, iv: iv);
+  return encrypted.base64;
+}
+
+String _generateSignature(String data) {
+  final bytes = utf8.encode(data + secretKey);
+  final digest = sha256.convert(bytes);
+  return digest.toString();
+}
 
 void main() async {
   print('=================================');
@@ -77,7 +96,7 @@ void main() async {
       ],
     },
     '5': {
-      'name': 'admin',
+      'name': 'enterprise',
       'users': 999,
       'features': [
         'pos',
@@ -131,27 +150,27 @@ void main() async {
   }
 
   // Generate license
-  final expiryDate = DateTime.now().add(Duration(days: days));
+  final now = DateTime.now();
+  final expiryDate = now.add(Duration(days: days));
   final licenseData = {
     'device': deviceFingerprint,
+    'type': selectedType['name'],
+    'issue_date': now.toIso8601String(),
     'expiry': expiryDate.toIso8601String(),
     'features': selectedType['features'],
     'max_users': selectedType['users'],
-    'license_type': selectedType['name'],
-    'duration': durationName,
-    'duration_days': days,
-    'price_multiplier': priceMultiplier,
-    'created': DateTime.now().toIso8601String(),
-    'version': '2.0.0',
+    'company_name':
+        selectedType.containsKey('lifetime') && selectedType['lifetime'] == true
+        ? 'Administrator'
+        : 'Generated License',
+    'contact_email': 'support@company.com',
+    'version': '1.0',
   };
 
   final jsonString = jsonEncode(licenseData);
-  final bytes = utf8.encode(jsonString);
-  final encoded = base64.encode(bytes);
-  final hmacBytes = utf8.encode(secretKey);
-  final hmac = Hmac(sha256, hmacBytes);
-  final signature = hmac.convert(utf8.encode(encoded));
-  final licenseKey = '$encoded.${signature.toString()}';
+  final encryptedData = _encrypt(jsonString);
+  final signature = _generateSignature(encryptedData);
+  final licenseKey = '$encryptedData.$signature';
 
   // Display results
   print('\n${'=' * 60}');

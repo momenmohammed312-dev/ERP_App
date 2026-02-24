@@ -194,7 +194,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
           // ── Rotating orbit particles
           AnimatedBuilder(
             animation: _particleController,
-            builder: (_, __) => _buildParticles(),
+            builder: (_, _) => _buildParticles(),
           ),
 
           // ── Main content
@@ -208,7 +208,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     _logoController,
                     _pulseController,
                   ]),
-                  builder: (_, __) => _buildLogoSection(),
+                  builder: (_, _) => _buildLogoSection(),
                 ),
 
                 const SizedBox(height: 40),
@@ -412,7 +412,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     child: Image.asset(
                       'assets/logo/app_logo.png',
                       fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Icon(
+                      errorBuilder: (_, _, _) => const Icon(
                         Icons.storefront_rounded,
                         color: _gold,
                         size: 48,
