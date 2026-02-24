@@ -49,32 +49,24 @@
     }
   </style>
 
-
   <script>
     var serviceWorkerVersion = {{flutter_service_worker_version}};
-    
-    // Set build config for FlutterLoader.load
-    window._flutter.buildConfig = {
-      build: false,
-      entrypoint: "main.dart.js",
-      onEntrypointLoaded: function(engineInitializer) {
-        return engineInitializer.initializeEngine().then(function(appRunner) {
-          return appRunner.runApp();
-        });
-      }
-    };
   </script>
   <script src="flutter.js" defer></script>
 </head>
-<body>
-  <div id="loading" class="loading">
-    <div class="spinner"></div>
-    <div class="loading-text">جاري تحميل لوحة التحكم...</div>
-  </div>
-  
-  <!-- Flutter Web App -->
   <script>
     window.addEventListener('load', function(ev) {
+      // Set build config for FlutterLoader.load
+      window._flutter.buildConfig = {
+        build: false,
+        entrypoint: "main.dart.js",
+        onEntrypointLoaded: function(engineInitializer) {
+          return engineInitializer.initializeEngine().then(function(appRunner) {
+            return appRunner.runApp();
+          });
+        }
+      };
+      
       _flutter.loader.load({
         serviceWorker: {
           serviceWorkerVersion: serviceWorkerVersion,
