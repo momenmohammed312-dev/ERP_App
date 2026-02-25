@@ -37,14 +37,28 @@ class _ProductSelectionModalState extends State<ProductSelectionModal> {
   double _discount = 0.0;
   double _tax = 0.0;
 
-  final List<String> _units = ['piece', 'kg', 'ton', 'box', 'meter', 'liter'];
+  final List<String> _units = [
+    'piece',
+    'kg',
+    'ton',
+    'box',
+    'meter',
+    'liter',
+    'كجم',
+    'كيلو',
+    'قطعة',
+    'علبة',
+    'متر',
+    'لتر',
+  ];
 
   @override
   void initState() {
     super.initState();
     _unitPrice = widget.product.price;
     _priceController.text = _unitPrice.toStringAsFixed(2);
-    _selectedUnit = widget.product.unit ?? 'piece';
+    final productUnit = widget.product.unit ?? 'piece';
+    _selectedUnit = _units.contains(productUnit) ? productUnit : 'piece';
   }
 
   @override

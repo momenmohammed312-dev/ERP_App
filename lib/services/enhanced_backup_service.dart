@@ -95,7 +95,7 @@ class EnhancedBackupInfo {
 
 class EnhancedBackupService {
   static const String _backupDir = 'data/backups';
-  static const String _encryptionKey = 'POS-SaaS-Backup-Key-2024-32Chars!!';
+  static const String _encryptionKey = 'POS-SaaS-Backup-Key-2024-32Chars';
   static const int _maxBackups = 10; // الاحتفاظ بآخر 10 نسخ
   static const String _backupExtension = '.posbackup';
 

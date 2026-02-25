@@ -94,69 +94,72 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ],
       ),
-      body: Row(
-        children: [
-          // Sidebar (Desktop)
-          if (isDesktop)
-            Container(
-              width: 280,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryColor,
+      body: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Row(
+          children: [
+            // Sidebar (Desktop)
+            if (isDesktop)
+              Container(
+                width: 280,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
                     ),
-                    child: const Row(
-                      children: [
-                        Icon(
-                          Icons.admin_panel_settings,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            AppStrings.appName,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryColor,
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.admin_panel_settings,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              AppStrings.appName,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const Divider(height: 1),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: _navigationItems.length,
-                      itemBuilder: (context, index) {
-                        final item = _navigationItems[index];
-                        return _buildNavigationItem(item, index);
-                      },
+                    const Divider(height: 1),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: _navigationItems.length,
+                        itemBuilder: (context, index) {
+                          final item = _navigationItems[index];
+                          return _buildNavigationItem(item, index);
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+            // Main Content
+            Expanded(
+              child: _buildSelectedPage(),
             ),
-          // Main Content
-          Expanded(
-            child: _buildSelectedPage(),
-          ),
-        ],
+          ],
+        ),
       ),
       // Bottom Navigation (Mobile/Tablet)
       bottomNavigationBar: isDesktop ? null : _buildBottomNavigationBar(),

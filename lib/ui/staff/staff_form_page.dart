@@ -94,6 +94,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: Text(
           widget.staff == null ? 'إضافة موظف جديد' : 'تعديل بيانات الموظف',
@@ -143,6 +144,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Widget _buildBasicInfo() {
     return Card(
+      color: Colors.white,
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -242,6 +245,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Widget _buildEmploymentInfo() {
     return Card(
+      color: Colors.white,
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -295,6 +300,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Widget _buildContactInfo() {
     return Card(
+      color: Colors.white,
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -341,6 +348,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Widget _buildBankInfo() {
     return Card(
+      color: Colors.white,
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -377,6 +386,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Widget _buildEmergencyContact() {
     return Card(
+      color: Colors.white,
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -414,6 +425,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Widget _buildNotes() {
     return Card(
+      color: Colors.white,
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(

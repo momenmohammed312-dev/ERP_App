@@ -1066,6 +1066,51 @@ class AppDatabase extends _$AppDatabase {
           log('Migration v32: Index on audit_log.user_id error: $e');
         }
       }
+
+      if (from < 35) {
+        log('Migration v35: Creating staff management tables if missing');
+        try {
+          await m.createTable(staffTable);
+        } catch (e) {
+          log('Table staffTable already exists or failed: $e');
+        }
+        try {
+          await m.createTable(attendanceTable);
+        } catch (e) {
+          log('Table attendanceTable already exists or failed: $e');
+        }
+        try {
+          await m.createTable(vacations);
+        } catch (e) {
+          log('Table vacations already exists or failed: $e');
+        }
+        try {
+          await m.createTable(staffAdvances);
+        } catch (e) {
+          log('Table staffAdvances already exists or failed: $e');
+        }
+        try {
+          await m.createTable(payrollTable);
+        } catch (e) {
+          log('Table payrollTable already exists or failed: $e');
+        }
+        try {
+          await m.createTable(rewardsPenalties);
+        } catch (e) {
+          log('Table rewardsPenalties already exists or failed: $e');
+        }
+        try {
+          await m.createTable(performanceReviews);
+        } catch (e) {
+          log('Table performanceReviews already exists or failed: $e');
+        }
+        try {
+          await m.createTable(staffDocuments);
+        } catch (e) {
+          log('Table staffDocuments already exists or failed: $e');
+        }
+        log('Migration v35: Finished creating staff management tables');
+      }
     },
     beforeOpen: (details) async {
       // Log the tables in the database

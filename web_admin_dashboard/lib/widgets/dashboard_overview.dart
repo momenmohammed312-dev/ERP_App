@@ -3,6 +3,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import '../services/data_service.dart';
 import '../utils/constants.dart';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
+import 'dart:convert';
 
 class DashboardOverview extends StatefulWidget {
   const DashboardOverview({super.key});
@@ -575,9 +578,38 @@ class _DashboardOverviewState extends State<DashboardOverview> {
   }
 
   void _exportReport() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('جاري تصدير التقرير...')),
-    );
+    try {
+      final licenses = _dataService.getLicenses();
+      String csv = 'License Key,Client Name,Price,Status,Created At\n';
+
+      for (var l in licenses) {
+        csv +=
+            '${l.licenseKey},${l.clientName},${l.price},${l.isExpired ? "Expired" : "Active"},${l.createdAt}\n';
+      }
+
+      final bytes = utf8.encode(csv);
+      final blob = html.Blob([bytes], 'text/csv');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..setAttribute('download',
+            'dashboard_report_${DateTime.now().millisecondsSinceEpoch}.csv')
+        ..click();
+      html.Url.revokeObjectUrl(url);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم تصدير التقرير بنجاح'),
+          backgroundColor: AppColors.successColor,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('فشل تصدير التقرير: $e'),
+          backgroundColor: AppColors.errorColor,
+        ),
+      );
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════

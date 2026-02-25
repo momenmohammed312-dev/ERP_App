@@ -48,5 +48,6 @@ void main() {
   final digest = sha256.convert(bytes);
   final signature = digest.toString();
 
+  // ignore: avoid_print
   print('GENERATED_KEY: $encryptedData.$signature');
 }

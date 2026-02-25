@@ -6,7 +6,8 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/customer_report_tab.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/expenses_report_tab.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/sales_report_tab.dart';
-import 'package:pos_offline_desktop/ui/reports/widgets/purchase_by_supplier_report.dart';
+import 'package:pos_offline_desktop/screens/reports/supplier_report_screen.dart';
+import 'package:pos_offline_desktop/ui/reports/widgets/staff_expenses_report.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/purchase_by_product_report.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/purchase_vs_sales_report.dart';
 
@@ -608,6 +609,26 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                       },
                     ),
                   ),
+                  const Gap(15),
+                  Expanded(
+                    child: _buildActionCard(
+                      'مصروفات الموظفين',
+                      'سلف ورواتب الموظفين',
+                      Icons.assignment_ind,
+                      Colors.blueGrey,
+                      () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => StaffExpensesReport(
+                              db: ref.read(appDatabaseProvider),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const Gap(15),
+                  Expanded(child: Container()),
                 ],
               ),
               const Gap(15),
@@ -622,8 +643,9 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                       () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (context) =>
-                                const PurchaseBySupplierReport(),
+                            builder: (context) => SupplierReportScreen(
+                              database: ref.read(appDatabaseProvider),
+                            ),
                           ),
                         );
                       },

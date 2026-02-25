@@ -625,9 +625,12 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Summary Cards
-                  Row(
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
                     children: [
-                      Expanded(
+                      SizedBox(
+                        width: 150,
                         child: _SummaryCard(
                           title: 'إجمالي المشتريات',
                           value: widget.totalPurchases,
@@ -635,8 +638,8 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
                           icon: Icons.shopping_cart,
                         ),
                       ),
-                      const Gap(16),
-                      Expanded(
+                      SizedBox(
+                        width: 150,
                         child: _SummaryCard(
                           title: 'المدفوع',
                           value: widget.totalPaid,
@@ -644,8 +647,8 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
                           icon: Icons.payment,
                         ),
                       ),
-                      const Gap(16),
-                      Expanded(
+                      SizedBox(
+                        width: 150,
                         child: _SummaryCard(
                           title: 'المتبقي',
                           value: remainingDebt,
