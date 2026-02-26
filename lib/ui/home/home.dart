@@ -38,7 +38,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final db = ref.watch(appDatabaseProvider);
-    final authService = AuthService(db);
+    final authService = ref.watch(authServiceProvider);
 
     return Scaffold(
       body: Row(
@@ -65,7 +65,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   child: Text(
                     context.l10n.brand_name,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
@@ -89,15 +89,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      Text(
-                        'v1.0.0',
+                      const Text(
+                        'v2.1.0', // Updated version
                         style: TextStyle(color: Colors.white54, fontSize: 12),
                         textAlign: TextAlign.center,
                       ),
                       const Gap(4),
                       Text(
                         'Developed by MO2',
-                        style: TextStyle(color: Colors.white38, fontSize: 10),
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 10,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -111,7 +114,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Expanded(
             child: Container(
               color: Theme.of(context).colorScheme.surface,
-              child: _buildPageContent(db),
+              child: _buildPageContent(db, authService),
             ),
           ),
         ],
@@ -119,7 +122,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildPageContent(AppDatabase db) {
+  Widget _buildPageContent(AppDatabase db, AuthService authService) {
     switch (_selectedPage) {
       case SideBarPage.home:
         return const DashboardPage();
@@ -144,7 +147,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       case SideBarPage.reports:
         return const ReportsPage();
       case SideBarPage.users:
-        return UserManagementPage(database: db, authService: AuthService(db));
+        return UserManagementPage(database: db, authService: authService);
       case SideBarPage.staff:
         return const StaffListPage();
       case SideBarPage.settings:

@@ -1,32 +1,27 @@
-// ════════════════════════════════════════════════════════════════════════
-// خدمة المصادقة - POS SaaS Offline
-// ════════════════════════════════════════════════════════════════════════
-
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/app_database.dart';
+import '../models/user_model.dart';
+import '../provider/app_database_provider.dart';
+import '../provider/auth_provider.dart';
 
 class AuthService {
-  static final _storage = FlutterSecureStorage();
-  static const _userKey = 'current_user_id';
-  static const _roleKey = 'current_user_role';
-
-  // Cache the current user in memory
-  AppUser? _currentUser;
-
-  AppUser? get currentUser => _currentUser;
-
   final AppDatabase _db;
-  AuthService(this._db);
+  final Ref _ref;
 
-  Future<AppUser?> login(String username, String password) async {
+  AuthService(this._db, this._ref);
+
+  Future<User?> login(String username, String password) async {
     try {
-      final user = await _db.userDao.authenticate(username, password);
-      if (user != null) {
-        await _db.userDao.updateLastLogin(user.id);
-        await _storage.write(key: _userKey, value: user.id.toString());
-        await _storage.write(key: _roleKey, value: user.role);
-        _currentUser = user; // ← cache it
+      final appUser = await _db.userDao.authenticate(username, password);
+      if (appUser != null) {
+        // Map AppUser to User model
+        final user = _mapAppUserToUser(appUser);
+
+        // Update auth state via provider
+        await _ref.read(authProvider.notifier).login(user);
+
+        await _db.userDao.updateLastLogin(appUser.id);
         return user;
       }
       return null;
@@ -37,21 +32,25 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    await _storage.delete(key: _userKey);
-    await _storage.delete(key: _roleKey);
-    _currentUser = null; // ← clear cache
+    await _ref.read(authProvider.notifier).logout();
   }
 
-  Future<bool> isLoggedIn() async {
-    final userId = await _storage.read(key: _userKey);
-    return userId != null;
+  bool isLoggedIn() {
+    return _ref.read(authProvider) != null;
   }
 
-  Future<String?> getCurrentRole() async => _storage.read(key: _roleKey);
+  UserRole? getCurrentRole() {
+    return _ref.read(authProvider)?.role;
+  }
 
-  Future<int?> getCurrentUserId() async {
-    final id = await _storage.read(key: _userKey);
-    return id != null ? int.tryParse(id) : null;
+  int? getCurrentUserId() {
+    return _ref.read(authProvider)?.id;
+  }
+
+  User? get currentUser => _ref.read(authProvider);
+
+  User? getCurrentUser() {
+    return _ref.read(authProvider);
   }
 
   // Add changePassword method
@@ -60,11 +59,14 @@ class AuthService {
     String oldPassword,
     String newPassword,
   ) async {
-    final user = await _db.userDao.getUserById(userId);
-    if (user == null) return false;
+    final appUser = await _db.userDao.getUserById(userId);
+    if (appUser == null) return false;
 
     // Verify old password
-    final verified = await _db.userDao.authenticate(user.username, oldPassword);
+    final verified = await _db.userDao.authenticate(
+      appUser.username,
+      oldPassword,
+    );
     if (verified == null) return false;
 
     // Update password
@@ -72,8 +74,46 @@ class AuthService {
     return true;
   }
 
-  bool hasPermission(String role, String requiredRole) {
-    const hierarchy = {'cashier': 0, 'manager': 1, 'admin': 2};
-    return (hierarchy[role] ?? 0) >= (hierarchy[requiredRole] ?? 0);
+  /// Helper to map drift AppUser to our custom User model
+  User _mapAppUserToUser(AppUser appUser) {
+    // Map string role to UserRole enum
+    UserRole role;
+    switch (appUser.role.toLowerCase()) {
+      case 'admin':
+        role = UserRole.admin;
+        break;
+      case 'manager':
+        role = UserRole.manager;
+        break;
+      case 'cashier':
+        role = UserRole.cashier;
+        break;
+      case 'accountant':
+        role = UserRole.accountant;
+        break;
+      case 'viewer':
+        role = UserRole.viewer;
+        break;
+      default:
+        role = UserRole.viewer;
+    }
+
+    return User(
+      id: appUser.id,
+      username: appUser.username,
+      passwordHash: appUser.password,
+      fullName: appUser.fullName,
+      role: role,
+      isActive: appUser.isActive,
+      lastLogin: appUser.lastLogin,
+      createdAt: appUser.createdAt,
+      customPermissions: [], // Map if stored in DB
+    );
   }
 }
+
+/// Provider for AuthService
+final authServiceProvider = Provider<AuthService>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return AuthService(db, ref);
+});

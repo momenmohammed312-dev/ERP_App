@@ -3,36 +3,24 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/services/auth_service.dart';
-import '../../core/database/app_database.dart';
-import '../dashboard/dashboard_page.dart';
 
-class LoginScreen extends StatefulWidget {
-  final AppDatabase database;
-
-  const LoginScreen({super.key, required this.database});
+class LoginScreen extends ConsumerStatefulWidget {
+  const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
-
-  late AuthService _authService;
-
-  @override
-  void initState() {
-    super.initState();
-    _authService = AuthService(widget.database);
-  }
 
   @override
   void dispose() {
@@ -77,8 +65,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           _buildErrorMessage(),
                           const SizedBox(height: 16),
                           _buildLoginButton(),
-                          const SizedBox(height: 24),
-                          _buildDefaultCredentials(),
                         ],
                       ),
                     ),
@@ -235,52 +221,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildDefaultCredentials() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue.shade200),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Icon(Icons.info, color: Colors.blue.shade600, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'بيانات الاعتماد الافتراضية',
-                style: TextStyle(
-                  color: Colors.blue.shade600,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'اسم المستخدم: admin\nكلمة المرور: admin123',
-            style: TextStyle(fontSize: 14),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: _fillDefaultCredentials,
-            child: Text(
-              'استخدام البيانات الافتراضية',
-              style: TextStyle(color: Colors.blue.shade600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _fillDefaultCredentials() {
-    _usernameController.text = 'admin';
-    _passwordController.text = 'admin123';
-  }
+  /* Removed default credentials display */
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
@@ -291,18 +232,13 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final user = await _authService.login(
-        _usernameController.text.trim(),
-        _passwordController.text,
-      );
+      final user = await ref
+          .read(authServiceProvider)
+          .login(_usernameController.text.trim(), _passwordController.text);
 
       if (user != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('current_user', jsonEncode(user.toJson()));
         if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const DashboardPage()),
-          );
+          context.go('/');
         }
       } else {
         setState(() {

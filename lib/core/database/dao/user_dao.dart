@@ -1,8 +1,7 @@
-import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
-import 'dart:convert';
 import '../app_database.dart';
 import '../tables/users_table.dart';
+import '../../utils/security_utils.dart';
 
 part 'user_dao.g.dart';
 
@@ -11,8 +10,25 @@ class UserDao extends DatabaseAccessor<AppDatabase> with _$UserDaoMixin {
   UserDao(super.db);
 
   String _hashPassword(String password) {
-    final bytes = utf8.encode(password);
-    return sha256.convert(bytes).toString();
+    return SecurityUtils.hashPassword(password);
+  }
+
+  /// Check if the admin user still has the default password
+  Future<bool> hasDefaultAdminPassword() async {
+    final admin = await getUserByUsername('admin');
+    if (admin == null) return false;
+
+    // Check against the new salted hash of 'admin123'
+    final defaultHash = _hashPassword('admin123');
+    return admin.password == defaultHash;
+  }
+
+  /// Special update for admin password during setup
+  Future<void> updateAdminPassword(String newPassword) async {
+    final admin = await getUserByUsername('admin');
+    if (admin != null) {
+      await changePassword(admin.id, newPassword);
+    }
   }
 
   Future<AppUser?> authenticate(String username, String password) =>

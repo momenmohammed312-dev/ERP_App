@@ -1,14 +1,12 @@
-// ════════════════════════════════════════════════════════════════════════
-// شاشة إدارة المستخدمين - POS SaaS Offline
-// ════════════════════════════════════════════════════════════════════════
-
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../../core/database/dao/user_dao.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/provider/auth_provider.dart';
 
-class UserManagementPage extends StatefulWidget {
+class UserManagementPage extends ConsumerStatefulWidget {
   final AppDatabase database;
   final AuthService authService;
 
@@ -19,10 +17,10 @@ class UserManagementPage extends StatefulWidget {
   });
 
   @override
-  State<UserManagementPage> createState() => _UserManagementPageState();
+  ConsumerState<UserManagementPage> createState() => _UserManagementPageState();
 }
 
-class _UserManagementPageState extends State<UserManagementPage> {
+class _UserManagementPageState extends ConsumerState<UserManagementPage> {
   late UserDao _userDao;
   List<AppUser> _users = [];
   bool _isLoading = false;
@@ -31,11 +29,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
   @override
   void initState() {
     super.initState();
-    _userDao = UserDao(widget.database);
+    _userDao = widget.database.userDao;
     _loadUsers();
   }
 
   Future<void> _loadUsers() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
@@ -45,16 +44,54 @@ class _UserManagementPageState extends State<UserManagementPage> {
           ? await _userDao.getActiveUsers()
           : await _userDao.searchUsers(_searchQuery);
 
+      if (!mounted) return;
       setState(() {
         _users = users;
       });
     } catch (e) {
-      _showError('فشل تحميل المستخدمين: $e');
+      if (mounted) _showError('فشل تحميل المستخدمين: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  User _mapAppUserToUser(AppUser appUser) {
+    UserRole role;
+    switch (appUser.role.toLowerCase()) {
+      case 'admin':
+        role = UserRole.admin;
+        break;
+      case 'manager':
+        role = UserRole.manager;
+        break;
+      case 'cashier':
+        role = UserRole.cashier;
+        break;
+      case 'accountant':
+        role = UserRole.accountant;
+        break;
+      case 'viewer':
+        role = UserRole.viewer;
+        break;
+      default:
+        role = UserRole.viewer;
+    }
+
+    return User(
+      id: appUser.id,
+      username: appUser.username,
+      passwordHash: appUser.password,
+      fullName: appUser.fullName,
+      role: role,
+      isActive: appUser.isActive,
+      lastLogin: appUser.lastLogin,
+      createdAt: appUser.createdAt,
+      customPermissions: [],
+    );
   }
 
   @override
@@ -233,6 +270,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
       orElse: () => UserRole.viewer,
     );
 
+    final currentUser = ref.watch(authProvider);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
@@ -314,8 +353,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                   icon: const Icon(Icons.edit),
                   tooltip: 'تعديل',
                 ),
-                if (user.role != 'admin' &&
-                    user.id != widget.authService.currentUser?.id)
+                if (user.role != 'admin' && user.id != currentUser?.id)
                   IconButton(
                     onPressed: () => _deleteUser(user),
                     icon: const Icon(Icons.delete),
@@ -452,10 +490,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
   void _addUser() async {
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => _AddUserDialog(
-        userDao: _userDao,
-        currentUserId: widget.authService.currentUser?.id,
-      ),
+      builder: (context) => _AddUserDialog(userDao: _userDao),
     );
 
     if (result == true) {
@@ -463,14 +498,11 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
   }
 
-  void _editUser(AppUser user) async {
+  void _editUser(AppUser appUser) async {
+    final user = _mapAppUserToUser(appUser);
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => _EditUserDialog(
-        userDao: _userDao,
-        user: user as User,
-        currentUserId: widget.authService.currentUser?.id,
-      ),
+      builder: (context) => _EditUserDialog(userDao: _userDao, user: user),
     );
 
     if (result == true) {
@@ -522,24 +554,24 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   void _showSuccess(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.green),
     );
   }
 
   void _showError(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 }
 
-// مربع حوار إضافة مستخدم
 class _AddUserDialog extends StatefulWidget {
   final UserDao userDao;
-  final int? currentUserId;
 
-  const _AddUserDialog({required this.userDao, this.currentUserId});
+  const _AddUserDialog({required this.userDao});
 
   @override
   State<_AddUserDialog> createState() => _AddUserDialogState();
@@ -576,107 +608,109 @@ class _AddUserDialogState extends State<_AddUserDialog> {
         title: const Text('إضافة مستخدم جديد'),
         content: SizedBox(
           width: 400,
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _usernameController,
-                  decoration: const InputDecoration(
-                    labelText: 'اسم المستخدم',
-                    prefixIcon: Icon(Icons.person),
+          child: SingleChildScrollView(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _usernameController,
+                    decoration: const InputDecoration(
+                      labelText: 'اسم المستخدم',
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'يرجى إدخال اسم المستخدم';
+                      }
+                      return null;
+                    },
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'يرجى إدخال اسم المستخدم';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _fullNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'الاسم الكامل',
-                    prefixIcon: Icon(Icons.badge),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _fullNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'الاسم الكامل',
+                      prefixIcon: Icon(Icons.badge),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'يرجى إدخال الاسم الكامل';
+                      }
+                      return null;
+                    },
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'يرجى إدخال الاسم الكامل';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'البريد الإلكتروني',
-                    prefixIcon: Icon(Icons.email),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: const InputDecoration(
+                      labelText: 'البريد الإلكتروني',
+                      prefixIcon: Icon(Icons.email),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _phoneController,
-                  decoration: const InputDecoration(
-                    labelText: 'رقم الهاتف',
-                    prefixIcon: Icon(Icons.phone),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _phoneController,
+                    decoration: const InputDecoration(
+                      labelText: 'رقم الهاتف',
+                      prefixIcon: Icon(Icons.phone),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<UserRole>(
-                  initialValue: _selectedRole,
-                  decoration: const InputDecoration(
-                    labelText: 'الدور',
-                    prefixIcon: Icon(Icons.admin_panel_settings),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<UserRole>(
+                    initialValue: _selectedRole,
+                    decoration: const InputDecoration(
+                      labelText: 'الدور',
+                      prefixIcon: Icon(Icons.admin_panel_settings),
+                    ),
+                    items: UserRole.values.map((role) {
+                      return DropdownMenuItem(
+                        value: role,
+                        child: Text(PermissionMatrix.getRoleDisplayName(role)),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedRole = value!;
+                      });
+                    },
                   ),
-                  items: UserRole.values.map((role) {
-                    return DropdownMenuItem(
-                      value: role,
-                      child: Text(PermissionMatrix.getRoleDisplayName(role)),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedRole = value!;
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'كلمة المرور',
-                    prefixIcon: Icon(Icons.lock),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'كلمة المرور',
+                      prefixIcon: Icon(Icons.lock),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'يرجى إدخال كلمة المرور';
+                      }
+                      if (value.length < 6) {
+                        return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                      }
+                      return null;
+                    },
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'يرجى إدخال كلمة المرور';
-                    }
-                    if (value.length < 6) {
-                      return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _confirmPasswordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'تأكيد كلمة المرور',
-                    prefixIcon: Icon(Icons.lock_outline),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _confirmPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'تأكيد كلمة المرور',
+                      prefixIcon: Icon(Icons.lock_outline),
+                    ),
+                    validator: (value) {
+                      if (value != _passwordController.text) {
+                        return 'كلمتا المرور غير متطابقتين';
+                      }
+                      return null;
+                    },
                   ),
-                  validator: (value) {
-                    if (value != _passwordController.text) {
-                      return 'كلمتا المرور غير متطابقتين';
-                    }
-                    return null;
-                  },
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -737,17 +771,11 @@ class _AddUserDialogState extends State<_AddUserDialog> {
   }
 }
 
-// مربع حوار تعديل مستخدم
 class _EditUserDialog extends StatefulWidget {
   final UserDao userDao;
   final User user;
-  final int? currentUserId;
 
-  const _EditUserDialog({
-    required this.userDao,
-    required this.user,
-    this.currentUserId,
-  });
+  const _EditUserDialog({required this.userDao, required this.user});
 
   @override
   State<_EditUserDialog> createState() => _EditUserDialogState();
@@ -766,8 +794,8 @@ class _EditUserDialogState extends State<_EditUserDialog> {
   void initState() {
     super.initState();
     _fullNameController = TextEditingController(text: widget.user.fullName);
-    _emailController = TextEditingController(text: widget.user.email);
-    _phoneController = TextEditingController(text: widget.user.phone);
+    _emailController = TextEditingController(text: widget.user.email ?? '');
+    _phoneController = TextEditingController(text: widget.user.phone ?? '');
     _selectedRole = widget.user.role;
   }
 
@@ -787,60 +815,62 @@ class _EditUserDialogState extends State<_EditUserDialog> {
         title: Text('تعديل المستخدم: ${widget.user.fullName}'),
         content: SizedBox(
           width: 400,
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _fullNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'الاسم الكامل',
-                    prefixIcon: Icon(Icons.badge),
+          child: SingleChildScrollView(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _fullNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'الاسم الكامل',
+                      prefixIcon: Icon(Icons.badge),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'يرجى إدخال الاسم الكامل';
+                      }
+                      return null;
+                    },
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'يرجى إدخال الاسم الكامل';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'البريد الإلكتروني',
-                    prefixIcon: Icon(Icons.email),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: const InputDecoration(
+                      labelText: 'البريد الإلكتروني',
+                      prefixIcon: Icon(Icons.email),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _phoneController,
-                  decoration: const InputDecoration(
-                    labelText: 'رقم الهاتف',
-                    prefixIcon: Icon(Icons.phone),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _phoneController,
+                    decoration: const InputDecoration(
+                      labelText: 'رقم الهاتف',
+                      prefixIcon: Icon(Icons.phone),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<UserRole>(
-                  initialValue: _selectedRole,
-                  decoration: const InputDecoration(
-                    labelText: 'الدور',
-                    prefixIcon: Icon(Icons.admin_panel_settings),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<UserRole>(
+                    initialValue: _selectedRole,
+                    decoration: const InputDecoration(
+                      labelText: 'الدور',
+                      prefixIcon: Icon(Icons.admin_panel_settings),
+                    ),
+                    items: UserRole.values.map((role) {
+                      return DropdownMenuItem(
+                        value: role,
+                        child: Text(PermissionMatrix.getRoleDisplayName(role)),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedRole = value!;
+                      });
+                    },
                   ),
-                  items: UserRole.values.map((role) {
-                    return DropdownMenuItem(
-                      value: role,
-                      child: Text(PermissionMatrix.getRoleDisplayName(role)),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedRole = value!;
-                    });
-                  },
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -857,7 +887,7 @@ class _EditUserDialogState extends State<_EditUserDialog> {
                     width: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('حفظ'),
+                : const Text('تعديل'),
           ),
         ],
       ),
@@ -872,21 +902,18 @@ class _EditUserDialogState extends State<_EditUserDialog> {
     });
 
     try {
-      final updatedUser =
-          widget.user.copyWith(
-                fullName: _fullNameController.text.trim(),
-                email: _emailController.text.trim().isEmpty
-                    ? null
-                    : _emailController.text.trim(),
-                phone: _phoneController.text.trim().isEmpty
-                    ? null
-                    : _phoneController.text.trim(),
-                role: _selectedRole,
-                updatedAt: DateTime.now(),
-              )
-              as AppUser;
+      final appUser = AppUser(
+        id: widget.user.id!,
+        username: widget.user.username,
+        password: widget.user.passwordHash,
+        role: _selectedRole.name,
+        fullName: _fullNameController.text.trim(),
+        isActive: widget.user.isActive,
+        lastLogin: widget.user.lastLogin,
+        createdAt: widget.user.createdAt,
+      );
 
-      await widget.userDao.updateUser(updatedUser);
+      await widget.userDao.updateUser(appUser);
 
       if (mounted) {
         Navigator.of(context).pop(true);
@@ -895,7 +922,7 @@ class _EditUserDialogState extends State<_EditUserDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('فشل تحديث المستخدم: $e'),
+            content: Text('فشل تعديل المستخدم: $e'),
             backgroundColor: Colors.red,
           ),
         );

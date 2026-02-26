@@ -1,14 +1,10 @@
-// ════════════════════════════════════════════════════════════════════════
-// ويدجت حماية الصلاحيات - POS SaaS Offline
-// ════════════════════════════════════════════════════════════════════════
-
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/models/user_model.dart';
+import '../core/provider/auth_provider.dart';
 
 /// ويدجت لحماية المحتوى بناءً على الصلاحيات
-class PermissionGuard extends StatelessWidget {
+class PermissionGuard extends ConsumerWidget {
   final Permission permission;
   final Widget child;
   final Widget? fallback;
@@ -23,46 +19,23 @@ class PermissionGuard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _checkPermission(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox.shrink();
-        }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authProvider);
+    final hasPermission = user?.hasPermission(permission) ?? false;
 
-        if (snapshot.hasData && snapshot.data == true) {
-          return child;
-        }
-
-        if (fallback != null) {
-          return fallback!;
-        }
-
-        if (showUpgradePrompt) {
-          return _buildUpgradePrompt(context);
-        }
-
-        return const SizedBox.shrink();
-      },
-    );
-  }
-
-  Future<bool> _checkPermission() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userJson = prefs.getString('current_user');
-      if (userJson == null || userJson.isEmpty) return false;
-      final user = User.fromJson(_safeDecodeJson(userJson));
-      return user.hasPermission(permission);
-    } catch (_) {
-      return false;
+    if (hasPermission) {
+      return child;
     }
-  }
 
-  Map<String, dynamic> _safeDecodeJson(String jsonString) {
-    final decoded = jsonDecode(jsonString);
-    return Map<String, dynamic>.from(decoded as Map);
+    if (fallback != null) {
+      return fallback!;
+    }
+
+    if (showUpgradePrompt) {
+      return _buildUpgradePrompt(context);
+    }
+
+    return const SizedBox.shrink();
   }
 
   Widget _buildUpgradePrompt(BuildContext context) {
@@ -141,7 +114,7 @@ class PermissionGuard extends StatelessWidget {
 }
 
 /// ويدجت لحماية القائمة بناءً على الصلاحيات
-class PermissionListGuard extends StatelessWidget {
+class PermissionListGuard extends ConsumerWidget {
   final List<Permission> permissions;
   final bool requireAll;
   final Widget child;
@@ -153,50 +126,30 @@ class PermissionListGuard extends StatelessWidget {
     this.requireAll = false,
     required this.child,
     this.fallback,
-  }) : super();
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _checkPermissions(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox.shrink();
-        }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authProvider);
+    if (user == null) return fallback ?? const SizedBox.shrink();
 
-        if (snapshot.hasData && snapshot.data == true) {
-          return child;
-        }
-
-        return fallback ?? const SizedBox.shrink();
-      },
-    );
-  }
-
-  Future<bool> _checkPermissions() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userJson = prefs.getString('current_user');
-      if (userJson == null || userJson.isEmpty) return false;
-      final user = User.fromJson(_safeDecodeJson(userJson));
-
-      if (requireAll) {
-        return permissions.every(user.hasPermission);
-      }
-      return permissions.any(user.hasPermission);
-    } catch (_) {
-      return false;
+    bool hasPermission;
+    if (requireAll) {
+      hasPermission = permissions.every(user.hasPermission);
+    } else {
+      hasPermission = permissions.any(user.hasPermission);
     }
-  }
 
-  Map<String, dynamic> _safeDecodeJson(String jsonString) {
-    final decoded = jsonDecode(jsonString);
-    return Map<String, dynamic>.from(decoded as Map);
+    if (hasPermission) {
+      return child;
+    }
+
+    return fallback ?? const SizedBox.shrink();
   }
 }
 
 /// ويدجت لحماية الأزرار بناءً على الصلاحيات
-class PermissionButton extends StatelessWidget {
+class PermissionButton extends ConsumerWidget {
   final Permission permission;
   final VoidCallback onPressed;
   final Widget child;
@@ -210,64 +163,35 @@ class PermissionButton extends StatelessWidget {
     required this.child,
     this.style,
     this.showLockIcon = false,
-  }) : super();
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _checkPermission(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox.shrink();
-        }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authProvider);
+    final hasPermission = user?.hasPermission(permission) ?? false;
 
-        final hasPermission = snapshot.data ?? false;
-
-        if (hasPermission) {
-          return ElevatedButton(
-            onPressed: onPressed,
-            style: style,
-            child: child,
-          );
-        }
-
-        if (showLockIcon) {
-          return ElevatedButton(
-            onPressed: () => _showLockedMessage(context),
-            style: style?.copyWith(
-              backgroundColor: WidgetStateProperty.all(Colors.grey),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.lock, size: 16),
-                const SizedBox(width: 4),
-                child,
-              ],
-            ),
-          );
-        }
-
-        return const SizedBox.shrink();
-      },
-    );
-  }
-
-  Future<bool> _checkPermission() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userJson = prefs.getString('current_user');
-      if (userJson == null || userJson.isEmpty) return false;
-      final user = User.fromJson(_safeDecodeJson(userJson));
-      return user.hasPermission(permission);
-    } catch (_) {
-      return false;
+    if (hasPermission) {
+      return ElevatedButton(onPressed: onPressed, style: style, child: child);
     }
-  }
 
-  Map<String, dynamic> _safeDecodeJson(String jsonString) {
-    final decoded = jsonDecode(jsonString);
-    return Map<String, dynamic>.from(decoded as Map);
+    if (showLockIcon) {
+      return ElevatedButton(
+        onPressed: () => _showLockedMessage(context),
+        style: style?.copyWith(
+          backgroundColor: WidgetStateProperty.all(Colors.grey),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock, size: 16),
+            const SizedBox(width: 4),
+            child,
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 
   void _showLockedMessage(BuildContext context) {
@@ -282,7 +206,7 @@ class PermissionButton extends StatelessWidget {
 }
 
 /// ويدجت لحماية القائمة المنسدلة بناءً على الصلاحيات
-class PermissionPopupMenuButton<T> extends StatelessWidget {
+class PermissionPopupMenuButton<T> extends ConsumerWidget {
   final Permission permission;
   final List<PopupMenuEntry<T>> items;
   final Widget child;
@@ -296,51 +220,28 @@ class PermissionPopupMenuButton<T> extends StatelessWidget {
     required this.child,
     this.onSelected,
     this.tooltip,
-  }) : super();
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _checkPermission(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox.shrink();
-        }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authProvider);
+    final hasPermission = user?.hasPermission(permission) ?? false;
 
-        if (snapshot.data == true) {
-          return PopupMenuButton<T>(
-            tooltip: tooltip?.message,
-            onSelected: onSelected,
-            itemBuilder: (context) => items,
-            child: child,
-          );
-        }
-
-        return child; // Show child but without menu functionality
-      },
-    );
-  }
-
-  Future<bool> _checkPermission() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userJson = prefs.getString('current_user');
-      if (userJson == null || userJson.isEmpty) return false;
-      final user = User.fromJson(_safeDecodeJson(userJson));
-      return user.hasPermission(permission);
-    } catch (_) {
-      return false;
+    if (hasPermission) {
+      return PopupMenuButton<T>(
+        tooltip: tooltip?.message,
+        onSelected: onSelected,
+        itemBuilder: (context) => items,
+        child: child,
+      );
     }
-  }
 
-  Map<String, dynamic> _safeDecodeJson(String jsonString) {
-    final decoded = jsonDecode(jsonString);
-    return Map<String, dynamic>.from(decoded as Map);
+    return child; // Show child but without menu functionality
   }
 }
 
 /// ويدجت لحماية حقول الإدخال بناءً على الصلاحيات
-class PermissionFormField<T> extends StatelessWidget {
+class PermissionFormField<T> extends ConsumerWidget {
   final Permission permission;
   final T? initialValue;
   final FormFieldValidator<T>? validator;
@@ -356,39 +257,18 @@ class PermissionFormField<T> extends StatelessWidget {
     this.onChanged,
     required this.builder,
     this.enabled = true,
-  }) : super();
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _checkPermission(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox.shrink();
-        }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authProvider);
+    final hasPermission = user?.hasPermission(permission) ?? false;
+    final isEnabled = enabled && hasPermission;
 
-        final hasPermission = snapshot.data ?? false;
-        final isEnabled = enabled && hasPermission;
-
-        return FormField<T>(
-          initialValue: initialValue,
-          validator: validator,
-          builder: (field) => builder(field, isEnabled),
-        );
-      },
+    return FormField<T>(
+      initialValue: initialValue,
+      validator: validator,
+      builder: (field) => builder(field, isEnabled),
     );
-  }
-
-  Future<bool> _checkPermission() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userJson = prefs.getString('current_user');
-      if (userJson == null || userJson.isEmpty) return false;
-      final decoded = jsonDecode(userJson);
-      final user = User.fromJson(Map<String, dynamic>.from(decoded as Map));
-      return user.hasPermission(permission);
-    } catch (_) {
-      return false;
-    }
   }
 }

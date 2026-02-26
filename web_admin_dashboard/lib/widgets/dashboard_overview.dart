@@ -3,7 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import '../services/data_service.dart';
 import '../utils/constants.dart';
-// ignore: avoid_web_libraries_in_flutter
+// ignore: deprecated_member_use, avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 import 'dart:convert';
 

@@ -19,10 +19,8 @@ void main() {
     setUp(() async {
       // Get the database instance using provider (same way as AuthService does)
       final container = ProviderContainer();
-      final db = container.read(appDatabaseProvider);
-      // Initialize services with the database instance
-      authService = AuthService(db);
-      userDao = db.userDao;
+      authService = container.read(authServiceProvider);
+      userDao = container.read(appDatabaseProvider).userDao;
     });
 
     test('should have correct role display names', () {
@@ -50,25 +48,35 @@ void main() {
 
     test('should have correct permission display names', () {
       expect(
-        models.PermissionMatrix.getPermissionDisplayName(models.Permission.viewProducts),
+        models.PermissionMatrix.getPermissionDisplayName(
+          models.Permission.viewProducts,
+        ),
         equals('عرض المنتجات'),
       );
       expect(
-        models.PermissionMatrix.getPermissionDisplayName(models.Permission.createSale),
+        models.PermissionMatrix.getPermissionDisplayName(
+          models.Permission.createSale,
+        ),
         equals('إنشاء بيع'),
       );
       expect(
-        models.PermissionMatrix.getPermissionDisplayName(models.Permission.viewUsers),
+        models.PermissionMatrix.getPermissionDisplayName(
+          models.Permission.viewUsers,
+        ),
         equals('عرض المستخدمين'),
       );
       expect(
-        models.PermissionMatrix.getPermissionDisplayName(models.Permission.manageUsers),
+        models.PermissionMatrix.getPermissionDisplayName(
+          models.Permission.manageUsers,
+        ),
         equals('إدارة المستخدمين'),
       );
     });
 
     test('should assign correct permissions to admin role', () {
-      final permissions = models.PermissionMatrix.getDefaultPermissions(models.UserRole.admin);
+      final permissions = models.PermissionMatrix.getDefaultPermissions(
+        models.UserRole.admin,
+      );
       expect(permissions.contains(models.Permission.viewProducts), isTrue);
       expect(permissions.contains(models.Permission.createSale), isTrue);
       expect(permissions.contains(models.Permission.manageUsers), isTrue);
@@ -228,30 +236,53 @@ void main() {
       final managerPermissions = models.PermissionMatrix.getDefaultPermissions(
         models.UserRole.manager,
       );
-      expect(managerPermissions.contains(models.Permission.manageUsers), isFalse);
-      expect(managerPermissions.contains(models.Permission.viewSettings), isFalse);
+      expect(
+        managerPermissions.contains(models.Permission.manageUsers),
+        isFalse,
+      );
+      expect(
+        managerPermissions.contains(models.Permission.viewSettings),
+        isFalse,
+      );
 
       // Cashier should have sales-related permissions
       final cashierPermissions = models.PermissionMatrix.getDefaultPermissions(
         models.UserRole.cashier,
       );
       expect(cashierPermissions.contains(models.Permission.createSale), isTrue);
-      expect(cashierPermissions.contains(models.Permission.viewProducts), isTrue);
-      expect(cashierPermissions.contains(models.Permission.manageUsers), isFalse);
+      expect(
+        cashierPermissions.contains(models.Permission.viewProducts),
+        isTrue,
+      );
+      expect(
+        cashierPermissions.contains(models.Permission.manageUsers),
+        isFalse,
+      );
 
       // Accountant should have reporting permissions
-      final accountantPermissions = models.PermissionMatrix.getDefaultPermissions(
-        models.UserRole.accountant,
+      final accountantPermissions = models
+          .PermissionMatrix.getDefaultPermissions(models.UserRole.accountant);
+      expect(
+        accountantPermissions.contains(models.Permission.viewReports),
+        isTrue,
       );
-      expect(accountantPermissions.contains(models.Permission.viewReports), isTrue);
-      expect(accountantPermissions.contains(models.Permission.createSale), isFalse);
+      expect(
+        accountantPermissions.contains(models.Permission.createSale),
+        isFalse,
+      );
 
       // Viewer should have view-only permissions
       final viewerPermissions = models.PermissionMatrix.getDefaultPermissions(
         models.UserRole.viewer,
       );
-      expect(viewerPermissions.contains(models.Permission.viewProducts), isTrue);
-      expect(viewerPermissions.contains(models.Permission.viewCustomers), isTrue);
+      expect(
+        viewerPermissions.contains(models.Permission.viewProducts),
+        isTrue,
+      );
+      expect(
+        viewerPermissions.contains(models.Permission.viewCustomers),
+        isTrue,
+      );
       expect(viewerPermissions.contains(models.Permission.createSale), isFalse);
     });
 
@@ -269,8 +300,14 @@ void main() {
       expect(adminPermissions.contains(models.Permission.createSale), isTrue);
 
       // Cashier should have limited permissions
-      expect(cashierPermissions.contains(models.Permission.manageUsers), isFalse);
-      expect(cashierPermissions.contains(models.Permission.viewSettings), isFalse);
+      expect(
+        cashierPermissions.contains(models.Permission.manageUsers),
+        isFalse,
+      );
+      expect(
+        cashierPermissions.contains(models.Permission.viewSettings),
+        isFalse,
+      );
       expect(cashierPermissions.contains(models.Permission.createSale), isTrue);
     });
 
