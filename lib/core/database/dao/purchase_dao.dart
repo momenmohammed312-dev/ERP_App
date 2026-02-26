@@ -66,6 +66,21 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
     purchaseItems,
   )..where((pi) => pi.purchaseId.equals(purchaseId))).get();
 
+  Future<List<(PurchaseItem, Product?)>> getItemsWithProductsByPurchase(
+    String purchaseId,
+  ) {
+    final query = select(purchaseItems).join([
+      leftOuterJoin(
+        db.products,
+        db.products.id.cast<String>().equalsExp(purchaseItems.productId),
+      ),
+    ])..where(purchaseItems.purchaseId.equals(purchaseId));
+
+    return query.map((row) {
+      return (row.readTable(purchaseItems), row.readTableOrNull(db.products));
+    }).get();
+  }
+
   // Insert purchase with items
   Future<String> insertPurchaseWithItems({
     String? supplierId,

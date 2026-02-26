@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/license_model.dart';
+import '../models/client_model.dart';
 import '../services/data_service.dart';
 import '../utils/constants.dart';
 
@@ -153,6 +154,29 @@ class _LicensesManagementState extends State<LicensesManagement> {
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            OutlinedButton.icon(
+              onPressed: _showPriceManagement,
+              icon: const Icon(Icons.settings),
+              label: const Text('إدارة الأسعار'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primaryColor,
+                side: const BorderSide(color: AppColors.primaryColor),
+              ),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed: _showAddLicenseDialog,
+              icon: const Icon(Icons.add),
+              label: const Text('ترخيص جديد'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryColor,
+                foregroundColor: Colors.white,
               ),
             ),
           ],
@@ -645,8 +669,8 @@ class _LicensesManagementState extends State<LicensesManagement> {
                   ...SubscriptionDuration.values
                       .where((d) => d != SubscriptionDuration.trial)
                       .map((duration) {
-                    final price = LicenseKeyGenerator.getPrice(
-                        license.packageType, duration);
+                    final price =
+                        _dataService.getPrice(license.packageType, duration);
                     // ignore: deprecated_member_use
                     return RadioListTile<SubscriptionDuration>(
                       value: duration,
@@ -760,6 +784,172 @@ class _LicensesManagementState extends State<LicensesManagement> {
       case SubscriptionDuration.lifetime:
         return 'مدى الحياة';
     }
+  }
+
+  void _showAddLicenseDialog() {
+    ClientModel? selectedClient;
+    SubscriptionDuration selectedDuration = SubscriptionDuration.monthly;
+    final notesController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('توليد ترخيص جديد'),
+            content: SizedBox(
+              width: 500,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<ClientModel>(
+                    decoration: const InputDecoration(labelText: 'العميل'),
+                    items: _dataService.getClients().map((c) {
+                      return DropdownMenuItem(value: c, child: Text(c.name));
+                    }).toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => selectedClient = value),
+                  ),
+                  const SizedBox(height: 16),
+                  if (selectedClient != null) ...[
+                    Text(
+                        'الباقة الحالية: ${selectedClient!.packageDisplayName}',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                  ],
+                  DropdownButtonFormField<SubscriptionDuration>(
+                    initialValue: selectedDuration,
+                    decoration: const InputDecoration(labelText: 'المدة'),
+                    items: SubscriptionDuration.values.map((d) {
+                      return DropdownMenuItem(
+                          value: d, child: Text(_getDurationName(d)));
+                    }).toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => selectedDuration = value!),
+                  ),
+                  const SizedBox(height: 16),
+                  if (selectedClient != null)
+                    Text(
+                      'السعر: ${_dataService.getPrice(selectedClient!.packageType, selectedDuration).toInt()} ج.م',
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.successColor),
+                    ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: notesController,
+                    decoration: const InputDecoration(labelText: 'ملاحظات'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: selectedClient == null
+                    ? null
+                    : () async {
+                        await _dataService.generateLicense(
+                          clientId: selectedClient!.id,
+                          clientName: selectedClient!.name,
+                          packageType: selectedClient!.packageType,
+                          duration: selectedDuration,
+                          notes: notesController.text,
+                        );
+                        if (mounted) {
+                          Navigator.pop(context);
+                          _loadData();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('تم توليد الترخيص بنجاح')),
+                          );
+                        }
+                      },
+                child: const Text('توليد'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPriceManagement() {
+    final prices = Map<String, double>.from(_dataService.packagePrices);
+    final basicController =
+        TextEditingController(text: prices['basic']?.toInt().toString());
+    final standardController =
+        TextEditingController(text: prices['standard']?.toInt().toString());
+    final professionalController =
+        TextEditingController(text: prices['professional']?.toInt().toString());
+
+    showDialog(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('إدارة أسعار الباقات'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: basicController,
+                decoration: const InputDecoration(
+                    labelText: 'سعر الباقة الأساسية (شهري)'),
+                keyboardType: TextInputType.number,
+              ),
+              TextField(
+                controller: standardController,
+                decoration: const InputDecoration(
+                    labelText: 'سعر الباقة القياسية (شهري)'),
+                keyboardType: TextInputType.number,
+              ),
+              TextField(
+                controller: professionalController,
+                decoration: const InputDecoration(
+                    labelText: 'سعر الباقة الاحترافية (شهري)'),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'ملاحظة: يتم حساب الأسعار السنوية (سعر 10 أشهر) ومدى الحياة (سعر سنتين) تلقائياً.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final newPrices = {
+                  'basic': double.tryParse(basicController.text) ?? 250.0,
+                  'standard': double.tryParse(standardController.text) ?? 400.0,
+                  'professional':
+                      double.tryParse(professionalController.text) ?? 600.0,
+                };
+                await _dataService.updatePackagePrices(newPrices);
+                if (mounted) {
+                  Navigator.pop(context);
+                  setState(() {});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم تحديث الأسعار بنجاح')),
+                  );
+                }
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override

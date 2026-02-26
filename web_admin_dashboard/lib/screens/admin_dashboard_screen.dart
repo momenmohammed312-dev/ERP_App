@@ -50,12 +50,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width > 1200;
-    final isTablet = MediaQuery.of(context).size.width > 800 &&
-        MediaQuery.of(context).size.width <= 1200;
 
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
+        leading: isDesktop
+            ? null
+            : Builder(
+                builder: (context) => IconButton(
+                  icon: const Icon(Icons.menu, color: Colors.white),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
+              ),
         title: const Text(
           'لوحة تحكم MO2',
           style: TextStyle(
@@ -94,66 +100,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ],
       ),
+      drawer: isDesktop ? null : _buildDrawer(),
       body: Directionality(
         textDirection: TextDirection.rtl,
         child: Row(
           children: [
             // Sidebar (Desktop)
-            if (isDesktop)
-              Container(
-                width: 280,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    // Header
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryColor,
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(
-                            Icons.admin_panel_settings,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              AppStrings.appName,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: _navigationItems.length,
-                        itemBuilder: (context, index) {
-                          final item = _navigationItems[index];
-                          return _buildNavigationItem(item, index);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            if (isDesktop) _buildSidebar(),
             // Main Content
             Expanded(
               child: _buildSelectedPage(),
@@ -161,83 +114,119 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ],
         ),
       ),
-      // Bottom Navigation (Mobile/Tablet)
-      bottomNavigationBar: isDesktop ? null : _buildBottomNavigationBar(),
-      floatingActionButton: isTablet ? _buildFloatingActionButton() : null,
+      // Bottom Navigation Removed for true sidebar/drawer feel if preferred,
+      // but keeping flexible as per user request for mobile layout.
+      // bottomNavigationBar: isDesktop ? null : _buildBottomNavigationBar(),
     );
   }
 
-  Widget _buildBottomNavigationBar() {
+  Widget _buildSidebar() {
     return Container(
+      width: 280,
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 4,
-            offset: const Offset(0, -2),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppColors.primaryColor,
-        unselectedItemColor: Colors.grey,
-        items: _navigationItems.map((item) {
-          return BottomNavigationBarItem(
-            icon: Icon(item.icon),
-            label: item.title,
-          );
-        }).toList(),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(
+              color: AppColors.primaryColor,
+            ),
+            child: const Row(
+              children: [
+                Icon(
+                  Icons.admin_panel_settings,
+                  color: Colors.white,
+                  size: 24,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    AppStrings.appName,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _navigationItems.length,
+              itemBuilder: (context, index) {
+                final item = _navigationItems[index];
+                return _buildNavigationItem(item, index);
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildFloatingActionButton() {
-    return FloatingActionButton(
-      onPressed: () {
-        // Show navigation menu
-        showDialog(
-          context: context,
-          builder: (context) => Dialog(
-            child: Container(
-              width: 300,
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: _navigationItems.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final item = entry.value;
-                  return ListTile(
-                    leading: Icon(item.icon),
-                    title: Text(item.title),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      setState(() {
-                        _selectedIndex = index;
-                      });
-                    },
-                    selected: _selectedIndex == index,
-                    selectedTileColor:
-                        AppColors.primaryColor.withValues(alpha: 0.1),
-                  );
-                }).toList(),
+  Widget _buildDrawer() {
+    return Drawer(
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Column(
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(
+                color: AppColors.primaryColor,
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.admin_panel_settings,
+                      color: Colors.white,
+                      size: 48,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      AppStrings.appName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
-      child: const Icon(Icons.menu),
+            Expanded(
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                itemCount: _navigationItems.length,
+                itemBuilder: (context, index) {
+                  final item = _navigationItems[index];
+                  return _buildNavigationItem(item, index, isDrawer: true);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _buildNavigationItem(NavigationItem item, int index) {
+  Widget _buildNavigationItem(NavigationItem item, int index,
+      {bool isDrawer = false}) {
     final isSelected = _selectedIndex == index;
 
     return Container(
@@ -264,6 +253,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           setState(() {
             _selectedIndex = index;
           });
+          if (isDrawer) {
+            Navigator.pop(context);
+          }
         },
         selected: isSelected,
       ),

@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/printer_service.dart';
+import '../../widgets/invoice_items_table.dart';
 
 class TransactionExpansionTile extends StatefulWidget {
   final LedgerTransaction transaction;
+  final String entityType; // 'Customer' or 'Supplier'
   final bool isPurchase;
   final bool isSale;
   final AppDatabase db;
-  final Customer customer;
 
   const TransactionExpansionTile({
     super.key,
     required this.transaction,
+    required this.entityType,
     required this.isPurchase,
     required this.isSale,
     required this.db,
-    required this.customer,
   });
 
   @override
@@ -25,146 +26,126 @@ class TransactionExpansionTile extends StatefulWidget {
 
 class TransactionExpansionTileState extends State<TransactionExpansionTile> {
   bool _isExpanded = false;
-  List<(InvoiceItem, Product?)> _invoiceItems = [];
+  List<InvoiceItemDisplayModel> _displayItems = [];
   bool _isLoadingItems = false;
 
   Future<void> _loadInvoiceItems() async {
-    if (_isExpanded && widget.isSale && _invoiceItems.isEmpty) {
+    if (_isExpanded &&
+        (widget.isSale || widget.isPurchase) &&
+        _displayItems.isEmpty) {
       setState(() => _isLoadingItems = true);
       try {
-        final invoiceId = _extractInvoiceId();
-        debugPrint('Loading invoice items for invoice ID: $invoiceId');
+        if (widget.isSale) {
+          final invoiceId = _extractInvoiceId();
+          if (invoiceId != null) {
+            final items = await widget.db.invoiceDao
+                .getItemsWithProductsByInvoice(invoiceId);
 
-        if (invoiceId != null) {
-          debugPrint('Fetching items from database...');
-          final items = await widget.db.invoiceDao
-              .getItemsWithProductsByInvoice(invoiceId);
-          debugPrint('Found ${items.length} items for invoice $invoiceId');
+            setState(() {
+              _displayItems = items.map((e) {
+                final item = e.$1;
+                final product = e.$2;
+                return InvoiceItemDisplayModel(
+                  productName: product?.name ?? 'منتج ${item.productId}',
+                  quantity: item.quantity.toDouble(),
+                  unitPrice: item.quantity > 0
+                      ? item.price / item.quantity
+                      : item.price,
+                  total: item.price,
+                  unit: product?.unit,
+                );
+              }).toList();
+              _isLoadingItems = false;
+            });
+          } else {
+            setState(() => _isLoadingItems = false);
+          }
+        } else if (widget.isPurchase) {
+          final purchaseId =
+              widget.transaction.receiptNumber ?? widget.transaction.id;
+          final items = await widget.db.purchaseDao
+              .getItemsWithProductsByPurchase(purchaseId);
 
           setState(() {
-            _invoiceItems = items;
+            _displayItems = items.map((e) {
+              final item = e.$1;
+              final product = e.$2;
+              return InvoiceItemDisplayModel(
+                productName: product?.name ?? 'منتج ${item.productId}',
+                quantity: item.quantity.toDouble(),
+                unitPrice: item.unitPrice,
+                total: item.totalPrice,
+                unit: item.unit,
+              );
+            }).toList();
             _isLoadingItems = false;
           });
-        } else {
-          debugPrint('No invoice ID found, cannot load items');
-          setState(() => _isLoadingItems = false);
         }
       } catch (e) {
-        debugPrint('Error loading invoice items: $e');
+        debugPrint('Error loading items: $e');
         setState(() => _isLoadingItems = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error loading invoice items: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
       }
     }
   }
 
   int? _extractInvoiceId() {
-    // Debug logging to understand the data structure
-    debugPrint('=== Invoice ID Extraction Debug ===');
-    debugPrint('Transaction ID: ${widget.transaction.id}');
-    debugPrint('Receipt Number: ${widget.transaction.receiptNumber}');
-    debugPrint('Description: ${widget.transaction.description}');
-    debugPrint('Origin: ${widget.transaction.origin}');
-
-    // Method 1: Try receiptNumber first (most reliable)
     if (widget.transaction.receiptNumber != null &&
         widget.transaction.receiptNumber!.isNotEmpty) {
       final receiptNum = widget.transaction.receiptNumber!;
-      debugPrint('Trying receiptNumber: $receiptNum');
-
-      // Try to extract numeric ID from receipt number
       final match = RegExp(r'\d+').firstMatch(receiptNum);
       if (match != null) {
         final extractedId = int.tryParse(match.group(0) ?? '');
-        debugPrint('Extracted ID from receiptNumber: $extractedId');
         if (extractedId != null) return extractedId;
       }
-
-      // Try direct parsing if receiptNumber is just the ID
       final directId = int.tryParse(receiptNum);
-      debugPrint('Direct parse from receiptNumber: $directId');
       if (directId != null) return directId;
-
-      // Try extracting from patterns like "INV-123" or "فاتورة-123"
       final invMatch = RegExp(
         r'(?:INV|فاتورة|invoice)?[-\s]?(\d+)',
         caseSensitive: false,
       ).firstMatch(receiptNum);
       if (invMatch != null) {
         final extractedId = int.tryParse(invMatch.group(1) ?? '');
-        debugPrint('Extracted ID from pattern: $extractedId');
         if (extractedId != null) return extractedId;
       }
     }
 
-    // Method 2: Try description field (fallback)
     final desc = widget.transaction.description;
-    debugPrint('Trying description field: $desc');
-
     if (desc.contains('#')) {
       final parts = desc.split('#');
       if (parts.length > 1) {
         final afterHash = parts[1].split(' ')[0];
         final extractedId = int.tryParse(afterHash);
-        debugPrint('Extracted ID from description: $extractedId');
         if (extractedId != null) return extractedId;
       }
     }
 
-    // Method 3: Try extracting from transaction ID itself (if it's actually the invoice ID)
     if (widget.transaction.id.isNotEmpty) {
-      // Check if transaction ID itself is a numeric invoice ID
       final idMatch = RegExp(r'^\d+$').firstMatch(widget.transaction.id);
       if (idMatch != null) {
         final extractedId = int.tryParse(widget.transaction.id);
-        debugPrint('Transaction ID itself is numeric: $extractedId');
         if (extractedId != null) return extractedId;
       }
     }
 
-    // Method 4: Try extracting from description with different patterns
     if (desc.isNotEmpty) {
-      // Look for patterns like "فاتورة مبيعات #123"
       final descMatch = RegExp(r'#(\d+)').firstMatch(desc);
       if (descMatch != null) {
         final extractedId = int.tryParse(descMatch.group(1) ?? '');
-        debugPrint('Extracted ID from description pattern: $extractedId');
         if (extractedId != null) return extractedId;
       }
-
-      // Look for any standalone numbers in description
       final numberMatch = RegExp(r'(\d+)').firstMatch(desc);
       if (numberMatch != null) {
         final extractedId = int.tryParse(numberMatch.group(1) ?? '');
-        debugPrint('Extracted ID from description numbers: $extractedId');
         if (extractedId != null) return extractedId;
       }
     }
-
-    debugPrint('=== No invoice ID found ===');
     return null;
   }
 
   Future<void> _printInvoice() async {
     try {
       final invoiceId = _extractInvoiceId();
-      if (invoiceId == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('لا يمكن العثور على رقم الفاتورة'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
-      }
+      if (invoiceId == null) return;
 
       final invoices = await widget.db.invoiceDao.getInvoicesByDateRange(
         DateTime.now().subtract(const Duration(days: 365)),
@@ -207,38 +188,39 @@ class TransactionExpansionTileState extends State<TransactionExpansionTile> {
         paymentMethod: invoice.paymentMethod ?? 'cash',
         ledgerDao: widget.db.ledgerDao,
       );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم إرسال الفاتورة للطباعة'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('خطأ في الطباعة: $e')));
-      }
+      debugPrint('Error printing: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isPaymentTransaction = widget.transaction.origin == 'payment';
+    final bool isCustomer = widget.entityType == 'Customer';
+
+    // Debit (+) for customer = Sale (Red)
+    // Credit (+) for supplier = Purchase (Red)
+    final bool isLiabilityIncrease = isCustomer
+        ? widget.transaction.debit > 0
+        : widget.transaction.credit > 0;
+
+    final double amount = isLiabilityIncrease
+        ? (isCustomer ? widget.transaction.debit : widget.transaction.credit)
+        : (isCustomer ? widget.transaction.credit : widget.transaction.debit);
+
+    final bool isPayment =
+        widget.transaction.origin == 'payment' ||
+        (!isLiabilityIncrease && amount > 0);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ExpansionTile(
         leading: CircleAvatar(
-          backgroundColor: widget.isPurchase
+          backgroundColor: isLiabilityIncrease
               ? Colors.red.withValues(alpha: 0.1)
               : Colors.green.withValues(alpha: 0.1),
           child: Icon(
-            widget.isPurchase ? Icons.shopping_cart : Icons.payment,
-            color: widget.isPurchase ? Colors.red : Colors.green,
+            isLiabilityIncrease ? Icons.shopping_cart : Icons.payment,
+            color: isLiabilityIncrease ? Colors.red : Colors.green,
             size: 20,
           ),
         ),
@@ -263,9 +245,9 @@ class TransactionExpansionTileState extends State<TransactionExpansionTile> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${(widget.isPurchase ? widget.transaction.debit : widget.transaction.credit).toStringAsFixed(2)} ج.م',
+                  '${amount.toStringAsFixed(2)} ج.م',
                   style: TextStyle(
-                    color: widget.isPurchase ? Colors.red : Colors.green,
+                    color: isLiabilityIncrease ? Colors.red : Colors.green,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -275,16 +257,16 @@ class TransactionExpansionTileState extends State<TransactionExpansionTile> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: (widget.isPurchase ? Colors.orange : Colors.green)
+                    color: (isLiabilityIncrease ? Colors.orange : Colors.green)
                         .withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    isPaymentTransaction
+                    isPayment
                         ? 'سداد'
-                        : (widget.isPurchase ? 'مدين' : 'مدفوع'),
+                        : (isLiabilityIncrease ? 'مدين' : 'مدفوع'),
                     style: TextStyle(
-                      color: widget.isPurchase ? Colors.orange : Colors.green,
+                      color: isLiabilityIncrease ? Colors.orange : Colors.green,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                     ),
@@ -292,7 +274,7 @@ class TransactionExpansionTileState extends State<TransactionExpansionTile> {
                 ),
               ],
             ),
-            if (widget.isSale && !isPaymentTransaction) ...[
+            if (widget.isSale && !isPayment) ...[
               const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.print, size: 20),
@@ -302,7 +284,7 @@ class TransactionExpansionTileState extends State<TransactionExpansionTile> {
             ],
           ],
         ),
-        onExpansionChanged: isPaymentTransaction
+        onExpansionChanged: (isPayment && !widget.isPurchase && !widget.isSale)
             ? null
             : (expanded) {
                 setState(() => _isExpanded = expanded);
@@ -310,15 +292,7 @@ class TransactionExpansionTileState extends State<TransactionExpansionTile> {
                   _loadInvoiceItems();
                 }
               },
-        children: [
-          if (widget.isSale && !isPaymentTransaction)
-            _buildProductDetailsSection()
-          else
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Text('لا توجد تفاصيل منتجات لهذه المعاملة'),
-            ),
-        ],
+        children: [_buildProductDetailsSection()],
       ),
     );
   }
@@ -331,15 +305,15 @@ class TransactionExpansionTileState extends State<TransactionExpansionTile> {
       );
     }
 
-    if (_invoiceItems.isEmpty) {
+    if (_displayItems.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(20),
-        child: Text('لا توجد منتجات في هذه الفاتورة'),
+        child: Text('لا توجد تفاصيل منتجات لهذه المعاملة'),
       );
     }
 
-    return SizedBox(
-      width: double.infinity,
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -351,61 +325,7 @@ class TransactionExpansionTileState extends State<TransactionExpansionTile> {
             ),
           ),
           const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.all(
-                Colors.grey.withValues(alpha: 0.1),
-              ),
-              columns: const [
-                DataColumn(
-                  label: Text(
-                    'اسم المنتج',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'الكمية',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'سعر الوحدة',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'الإجمالي',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-              rows: _invoiceItems.map((itemWithProduct) {
-                final item = itemWithProduct.$1;
-                final product = itemWithProduct.$2;
-                final unitPrice = item.quantity > 0
-                    ? item.price / item.quantity
-                    : item.price; // If quantity is 0 or less, use total price as unit price
-
-                return DataRow(
-                  cells: [
-                    DataCell(Text(product?.name ?? 'منتج ${item.productId}')),
-                    DataCell(Text(item.quantity.toString())),
-                    DataCell(Text('${unitPrice.toStringAsFixed(2)} ج.م')),
-                    DataCell(
-                      Text(
-                        '${item.price.toStringAsFixed(2)} ج.م',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
+          InvoiceItemsTable(items: _displayItems),
         ],
       ),
     );

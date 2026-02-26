@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:device_info_plus/device_info_plus.dart';
+
 import '../services/data_service.dart';
 import '../utils/constants.dart';
 // ignore: deprecated_member_use, avoid_web_libraries_in_flutter
@@ -15,22 +15,14 @@ class DashboardOverview extends StatefulWidget {
 }
 
 class _DashboardOverviewState extends State<DashboardOverview> {
-  WebBrowserInfo? _webInfo;
   final DataService _dataService = DataService();
 
   @override
   void initState() {
     super.initState();
-    _loadSystemInfo();
     _dataService.init().then((_) {
       if (mounted) setState(() {});
     });
-  }
-
-  Future<void> _loadSystemInfo() async {
-    final deviceInfo = DeviceInfoPlugin();
-    _webInfo = await deviceInfo.webBrowserInfo;
-    if (mounted) setState(() {});
   }
 
   @override
@@ -56,6 +48,8 @@ class _DashboardOverviewState extends State<DashboardOverview> {
 
           // Recent Transactions
           Card(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Column(
@@ -74,11 +68,6 @@ class _DashboardOverviewState extends State<DashboardOverview> {
               ),
             ),
           ),
-
-          const SizedBox(height: 32),
-
-          // System Information
-          _buildSystemInfoCard(),
         ],
       ),
     );
@@ -267,8 +256,25 @@ class _DashboardOverviewState extends State<DashboardOverview> {
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color,
       String change, bool isPositive) {
-    return Card(
-      elevation: 4,
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withValues(alpha: 0.1),
+            Colors.white,
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -279,46 +285,57 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
+                    color: color.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: color, size: 24),
                 ),
                 const Spacer(),
-                Icon(
-                  isPositive ? Icons.trending_up : Icons.trending_down,
-                  color: isPositive
-                      ? AppColors.successColor
-                      : AppColors.errorColor,
-                  size: 16,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  change,
-                  style: TextStyle(
-                    color: isPositive
-                        ? AppColors.successColor
-                        : AppColors.errorColor,
-                    fontWeight: FontWeight.w500,
-                    fontSize: 12,
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (isPositive ? Colors.green : Colors.red)
+                        .withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isPositive ? Icons.arrow_upward : Icons.arrow_downward,
+                        color: isPositive ? Colors.green : Colors.red,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        change,
+                        style: TextStyle(
+                          color: isPositive ? Colors.green : Colors.red,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
             Text(
               value,
               style: const TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
+                letterSpacing: -0.5,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               title,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 14,
                 color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -540,43 +557,6 @@ class _DashboardOverviewState extends State<DashboardOverview> {
     );
   }
 
-  Widget _buildSystemInfoCard() {
-    if (_webInfo == null) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(
-            child: CircularProgressIndicator(),
-          ),
-        ),
-      );
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'معلومات النظام',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text('المتصفح: ${_webInfo!.browserName}'),
-            Text('إصدار المتصفح: ${_webInfo!.appVersion}'),
-            Text('نظام التشغيل: ${_webInfo!.platform}'),
-            Text('اللغة: ${_webInfo!.language}'),
-            Text('المنصة: ${_webInfo!.product}'),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _exportReport() {
     try {
       final licenses = _dataService.getLicenses();
@@ -596,6 +576,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
         ..click();
       html.Url.revokeObjectUrl(url);
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('تم تصدير التقرير بنجاح'),
@@ -603,6 +584,7 @@ class _DashboardOverviewState extends State<DashboardOverview> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('فشل تصدير التقرير: $e'),

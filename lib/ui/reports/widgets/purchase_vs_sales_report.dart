@@ -116,9 +116,9 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         SELECT 
           DATE(date) as report_date,
           COUNT(*) as invoice_count,
-          SUM($salesTotalColumn) as total_sales,
-          SUM(CASE WHEN paymentMethod = 'cash' THEN $salesTotalColumn ELSE 0 END) as cash_sales,
-          SUM(CASE WHEN paymentMethod != 'cash' THEN $salesTotalColumn ELSE 0 END) as credit_sales
+          SUM(total_amount) as total_sales,
+          SUM(CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END) as cash_sales,
+          SUM(CASE WHEN payment_method != 'cash' THEN total_amount ELSE 0 END) as credit_sales
         FROM invoices 
         WHERE date >= ? AND date <= ? AND status != 'deleted'
         GROUP BY DATE(date)
@@ -136,14 +136,14 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
           .customSelect(
             '''
         SELECT 
-          DATE(purchaseDate) as report_date,
+          DATE(purchase_date) as report_date,
           COUNT(*) as purchase_count,
-          SUM($purchasesTotalColumn) as total_purchases,
-          SUM(CASE WHEN paymentMethod = 'cash' THEN $purchasesTotalColumn ELSE 0 END) as cash_purchases,
-          SUM(CASE WHEN paymentMethod != 'cash' THEN $purchasesTotalColumn ELSE 0 END) as credit_purchases
+          SUM(total_amount) as total_purchases,
+          SUM(CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END) as cash_purchases,
+          SUM(CASE WHEN payment_method != 'cash' THEN total_amount ELSE 0 END) as credit_purchases
         FROM purchases 
-        WHERE purchaseDate >= ? AND purchaseDate <= ? AND isDeleted = 0
-        GROUP BY DATE(purchaseDate)
+        WHERE purchase_date >= ? AND purchase_date <= ? AND is_deleted = 0
+        GROUP BY DATE(purchase_date)
         ORDER BY report_date
       ''',
             variables: [

@@ -27,7 +27,7 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   @override
@@ -77,6 +77,7 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const Gap(4),
                       Text(
                         'Developed by MO2',
                         style: Theme.of(context).textTheme.headlineMedium
@@ -87,92 +88,18 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
                               ).colorScheme.onSurface.withValues(alpha: 0.7),
                             ),
                       ),
-                      Text(
-                        l10n.brand_name_subtitle,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.7),
-                        ),
-                      ),
                     ],
                   ),
                 ),
                 Row(
                   children: [
-                    // Reports Button
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.purple.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.purple.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const ReportsPage(),
-                            ),
-                          );
-                        },
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.analytics,
-                              color: Colors.purple,
-                              size: 20,
-                            ),
-                            const Gap(8),
-                            Text(
-                              'التقارير',
-                              style: const TextStyle(
-                                color: Colors.purple,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    // Notifications
+                    IconButton(
+                      icon: const Icon(Icons.notifications_outlined),
+                      onPressed: () {},
+                      tooltip: 'Notifications',
                     ),
-                    const Gap(12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.green.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.monetization_on,
-                            color: Colors.green,
-                            size: 20,
-                          ),
-                          const Gap(8),
-                          Text(
-                            l10n.currency,
-                            style: const TextStyle(
-                              color: Colors.green,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    const Gap(8),
                   ],
                 ),
               ],
@@ -226,6 +153,10 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
                   icon: const Icon(Icons.account_balance_wallet_outlined),
                   text: l10n.cash,
                 ),
+                Tab(
+                  icon: const Icon(Icons.analytics),
+                  text: l10n.reports,
+                ), // Added Reports tab
               ],
             ),
           ),
@@ -337,6 +268,7 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
                   child: const StaffListPage(),
                 ),
                 CashierPage(db: widget.db),
+                ReportsPage(),
               ],
             ),
           ),

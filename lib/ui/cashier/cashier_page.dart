@@ -110,7 +110,7 @@ class _CashierPageState extends State<CashierPage> {
     final l10n = AppLocalizations.of(context);
     // Show popup for entering opening balance
     final result = await _showOpeningBalanceDialog();
-    if (result == null) return; // User cancelled
+    if (!mounted || result == null) return; // User cancelled or unmounted
 
     try {
       final today = DateTime.now();
@@ -133,6 +133,7 @@ class _CashierPageState extends State<CashierPage> {
       );
 
       await _loadCurrentDay();
+      if (!mounted) return;
 
       if (mounted) {
         final l10n = AppLocalizations.of(context);

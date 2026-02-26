@@ -20,8 +20,9 @@ class PermissionGuard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authProvider);
-    final hasPermission = user?.hasPermission(permission) ?? false;
+    final hasPermission = ref.watch(
+      authProvider.select((user) => user?.hasPermission(permission) ?? false),
+    );
 
     if (hasPermission) {
       return child;
@@ -130,15 +131,16 @@ class PermissionListGuard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authProvider);
-    if (user == null) return fallback ?? const SizedBox.shrink();
-
-    bool hasPermission;
-    if (requireAll) {
-      hasPermission = permissions.every(user.hasPermission);
-    } else {
-      hasPermission = permissions.any(user.hasPermission);
-    }
+    final hasPermission = ref.watch(
+      authProvider.select((user) {
+        if (user == null) return false;
+        if (requireAll) {
+          return permissions.every(user.hasPermission);
+        } else {
+          return permissions.any(user.hasPermission);
+        }
+      }),
+    );
 
     if (hasPermission) {
       return child;
@@ -167,8 +169,9 @@ class PermissionButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authProvider);
-    final hasPermission = user?.hasPermission(permission) ?? false;
+    final hasPermission = ref.watch(
+      authProvider.select((user) => user?.hasPermission(permission) ?? false),
+    );
 
     if (hasPermission) {
       return ElevatedButton(onPressed: onPressed, style: style, child: child);
@@ -224,8 +227,9 @@ class PermissionPopupMenuButton<T> extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authProvider);
-    final hasPermission = user?.hasPermission(permission) ?? false;
+    final hasPermission = ref.watch(
+      authProvider.select((user) => user?.hasPermission(permission) ?? false),
+    );
 
     if (hasPermission) {
       return PopupMenuButton<T>(
@@ -261,8 +265,9 @@ class PermissionFormField<T> extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authProvider);
-    final hasPermission = user?.hasPermission(permission) ?? false;
+    final hasPermission = ref.watch(
+      authProvider.select((user) => user?.hasPermission(permission) ?? false),
+    );
     final isEnabled = enabled && hasPermission;
 
     return FormField<T>(

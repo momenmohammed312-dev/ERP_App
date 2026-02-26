@@ -26,9 +26,13 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
   @override
   void initState() {
     super.initState();
-    _initializeService();
-    _loadStaff();
+    _init();
     _searchController.addListener(_filterStaff);
+  }
+
+  Future<void> _init() async {
+    await _initializeService();
+    await _loadStaff();
   }
 
   Future<void> _initializeService() async {

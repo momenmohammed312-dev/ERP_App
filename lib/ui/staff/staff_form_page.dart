@@ -94,7 +94,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: const Color(0xFF2D2D2D),
       appBar: AppBar(
         title: Text(
           widget.staff == null ? 'إضافة موظف جديد' : 'تعديل بيانات الموظف',
@@ -144,7 +144,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Widget _buildBasicInfo() {
     return Card(
-      color: Colors.white,
+      color: const Color(0xFF3A3A3A),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -154,13 +154,14 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
             Text(
               'المعلومات الأساسية',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[700],
+                color: Colors.blue[400],
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _nameController,
+              style: const TextStyle(color: Colors.white),
               decoration: _buildInputDecoration('الاسم الكامل', Icons.person),
               validator: (value) {
                 if (value == null || value.isEmpty) {
@@ -172,13 +173,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _positionController,
+              style: const TextStyle(color: Colors.white),
               decoration: _buildInputDecoration('المنصب', Icons.work),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'هذا الحقل مطلوب';
-                }
-                return null;
-              },
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -245,7 +241,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Widget _buildEmploymentInfo() {
     return Card(
-      color: Colors.white,
+      color: const Color(0xFF3A3A3A),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -255,7 +251,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
             Text(
               'معلومات التوظيف',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[700],
+                color: Colors.blue[400],
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -300,7 +296,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Widget _buildContactInfo() {
     return Card(
-      color: Colors.white,
+      color: const Color(0xFF3A3A3A),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -310,7 +306,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
             Text(
               'معلومات الاتصال',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[700],
+                color: Colors.blue[400],
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -348,7 +344,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Widget _buildBankInfo() {
     return Card(
-      color: Colors.white,
+      color: const Color(0xFF3A3A3A),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -358,7 +354,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
             Text(
               'معلومات البنك',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[700],
+                color: Colors.blue[400],
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -386,7 +382,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Widget _buildEmergencyContact() {
     return Card(
-      color: Colors.white,
+      color: const Color(0xFF3A3A3A),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -396,7 +392,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
             Text(
               'معلومات الطوارئ',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[700],
+                color: Colors.blue[400],
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -425,7 +421,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Widget _buildNotes() {
     return Card(
-      color: Colors.white,
+      color: const Color(0xFF3A3A3A),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -435,7 +431,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
             Text(
               'ملاحظات',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[700],
+                color: Colors.blue[400],
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -443,6 +439,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
             TextFormField(
               controller: _notesController,
               maxLines: 4,
+              style: const TextStyle(color: Colors.white),
               decoration: _buildInputDecoration('ملاحظات إضافية', Icons.note),
             ),
           ],
@@ -454,7 +451,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   InputDecoration _buildInputDecoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
-      prefixIcon: Icon(icon, color: Colors.blue[700]),
+      labelStyle: const TextStyle(color: Colors.white70),
+      prefixIcon: Icon(icon, color: Colors.blue[400]),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: Colors.grey[300]!),
@@ -464,7 +462,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         borderSide: BorderSide(color: Colors.blue[700]!),
       ),
       filled: true,
-      fillColor: Colors.grey[50],
+      fillColor: const Color(0xFF4A4A4A),
     );
   }
 

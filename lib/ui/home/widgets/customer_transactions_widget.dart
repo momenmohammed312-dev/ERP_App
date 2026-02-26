@@ -779,15 +779,15 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
                               itemCount: _transactions.length,
                               itemBuilder: (context, index) {
                                 final transaction = _transactions[index];
-                                final isPurchase = transaction.debit > 0;
-                                final isSale = transaction.credit > 0;
+                                final isSale = transaction.debit > 0;
+                                final isPayment = transaction.credit > 0;
 
                                 return TransactionExpansionTile(
                                   transaction: transaction,
-                                  isPurchase: isPurchase,
+                                  entityType: 'Customer',
+                                  isPurchase: false,
                                   isSale: isSale,
                                   db: widget.db,
-                                  customer: widget.customer,
                                 );
                               },
                             ),

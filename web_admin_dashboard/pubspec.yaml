@@ -18,6 +18,9 @@ dependencies:
   
   # إدارة الحالة
   get: ^4.6.6
+
+  # الخطوط
+  google_fonts: ^6.1.0
   
   # HTTP requests
   http: ^1.1.0

@@ -7,6 +7,7 @@ class DataService {
   FirebaseFirestore? _firestore;
   static const String _clientsCollection = 'clients';
   static const String _licensesCollection = 'licenses';
+  static const String _settingsCollection = 'settings';
 
   // Singleton
   static final DataService _instance = DataService._internal();
@@ -16,6 +17,11 @@ class DataService {
   // Local cache
   List<ClientModel> _clients = [];
   List<LicenseRecord> _licenses = [];
+  Map<String, double> _packagePrices = {
+    'basic': 250.0,
+    'standard': 400.0,
+    'professional': 600.0,
+  };
   bool _isInit = false;
   bool _useLocal = false;
 
@@ -63,6 +69,21 @@ class DataService {
             .toList();
       }, onError: (_) {
         _useLocal = true;
+      });
+
+      _firestore!
+          .collection(_settingsCollection)
+          .doc('package_prices')
+          .snapshots()
+          .listen((doc) {
+        if (doc.exists && doc.data() != null) {
+          final data = doc.data()!;
+          _packagePrices = {
+            'basic': (data['basic'] as num?)?.toDouble() ?? 250.0,
+            'standard': (data['standard'] as num?)?.toDouble() ?? 400.0,
+            'professional': (data['professional'] as num?)?.toDouble() ?? 600.0,
+          };
+        }
       });
     } catch (_) {
       _useLocal = true;
@@ -398,4 +419,34 @@ class DataService {
   /// Get trial licenses count
   int get trialLicensesCount =>
       _licenses.where((l) => l.status == LicenseStatus.trial).length;
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // PRICE SETTINGS
+  // ═══════════════════════════════════════════════════════════════════════
+
+  Map<String, double> get packagePrices => _packagePrices;
+
+  Future<void> updatePackagePrices(Map<String, double> prices) async {
+    _packagePrices = Map.from(prices);
+    if (_useLocal) return;
+
+    await _firestore!
+        .collection(_settingsCollection)
+        .doc('package_prices')
+        .set(_packagePrices);
+  }
+
+  double getPrice(String packageType, SubscriptionDuration duration) {
+    final basePrice = _packagePrices[packageType] ?? 250.0;
+    switch (duration) {
+      case SubscriptionDuration.trial:
+        return 0.0;
+      case SubscriptionDuration.monthly:
+        return basePrice;
+      case SubscriptionDuration.yearly:
+        return basePrice * 10;
+      case SubscriptionDuration.lifetime:
+        return basePrice * 24;
+    }
+  }
 }

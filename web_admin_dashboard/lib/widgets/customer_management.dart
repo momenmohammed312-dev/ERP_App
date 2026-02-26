@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
+import '../services/data_service.dart';
+import '../models/client_model.dart';
 
 class CustomerManagement extends StatefulWidget {
   const CustomerManagement({super.key});
@@ -9,42 +11,18 @@ class CustomerManagement extends StatefulWidget {
 }
 
 class _CustomerManagementState extends State<CustomerManagement> {
+  final DataService _dataService = DataService();
   String _searchQuery = '';
   String _selectedFilter = 'الكل';
   final List<String> _filters = ['الكل', 'نشط', 'غير نشط', 'مدين'];
 
-  final List<Map<String, dynamic>> _customers = [
-    {
-      'name': 'أحمد محمد',
-      'phone': '0501234567',
-      'balance': '1,234.50',
-      'status': 'نشط',
-    },
-    {
-      'name': 'فاطمة علي',
-      'phone': '0507654321',
-      'balance': '-450.00',
-      'status': 'نشط',
-    },
-    {
-      'name': 'محمد سعيد',
-      'phone': '0509876543',
-      'balance': '2,456.75',
-      'status': 'نشط',
-    },
-    {
-      'name': 'خالد أحمد',
-      'phone': '0502345678',
-      'balance': '-890.25',
-      'status': 'مدين',
-    },
-    {
-      'name': 'عمر خالد',
-      'phone': '0503456789',
-      'balance': '567.25',
-      'status': 'نشط',
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _dataService.init().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -100,8 +78,7 @@ class _CustomerManagementState extends State<CustomerManagement> {
               const SizedBox(width: 16),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  // ignore: deprecated_member_use
-                  value: _selectedFilter,
+                  initialValue: _selectedFilter,
                   decoration: InputDecoration(
                     labelText: 'الحالة',
                     border: OutlineInputBorder(
@@ -127,36 +104,7 @@ class _CustomerManagementState extends State<CustomerManagement> {
           const SizedBox(height: 24),
 
           // Stats Cards
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatCard(
-                  'إجمالي العملاء',
-                  '245',
-                  Icons.people,
-                  AppColors.primaryColor,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildStatCard(
-                  'العملاء النشطون',
-                  '198',
-                  Icons.person,
-                  AppColors.successColor,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildStatCard(
-                  'العملاء المدينون',
-                  '47',
-                  Icons.account_balance,
-                  AppColors.warningColor,
-                ),
-              ),
-            ],
-          ),
+          _buildStatsCards(),
 
           const SizedBox(height: 24),
 
@@ -206,50 +154,108 @@ class _CustomerManagementState extends State<CustomerManagement> {
     );
   }
 
+  Widget _buildStatsCards() {
+    final clients = _dataService.getClients();
+    final activeCount = clients.where((c) => c.isActive).length;
+    final debtorCount =
+        clients.where((c) => c.totalPaid < 0).length; // Adjust logic as needed
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = constraints.maxWidth > 900
+            ? 3
+            : (constraints.maxWidth > 600 ? 2 : 1);
+        const spacing = 16.0;
+        final cardWidth =
+            (constraints.maxWidth - (spacing * (crossAxisCount - 1))) /
+                crossAxisCount;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            SizedBox(
+              width: cardWidth,
+              child: _buildStatCard(
+                'إجمالي العملاء',
+                clients.length.toString(),
+                Icons.people,
+                AppColors.primaryColor,
+              ),
+            ),
+            SizedBox(
+              width: cardWidth,
+              child: _buildStatCard(
+                'العملاء النشطون',
+                activeCount.toString(),
+                Icons.person,
+                AppColors.successColor,
+              ),
+            ),
+            SizedBox(
+              width: cardWidth,
+              child: _buildStatCard(
+                'العملاء المدينون',
+                debtorCount.toString(),
+                Icons.account_balance,
+                AppColors.warningColor,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildStatCard(
       String title, String value, IconData icon, Color color) {
-    return Card(
-      elevation: 4,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 32),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
                   ),
-                  child: Icon(icon, color: color, size: 32),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        value,
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: color,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 8),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
@@ -258,14 +264,18 @@ class _CustomerManagementState extends State<CustomerManagement> {
   }
 
   Widget _buildCustomersList() {
+    final clients = _dataService.getClients();
+
     // Filter customers
-    var filteredCustomers = _customers.where((customer) {
+    var filteredCustomers = clients.where((client) {
       final matchesSearch = _searchQuery.isEmpty ||
-          (customer['name'] as String)
-              .toLowerCase()
-              .contains(_searchQuery.toLowerCase());
-      final matchesFilter =
-          _selectedFilter == 'الكل' || customer['status'] == _selectedFilter;
+          client.name.toLowerCase().contains(_searchQuery.toLowerCase());
+
+      final bool matchesFilter = _selectedFilter == 'الكل' ||
+          (_selectedFilter == 'نشط' && client.isActive) ||
+          (_selectedFilter == 'غير نشط' && !client.isActive) ||
+          (_selectedFilter == 'مدين' && client.totalPaid < 0);
+
       return matchesSearch && matchesFilter;
     }).toList();
 
@@ -287,15 +297,15 @@ class _CustomerManagementState extends State<CustomerManagement> {
     }
 
     return Column(
-      children: filteredCustomers.map((customer) {
-        return _buildCustomerRow(customer);
+      children: filteredCustomers.map((client) {
+        return _buildCustomerRow(client);
       }).toList(),
     );
   }
 
-  Widget _buildCustomerRow(Map<String, dynamic> customer) {
-    final isActive = customer['status'] == 'نشط';
-    final isDebtor = (customer['balance'] as String).startsWith('-');
+  Widget _buildCustomerRow(ClientModel client) {
+    final isActive = client.isActive;
+    final isDebtor = client.totalPaid < 0; // Simplified for now
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -310,12 +320,12 @@ class _CustomerManagementState extends State<CustomerManagement> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  customer['name']!,
+                  client.name,
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  customer['phone']!,
+                  client.phone,
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
@@ -323,7 +333,7 @@ class _CustomerManagementState extends State<CustomerManagement> {
           ),
           Expanded(
             child: Text(
-              '${customer['balance']} ج.م',
+              '${client.totalPaid.toStringAsFixed(2)} ج.م',
               style: TextStyle(
                 fontWeight: FontWeight.w500,
                 color: isDebtor ? AppColors.errorColor : AppColors.successColor,
@@ -340,7 +350,7 @@ class _CustomerManagementState extends State<CustomerManagement> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                customer['status']!,
+                isActive ? 'نشط' : 'غير نشط',
                 style: TextStyle(
                   color:
                       isActive ? AppColors.successColor : AppColors.errorColor,
@@ -357,18 +367,18 @@ class _CustomerManagementState extends State<CustomerManagement> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.visibility, size: 20),
-                  onPressed: () => _viewCustomerDetails(customer),
+                  onPressed: () => _viewCustomerDetails(client),
                   tooltip: 'عرض التفاصيل',
                 ),
                 IconButton(
                   icon: const Icon(Icons.edit, size: 20),
-                  onPressed: () => _editCustomer(customer),
+                  onPressed: () => _editCustomer(client),
                   tooltip: 'تعديل',
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete,
                       size: 20, color: AppColors.errorColor),
-                  onPressed: () => _deleteCustomer(customer),
+                  onPressed: () => _deleteCustomer(client),
                   tooltip: 'حذف',
                 ),
               ],
@@ -382,189 +392,263 @@ class _CustomerManagementState extends State<CustomerManagement> {
   void _addNewCustomer() {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
-    final balanceController = TextEditingController();
-    String status = 'نشط';
+    final emailController = TextEditingController();
+    final addressController = TextEditingController();
+    String packageType = 'basic';
+    bool isActive = true;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('إضافة عميل جديد'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'اسم العميل'),
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('إضافة عميل جديد'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'اسم العميل'),
+                ),
+                TextField(
+                  controller: phoneController,
+                  decoration: const InputDecoration(labelText: 'الهاتف'),
+                ),
+                TextField(
+                  controller: emailController,
+                  decoration:
+                      const InputDecoration(labelText: 'البريد الإلكتروني'),
+                ),
+                TextField(
+                  controller: addressController,
+                  decoration: const InputDecoration(labelText: 'العنوان'),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: packageType,
+                  decoration: const InputDecoration(labelText: 'الباقة'),
+                  items: [
+                    const DropdownMenuItem(
+                        value: 'basic', child: Text('أساسي')),
+                    const DropdownMenuItem(
+                        value: 'standard', child: Text('قياسي')),
+                    const DropdownMenuItem(
+                        value: 'professional', child: Text('احترافي')),
+                  ],
+                  onChanged: (value) => packageType = value!,
+                ),
+                SwitchListTile(
+                  title: const Text('نشط'),
+                  value: isActive,
+                  onChanged: (value) => setState(() => isActive = value),
+                ),
+              ],
             ),
-            TextField(
-              controller: phoneController,
-              decoration: const InputDecoration(labelText: 'الهاتف'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('إلغاء'),
             ),
-            TextField(
-              controller: balanceController,
-              decoration: const InputDecoration(labelText: 'الرصيد'),
-            ),
-            DropdownButton<String>(
-              value: status,
-              items: ['نشط', 'غير نشط', 'مدين'].map((String value) {
-                return DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(value),
+            ElevatedButton(
+              onPressed: () async {
+                final newClient = ClientModel(
+                  id: '',
+                  name: nameController.text,
+                  phone: phoneController.text,
+                  email: emailController.text,
+                  address: addressController.text,
+                  packageType: packageType,
+                  createdAt: DateTime.now(),
+                  isActive: isActive,
                 );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  status = value!;
-                });
+                await _dataService.addClient(newClient);
+                if (mounted) {
+                  Navigator.of(context).pop();
+                  setState(() {});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم إضافة العميل بنجاح')),
+                  );
+                }
               },
+              child: const Text('إضافة'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('إلغاء'),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _customers.add({
-                  'name': nameController.text,
-                  'phone': phoneController.text,
-                  'balance': balanceController.text,
-                  'status': status,
-                });
-              });
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم إضافة العميل بنجاح')),
-              );
-            },
-            child: const Text('إضافة'),
-          ),
-        ],
       ),
     );
   }
 
-  void _viewCustomerDetails(Map<String, dynamic> customer) {
+  void _viewCustomerDetails(ClientModel client) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('تفاصيل العميل: ${customer['name']}'),
-        content: SingleChildScrollView(
-          child: Column(
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: Text('تفاصيل العميل: ${client.name}'),
+          content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('الهاتف: ${customer['phone']}'),
-              Text('الرصيد: ${customer['balance']} ج.م'),
-              Text('الحالة: ${customer['status']}'),
+              _detailRow(Icons.phone, 'الهاتف', client.phone),
+              _detailRow(Icons.email, 'البريد', client.email),
+              _detailRow(Icons.location_on, 'العنوان', client.address),
+              _detailRow(Icons.inventory, 'الباقة', client.packageDisplayName),
+              _detailRow(Icons.calendar_today, 'تاريخ البدء',
+                  '${client.createdAt.year}-${client.createdAt.month}-${client.createdAt.day}'),
+              _detailRow(
+                  Icons.money, 'إجمالي المدفوع', '${client.totalPaid} ج.م'),
+              _detailRow(Icons.check_circle, 'الحالة',
+                  client.isActive ? 'نشط' : 'غير نشط'),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('إغلاق'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _editCustomer(Map<String, dynamic> customer) {
-    final nameController = TextEditingController(text: customer['name']);
-    final phoneController = TextEditingController(text: customer['phone']);
-    final balanceController = TextEditingController(text: customer['balance']);
-    String status = customer['status'];
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تعديل العميل'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'اسم العميل'),
-            ),
-            TextField(
-              controller: phoneController,
-              decoration: const InputDecoration(labelText: 'الهاتف'),
-            ),
-            TextField(
-              controller: balanceController,
-              decoration: const InputDecoration(labelText: 'الرصيد'),
-            ),
-            DropdownButton<String>(
-              value: status,
-              items: ['نشط', 'غير نشط', 'مدين'].map((String value) {
-                return DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(value),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  status = value!;
-                });
-              },
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('إغلاق'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('إلغاء'),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                customer['name'] = nameController.text;
-                customer['phone'] = phoneController.text;
-                customer['balance'] = balanceController.text;
-                customer['status'] = status;
-              });
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم تعديل العميل بنجاح')),
-              );
-            },
-            child: const Text('حفظ'),
-          ),
+      ),
+    );
+  }
+
+  Widget _detailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: AppColors.primaryColor),
+          const SizedBox(width: 8),
+          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(value),
         ],
       ),
     );
   }
 
-  void _deleteCustomer(Map<String, dynamic> customer) {
+  void _editCustomer(ClientModel client) {
+    final nameController = TextEditingController(text: client.name);
+    final phoneController = TextEditingController(text: client.phone);
+    final emailController = TextEditingController(text: client.email);
+    final addressController = TextEditingController(text: client.address);
+    String packageType = client.packageType;
+    bool isActive = client.isActive;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تأكيد الحذف'),
-        content: Text('هل أنت متأكد من حذف العميل "${customer['name']}"؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('إلغاء'),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _customers.remove(customer);
-              });
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('تم حذف العميل بنجاح'),
-                  backgroundColor: AppColors.successColor,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('تعديل العميل'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'اسم العميل'),
                 ),
-              );
-            },
-            child: const Text('حذف',
-                style: TextStyle(color: AppColors.errorColor)),
+                TextField(
+                  controller: phoneController,
+                  decoration: const InputDecoration(labelText: 'الهاتف'),
+                ),
+                TextField(
+                  controller: emailController,
+                  decoration:
+                      const InputDecoration(labelText: 'البريد الإلكتروني'),
+                ),
+                TextField(
+                  controller: addressController,
+                  decoration: const InputDecoration(labelText: 'العنوان'),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: packageType,
+                  decoration: const InputDecoration(labelText: 'الباقة'),
+                  items: [
+                    const DropdownMenuItem(
+                        value: 'basic', child: Text('أساسي')),
+                    const DropdownMenuItem(
+                        value: 'standard', child: Text('قياسي')),
+                    const DropdownMenuItem(
+                        value: 'professional', child: Text('احترافي')),
+                  ],
+                  onChanged: (value) => packageType = value!,
+                ),
+                SwitchListTile(
+                  title: const Text('نشط'),
+                  value: isActive,
+                  onChanged: (value) => setState(() => isActive = value),
+                ),
+              ],
+            ),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final updatedClient = client.copyWith(
+                  name: nameController.text,
+                  phone: phoneController.text,
+                  email: emailController.text,
+                  address: addressController.text,
+                  packageType: packageType,
+                  isActive: isActive,
+                );
+                await _dataService.updateClient(updatedClient);
+                if (mounted) {
+                  Navigator.of(context).pop();
+                  setState(() {});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم تعديل العميل بنجاح')),
+                  );
+                }
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _deleteCustomer(ClientModel client) {
+    showDialog(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('تأكيد الحذف'),
+          content: Text('هل أنت متأكد من حذف العميل "${client.name}"؟'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('إلغاء'),
+            ),
+            TextButton(
+              onPressed: () async {
+                await _dataService.deleteClient(client.id);
+                if (mounted) {
+                  Navigator.of(context).pop();
+                  setState(() {});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('تم حذف العميل بنجاح'),
+                      backgroundColor: AppColors.successColor,
+                    ),
+                  );
+                }
+              },
+              child: const Text('حذف',
+                  style: TextStyle(color: AppColors.errorColor)),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,4 +1,3 @@
-import '../config/license_config.dart';
 import 'license_manager.dart';
 
 /// Activation Service - يعالج عملية التفعيل محلياً فقط

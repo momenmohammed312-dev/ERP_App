@@ -156,12 +156,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 1. Initial splash/activation screen logic (omitted for brevity, keeping simple)
 
       // 2. Logic for first-run setup
+      /*
       if (state.matchedLocation != '/setup') {
         final hasDefault = await db.userDao.hasDefaultAdminPassword();
         if (hasDefault) {
           return '/setup';
         }
       }
+      */
 
       // 3. Auth redirect
       if (!loggedIn && !isAuthPath) {

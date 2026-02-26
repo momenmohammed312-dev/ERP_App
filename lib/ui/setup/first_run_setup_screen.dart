@@ -117,11 +117,13 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
                     ),
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty)
+                    if (value == null || value.isEmpty) {
                       return 'يرجى إدخال كلمة المرور';
+                    }
                     if (value.length < 6) return 'يجب أن لا تقل عن 6 أحرف';
-                    if (value == 'admin123')
+                    if (value == 'admin123') {
                       return 'لا يمكنك استخدام كلمة المرور الافتراضية';
+                    }
                     return null;
                   },
                 ),
@@ -137,8 +139,9 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
                     ),
                   ),
                   validator: (value) {
-                    if (value != _passwordController.text)
+                    if (value != _passwordController.text) {
                       return 'كلمات المرور غير متطابقة';
+                    }
                     return null;
                   },
                 ),

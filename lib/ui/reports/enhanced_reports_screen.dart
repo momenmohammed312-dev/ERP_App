@@ -4,6 +4,10 @@ import '../../../core/database/dao/enhanced_purchase_dao.dart';
 import '../../../core/provider/app_database_provider.dart';
 import '../../../widgets/license/feature_guard.dart';
 import 'widgets/inventory_report_tab.dart';
+import 'purchase/purchase_reports_screen.dart';
+import 'purchase/supplier_performance_screen.dart';
+import 'purchase/purchase_budget_screen.dart';
+import 'purchase/purchase_orders_screen.dart';
 
 class EnhancedReportsScreen extends ConsumerStatefulWidget {
   const EnhancedReportsScreen({super.key});
@@ -222,7 +226,7 @@ class _EnhancedReportsScreenState extends ConsumerState<EnhancedReportsScreen> {
               Expanded(
                 child: _buildStatCard(
                   'متوسط الفاتورة',
-                  '${_purchaseStats['averagePurchase']?.toStringAsFixed(0) ?? '0'} ج.م',
+                  '${_purchaseStats['averagePurchase']?.toStringAsFixed(0) ?? '0'} ج.m',
                   Icons.calculate,
                   Colors.orange,
                 ),
@@ -551,7 +555,6 @@ class _EnhancedReportsScreenState extends ConsumerState<EnhancedReportsScreen> {
   Widget _buildPaymentMethodChart() {
     final creditCount = _purchaseStats['creditCount'] ?? 0;
     final cashCount = _purchaseStats['cashCount'] ?? 0;
-    final totalCount = creditCount + cashCount;
 
     return Container(
       height: 200,
@@ -654,113 +657,30 @@ class _EnhancedReportsScreenState extends ConsumerState<EnhancedReportsScreen> {
   void _navigateToPurchaseReports() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => PurchaseReportsScreen()),
+      MaterialPageRoute(builder: (context) => const PurchaseReportsScreen()),
     );
   }
 
   void _navigateToSupplierAnalytics() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => SupplierPerformanceScreen()),
+      MaterialPageRoute(
+        builder: (context) => const SupplierPerformanceScreen(),
+      ),
     );
   }
 
   void _navigateToBudgetManagement() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => PurchaseBudgetScreen()),
+      MaterialPageRoute(builder: (context) => const PurchaseBudgetScreen()),
     );
   }
 
   void _navigateToPurchaseOrders() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => PurchaseOrdersScreen()),
-    );
-  }
-}
-
-// Import the existing screens
-class PurchaseReportsScreen extends StatelessWidget {
-  const PurchaseReportsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Color(0xFF1E1E2E),
-      appBar: AppBar(
-        title: Text('تقارير المشتريات'),
-        backgroundColor: Color(0xFF2D2D3D),
-      ),
-      body: Center(
-        child: Text(
-          'تقارير المشتريات - قيد التطوير',
-          style: TextStyle(color: Colors.white),
-        ),
-      ),
-    );
-  }
-}
-
-class SupplierPerformanceScreen extends StatelessWidget {
-  const SupplierPerformanceScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Color(0xFF1E1E2E),
-      appBar: AppBar(
-        title: Text('تحليلات الموردين'),
-        backgroundColor: Color(0xFF2D2D3D),
-      ),
-      body: Center(
-        child: Text(
-          'تحليلات الموردين - قيد التطوير',
-          style: TextStyle(color: Colors.white),
-        ),
-      ),
-    );
-  }
-}
-
-class PurchaseBudgetScreen extends StatelessWidget {
-  const PurchaseBudgetScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Color(0xFF1E1E2E),
-      appBar: AppBar(
-        title: Text('إدارة الميزانية'),
-        backgroundColor: Color(0xFF2D2D3D),
-      ),
-      body: Center(
-        child: Text(
-          'إدارة الميزانية - قيد التطوير',
-          style: TextStyle(color: Colors.white),
-        ),
-      ),
-    );
-  }
-}
-
-class PurchaseOrdersScreen extends StatelessWidget {
-  const PurchaseOrdersScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Color(0xFF1E1E2E),
-      appBar: AppBar(
-        title: Text('أوامر الشراء'),
-        backgroundColor: Color(0xFF2D2D3D),
-      ),
-      body: Center(
-        child: Text(
-          'أوامر الشراء - قيد التطوير',
-          style: TextStyle(color: Colors.white),
-        ),
-      ),
+      MaterialPageRoute(builder: (context) => const PurchaseOrdersScreen()),
     );
   }
 }

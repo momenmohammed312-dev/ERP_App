@@ -756,7 +756,7 @@ class SummaryPanel extends StatelessWidget {
       sections.add(
         PieChartSectionData(
           value: income,
-          title: '${income.toStringAsFixed(0)}',
+          title: income.toStringAsFixed(0),
           color: Colors.green,
           radius: 60,
         ),
@@ -767,7 +767,7 @@ class SummaryPanel extends StatelessWidget {
       sections.add(
         PieChartSectionData(
           value: expenses,
-          title: '${expenses.toStringAsFixed(0)}',
+          title: expenses.toStringAsFixed(0),
           color: Colors.red,
           radius: 60,
         ),

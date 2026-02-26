@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'screens/login_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'utils/constants.dart';
@@ -14,15 +15,12 @@ void main() async {
       options.projectId.startsWith('PASTE_') ||
       options.apiKey.startsWith('PASTE_');
 
-  if (!isPlaceholderConfig) {
-    try {
-      await Firebase.initializeApp(
-        options: options,
-      );
-    } catch (e) {
-      debugPrint("Firebase initialization failed: $e");
-      debugPrint("Continuing without Firebase for UI testing...");
+  try {
+    if (!isPlaceholderConfig) {
+      await Firebase.initializeApp(options: options);
     }
+  } catch (e) {
+    debugPrint("Firebase initialization failed: $e");
   }
   runApp(const POSAdminDashboard());
 }
@@ -36,8 +34,8 @@ class POSAdminDashboard extends StatelessWidget {
       title: 'POS Admin Dashboard',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: AppColors.primary,
-        fontFamily: 'Cairo',
+        colorSchemeSeed: AppColors.primaryColor,
+        textTheme: GoogleFonts.cairoTextTheme(),
         useMaterial3: true,
         scaffoldBackgroundColor: AppColors.backgroundColor,
         appBarTheme: const AppBarTheme(
@@ -60,12 +58,6 @@ class POSAdminDashboard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
           ),
-        ),
-        textTheme: const TextTheme(
-          bodyLarge: TextStyle(fontFamily: 'Cairo'),
-          bodyMedium: TextStyle(fontFamily: 'Cairo'),
-          headlineLarge: TextStyle(fontFamily: 'Cairo'),
-          headlineMedium: TextStyle(fontFamily: 'Cairo'),
         ),
       ),
       home: const LoginScreen(),

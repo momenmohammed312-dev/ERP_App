@@ -82,6 +82,26 @@ class EnhancedPurchaseDao extends DatabaseAccessor<AppDatabase>
         db.enhancedPurchaseItems,
       )..where((tbl) => tbl.purchaseId.equals(purchaseId))).get();
 
+  Future<List<(EnhancedPurchaseItem, Product?)>> getItemsWithProductsByPurchase(
+    int purchaseId,
+  ) {
+    final query = select(db.enhancedPurchaseItems).join([
+      leftOuterJoin(
+        db.products,
+        db.products.id.equalsExp(db.enhancedPurchaseItems.productId),
+      ),
+    ])..where(db.enhancedPurchaseItems.purchaseId.equals(purchaseId));
+
+    return query.get().then((rows) {
+      return rows.map((row) {
+        return (
+          row.readTable(db.enhancedPurchaseItems),
+          row.readTableOrNull(db.products),
+        );
+      }).toList();
+    });
+  }
+
   Future<void> insertPurchaseItem(EnhancedPurchaseItemsCompanion item) =>
       into(db.enhancedPurchaseItems).insert(item);
 

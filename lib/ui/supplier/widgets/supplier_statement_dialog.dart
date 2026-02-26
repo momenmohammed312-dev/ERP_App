@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/supplier_dao.dart';
 import 'package:pos_offline_desktop/core/services/purchase_print_service_simple.dart';
+import '../../home/widgets/transaction_expansion_tile.dart';
 
 class SupplierStatementDialog extends StatefulWidget {
   final AppDatabase database;
@@ -48,18 +48,7 @@ class _SupplierStatementDialogState extends State<SupplierStatementDialog> {
 
       setState(() {
         _transactions = transactions
-            .map(
-              (row) => LedgerTransaction(
-                id: row.read<String>('id'),
-                entityType: row.read<String>('entity_type'),
-                refId: row.read<String>('ref_id'),
-                date: row.read<DateTime>('date'),
-                description: row.read<String>('description'),
-                debit: row.read<double>('debit'),
-                credit: row.read<double>('credit'),
-                origin: row.read<String>('origin'),
-              ),
-            )
+            .map((row) => widget.database.ledgerTransactions.map(row.data))
             .toList();
         _currentBalance = balance;
         _isLoading = false;
@@ -75,15 +64,6 @@ class _SupplierStatementDialogState extends State<SupplierStatementDialog> {
         );
       }
     }
-  }
-
-  double _calculateRunningBalance(int index) {
-    double balance = 0.0;
-    for (int i = _transactions.length - 1; i >= index; i--) {
-      final transaction = _transactions[i];
-      balance += transaction.credit - transaction.debit;
-    }
-    return balance;
   }
 
   @override
@@ -194,72 +174,14 @@ class _SupplierStatementDialogState extends State<SupplierStatementDialog> {
                       itemCount: _transactions.length,
                       itemBuilder: (context, index) {
                         final transaction = _transactions[index];
-                        final runningBalance = _calculateRunningBalance(index);
+                        final isPurchase = transaction.credit > 0;
 
-                        return Card(
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: transaction.debit > 0
-                                  ? Colors.green.withValues(alpha: 0.1)
-                                  : Colors.red.withValues(alpha: 0.1),
-                              child: Icon(
-                                transaction.debit > 0
-                                    ? Icons.arrow_downward
-                                    : Icons.arrow_upward,
-                                color: transaction.debit > 0
-                                    ? Colors.green
-                                    : Colors.red,
-                              ),
-                            ),
-                            title: Text(
-                              transaction.description,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            subtitle: Text(
-                              DateFormat(
-                                'yyyy-MM-dd HH:mm',
-                              ).format(transaction.date),
-                              style: TextStyle(color: Colors.grey[600]),
-                            ),
-                            trailing: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                if (transaction.debit > 0)
-                                  Text(
-                                    '${transaction.debit.toStringAsFixed(2)} ج.م',
-                                    style: const TextStyle(
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                if (transaction.credit > 0)
-                                  Text(
-                                    '${transaction.credit.toStringAsFixed(2)} ج.م',
-                                    style: const TextStyle(
-                                      color: Colors.red,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                Text(
-                                  '${runningBalance.toStringAsFixed(2)} ج.م',
-                                  style: TextStyle(
-                                    color: runningBalance > 0
-                                        ? Colors.red
-                                        : Colors.green,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                        return TransactionExpansionTile(
+                          transaction: transaction,
+                          entityType: 'Supplier',
+                          isPurchase: isPurchase,
+                          isSale: false,
+                          db: widget.database,
                         );
                       },
                     ),
@@ -298,10 +220,10 @@ class _SupplierStatementDialogState extends State<SupplierStatementDialog> {
                         label: const Text('طباعة'),
                       ),
                       const SizedBox(width: 8),
-                      ElevatedButton(
+                      /* ElevatedButton(
                         onPressed: () => Navigator.of(context).pop(),
                         child: const Text('إغلاق'),
-                      ),
+                      ), */
                     ],
                   ),
                 ],
@@ -312,27 +234,4 @@ class _SupplierStatementDialogState extends State<SupplierStatementDialog> {
       ),
     );
   }
-}
-
-// Helper class for ledger transactions
-class LedgerTransaction {
-  final String id;
-  final String entityType;
-  final String refId;
-  final DateTime date;
-  final String description;
-  final double debit;
-  final double credit;
-  final String origin;
-
-  LedgerTransaction({
-    required this.id,
-    required this.entityType,
-    required this.refId,
-    required this.date,
-    required this.description,
-    required this.debit,
-    required this.credit,
-    required this.origin,
-  });
 }
