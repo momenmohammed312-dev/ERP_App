@@ -1,6 +1,8 @@
+import 'app_secrets.dart';
+
 class LicenseConfig {
-  // SECURITY: Production-secure key - CHANGE BEFORE DEPLOYMENT!
-  static const String secretKey = 'POS-SaaS-2026-PROD-SECURE-K3Y-F0R-L1C3NS3!';
+  // SECURITY: Secret key moved to AppSecrets
+  static const String secretKey = AppSecrets.licenseSecretKey;
 
   // License duration types
   static const Map<String, Map<String, dynamic>> licenseDurations = {
@@ -101,10 +103,10 @@ class LicenseConfig {
   };
 
   // App version
-  static const String appVersion = '2.0.0';
+  static const String appVersion = '2.1.0';
   static const String appName = 'Professional POS System';
 
   // Support contact
-  static const String supportEmail = 'support@yourcompany.com';
-  static const String supportPhone = '+20 XXX XXX XXXX';
+  static const String supportEmail = 'support@mo2-systems.com';
+  static const String supportPhone = '+20 100 000 0000';
 }

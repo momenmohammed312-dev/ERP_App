@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
 import '../config/database_config.dart';
+import '../core/utils/logger.dart';
 
 class DatabaseMigrationService {
   /// Migrate from old unencrypted DB to new encrypted DB
@@ -26,17 +27,17 @@ class DatabaseMigrationService {
 
       // Check if old database exists
       if (!await oldFile.exists()) {
-        print('No old database to migrate');
+        AppLogger.i('No old database to migrate');
         return;
       }
 
       // Check if already migrated
       if (await newFile.exists()) {
-        print('Already migrated to encrypted database');
+        AppLogger.i('Already migrated to encrypted database');
         return;
       }
 
-      print('Starting database migration...');
+      AppLogger.i('Starting database migration...');
 
       // For now, just copy the file
       // Full SQLCipher migration will be implemented after package installation
@@ -45,11 +46,11 @@ class DatabaseMigrationService {
       // Backup old database
       final backupPath = '$oldPath.backup';
       await oldFile.copy(backupPath);
-      print('Old database backed up to: $backupPath');
+      AppLogger.i('Old database backed up to: $backupPath');
 
-      print('✅ Migration completed successfully!');
+      AppLogger.i('✅ Migration completed successfully!');
     } catch (e) {
-      print('❌ Migration failed: $e');
+      AppLogger.e('❌ Migration failed', e);
       rethrow;
     }
   }

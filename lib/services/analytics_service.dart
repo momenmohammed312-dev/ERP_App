@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import '../core/utils/logger.dart';
 
 class AnalyticsService {
   final AppDatabase db;
@@ -86,7 +87,7 @@ class AnalyticsService {
         paymentMethods: paymentMethods,
       );
     } catch (e) {
-      print('Error getting sales analytics: $e');
+      AppLogger.e('Error getting sales analytics', e);
       rethrow;
     }
   }
@@ -127,7 +128,7 @@ class AnalyticsService {
         );
       }).toList();
     } catch (e) {
-      print('Error getting product analytics: $e');
+      AppLogger.e('Error getting product analytics', e);
       rethrow;
     }
   }
@@ -173,7 +174,7 @@ class AnalyticsService {
         );
       }).toList();
     } catch (e) {
-      print('Error getting customer analytics: $e');
+      AppLogger.e('Error getting customer analytics', e);
       rethrow;
     }
   }
@@ -207,7 +208,7 @@ class AnalyticsService {
         healthScore: healthScore,
       );
     } catch (e) {
-      print('Error getting inventory analytics: $e');
+      AppLogger.e('Error getting inventory analytics', e);
       rethrow;
     }
   }
@@ -258,7 +259,7 @@ class AnalyticsService {
         margins: margins,
       );
     } catch (e) {
-      print('Error getting financial analytics: $e');
+      AppLogger.e('Error getting financial analytics', e);
       rethrow;
     }
   }
@@ -286,7 +287,7 @@ class AnalyticsService {
           throw ArgumentError('Unsupported export format: $format');
       }
     } catch (e) {
-      print('Error exporting analytics data: $e');
+      AppLogger.e('Error exporting analytics data', e);
       rethrow;
     }
   }

@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart' as drift;
 import '../database/app_database.dart';
+import '../utils/logger.dart';
 
 class ReorderLevelService {
   final AppDatabase _database;
@@ -67,8 +68,11 @@ class ReorderLevelService {
     try {
       // Note: This would require adding a reorder_level field to the products table
       // For now, we'll just log the action
-      print('Updated reorder level for product $productId to $reorderLevel');
+      AppLogger.i(
+        'Updated reorder level for product $productId to $reorderLevel',
+      );
     } catch (e) {
+      AppLogger.e('Error updating reorder level', e);
       throw Exception('Error updating reorder level: $e');
     }
   }

@@ -4,10 +4,11 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import '../core/utils/logger.dart';
 
 class UpdateService {
   static const String updateCheckUrl =
-      'https://yourwebsite.com/updates/latest.json';
+      'https://api.mo2-systems.com/pos/updates/latest.json';
   final Dio _dio = Dio();
 
   /// Check if update is available
@@ -16,14 +17,14 @@ class UpdateService {
       return null; // Updates not available on web
     }
     try {
-      print('Checking for updates...');
+      AppLogger.i('Checking for updates...');
 
       // Get current version
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = packageInfo.version;
       final currentBuild = int.parse(packageInfo.buildNumber);
 
-      print('Current version: $currentVersion (build $currentBuild)');
+      AppLogger.i('Current version: $currentVersion (build $currentBuild)');
 
       // Fetch latest version info
       final response = await _dio.get(
@@ -35,7 +36,7 @@ class UpdateService {
       );
 
       if (response.statusCode != 200) {
-        print('Failed to check for updates: ${response.statusCode}');
+        AppLogger.e('Failed to check for updates: ${response.statusCode}');
         return null;
       }
 
@@ -43,22 +44,22 @@ class UpdateService {
       final latestVersion = data['version'] as String;
       final latestBuild = data['build_number'] as int;
 
-      print('Latest version: $latestVersion (build $latestBuild)');
+      AppLogger.i('Latest version: $latestVersion (build $latestBuild)');
 
       // Compare versions
       if (latestBuild > currentBuild) {
-        print('✅ Update available!');
+        AppLogger.i('✅ Update available!');
         return UpdateInfo.fromJson(data);
       } else {
-        print('ℹ️ Already on latest version');
+        AppLogger.i('ℹ️ Already on latest version');
         return null;
       }
     } on DioException catch (e) {
       // No internet or server unreachable
-      print('Update check failed (no internet): ${e.message}');
+      AppLogger.w('Update check failed (no internet): ${e.message}');
       return null;
     } catch (e) {
-      print('Update check error: $e');
+      AppLogger.e('Update check error', e);
       return null;
     }
   }
@@ -82,7 +83,9 @@ class UpdateService {
           if (total != -1) {
             final progress = received / total;
             onProgress(progress);
-            print('Download progress: ${(progress * 100).toStringAsFixed(1)}%');
+            AppLogger.d(
+              'Download progress: ${(progress * 100).toStringAsFixed(1)}%',
+            );
           }
         },
       );
@@ -92,7 +95,7 @@ class UpdateService {
       // Verify file size
       final fileSize = await file.length();
       if (fileSize != update.downloadSize) {
-        print(
+        AppLogger.e(
           '❌ Size mismatch: expected ${update.downloadSize}, got $fileSize',
         );
         await file.delete();
@@ -103,16 +106,16 @@ class UpdateService {
       if (update.checksum != null) {
         final isValid = await _verifyChecksum(file, update.checksum!);
         if (!isValid) {
-          print('❌ Checksum verification failed');
+          AppLogger.e('❌ Checksum verification failed');
           await file.delete();
           throw Exception('Checksum verification failed');
         }
       }
 
-      print('✅ Download and verification successful');
+      AppLogger.i('✅ Download and verification successful');
       return file;
     } catch (e) {
-      print('Download error: $e');
+      AppLogger.e('Download error', e);
       return null;
     }
   }
@@ -126,7 +129,7 @@ class UpdateService {
 
       return actualChecksum == expectedChecksum;
     } catch (e) {
-      print('Checksum verification error: $e');
+      AppLogger.e('Checksum verification error', e);
       return false;
     }
   }
@@ -142,7 +145,7 @@ class UpdateService {
         ]);
 
         if (result.exitCode == 0) {
-          print('✅ Update installed successfully');
+          AppLogger.i('✅ Update installed successfully');
           // Exit current app so installer can replace files
           exit(0);
         } else {
@@ -158,7 +161,7 @@ class UpdateService {
         exit(0);
       }
     } catch (e) {
-      print('Installation error: $e');
+      AppLogger.e('Installation error', e);
       rethrow;
     }
   }

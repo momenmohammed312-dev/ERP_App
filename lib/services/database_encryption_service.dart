@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
+import 'security_service.dart';
 
 class DatabaseEncryptionService {
-  static final _key = encrypt_pkg.Key.fromUtf8(
-    'POS2026-PROD-ENCRYPT-32-SECURE!!', // Production encryption key
-  );
-  static final _encrypter = encrypt_pkg.Encrypter(
+  static encrypt_pkg.Key get _key =>
+      encrypt_pkg.Key.fromUtf8(SecurityService.encryptionKey);
+
+  static encrypt_pkg.Encrypter get _encrypter => encrypt_pkg.Encrypter(
     encrypt_pkg.AES(_key, mode: encrypt_pkg.AESMode.cbc),
   );
 

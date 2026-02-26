@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
 import 'local_backup_service.dart';
+import '../core/utils/logger.dart';
 
 class ManualBackupService {
   /// Export backup to user-selected location
@@ -30,7 +31,7 @@ class ManualBackupService {
         final targetFile = File(result);
         await backupFile.copy(result);
 
-        print('✅ Backup exported to: $result');
+        AppLogger.i('✅ Backup exported to: $result');
         return result;
       } else {
         // User cancelled
@@ -38,7 +39,7 @@ class ManualBackupService {
         return null;
       }
     } catch (e) {
-      print('Export backup error: $e');
+      AppLogger.e('Export backup error', e);
       return null;
     }
   }
@@ -62,7 +63,7 @@ class ManualBackupService {
         return false; // User cancelled
       }
     } catch (e) {
-      print('Import backup error: $e');
+      AppLogger.e('Import backup error', e);
       return false;
     }
   }
@@ -88,14 +89,14 @@ class ManualBackupService {
 
         await backupFile.copy(targetPath);
 
-        print('✅ Backup exported to USB: $targetPath');
+        AppLogger.i('✅ Backup exported to USB: $targetPath');
         return targetPath;
       } else {
         // Fallback to user selection
         return await exportToUserLocation();
       }
     } catch (e) {
-      print('USB export error: $e');
+      AppLogger.e('USB export error', e);
       return null;
     }
   }
@@ -137,7 +138,7 @@ class ManualBackupService {
 
       return null; // No USB drive found
     } catch (e) {
-      print('Error detecting USB drive: $e');
+      AppLogger.e('Error detecting USB drive', e);
       return null;
     }
   }
@@ -175,10 +176,10 @@ Notes: $notes
 Version: 2.0.0
 ''');
 
-      print('✅ Custom backup created: $backupPath');
+      AppLogger.i('✅ Custom backup created: $backupPath');
       return backupPath;
     } catch (e) {
-      print('Custom backup error: $e');
+      AppLogger.e('Custom backup error', e);
       rethrow;
     }
   }
@@ -196,7 +197,7 @@ Version: 2.0.0
       final fileSize = await backupFile.length();
       return fileSize > 1024; // At least 1KB
     } catch (e) {
-      print('Backup verification error: $e');
+      AppLogger.e('Backup verification error', e);
       return false;
     }
   }
@@ -229,7 +230,7 @@ Version: 2.0.0
         },
       };
     } catch (e) {
-      print('Error getting backup statistics: $e');
+      AppLogger.e('Error getting backup statistics', e);
       return {};
     }
   }

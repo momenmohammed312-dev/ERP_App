@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import '../core/utils/logger.dart';
 
 class LocalBackupService {
   static const String _backupDir = 'backups';
@@ -23,7 +24,7 @@ class LocalBackupService {
 
       return await createBackup(backupName);
     } catch (e) {
-      print('Auto backup failed: $e');
+      AppLogger.e('Auto backup failed', e);
       rethrow;
     }
   }
@@ -36,7 +37,7 @@ class LocalBackupService {
 
       return await createBackup(backupName);
     } catch (e) {
-      print('Manual backup failed: $e');
+      AppLogger.e('Manual backup failed', e);
       rethrow;
     }
   }
@@ -103,10 +104,10 @@ class LocalBackupService {
       // Clean old backups
       await _cleanOldBackups();
 
-      print('✅ Backup created: $backupFilename');
+      AppLogger.i('✅ Backup created: $backupFilename');
       return backupPath;
     } catch (e) {
-      print('Backup creation failed: $e');
+      AppLogger.e('Backup creation failed', e);
       rethrow;
     }
   }
@@ -159,7 +160,7 @@ class LocalBackupService {
           }
         }
 
-        print('Restoring from backup created: ${metadata['created']}');
+        AppLogger.i('Restoring from backup created: ${metadata['created']}');
       }
 
       // Get current database path
@@ -173,16 +174,16 @@ class LocalBackupService {
           'pre_restore_$timestamp.db',
         );
         await currentDbFile.copy(preRestoreBackup);
-        print('Current database backed up to: $preRestoreBackup');
+        AppLogger.i('Current database backed up to: $preRestoreBackup');
       }
 
       // Restore database
       await currentDbFile.writeAsBytes(dbFile.content as List<int>);
 
-      print('✅ Database restored successfully');
+      AppLogger.i('✅ Database restored successfully');
       return true;
     } catch (e) {
-      print('Restore failed: $e');
+      AppLogger.e('Restore failed', e);
       return false;
     }
   }
@@ -209,7 +210,7 @@ class LocalBackupService {
             backups.add(info);
           }
         } catch (e) {
-          print('Error reading backup ${file.path}: $e');
+          AppLogger.e('Error reading backup ${file.path}', e);
         }
       }
 
@@ -217,7 +218,7 @@ class LocalBackupService {
       backups.sort((a, b) => b.created.compareTo(a.created));
       return backups;
     } catch (e) {
-      print('Error getting backup list: $e');
+      AppLogger.e('Error getting backup list', e);
       return [];
     }
   }
@@ -231,12 +232,12 @@ class LocalBackupService {
       final file = File(backupPath);
       if (await file.exists()) {
         await file.delete();
-        print('Backup deleted: $backupPath');
+        AppLogger.i('Backup deleted: $backupPath');
         return true;
       }
       return false;
     } catch (e) {
-      print('Error deleting backup: $e');
+      AppLogger.e('Error deleting backup', e);
       return false;
     }
   }
@@ -282,7 +283,7 @@ class LocalBackupService {
         }
       }
     } catch (e) {
-      print('Error cleaning old backups: $e');
+      AppLogger.e('Error cleaning old backups', e);
     }
   }
 
@@ -326,7 +327,7 @@ class LocalBackupService {
         version: metadata['version'] as String? ?? 'unknown',
       );
     } catch (e) {
-      print('Error parsing backup info: $e');
+      AppLogger.e('Error parsing backup info', e);
       return null;
     }
   }

@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'license_manager.dart';
 import 'audit_service.dart';
-import '../core/provider/app_database_provider.dart';
+import '../core/utils/logger.dart';
 import '../core/database/app_database.dart';
 
 class UserSessionService {
@@ -43,12 +41,12 @@ class UserSessionService {
       final maxUsers = license.maxUsers;
       final activeSessions = await getActiveSessions();
 
-      debugPrint(
+      AppLogger.d(
         'User Session Check: ${activeSessions.length}/$maxUsers active',
       );
       return activeSessions.length < maxUsers;
     } catch (e) {
-      debugPrint('Error checking user limit: $e');
+      AppLogger.e('Error checking user limit', e);
       return false;
     }
   }
@@ -64,7 +62,7 @@ class UserSessionService {
 
       return maxUsers - activeSessions.length;
     } catch (e) {
-      debugPrint('Error getting remaining slots: $e');
+      AppLogger.e('Error getting remaining slots', e);
       return 0;
     }
   }
@@ -81,14 +79,14 @@ class UserSessionService {
         );
 
         if (!alreadyLoggedIn) {
-          debugPrint('User $userId blocked: At user limit');
+          AppLogger.w('User $userId blocked: At user limit');
           return false;
         }
       }
 
       return true;
     } catch (e) {
-      debugPrint('Error checking login permission: $e');
+      AppLogger.e('Error checking login permission', e);
       return false;
     }
   }
@@ -140,9 +138,9 @@ class UserSessionService {
         },
       );
 
-      debugPrint('User session registered: $username ($userId)');
+      AppLogger.i('User session registered: $username ($userId)');
     } catch (e) {
-      debugPrint('Error registering user session: $e');
+      AppLogger.e('Error registering user session', e);
     }
   }
 
@@ -160,7 +158,7 @@ class UserSessionService {
         await _saveActiveSessions(activeSessions);
       }
     } catch (e) {
-      debugPrint('Error updating activity: $e');
+      AppLogger.e('Error updating activity', e);
     }
   }
 
@@ -187,9 +185,9 @@ class UserSessionService {
         details: {'logout_time': DateTime.now().toIso8601String()},
       );
 
-      debugPrint('User logged out: $userId');
+      AppLogger.i('User logged out: $userId');
     } catch (e) {
-      debugPrint('Error logging out user: $e');
+      AppLogger.e('Error logging out user', e);
     }
   }
 
@@ -226,7 +224,7 @@ class UserSessionService {
 
       return sessions;
     } catch (e) {
-      debugPrint('Error getting active sessions: $e');
+      AppLogger.e('Error getting active sessions', e);
       return [];
     }
   }
@@ -243,7 +241,7 @@ class UserSessionService {
       final license = await LicenseManager().getCurrentLicense();
       return license?.maxUsers ?? 1;
     } catch (e) {
-      debugPrint('Error getting max users: $e');
+      AppLogger.e('Error getting max users', e);
       return 1;
     }
   }
@@ -264,7 +262,7 @@ class UserSessionService {
 
       await prefs.setString(_activeSessionsKey, sessionsString);
     } catch (e) {
-      debugPrint('Error saving active sessions: $e');
+      AppLogger.e('Error saving active sessions', e);
     }
   }
 
@@ -304,12 +302,12 @@ class UserSessionService {
 
       if (validSessions.length != activeSessions.length) {
         await _saveActiveSessions(validSessions);
-        debugPrint(
+        AppLogger.i(
           'Cleaned up ${activeSessions.length - validSessions.length} expired sessions',
         );
       }
     } catch (e) {
-      debugPrint('Error cleaning up expired sessions: $e');
+      AppLogger.e('Error cleaning up expired sessions', e);
     }
   }
 
@@ -322,9 +320,9 @@ class UserSessionService {
         await logoutUser(session['userId']!);
       }
 
-      debugPrint('Force logged out all users');
+      AppLogger.i('Force logged out all users');
     } catch (e) {
-      debugPrint('Error logging out all users: $e');
+      AppLogger.e('Error logging out all users', e);
     }
   }
 
@@ -344,7 +342,7 @@ class UserSessionService {
             : 0,
       };
     } catch (e) {
-      debugPrint('Error getting session stats: $e');
+      AppLogger.e('Error getting session stats', e);
       return {
         'activeUsers': 0,
         'maxUsers': 1,

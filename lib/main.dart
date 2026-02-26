@@ -23,11 +23,13 @@ import 'package:pos_offline_desktop/screens/license/tamper_detected_screen.dart'
 
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'services/security_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await SecurityService.initialize();
 
   // Create shared container for all services
   final container = ProviderContainer();
@@ -36,6 +38,7 @@ void main() async {
   // Initialize services with shared database
   AntiTamperService.init(db);
   UserSessionService.init(db);
+  await db.userDao.createDefaultAdmin();
 
   // Check for clock tampering (now that services are initialized)
   final isTampered = await AntiTamperService.detectClockTampering();

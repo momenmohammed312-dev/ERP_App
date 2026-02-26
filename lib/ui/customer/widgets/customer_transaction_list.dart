@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:developer' as developer;
+import '../../../core/utils/logger.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -28,7 +28,7 @@ class TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    developer.log(
+    AppLogger.d(
       'DEBUG: Building TransactionTile for ${transaction.origin} transaction',
     );
 
@@ -493,12 +493,12 @@ class TransactionTile extends StatelessWidget {
   Future<List<InvoiceItem>> _getTransactionDetails() async {
     if (db == null) return [];
 
-    developer.log(
+    AppLogger.d(
       'DEBUG: Getting transaction details for ${transaction.origin} transaction',
     );
-    developer.log('DEBUG: Transaction date: ${transaction.date}');
-    developer.log('DEBUG: Transaction amount: ${transaction.amount}');
-    developer.log(
+    AppLogger.d('DEBUG: Transaction date: ${transaction.date}');
+    AppLogger.d('DEBUG: Transaction amount: ${transaction.amount}');
+    AppLogger.d(
       'DEBUG: Transaction receiptNumber: ${transaction.receiptNumber}',
     );
 
@@ -509,11 +509,11 @@ class TransactionTile extends StatelessWidget {
         transaction.date.add(const Duration(days: 1)),
       );
 
-      developer.log('DEBUG: Found ${invoices.length} invoices in date range');
+      AppLogger.d('DEBUG: Found ${invoices.length} invoices in date range');
 
       // Log all invoices for debugging
       for (final inv in invoices) {
-        developer.log(
+        AppLogger.d(
           'DEBUG: Invoice #${inv.id} - Date: ${inv.date} - Amount: ${inv.totalAmount} - InvoiceNumber: ${inv.invoiceNumber}',
         );
       }
@@ -522,7 +522,7 @@ class TransactionTile extends StatelessWidget {
 
       // First try: use receiptNumber if available
       if (transaction.receiptNumber != null) {
-        developer.log(
+        AppLogger.d(
           'DEBUG: Trying to find invoice by receiptNumber: ${transaction.receiptNumber}',
         );
         try {
@@ -531,9 +531,9 @@ class TransactionTile extends StatelessWidget {
                 inv.invoiceNumber == transaction.receiptNumber ||
                 inv.id.toString() == transaction.receiptNumber,
           );
-          developer.log('DEBUG: Found invoice by receiptNumber');
+          AppLogger.d('DEBUG: Found invoice by receiptNumber');
         } catch (e) {
-          developer.log(
+          AppLogger.d(
             'DEBUG: No invoice found by receiptNumber, trying date/amount match',
           );
           // Fallback to date/amount matching
@@ -544,7 +544,7 @@ class TransactionTile extends StatelessWidget {
                 inv.date.day == transaction.date.day &&
                 inv.totalAmount.abs() == transaction.amount.abs(),
             orElse: () {
-              developer.log(
+              AppLogger.d(
                 'DEBUG: No matching invoice found, trying any sale transaction',
               );
               // Fallback: try any invoice from that day
@@ -567,7 +567,7 @@ class TransactionTile extends StatelessWidget {
               inv.date.day == transaction.date.day &&
               inv.totalAmount.abs() == transaction.amount.abs(),
           orElse: () {
-            developer.log(
+            AppLogger.d(
               'DEBUG: No matching invoice found, trying any sale transaction',
             );
             // Fallback: try any invoice from that day
@@ -582,14 +582,14 @@ class TransactionTile extends StatelessWidget {
         );
       }
 
-      developer.log('DEBUG: Found matching invoice #${matchingInvoice.id}');
+      AppLogger.d('DEBUG: Found matching invoice #${matchingInvoice.id}');
 
       final items = await db!.invoiceDao.getInvoiceItems(matchingInvoice.id);
-      developer.log('DEBUG: Found ${items.length} invoice items');
+      AppLogger.d('DEBUG: Found ${items.length} invoice items');
 
       return items;
     } catch (e) {
-      developer.log('DEBUG: Error getting transaction details: $e');
+      AppLogger.d('DEBUG: Error getting transaction details: $e');
       return [];
     }
   }
@@ -604,7 +604,7 @@ class TransactionTile extends StatelessWidget {
         return products.first.name;
       }
     } catch (e) {
-      developer.log('DEBUG: Error getting product name for $productId: $e');
+      AppLogger.e('DEBUG: Error getting product name for $productId', e);
     }
     return 'منتج #$productId';
   }

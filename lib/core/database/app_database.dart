@@ -9,6 +9,8 @@ import 'package:path_provider/path_provider.dart';
 import 'dao/dao.dart';
 import 'tables/tables.dart';
 
+import '../utils/security_utils.dart';
+
 part 'app_database.g.dart';
 
 @DriftDatabase(
@@ -79,9 +81,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   String _hashPassword(String password) {
-    final bytes = utf8.encode('${password}pos_prod_salt_2026');
-    final digest = sha256.convert(bytes);
-    return digest.toString();
+    return SecurityUtils.hashPassword(password);
   }
 
   @override

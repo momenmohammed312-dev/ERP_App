@@ -10,6 +10,7 @@ import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:crypto/crypto.dart';
 import '../database/app_database.dart';
 import 'package:path/path.dart' as path;
+import '../utils/logger.dart';
 
 /// Enhanced Backup Service for POS System
 /// خدمة النسخ الاحتياطي المحسنة لنظام نقاط البيع
@@ -34,7 +35,7 @@ class BackupService {
       throw Exception('Backup operations not supported on web platform');
     }
     try {
-      print('📦 بدء النسخ الاحتياطي...');
+      AppLogger.i('📦 بدء النسخ الاحتياطي...');
 
       // 1. إنشاء مجلد النسخ الاحتياطية
       final backupDirectory = await _getBackupDirectory();
@@ -74,14 +75,14 @@ class BackupService {
       archive.addFile(dataFile);
 
       // 6. ضغط الأرشيف
-      print('📦 ضغط الملفات...');
+      AppLogger.i('📦 ضغط الملفات...');
       final zipData = ZipEncoder().encode(archive);
       if (zipData == null) {
         throw Exception('فشل في إنشاء أرشيف ZIP');
       }
 
       // 7. تشفير الملف
-      print('🔒 تشفير النسخة الاحتياطية...');
+      AppLogger.i('🔒 تشفير النسخة الاحتياطية...');
       final encryptedBytes = _encryptData(zipData);
 
       // 8. حفظ النسخة النهائية
@@ -91,9 +92,9 @@ class BackupService {
       final backupFile = File(backupPath);
       final size = await backupFile.length();
 
-      print('✅ تم إنشاء النسخة الاحتياطية بنجاح');
-      print('📁 الموقع: $backupPath');
-      print('📊 الحجم: ${_formatBytes(size)}');
+      AppLogger.i('✅ تم إنشاء النسخة الاحتياطية بنجاح');
+      AppLogger.i('📁 الموقع: $backupPath');
+      AppLogger.i('📊 الحجم: ${_formatBytes(size)}');
 
       // 10. تنظيف النسخ القديمة
       await _cleanOldBackups();
@@ -107,7 +108,7 @@ class BackupService {
         createdBy: createdBy,
       );
     } catch (e) {
-      print('❌ خطأ في النسخ الاحتياطي: $e');
+      AppLogger.e('❌ خطأ في النسخ الاحتياطي', e);
       rethrow;
     }
   }
@@ -119,7 +120,7 @@ class BackupService {
       throw Exception('Backup restore not supported on web platform');
     }
     try {
-      print('📥 بدء الاستعادة من: $filename');
+      AppLogger.i('📥 بدء الاستعادة من: $filename');
 
       final backupDirectory = await _getBackupDirectory();
       final backupPath = path.join(backupDirectory.path, filename);
@@ -130,12 +131,12 @@ class BackupService {
       }
 
       // 1. فك تشفير الملف
-      print('🔓 فك تشفير النسخة الاحتياطية...');
+      AppLogger.i('🔓 فك تشفير النسخة الاحتياطية...');
       final encryptedBytes = await backupFile.readAsBytes();
       final decryptedBytes = _decryptData(encryptedBytes);
 
       // 2. فك ضغط الأرشيف
-      print('📦 فك ضغط الملفات...');
+      AppLogger.i('📦 فك ضغط الملفات...');
       final archive = ZipDecoder().decodeBytes(decryptedBytes);
 
       // 3. استخراج ملف البيانات
@@ -171,7 +172,7 @@ class BackupService {
       }
 
       // 5. استعادة البيانات
-      print('💾 استعادة قاعدة البيانات...');
+      AppLogger.i('💾 استعادة قاعدة البيانات...');
       await _restoreTablesData(tablesData);
 
       print('✅ تمت الاستعادة بنجاح');
@@ -303,10 +304,10 @@ class BackupService {
 
       if (await file.exists()) {
         await file.delete();
-        print('🗑️ تم حذف النسخة الاحتياطية: $filename');
+        AppLogger.i('🗑️ تم حذف النسخة الاحتياطية: $filename');
       }
     } catch (e) {
-      debugPrint('Error deleting backup: $e');
+      AppLogger.e('Error deleting backup', e);
       rethrow;
     }
   }
@@ -323,13 +324,15 @@ class BackupService {
           type: 'auto',
           description: 'نسخة احتياطية تلقائية مجدولة',
         );
-        print('✅ اكتمل النسخ الاحتياطي التلقائي');
+        AppLogger.i('✅ اكتمل النسخ الاحتياطي التلقائي');
       } catch (e) {
-        print('❌ فشل النسخ الاحتياطي التلقائي: $e');
+        AppLogger.e('❌ فشل النسخ الاحتياطي التلقائي', e);
       }
     });
 
-    print('✅ تم تفعيل النسخ الاحتياطي التلقائي (كل ${interval.inHours} ساعة)');
+    AppLogger.i(
+      '✅ تم تفعيل النسخ الاحتياطي التلقائي (كل ${interval.inHours} ساعة)',
+    );
   }
 
   /// Stop automatic backup scheduling
@@ -337,7 +340,7 @@ class BackupService {
   void stopAutoBackup() {
     _autoBackupTimer?.cancel();
     _autoBackupTimer = null;
-    print('⏹️ تم إيقاف النسخ الاحتياطي التلقائي');
+    AppLogger.i('⏹️ تم إيقاف النسخ الاحتياطي التلقائي');
   }
 
   /// Force immediate backup

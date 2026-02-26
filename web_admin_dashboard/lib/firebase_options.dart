@@ -3,6 +3,7 @@
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'config/app_secrets.dart';
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
 ///
@@ -48,8 +49,8 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyD4vapbIT9EnoREepmJRrQXHSt-UfgY5aw',
-    appId: '1:431956537173:web:a8e81039cc5afa41b149dc',
+    apiKey: AppSecrets.firebaseApiKeyWeb,
+    appId: AppSecrets.firebaseAppIdWeb,
     messagingSenderId: '431956537173',
     projectId: 'posmo2-13dc1',
     authDomain: 'posmo2-13dc1.firebaseapp.com',

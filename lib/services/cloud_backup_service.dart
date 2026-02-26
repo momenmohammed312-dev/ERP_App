@@ -5,6 +5,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'local_backup_service.dart';
+import '../core/utils/logger.dart';
 
 class CloudBackupService {
   static final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -52,10 +53,10 @@ class CloudBackupService {
         'version': '2.0.0',
       });
 
-      print('✅ Cloud upload completed successfully: $fileName');
+      AppLogger.i('✅ Cloud upload completed successfully: $fileName');
       return true;
     } catch (e) {
-      print('Cloud upload error: $e');
+      AppLogger.e('Cloud upload error', e);
       return false;
     }
   }
@@ -87,10 +88,10 @@ class CloudBackupService {
       final localFile = File(localPath);
       await localFile.writeAsBytes(bytes);
 
-      print('✅ Cloud download completed successfully: $backupId');
+      AppLogger.i('✅ Cloud download completed successfully: $backupId');
       return localPath;
     } catch (e) {
-      print('Cloud download error: $e');
+      AppLogger.e('Cloud download error', e);
       return null;
     }
   }
@@ -121,7 +122,7 @@ class CloudBackupService {
         );
       }).toList();
     } catch (e) {
-      print('Error listing cloud backups: $e');
+      AppLogger.e('Error listing cloud backups', e);
       return [];
     }
   }
@@ -145,10 +146,10 @@ class CloudBackupService {
       // Delete metadata from Firestore
       await _firestore.collection('backups').doc(backupId).delete();
 
-      print('✅ Cloud backup deleted successfully: $backupId');
+      AppLogger.i('✅ Cloud backup deleted successfully: $backupId');
       return true;
     } catch (e) {
-      print('Error deleting cloud backup: $e');
+      AppLogger.e('Error deleting cloud backup', e);
       return false;
     }
   }
@@ -156,7 +157,7 @@ class CloudBackupService {
   /// Sync local backups with cloud (simplified version)
   static Future<void> syncWithCloud({String? customerId}) async {
     try {
-      print('🔄 Starting cloud backup sync...');
+      AppLogger.i('🔄 Starting cloud backup sync...');
 
       // Get local backups
       final localBackups = await LocalBackupService.getAvailableBackups();
@@ -164,8 +165,8 @@ class CloudBackupService {
       // Get cloud backups
       final cloudBackups = await listCloudBackups(customerId: customerId);
 
-      print('📊 Local backups: ${localBackups.length}');
-      print('☁️ Cloud backups: ${cloudBackups.length}');
+      AppLogger.i('📊 Local backups: ${localBackups.length}');
+      AppLogger.i('☁️ Cloud backups: ${cloudBackups.length}');
 
       // Simulate sync process
       for (final localBackup in localBackups) {
@@ -174,24 +175,26 @@ class CloudBackupService {
         );
 
         if (!existsInCloud) {
-          print('☁️ Uploading new backup to cloud: ${localBackup.fileName}');
+          AppLogger.i(
+            '☁️ Uploading new backup to cloud: ${localBackup.fileName}',
+          );
           await uploadToCloud(localBackup.filePath, customerId: customerId);
         }
       }
 
-      print('✅ Cloud sync completed');
+      AppLogger.i('✅ Cloud sync completed');
     } catch (e) {
-      print('Cloud sync error: $e');
+      AppLogger.e('Cloud sync error', e);
     }
   }
 
   /// Schedule automatic cloud backup (simplified version)
   static void scheduleAutoCloudBackup({String? customerId}) {
-    print('⏰ Scheduling automatic cloud backup every 7 days');
+    AppLogger.i('⏰ Scheduling automatic cloud backup every 7 days');
 
     // For now, just log that scheduling would happen
     // In production, use Timer.periodic from dart:async
-    print(
+    AppLogger.i(
       '📅 Auto-cloud backup scheduled for customer: ${customerId ?? 'default'}',
     );
   }

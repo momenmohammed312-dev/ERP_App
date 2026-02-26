@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:flutter/foundation.dart';
+import '../core/utils/logger.dart';
+import 'package:pos_offline_desktop/config/app_secrets.dart';
 
 enum LicenseType {
   trial, // تجريبي - 7 أيام - مستخدم واحد
@@ -78,7 +81,7 @@ class License {
 
 class LicenseManager {
   static const String _storageKey = 'app_license';
-  static const String _secretKey = 'POS-SaaS-2026-PROD-SECURE-K3Y-F0R-L1C3NS3!';
+  static const String _secretKey = AppSecrets.licenseSecretKey;
 
   // Singleton
   static final LicenseManager _instance = LicenseManager._internal();
@@ -115,8 +118,10 @@ class LicenseManager {
       // تشفير البصمة
       final bytes = utf8.encode(fingerprint);
       final digest = sha256.convert(bytes);
+      AppLogger.i('Fingerprint generated: $digest');
       return digest.toString();
     } catch (e) {
+      AppLogger.e('Error generating fingerprint: $e');
       throw Exception('فشل في توليد بصمة الجهاز: $e');
     }
   }
@@ -256,6 +261,7 @@ class LicenseManager {
       final data = jsonDecode(licenseJson);
       return License.fromJson(data);
     } catch (e) {
+      AppLogger.e('Error loading current license: $e');
       return null;
     }
   }

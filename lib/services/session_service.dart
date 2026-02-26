@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'license_manager.dart';
+import '../core/utils/logger.dart';
 
 class SessionService {
   static const String _sessionKeyPrefix = 'user_session_';
@@ -61,10 +62,10 @@ class SessionService {
       // Add to active sessions list
       await _addActiveSession(sessionId);
 
-      print('✅ Session created for user: $username ($sessionId)');
+      AppLogger.i('✅ Session created for user: $username ($sessionId)');
       return sessionId;
     } catch (e) {
-      print('Session creation failed: $e');
+      AppLogger.e('Session creation failed', e);
       rethrow;
     }
   }
@@ -99,7 +100,7 @@ class SessionService {
 
       return true;
     } catch (e) {
-      print('Session validation error: $e');
+      AppLogger.e('Session validation error', e);
       return false;
     }
   }
@@ -115,9 +116,9 @@ class SessionService {
       // Remove from active sessions
       await _removeActiveSession(sessionId);
 
-      print('🗑️ Session destroyed: $sessionId');
+      AppLogger.i('🗑️ Session destroyed: $sessionId');
     } catch (e) {
-      print('Session destruction error: $e');
+      AppLogger.e('Session destruction error', e);
     }
   }
 
@@ -139,7 +140,7 @@ class SessionService {
 
       return validSessions;
     } catch (e) {
-      print('Error getting active session count: $e');
+      AppLogger.e('Error getting active session count', e);
       return 0;
     }
   }
@@ -171,7 +172,7 @@ class SessionService {
 
       return sessions;
     } catch (e) {
-      print('Error getting active sessions: $e');
+      AppLogger.e('Error getting active sessions', e);
       return [];
     }
   }
@@ -192,16 +193,18 @@ class SessionService {
 
       // Check against license limit
       if (activeCount >= license.maxUsers) {
-        print(
+        AppLogger.w(
           '❌ Concurrent user limit reached: $activeCount/${license.maxUsers}',
         );
         return false;
       }
 
-      print('✅ Concurrent user check passed: $activeCount/${license.maxUsers}');
+      AppLogger.i(
+        '✅ Concurrent user check passed: $activeCount/${license.maxUsers}',
+      );
       return true;
     } catch (e) {
-      print('Concurrent user limit check error: $e');
+      AppLogger.e('Concurrent user limit check error', e);
       return false;
     }
   }
@@ -217,11 +220,13 @@ class SessionService {
 
         if (now.difference(lastActivity) > _sessionTimeout) {
           await destroySession(session['session_id'] as String);
-          print('🔐 Force logged out inactive user: ${session['username']}');
+          AppLogger.i(
+            '🔐 Force logged out inactive user: ${session['username']}',
+          );
         }
       }
     } catch (e) {
-      print('Force logout error: $e');
+      AppLogger.e('Force logout error', e);
     }
   }
 
@@ -248,7 +253,7 @@ class SessionService {
         }
       }
     } catch (e) {
-      print('Session cleanup error: $e');
+      AppLogger.e('Session cleanup error', e);
     }
   }
 
@@ -288,7 +293,7 @@ class SessionService {
             .toList(),
       };
     } catch (e) {
-      print('Session statistics error: $e');
+      AppLogger.e('Session statistics error', e);
       return {};
     }
   }
@@ -314,7 +319,7 @@ class SessionService {
         await prefs.setStringList(_activeSessionsKey, activeSessions);
       }
     } catch (e) {
-      print('Error adding active session: $e');
+      AppLogger.e('Error adding active session', e);
     }
   }
 
@@ -327,7 +332,7 @@ class SessionService {
       activeSessions.remove(sessionId);
       await prefs.setStringList(_activeSessionsKey, activeSessions);
     } catch (e) {
-      print('Error removing active session: $e');
+      AppLogger.e('Error removing active session', e);
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_encryption_service.dart';
 import '../services/audit_service.dart';
 import '../core/database/app_database.dart';
+import '../core/utils/logger.dart';
 
 class AntiTamperService {
   static const String _lastDateKey = 'last_known_date_encrypted';
@@ -40,10 +41,10 @@ class AntiTamperService {
 
       if (timeDiff.inHours < -1) {
         // TAMPERING DETECTED!
-        print('⚠️ CLOCK TAMPERING DETECTED!');
-        print('Last known: $lastDate');
-        print('Current: $currentDate');
-        print('Difference: ${timeDiff.inHours} hours');
+        AppLogger.w('⚠️ CLOCK TAMPERING DETECTED!');
+        AppLogger.w('Last known: $lastDate');
+        AppLogger.w('Current: $currentDate');
+        AppLogger.w('Difference: ${timeDiff.inHours} hours');
 
         // Log the tampering attempt
         await AuditService.log(
@@ -65,7 +66,7 @@ class AntiTamperService {
       await _storeCurrentDate();
       return false; // No tampering
     } catch (e) {
-      print('Error in tamper detection: $e');
+      AppLogger.e('Error in tamper detection', e);
       // If decryption fails, the data is likely corrupted or from an incompatible version
       // Reset it to avoid persistent errors and allow the system to re-initialize
       await resetTamperCheck();
@@ -84,7 +85,7 @@ class AntiTamperService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_lastDateKey, encrypted);
     } catch (e) {
-      print('Error storing date: $e');
+      AppLogger.e('Error storing date', e);
     }
   }
 
@@ -93,9 +94,9 @@ class AntiTamperService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_lastDateKey);
-      print('Tamper check reset');
+      AppLogger.i('Tamper check reset');
     } catch (e) {
-      print('Error resetting tamper check: $e');
+      AppLogger.e('Error resetting tamper check', e);
     }
   }
 }
