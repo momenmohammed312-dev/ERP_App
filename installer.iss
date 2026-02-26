@@ -2,9 +2,9 @@
 ; Professional installer for Windows
 
 #define MyAppName "Professional POS System"
-#define MyAppVersion "2.0.0"
-#define MyAppPublisher "Your Company"
-#define MyAppURL "https://yourcompany.com"
+#define MyAppVersion "2.1.0"
+#define MyAppPublisher "MO2 Systems"
+#define MyAppURL "https://mo2-systems.com"
 #define MyAppExeName "pos_system.exe"
 
 [Setup]
@@ -24,7 +24,7 @@ AllowNoIcons=yes
 LicenseFile=license.txt
 InfoBeforeFile=readme.txt
 OutputDir=installer_output
-OutputBaseFilename=POS_System_v2.0_Setup
+OutputBaseFilename=POS_System_v2.1_Setup
 SetupIconFile=assets\logo\app_logo.ico
 Compression=lzma
 SolidCompression=yes
