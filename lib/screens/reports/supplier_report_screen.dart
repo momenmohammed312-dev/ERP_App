@@ -26,26 +26,35 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
     try {
       // Get supplier summary data. This is a simplified query for demonstration.
       final suppliers = widget.database.customSelect('''
-        SELECT s.id, s.name, s.phone, s.opening_balance as current_balance, COUNT(p.id) as invoice_count
+        SELECT 
+          s.id, s.name, s.phone,
+          COALESCE(s.opening_balance, 0) as current_balance,
+          COUNT(CASE WHEN p.is_deleted = 0 OR p.is_deleted IS NULL THEN p.id END) as invoice_count,
+          COALESCE(SUM(CASE WHEN p.is_deleted = 0 OR p.is_deleted IS NULL THEN p.total_amount ELSE 0 END), 0) as total_purchases,
+          COALESCE(SUM(CASE WHEN p.is_deleted = 0 OR p.is_deleted IS NULL THEN p.paid_amount ELSE 0 END), 0) as total_payments
         FROM suppliers s
         LEFT JOIN purchases p ON s.id = p.supplier_id
-        WHERE p.is_deleted = 0
         GROUP BY s.id
+        ORDER BY s.name
         ''');
 
       final supplierList = await suppliers.get();
       setState(() {
         _supplierData = supplierList.map((row) {
           final data = row.data;
+          final openingBalance = (data['current_balance'] as double?) ?? 0.0;
+          final totalPurchases = (data['total_purchases'] as double?) ?? 0.0;
+          final totalPayments = (data['total_payments'] as double?) ?? 0.0;
+          final outstanding = totalPurchases - totalPayments + openingBalance;
           return {
             'id': data['id'],
             'name': data['name'],
             'phone': data['phone'],
-            'current_balance': (data['current_balance'] as double?) ?? 0.0,
+            'current_balance': openingBalance,
             'invoice_count': data['invoice_count'] as int? ?? 0,
-            'total_purchases': 0.0,
-            'total_payments': 0.0,
-            'outstanding': (data['current_balance'] as double?) ?? 0.0,
+            'total_purchases': totalPurchases,
+            'total_payments': totalPayments,
+            'outstanding': outstanding,
           };
         }).toList();
         _isLoading = false;

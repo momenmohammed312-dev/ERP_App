@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 import 'package:pos_offline_desktop/ui/product/product.dart';
 import 'package:pos_offline_desktop/ui/cashier/cashier_page.dart';
@@ -12,22 +14,46 @@ import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
 import 'package:pos_offline_desktop/ui/staff/staff_list_page.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
 
-class ModernHomeScreen extends StatefulWidget {
+class ModernHomeScreen extends ConsumerStatefulWidget {
   final AppDatabase db;
   const ModernHomeScreen({super.key, required this.db});
 
   @override
-  State<ModernHomeScreen> createState() => _ModernHomeScreenState();
+  ConsumerState<ModernHomeScreen> createState() => _ModernHomeScreenState();
 }
 
-class _ModernHomeScreenState extends State<ModernHomeScreen>
+class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+
+  bool _licenseWarningShown = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 7, vsync: this);
+    _checkLicenseWarning();
+  }
+
+  Future<void> _checkLicenseWarning() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+    final license = await ref.read(currentLicenseProvider.future);
+    if (license != null &&
+        !license.isExpired &&
+        license.daysRemaining <= 5 &&
+        !_licenseWarningShown &&
+        mounted) {
+      _licenseWarningShown = true;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'تنبيه: تبقى ${license.daysRemaining} أيام على انتهاء الترخيص. يرجى التجديد.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
   }
 
   @override
@@ -93,6 +119,9 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
                 ),
                 Row(
                   children: [
+                    // License Badge
+                    const _LicenseBadge(),
+                    const Gap(8),
                     // Notifications
                     IconButton(
                       icon: const Icon(Icons.notifications_outlined),
@@ -187,13 +216,31 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
                           runSpacing: 20,
                           alignment: WrapAlignment.center,
                           children: [
-                            // New Invoice Button
+                            // New Invoice Button — Day Guard
                             _buildLauncherButton(
                               context,
                               'فاتورة جديدة',
                               Icons.receipt_long,
                               Colors.blue,
-                              () {
+                              () async {
+                                final isOpen = await widget.db.dayDao.isDayOpen();
+                                if (!context.mounted) return;
+                                if (!isOpen) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: const Text(
+                                        'يجب فتح اليوم أولاً من تبويب الكاشير',
+                                      ),
+                                      backgroundColor: Colors.red,
+                                      action: SnackBarAction(
+                                        label: 'الذهاب للكاشير',
+                                        onPressed: () =>
+                                            _tabController.animateTo(5),
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -298,6 +345,104 @@ class _ModernHomeScreenState extends State<ModernHomeScreen>
             borderRadius: BorderRadius.circular(12),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Badge يعرض الأيام المتبقية على الترخيص — أخضر (>5) / برتقالي (<5) / أحمر (منتهي)
+class _LicenseBadge extends ConsumerWidget {
+  const _LicenseBadge();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final licenseAsync = ref.watch(currentLicenseProvider);
+
+    return licenseAsync.when(
+      data: (license) {
+        if (license == null) return const SizedBox.shrink();
+
+        final days = license.daysRemaining;
+        final color = license.isExpired
+            ? Colors.red
+            : days <= 5
+                ? Colors.orange
+                : Colors.green;
+
+        return Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _showLicenseDialog(context, license, days),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: color, width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      license.isExpired ? Icons.error : Icons.verified_user,
+                      size: 18,
+                      color: color,
+                    ),
+                    const Gap(6),
+                    Text(
+                      license.isExpired
+                          ? 'منتهي'
+                          : '$days يوم',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
+  void _showLicenseDialog(BuildContext context, dynamic license, int days) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('حالة الترخيص'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('النوع: ${license.licenseType}'),
+            Text('الشركة: ${license.companyName}'),
+            Text(
+              'انتهاء الصلاحية: ${license.expiryDate.toString().split(' ')[0]}',
+            ),
+            Text(
+              'الأيام المتبقية: ${license.isExpired ? 0 : days}',
+              style: TextStyle(
+                color: license.isExpired ? Colors.red : Colors.green,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إغلاق'),
+          ),
+        ],
       ),
     );
   }

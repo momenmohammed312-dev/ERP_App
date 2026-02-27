@@ -192,14 +192,38 @@ class SuppliersWidget extends ConsumerWidget {
     );
   }
 
-  void _showAddSupplierDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    final phoneController = TextEditingController();
-    final addressController = TextEditingController();
-    final emailController = TextEditingController();
-    final balanceController = TextEditingController();
+  Future<List<Map<String, dynamic>>> _getSupplierPurchases(String supplierId) async {
+    try {
+      final result = await db.customSelect(
+        '''
+        SELECT p.id, p.invoice_number, p.purchase_date, p.total_amount, 
+               p.paid_amount, p.payment_method, p.status
+        FROM purchases p
+        WHERE p.supplier_id = ? AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+        ORDER BY p.purchase_date DESC
+        LIMIT 20
+        ''',
+        variables: [drift.Variable.withString(supplierId)],
+      ).get();
 
-    showDialog(
+      return result.map((row) {
+        return {
+          'id': row.read<int>('id'),
+          'invoice_number': row.read<String?>('invoice_number'),
+          'purchase_date': row.read<DateTime>('purchase_date').toIso8601String(),
+          'total_amount': row.read<double>('total_amount'),
+          'paid_amount': row.read<double>('paid_amount'),
+          'payment_method': row.read<String>('payment_method'),
+          'status': row.read<String>('status'),
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint('Error fetching supplier purchases: $e');
+      return [];
+    }
+  }
+
+  void _showAddSupplierDialog(BuildContext context) {
       context: context,
       builder: (context) {
         final l10n = AppLocalizations.of(context);
@@ -511,122 +535,152 @@ class _SupplierCard extends StatelessWidget {
                 const Gap(16),
 
                 // Recent Purchases
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.outline.withValues(alpha: 0.2),
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.purple.withValues(alpha: 0.1),
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(8),
-                            topRight: Radius.circular(8),
-                          ),
+                FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _getSupplierPurchases(supplier.id),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return Container(
+                        padding: const EdgeInsets.all(20),
+                        child: const Text('لا توجد مشتريات لهذا المورد'),
+                      );
+                    }
+                    final purchases = snapshot.data!;
+                    return Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outline.withValues(alpha: 0.2),
                         ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                AppLocalizations.of(context).date,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                AppLocalizations.of(context).description,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                AppLocalizations.of(context).amount,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                AppLocalizations.of(context).status,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      ...List.generate(3, (index) {
-                        final date = DateTime.now().subtract(
-                          Duration(days: index * 2),
-                        );
-                        final amount = (index + 1) * 500.0;
-                        return Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.outline.withValues(alpha: 0.1),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.withValues(alpha: 0.1),
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(8),
+                                topRight: Radius.circular(8),
                               ),
                             ),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '${date.day}/${date.month}/${date.year}',
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  '${AppLocalizations.of(context).purchase_materials}${200 + index}',
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  '${amount.toStringAsFixed(2)} ${AppLocalizations.of(context).currency}',
-                                ),
-                              ),
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
+                            child: Row(
+                              children: [
+                                Expanded(
                                   child: Text(
-                                    AppLocalizations.of(context).paid_status,
+                                    AppLocalizations.of(context).date,
                                     style: const TextStyle(
-                                      color: Colors.green,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+                                Expanded(
+                                  child: Text(
+                                    AppLocalizations.of(context).description,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    AppLocalizations.of(context).amount,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    AppLocalizations.of(context).status,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        );
-                      }),
-                    ],
-                  ),
+                          ...purchases.map((purchase) {
+                            final date = DateTime.parse(
+                              purchase['purchase_date'],
+                            );
+                            final amount = purchase['total_amount'] as double;
+                            final paidAmount =
+                                purchase['paid_amount'] as double;
+                            final remaining = amount - paidAmount;
+                            final isPaid = remaining <= 0;
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: Theme.of(context).colorScheme.outline
+                                        .withValues(alpha: 0.1),
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '${date.day}/${date.month}/${date.year}',
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      'فاتورة ${purchase['invoice_number'] ?? 'غير محدد'}',
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      '${amount.toStringAsFixed(2)} ${AppLocalizations.of(context).currency}',
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isPaid
+                                            ? Colors.green.withValues(
+                                                alpha: 0.1,
+                                              )
+                                            : Colors.orange.withValues(
+                                                alpha: 0.1,
+                                              ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        isPaid
+                                            ? AppLocalizations.of(
+                                                context,
+                                              ).paid_status
+                                            : 'متبقي ${remaining.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                          color: isPaid
+                                              ? Colors.green
+                                              : Colors.orange,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    );
+                  },
                 ),
 
                 const Gap(16),

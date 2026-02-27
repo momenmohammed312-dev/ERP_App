@@ -28,8 +28,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   void _navigateToNextScreen() {
-    // Wait 3 seconds then navigate
-    Future.delayed(const Duration(seconds: 3), () {
+    // Wait 3.5 seconds then navigate
+    Future.delayed(const Duration(milliseconds: 3500), () {
       if (mounted) {
         // For development: go directly to home
         // In production: check license status first
@@ -43,11 +43,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     final licenseState = ref.watch(licenseStateProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF2C3E50), // Dark blue background
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0A0E1A), Color(0xFF0A2463)],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
             // Logo/Icon
             Container(
               padding: const EdgeInsets.all(20),
@@ -128,11 +135,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             const SizedBox(height: 20),
 
             // Developer Info
-            const Text(
-              'Developed by MO2',
-              style: TextStyle(fontSize: 12, color: Colors.white54),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Developed by MO2',
+                style: TextStyle(fontSize: 12, color: Colors.white54),
+              ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

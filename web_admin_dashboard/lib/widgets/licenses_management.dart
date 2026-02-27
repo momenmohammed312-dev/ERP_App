@@ -172,8 +172,8 @@ class _LicensesManagementState extends State<LicensesManagement> {
             const SizedBox(width: 12),
             ElevatedButton.icon(
               onPressed: _showAddLicenseDialog,
-              icon: const Icon(Icons.add),
-              label: const Text('ترخيص جديد'),
+              icon: const Icon(Icons.key),
+              label: const Text('توليد وعرض المفتاح'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryColor,
                 foregroundColor: Colors.white,
@@ -469,6 +469,14 @@ class _LicensesManagementState extends State<LicensesManagement> {
                   ],
                 ),
                 _buildStatusBadge(license),
+                IconButton(
+                  icon: const Icon(Icons.key, size: 20),
+                  color: AppColors.primaryColor,
+                  tooltip: 'عرض المفتاح الكامل',
+                  onPressed: () => _showFullKeyDialog(license),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
               ],
             ),
             const Spacer(),
@@ -479,34 +487,50 @@ class _LicensesManagementState extends State<LicensesManagement> {
                 color: Colors.grey[100],
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      license.licenseKey,
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 18),
-                    onPressed: () {
-                      Clipboard.setData(
-                          ClipboardData(text: license.licenseKey));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(AppStrings.copied),
-                          backgroundColor: AppColors.successColor,
-                          duration: Duration(seconds: 1),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          license.licenseKey.length > 40
+                              ? '${license.licenseKey.substring(0, 40)}...'
+                              : license.licenseKey,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
                         ),
-                      );
-                    },
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    tooltip: AppStrings.copyLicenseKey,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.copy, size: 18),
+                        onPressed: () {
+                          Clipboard.setData(
+                              ClipboardData(text: license.licenseKey));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('تم نسخ المفتاح'),
+                              backgroundColor: AppColors.successColor,
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        tooltip: 'نسخ المفتاح',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '🔗 طافٍ — يُربط عند التفعيل',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.successColor,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
@@ -854,7 +878,7 @@ class _LicensesManagementState extends State<LicensesManagement> {
                 onPressed: selectedClient == null
                     ? null
                     : () async {
-                        await _dataService.generateLicense(
+                        final license = await _dataService.generateLicense(
                           clientId: selectedClient!.id,
                           clientName: selectedClient!.name,
                           packageType: selectedClient!.packageType,
@@ -864,16 +888,156 @@ class _LicensesManagementState extends State<LicensesManagement> {
                         if (mounted) {
                           Navigator.pop(context);
                           _loadData();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('تم توليد الترخيص بنجاح')),
-                          );
+                          _showGeneratedKeyDialog(license);
                         }
                       },
-                child: const Text('توليد'),
+                child: const Text('توليد وعرض المفتاح'),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showGeneratedKeyDialog(LicenseRecord license) {
+    showDialog(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.key, color: AppColors.successColor),
+              const SizedBox(width: 12),
+              const Text('تم توليد المفتاح بنجاح'),
+            ],
+          ),
+          content: SizedBox(
+            width: 500,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'هذا المفتاح طافٍ (Floating) ولم يُربط بأي جهاز بعد. '
+                  'سيتم ربطه تلقائياً بالجهاز الأول الذي يُفعَّل عليه.',
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(
+                    license.licenseKey,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إغلاق'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: license.licenseKey));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('تم نسخ المفتاح إلى الحافظة'),
+                    backgroundColor: AppColors.successColor,
+                  ),
+                );
+              },
+              icon: const Icon(Icons.copy),
+              label: const Text('نسخ المفتاح'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryColor,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFullKeyDialog(LicenseRecord license) {
+    showDialog(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.key, color: AppColors.primaryColor),
+              const SizedBox(width: 12),
+              const Text('المفتاح الكامل'),
+            ],
+          ),
+          content: SizedBox(
+            width: 500,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'مفتاح الترخيص للعميل: ${license.clientName}',
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(
+                    license.licenseKey,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إغلاق'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: license.licenseKey));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('تم نسخ المفتاح إلى الحافظة'),
+                    backgroundColor: AppColors.successColor,
+                  ),
+                );
+              },
+              icon: const Icon(Icons.copy),
+              label: const Text('نسخ'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryColor,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -174,7 +174,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
             TextFormField(
               controller: _positionController,
               style: const TextStyle(color: Colors.white),
-              decoration: _buildInputDecoration('المنصب', Icons.work),
+              decoration: _buildInputDecoration('المنصب (اختياري)', Icons.work),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -505,7 +505,9 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       if (widget.staff == null) {
         await _service.addNewStaff(
           name: _nameController.text.trim(),
-          position: _positionController.text.trim(),
+          position: _positionController.text.trim().isEmpty
+              ? 'موظف'
+              : _positionController.text.trim(),
           employmentType: _selectedEmploymentType,
           basicSalary: double.parse(_basicSalaryController.text),
           nationalId: _nationalIdController.text.trim().isEmpty
@@ -547,7 +549,9 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         await _service.updateStaffInfo(
           staffId: widget.staff!.staffId,
           name: _nameController.text.trim(),
-          position: _positionController.text.trim(),
+          position: _positionController.text.trim().isEmpty
+              ? 'موظف'
+              : _positionController.text.trim(),
           department: _departmentController.text.trim().isEmpty
               ? null
               : _departmentController.text.trim(),

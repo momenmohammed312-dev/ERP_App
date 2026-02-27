@@ -327,8 +327,10 @@ class _AddInvoiceDialogState extends ConsumerState<AddInvoiceDialog> {
             credit: Value(paid), // Customer pays this
             origin: 'payment',
             paymentMethod: Value(
-              _selectedInvoiceType == 'cash' ? _selectedPaymentMethod : 'cash',
-            ), // Usually cash payment for partial too?
+              _selectedInvoiceType == 'cash'
+                  ? _selectedPaymentMethod
+                  : 'credit_partial_payment', // تمييز دفعات الآجل عن الكاش
+            ),
             receiptNumber: Value(invoiceNumber),
           ),
         );

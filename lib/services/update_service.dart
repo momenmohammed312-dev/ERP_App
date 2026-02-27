@@ -74,7 +74,7 @@ class UpdateService {
       final filename = update.downloadUrl.split('/').last;
       final savePath = '${tempDir.path}/$filename';
 
-      print('Downloading update to: $savePath');
+      AppLogger.i('Downloading update to: $savePath');
 
       await _dio.download(
         update.downloadUrl,

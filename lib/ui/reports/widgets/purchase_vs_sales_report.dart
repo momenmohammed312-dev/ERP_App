@@ -158,15 +158,13 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
 
       // Add sales data
       for (final row in salesResult) {
-        final date = DateFormat(
-          'yyyy-MM-dd',
-        ).format(row.read<DateTime>('report_date'));
+        final date = row.read<String>('report_date');
         combinedData[date] = {
           'date': date,
-          'sales_count': row.read<int>('invoice_count'),
-          'total_sales': row.read<double>('total_sales'),
-          'cash_sales': row.read<double>('cash_sales'),
-          'credit_sales': row.read<double>('credit_sales'),
+          'sales_count': row.readNullable<int>('invoice_count') ?? 0,
+          'total_sales': row.readNullable<double>('total_sales') ?? 0.0,
+          'cash_sales': row.readNullable<double>('cash_sales') ?? 0.0,
+          'credit_sales': row.readNullable<double>('credit_sales') ?? 0.0,
           'purchase_count': 0,
           'total_purchases': 0.0,
           'cash_purchases': 0.0,
@@ -178,21 +176,18 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
 
       // Add purchases data
       for (final row in purchasesResult) {
-        final date = DateFormat(
-          'yyyy-MM-dd',
-        ).format(row.read<DateTime>('report_date'));
+        final date = row.read<String>('report_date');
         if (combinedData.containsKey(date)) {
           combinedData[date]!.updateAll((key, value) {
             if (key.startsWith('purchase') ||
                 key.startsWith('cash_purchase') ||
                 key.startsWith('credit_purchase')) {
-              return row.read<double>(key);
+              return row.readNullable<double>(key) ?? 0.0;
             }
             return value;
           });
-          combinedData[date]!['purchase_count'] = row.read<int>(
-            'purchase_count',
-          );
+          combinedData[date]!['purchase_count'] =
+              row.readNullable<int>('purchase_count') ?? 0;
         } else {
           combinedData[date] = {
             'date': date,
@@ -200,10 +195,12 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
             'total_sales': 0.0,
             'cash_sales': 0.0,
             'credit_sales': 0.0,
-            'purchase_count': row.read<int>('purchase_count'),
-            'total_purchases': row.read<double>('total_purchases'),
-            'cash_purchases': row.read<double>('cash_purchases'),
-            'credit_purchases': row.read<double>('credit_purchases'),
+            'purchase_count': row.readNullable<int>('purchase_count') ?? 0,
+            'total_purchases':
+                row.readNullable<double>('total_purchases') ?? 0.0,
+            'cash_purchases': row.readNullable<double>('cash_purchases') ?? 0.0,
+            'credit_purchases':
+                row.readNullable<double>('credit_purchases') ?? 0.0,
             'gross_profit': 0.0,
             'profit_margin': 0.0,
           };

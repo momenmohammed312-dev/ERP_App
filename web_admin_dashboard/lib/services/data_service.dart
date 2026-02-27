@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/client_model.dart';
 import '../models/license_model.dart';
+import 'pos_license_generator.dart';
 
 /// Data Service - يدير البيانات عبر Firebase Firestore
 class DataService {
@@ -199,11 +200,19 @@ class DataService {
     String? notes,
   }) async {
     final expiresAt = LicenseKeyGenerator.getExpiryDate(duration);
-    final licenseKey = LicenseKeyGenerator.generateKey(
-      packageType: packageType,
-      expiresAt: expiresAt,
+
+    // Get client email for license generation
+    final licenseClient = getClientById(clientId);
+    final contactEmail =
+        licenseClient?.email ?? 'contact@client.com'; // fallback
+
+    final licenseKey = POSLicenseGenerator.generateFloatingKey(
+      type: packageType,
+      expiryDate: expiresAt,
+      companyName: clientName,
+      contactEmail: contactEmail,
     );
-    final price = LicenseKeyGenerator.getPrice(packageType, duration);
+    final price = getPrice(packageType, duration);
 
     final Map<String, dynamic> licenseData = {
       'licenseKey': licenseKey,

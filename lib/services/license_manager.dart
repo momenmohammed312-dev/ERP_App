@@ -188,11 +188,17 @@ class LicenseManager {
       final decryptedJson = _decrypt(encryptedData);
       final licenseData = jsonDecode(decryptedJson) as Map<String, dynamic>;
 
-      // التحقق من بصمة الجهاز
+      // التحقق من بصمة الجهاز (مع دعم التراخيص الطافية)
       final currentFingerprint = await generateDeviceFingerprint();
-      if (licenseData['device'] != currentFingerprint) {
+      final savedDevice = licenseData['device'];
+
+      if (savedDevice == 'UNBOUND' || savedDevice.isEmpty) {
+        // ترخيص طافٍ - يُربط بالجهاز الحالي عند التفعيل الأول
+        licenseData['device'] = currentFingerprint;
+      } else if (savedDevice != currentFingerprint) {
+        // مُفعَّل على جهاز آخر
         return LicenseValidationResult.invalid(
-          'هذا الترخيص غير صالح لهذا الجهاز',
+          'هذا الترخيص مُفعَّل على جهاز آخر',
         );
       }
 

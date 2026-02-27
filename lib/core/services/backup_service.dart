@@ -175,10 +175,10 @@ class BackupService {
       AppLogger.i('💾 استعادة قاعدة البيانات...');
       await _restoreTablesData(tablesData);
 
-      print('✅ تمت الاستعادة بنجاح');
-      print('📅 تاريخ الإنشاء: ${backup['created_at']}');
+      AppLogger.i('✅ تمت الاستعادة بنجاح');
+      AppLogger.i('📅 تاريخ الإنشاء: ${backup['created_at']}');
     } catch (e) {
-      print('❌ خطأ في الاستعادة: $e');
+      AppLogger.e('❌ خطأ في الاستعادة', e);
       rethrow;
     }
   }
@@ -319,7 +319,7 @@ class BackupService {
 
     _autoBackupTimer = Timer.periodic(interval, (_) async {
       try {
-        print('⏰ بدء النسخ الاحتياطي التلقائي...');
+        AppLogger.i('⏰ بدء النسخ الاحتياطي التلقائي...');
         await createBackup(
           type: 'auto',
           description: 'نسخة احتياطية تلقائية مجدولة',
@@ -347,15 +347,15 @@ class BackupService {
   /// إنشاء نسخة احتياطية فورية
   Future<BackupInfo> forceBackup({String? description}) async {
     try {
-      print('⏰ إنشاء نسخة احتياطية فورية...');
+      AppLogger.i('⏰ إنشاء نسخة احتياطية فورية...');
       final backup = await createBackup(
         type: 'manual',
         description: description ?? 'نسخة احتياطية فورية',
       );
-      print('✅ اكتملت النسخة الاحتياطية الفورية');
+      AppLogger.i('✅ اكتملت النسخة الاحتياطية الفورية');
       return backup;
     } catch (e) {
-      print('❌ فشلت النسخة الاحتياطية الفورية: $e');
+      AppLogger.e('❌ فشلت النسخة الاحتياطية الفورية', e);
       rethrow;
     }
   }
@@ -495,9 +495,9 @@ class BackupService {
         await deleteBackup(backups[i].filename);
       }
 
-      print('🧹 تم تنظيف ${backups.length - _maxBackups} نسخة احتياطية قديمة');
+      AppLogger.i('🧹 تم تنظيف ${backups.length - _maxBackups} نسخة احتياطية قديمة');
     } catch (e) {
-      print('Error cleaning old backups: $e');
+      AppLogger.e('Error cleaning old backups', e);
     }
   }
 

@@ -10,6 +10,7 @@ import 'package:pos_offline_desktop/screens/reports/supplier_report_screen.dart'
 import 'package:pos_offline_desktop/ui/reports/widgets/staff_expenses_report.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/purchase_by_product_report.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/purchase_vs_sales_report.dart';
+import 'package:pos_offline_desktop/ui/reports/widgets/daily_report_page.dart';
 
 class ReportsPage extends ConsumerStatefulWidget {
   const ReportsPage({super.key});
@@ -92,7 +93,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           sales += totalAmount;
           totalInvCount++;
 
-          if (paymentMethod.toLowerCase().trim() == 'credit') {
+          final pm = paymentMethod.toLowerCase().trim();
+          if (pm == 'credit' || pm == 'آجل') {
             credit += totalAmount; // Total amount for credit invoices
             creditInvCount++;
           } else {
@@ -174,7 +176,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           sales += totalAmount;
           totalInvCount++;
 
-          if (paymentMethod.toLowerCase().trim() == 'credit') {
+          final pm = paymentMethod.toLowerCase().trim();
+          if (pm == 'credit' || pm == 'آجل') {
             credit += totalAmount; // Total amount for credit invoices
             creditInvCount++;
           } else {
@@ -252,10 +255,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        automaticallyImplyLeading: false,
         title: const Text('التقارير والمبيعات'),
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         elevation: Theme.of(context).appBarTheme.elevation,
@@ -455,49 +455,6 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                   ),
                 ],
               ),
-              const Gap(10),
-              // Credit Payments Button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('المدفوع من الآجل'),
-                        content: StreamBuilder<double>(
-                          stream: ref
-                              .read(appDatabaseProvider)
-                              .creditPaymentsDao
-                              .watchTotalCreditPayments(),
-                          builder: (context, snapshot) {
-                            final total = snapshot.data ?? 0.0;
-                            return Text(
-                              'إجمالي المدفوع: ${total.toStringAsFixed(2)} ج.م',
-                              style: const TextStyle(fontSize: 16),
-                            );
-                          },
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('إغلاق'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange.shade600,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: const Text(
-                    'المدفوع من الآجل',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
               const Gap(20),
 
               // Invoice Count Cards
@@ -556,6 +513,22 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               const Gap(15),
               Row(
                 children: [
+                  Expanded(
+                    child: _buildActionCard(
+                      'تقرير اليوم',
+                      'الأيام المفتوحة والمبيعات اليومية',
+                      Icons.today,
+                      Colors.amber,
+                      () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const DailyReportPage(),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const Gap(15),
                   Expanded(
                     child: _buildActionCard(
                       'تقارير المبيعات',

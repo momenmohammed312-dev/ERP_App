@@ -36,10 +36,23 @@ class TransactionExpansionTileState extends State<TransactionExpansionTile> {
       setState(() => _isLoadingItems = true);
       try {
         if (widget.isSale) {
-          final invoiceId = _extractInvoiceId();
-          if (invoiceId != null) {
+          int? resolvedId;
+
+          // First try to find invoice by receipt_number
+          final receiptNum = widget.transaction.receiptNumber;
+          if (receiptNum != null && receiptNum.isNotEmpty) {
+            final invByNumber = await widget.db.invoiceDao.getInvoiceByNumber(
+              receiptNum,
+            );
+            if (invByNumber != null) resolvedId = invByNumber.id;
+          }
+
+          // Fallback: extract ID using regex
+          resolvedId ??= _extractInvoiceId();
+
+          if (resolvedId != null) {
             final items = await widget.db.invoiceDao
-                .getItemsWithProductsByInvoice(invoiceId);
+                .getItemsWithProductsByInvoice(resolvedId);
 
             setState(() {
               _displayItems = items.map((e) {
