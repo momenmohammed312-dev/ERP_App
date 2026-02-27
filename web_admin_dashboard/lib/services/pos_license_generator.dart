@@ -6,6 +6,37 @@ import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 class POSLicenseGenerator {
   static const String _secretKey = 'POS-SaaS-2026-PROD-SECURE-K3Y-F0R-L1C3NS3!';
 
+  /// Device-bound license (for specific hardware ID).
+  static String generateLicenseKey({
+    required String deviceFingerprint,
+    required String type,
+    required DateTime expiryDate,
+    required List<String> features,
+    required String companyName,
+    required String contactEmail,
+  }) {
+    final now = DateTime.now();
+
+    final licenseData = {
+      'device': deviceFingerprint,
+      'type': type,
+      'issue_date': now.toIso8601String(),
+      'expiry': expiryDate.toIso8601String(),
+      'features': features,
+      'max_users': _getMaxUsersForType(type),
+      'company_name': companyName,
+      'contact_email': contactEmail,
+      'version': '1.0',
+    };
+
+    final jsonString = jsonEncode(licenseData);
+    final encryptedData = _encrypt(jsonString);
+    final signature = _generateSignature(encryptedData);
+
+    return '$encryptedData.$signature';
+  }
+
+  /// Floating license (unbound - will be bound on first activation).
   static String generateFloatingKey({
     required String type,
     required DateTime expiryDate,

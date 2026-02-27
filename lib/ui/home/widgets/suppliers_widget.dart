@@ -179,6 +179,7 @@ class SuppliersWidget extends ConsumerWidget {
                           lastPurchaseDate: DateTime.now().subtract(
                             Duration(days: index * 2),
                           ),
+                          getSupplierPurchases: _getSupplierPurchases,
                         );
                       },
                     );
@@ -203,7 +204,7 @@ class SuppliersWidget extends ConsumerWidget {
         ORDER BY p.purchase_date DESC
         LIMIT 20
         ''',
-        variables: [drift.Variable.withString(supplierId)],
+        variables: [Variable.withString(supplierId)],
       ).get();
 
       return result.map((row) {
@@ -224,9 +225,16 @@ class SuppliersWidget extends ConsumerWidget {
   }
 
   void _showAddSupplierDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController();
+    final addressController = TextEditingController();
+    final emailController = TextEditingController();
+    final balanceController = TextEditingController();
+
+    showDialog(
       context: context,
-      builder: (context) {
-        final l10n = AppLocalizations.of(context);
+      builder: (dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext);
         return AlertDialog(
           title: Text(l10n.add_new_supplier),
           content: Column(
@@ -279,7 +287,7 @@ class SuppliersWidget extends ConsumerWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: Text(l10n.cancel),
             ),
             ElevatedButton(
@@ -304,9 +312,9 @@ class SuppliersWidget extends ConsumerWidget {
                       ),
                     );
 
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
+                    if (dialogContext.mounted) {
+                      Navigator.pop(dialogContext);
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
                         SnackBar(
                           content: Text(l10n.supplier_added_successfully),
                           backgroundColor: Colors.green,
@@ -314,9 +322,9 @@ class SuppliersWidget extends ConsumerWidget {
                       );
                     }
                   } catch (e) {
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
+                    if (dialogContext.mounted) {
+                      Navigator.pop(dialogContext);
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
                         SnackBar(
                           content: Text('${l10n.error}: $e'),
                           backgroundColor: Colors.red,
@@ -388,6 +396,7 @@ class _SupplierCard extends StatelessWidget {
   final AppDatabase db;
   final BuildContext context;
   final DateTime lastPurchaseDate;
+  final Future<List<Map<String, dynamic>>> Function(String) getSupplierPurchases;
 
   const _SupplierCard({
     required this.supplier,
@@ -396,6 +405,7 @@ class _SupplierCard extends StatelessWidget {
     required this.db,
     required this.context,
     required this.lastPurchaseDate,
+    required this.getSupplierPurchases,
   });
 
   @override
@@ -536,7 +546,7 @@ class _SupplierCard extends StatelessWidget {
 
                 // Recent Purchases
                 FutureBuilder<List<Map<String, dynamic>>>(
-                  future: _getSupplierPurchases(supplier.id),
+                  future: getSupplierPurchases(supplier.id),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
@@ -837,7 +847,7 @@ class _SupplierCard extends StatelessWidget {
 
                     if (dialogContext.mounted) {
                       Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
                         SnackBar(
                           content: Text('تم تحديث بيانات المورد بنجاح'),
                           backgroundColor: Colors.green,
@@ -847,7 +857,7 @@ class _SupplierCard extends StatelessWidget {
                   } catch (e) {
                     if (dialogContext.mounted) {
                       Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
                         SnackBar(
                           content: Text('خطأ: $e'),
                           backgroundColor: Colors.red,
@@ -977,7 +987,7 @@ class _SupplierCard extends StatelessWidget {
 
                     if (dialogContext.mounted) {
                       Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
                         SnackBar(
                           content: Text('تم إضافة المشتريات بنجاح'),
                           backgroundColor: Colors.green,
@@ -987,7 +997,7 @@ class _SupplierCard extends StatelessWidget {
                   } catch (e) {
                     if (dialogContext.mounted) {
                       Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
                         SnackBar(
                           content: Text('خطأ: $e'),
                           backgroundColor: Colors.red,
@@ -1067,7 +1077,7 @@ class _SupplierCard extends StatelessWidget {
 
                     if (dialogContext.mounted) {
                       Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
                         SnackBar(
                           content: Text('تم تسديد الدفعة بنجاح'),
                           backgroundColor: Colors.green,
@@ -1077,7 +1087,7 @@ class _SupplierCard extends StatelessWidget {
                   } catch (e) {
                     if (dialogContext.mounted) {
                       Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
                         SnackBar(
                           content: Text('خطأ: $e'),
                           backgroundColor: Colors.red,
