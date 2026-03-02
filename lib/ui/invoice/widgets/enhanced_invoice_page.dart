@@ -287,101 +287,102 @@ class _EnhancedInvoicePageState extends ConsumerState<EnhancedInvoicePage> {
     setState(() => _isProcessingPayment = true);
 
     try {
-      // Create invoice record
-      final invoice = InvoicesCompanion.insert(
-        invoiceNumber: Value('INV-${DateTime.now().millisecondsSinceEpoch}'),
-        customerName: Value(_selectedCustomer?.name ?? 'Cash Customer'),
-        customerContact: Value(
-          (_selectedCustomer?.phone != null &&
-                  _selectedCustomer!.phone!.isNotEmpty)
-              ? _selectedCustomer!.phone!
-              : 'N/A',
-        ),
-        customerId: Value(_selectedCustomer?.id),
-        totalAmount: Value(_grandTotal),
-        paidAmount: Value(_paidAmount),
-        date: Value(DateTime.now()),
-        status: Value(
-          _selectedInvoiceType == InvoiceType.cash ? 'paid' : 'credit',
-        ),
-        paymentMethod: Value(_selectedPaymentMethod),
-      );
-
-      final insertedId = await widget.db
-          .into(widget.db.invoices)
-          .insert(invoice);
-
-      // Create invoice items
-      for (final entry in _selectedEntries) {
-        final item = InvoiceItemsCompanion.insert(
-          invoiceId: insertedId,
-          productId: entry.product.id,
-          quantity: Value(entry.quantity.toInt()),
-          price: entry.unitPrice,
-        );
-        await widget.db.into(widget.db.invoiceItems).insert(item);
-      }
-
-      // Update stock
-      for (final entry in _selectedEntries) {
-        final currentProduct = await (widget.db.select(
-          widget.db.products,
-        )..where((p) => p.id.equals(entry.product.id))).getSingleOrNull();
-        if (currentProduct != null) {
-          final newQuantity = (currentProduct.quantity - entry.quantity)
-              .toInt();
-          await widget.db.productDao.updateProduct(
-            ProductsCompanion(
-              id: Value(currentProduct.id),
-              name: Value(currentProduct.name),
-              quantity: Value(newQuantity),
-              price: Value(currentProduct.price),
-              unit: Value(currentProduct.unit),
-              status: Value(currentProduct.status),
-            ),
-          );
-        }
-      }
-
-      // Record Sales Ledger Transactions
-      final productSummary = _selectedEntries
-          .map((e) => '${e.product.name} (${e.quantity})')
-          .join(', ');
-      final customerIdForLedger = _selectedCustomer?.id ?? 'walk-in';
-
-      // 1. Record the Sale (Debt)
-      await widget.db.ledgerDao.insertTransaction(
-        LedgerTransactionsCompanion.insert(
-          id: '${DateTime.now().millisecondsSinceEpoch}_sale',
-          entityType: 'Customer',
-          refId: customerIdForLedger,
-          date: DateTime.now(),
-          description: 'فاتورة مبيعات #$insertedId: $productSummary',
-          debit: Value(_grandTotal),
-          credit: const Value(0.0),
-          origin: 'sale',
+      int insertedId = 0;
+      await widget.db.transaction(() async {
+        // Create invoice record
+        final invoice = InvoicesCompanion.insert(
+          invoiceNumber: Value('INV-${DateTime.now().millisecondsSinceEpoch}'),
+          customerName: Value(_selectedCustomer?.name ?? 'Cash Customer'),
+          customerContact: Value(
+            (_selectedCustomer?.phone != null &&
+                    _selectedCustomer!.phone!.isNotEmpty)
+                ? _selectedCustomer!.phone!
+                : 'N/A',
+          ),
+          customerId: Value(_selectedCustomer?.id),
+          totalAmount: Value(_grandTotal),
+          paidAmount: Value(_paidAmount),
+          date: Value(DateTime.now()),
+          status: Value(
+            _selectedInvoiceType == InvoiceType.cash ? 'paid' : 'credit',
+          ),
           paymentMethod: Value(_selectedPaymentMethod),
-          receiptNumber: Value(insertedId.toString()),
-        ),
-      );
+        );
 
-      // 2. Record Payment (Credit) if paid > 0
-      if (_paidAmount > 0) {
+        insertedId = await widget.db.into(widget.db.invoices).insert(invoice);
+
+        // Create invoice items
+        for (final entry in _selectedEntries) {
+          final item = InvoiceItemsCompanion.insert(
+            invoiceId: insertedId,
+            productId: entry.product.id,
+            quantity: Value(entry.quantity.toInt()),
+            price: entry.unitPrice,
+          );
+          await widget.db.into(widget.db.invoiceItems).insert(item);
+        }
+
+        // Update stock
+        for (final entry in _selectedEntries) {
+          final currentProduct = await (widget.db.select(
+            widget.db.products,
+          )..where((p) => p.id.equals(entry.product.id))).getSingleOrNull();
+          if (currentProduct != null) {
+            final newQuantity = (currentProduct.quantity - entry.quantity)
+                .toInt();
+            await widget.db.productDao.updateProduct(
+              ProductsCompanion(
+                id: Value(currentProduct.id),
+                name: Value(currentProduct.name),
+                quantity: Value(newQuantity),
+                price: Value(currentProduct.price),
+                unit: Value(currentProduct.unit),
+                status: Value(currentProduct.status),
+              ),
+            );
+          }
+        }
+
+        // Record Sales Ledger Transactions
+        final productSummary = _selectedEntries
+            .map((e) => '${e.product.name} (${e.quantity})')
+            .join(', ');
+        final customerIdForLedger = _selectedCustomer?.id ?? 'walk-in';
+
+        // 1. Record the Sale (Debt)
         await widget.db.ledgerDao.insertTransaction(
           LedgerTransactionsCompanion.insert(
-            id: '${DateTime.now().millisecondsSinceEpoch}_pay',
+            id: '${DateTime.now().millisecondsSinceEpoch}_sale',
             entityType: 'Customer',
             refId: customerIdForLedger,
             date: DateTime.now(),
-            description: 'دفعة فاتورة #$insertedId',
-            debit: const Value(0.0),
-            credit: Value(_paidAmount),
-            origin: 'payment',
+            description: 'فاتورة مبيعات #$insertedId: $productSummary',
+            debit: Value(_grandTotal),
+            credit: const Value(0.0),
+            origin: 'sale',
             paymentMethod: Value(_selectedPaymentMethod),
             receiptNumber: Value(insertedId.toString()),
           ),
         );
-      }
+
+        // 2. Record Payment (Credit) if paid > 0
+        if (_paidAmount > 0) {
+          await widget.db.ledgerDao.insertTransaction(
+            LedgerTransactionsCompanion.insert(
+              id: '${DateTime.now().millisecondsSinceEpoch}_pay',
+              entityType: 'Customer',
+              refId: customerIdForLedger,
+              date: DateTime.now(),
+              description: 'دفعة فاتورة #$insertedId',
+              debit: const Value(0.0),
+              credit: Value(_paidAmount),
+              origin: 'payment',
+              paymentMethod: Value(_selectedPaymentMethod),
+              receiptNumber: Value(insertedId.toString()),
+            ),
+          );
+        }
+      });
 
       setState(() => _invoiceStatus = InvoiceStatus.completed);
 

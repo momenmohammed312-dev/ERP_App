@@ -20,9 +20,19 @@ class _DashboardOverviewState extends State<DashboardOverview> {
   @override
   void initState() {
     super.initState();
-    _dataService.init().then((_) {
-      if (mounted) setState(() {});
-    });
+    _dataService.addListener(_onDataChanged);
+    _dataService.init();
+  }
+
+  void _onDataChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _dataService.removeListener(_onDataChanged);
+    super.dispose();
   }
 
   @override

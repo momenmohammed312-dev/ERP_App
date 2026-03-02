@@ -19,6 +19,5 @@ class Invoices extends Table {
     const Constant('pending'),
   )(); // 'pending' | 'paid' | 'partial'
 
-  @override
-  Set<Column> get primaryKey => {id}; // Use auto-increment id as primary key
+  // primaryKey is defined by autoIncrement() on 'id'
 }

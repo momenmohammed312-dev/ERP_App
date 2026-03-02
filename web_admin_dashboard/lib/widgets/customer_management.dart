@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
 import '../services/data_service.dart';
@@ -15,13 +16,24 @@ class _CustomerManagementState extends State<CustomerManagement> {
   String _searchQuery = '';
   String _selectedFilter = 'الكل';
   final List<String> _filters = ['الكل', 'نشط', 'غير نشط', 'مدين'];
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
-    _dataService.init().then((_) {
-      if (mounted) setState(() {});
-    });
+    _dataService.addListener(_onDataChanged);
+    _dataService.init();
+  }
+
+  void _onDataChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _dataService.removeListener(_onDataChanged);
+    super.dispose();
   }
 
   @override
@@ -31,8 +43,11 @@ class _CustomerManagementState extends State<CustomerManagement> {
       child: Column(
         children: [
           // Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 12,
             children: [
               const Text(
                 'إدارة العملاء',
@@ -69,8 +84,11 @@ class _CustomerManagementState extends State<CustomerManagement> {
                     ),
                   ),
                   onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value;
+                    if (_debounce?.isActive ?? false) _debounce!.cancel();
+                    _debounce = Timer(const Duration(milliseconds: 400), () {
+                      setState(() {
+                        _searchQuery = value;
+                      });
                     });
                   },
                 ),
@@ -79,6 +97,7 @@ class _CustomerManagementState extends State<CustomerManagement> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   initialValue: _selectedFilter,
+                  isExpanded: true,
                   decoration: InputDecoration(
                     labelText: 'الحالة',
                     border: OutlineInputBorder(
@@ -246,12 +265,16 @@ class _CustomerManagementState extends State<CustomerManagement> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: color,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
                     ),
                   ),
                 ],

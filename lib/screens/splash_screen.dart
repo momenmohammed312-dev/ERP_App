@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/services/anti_tamper_service.dart';
+import 'package:pos_offline_desktop/services/firebase_license_service.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -130,26 +131,146 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       return;
     }
 
-    // Step 2 — License
-    _updateStatus('التحقق من الترخيص...', 0.55);
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Step 2 — License (local check)
+    _updateStatus('التحقق من الترخيص...', 0.50);
+    await Future.delayed(const Duration(milliseconds: 400));
     final licenseManager = LicenseManager();
     final isLicenseValid = await licenseManager.isLicenseValid();
 
-    // Step 3 — Database
-    _updateStatus('تحميل قاعدة البيانات...', 0.80);
+    if (!isLicenseValid) {
+      if (mounted) context.go('/activation');
+      return;
+    }
+
+    // Step 3 — Firebase 7-day checkin
+    _updateStatus('التحقق من الاشتراك...', 0.72);
+    await Future.delayed(const Duration(milliseconds: 300));
+    final currentLicense = await licenseManager.getCurrentLicense();
+    if (currentLicense != null) {
+      final fbService = FirebaseLicenseService();
+      final fbResult = await fbService.performCheckinIfNeeded(
+        currentLicense.licenseKey,
+      );
+
+      if (fbResult.isSuspended) {
+        // الترخيص موقوف → أوقف البرنامج
+        if (mounted) {
+          _showSuspendedDialog(
+            fbResult.suspendedReason ?? 'تم إيقاف ترخيصك من قِبل المزود.',
+          );
+          return;
+        }
+      } else if (fbResult.warningCount > 0 && fbResult.warningCount <= 3) {
+        // في حالة تحذير → نُكمل لكن نعرض رسالة
+        if (mounted) {
+          _showWarningDialog(fbResult.warningCount);
+        }
+      }
+    }
+
+    // Step 4 — Database
+    _updateStatus('تحميل قاعدة البيانات...', 0.88);
     await Future.delayed(const Duration(milliseconds: 400));
 
-    // Step 4 — Done
+    // Step 5 — Done
     _updateStatus('جاهز!', 1.0);
-    await Future.delayed(const Duration(milliseconds: 500));
+    await Future.delayed(const Duration(milliseconds: 400));
 
     if (!mounted) return;
-    if (isLicenseValid) {
-      context.go('/');
-    } else {
-      context.go('/activation');
-    }
+    context.go('/');
+  }
+
+  void _showSuspendedDialog(String reason) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          backgroundColor: const Color(0xFF0F172A),
+          title: const Row(
+            children: [
+              Icon(Icons.block, color: Colors.red, size: 28),
+              SizedBox(width: 12),
+              Text(
+                'تم إيقاف الترخيص',
+                style: TextStyle(color: Colors.white, fontSize: 18),
+              ),
+            ],
+          ),
+          content: Text(
+            reason,
+            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () {},
+              child: const Text(
+                'تواصل مع المزود',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showWarningDialog(int warningCount) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+              const SizedBox(width: 12),
+              Text(
+                'تحذير ($warningCount/3)',
+                style: const TextStyle(fontSize: 18),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('تلقيت تحذيراً من المزود. يرجى التواصل لتسوية وضعك.'),
+              const SizedBox(height: 12),
+              LinearProgressIndicator(
+                value: warningCount / 3,
+                color: Colors.orange,
+                backgroundColor: Colors.orange.shade100,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                warningCount >= 3
+                    ? 'هذا التحذير الأخير — سيتم الإيقاف عند التحذير القادم'
+                    : 'متبقي ${3 - warningCount} تحذير/ات قبل الإيقاف',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('حسناً، سأتواصل'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _updateStatus(String text, double progress) {

@@ -26,6 +26,9 @@ class License {
   final int maxUsers;
   final String companyName;
   final String contactEmail;
+  final String? signature; // Add signature for validation
+  final String? hardwareId; // Add hardware ID for binding
+  final int gracePeriodDays = 7; // Grace period in days
 
   License({
     required this.licenseKey,
@@ -37,10 +40,30 @@ class License {
     required this.maxUsers,
     required this.companyName,
     required this.contactEmail,
+    this.signature,
+    this.hardwareId,
   });
 
-  bool get isExpired => DateTime.now().isAfter(expiryDate);
-  bool get isValid => !isExpired;
+  bool get isExpired {
+    final now = DateTime.now();
+    final effectiveExpiry = expiryDate.add(Duration(days: gracePeriodDays));
+    return now.isAfter(effectiveExpiry);
+  }
+
+  bool get isValid => !isExpired && isSignatureValid;
+
+  bool get isSignatureValid {
+    if (signature == null) return true; // Allow old licenses without signature
+    final data =
+        '$licenseKey$deviceFingerprint$type$issueDate$expiryDate$maxUsers$companyName';
+    final expectedSignature = _generateSignature(data);
+    return expectedSignature == signature;
+  }
+
+  Future<bool> get isHardwareBound async {
+    if (hardwareId == null) return true; // Allow unbound licenses
+    return hardwareId == await _getHardwareId();
+  }
 
   int get daysRemaining {
     if (isExpired) return 0;
@@ -48,6 +71,29 @@ class License {
   }
 
   String get licenseType => type.toString().split('.').last;
+
+  static String _generateSignature(String data) {
+    final key = utf8.encode(AppSecrets.licenseSecretKey);
+    final bytes = utf8.encode(data);
+    final hmac = Hmac(sha256, key);
+    final digest = hmac.convert(bytes);
+    return base64Encode(digest.bytes);
+  }
+
+  static Future<String> _getHardwareId() async {
+    final deviceInfo = DeviceInfoPlugin();
+    if (Platform.isWindows) {
+      final windowsInfo = await deviceInfo.windowsInfo;
+      return '${windowsInfo.computerName}_${windowsInfo.systemMemoryInMegabytes}';
+    } else if (Platform.isLinux) {
+      final linuxInfo = await deviceInfo.linuxInfo;
+      return '${linuxInfo.name}_${linuxInfo.machineId}';
+    } else if (Platform.isMacOS) {
+      final macInfo = await deviceInfo.macOsInfo;
+      return '${macInfo.computerName}_${macInfo.systemGUID}';
+    }
+    return 'unknown';
+  }
 
   Map<String, dynamic> toJson() => {
     'license_key': licenseKey,
@@ -59,6 +105,8 @@ class License {
     'max_users': maxUsers,
     'company_name': companyName,
     'contact_email': contactEmail,
+    'signature': signature,
+    'hardware_id': hardwareId,
   };
 
   factory License.fromJson(Map<String, dynamic> json) {
@@ -74,6 +122,8 @@ class License {
       maxUsers: json['max_users'],
       companyName: json['company_name'],
       contactEmail: json['contact_email'],
+      signature: json['signature'],
+      hardwareId: json['hardware_id'],
     );
   }
 }

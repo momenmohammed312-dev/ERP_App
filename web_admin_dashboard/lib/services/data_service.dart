@@ -1,10 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/client_model.dart';
 import '../models/license_model.dart';
 import 'pos_license_generator.dart';
 
 /// Data Service - يدير البيانات عبر Firebase Firestore
-class DataService {
+class DataService extends ChangeNotifier {
   FirebaseFirestore? _firestore;
   static const String _clientsCollection = 'clients';
   static const String _licensesCollection = 'licenses';
@@ -25,6 +26,7 @@ class DataService {
   };
   bool _isInit = false;
   bool _useLocal = false;
+  Future<void>? _initFuture;
 
   bool _hasPlaceholderFirebaseConfig() {
     try {
@@ -38,7 +40,12 @@ class DataService {
   /// Initialize and load data from Firestore
   Future<void> init() async {
     if (_isInit) return;
+    // Return the in-progress future to prevent multiple parallel inits
+    _initFuture ??= _doInit();
+    return _initFuture;
+  }
 
+  Future<void> _doInit() async {
     if (_hasPlaceholderFirebaseConfig()) {
       _useLocal = true;
       _isInit = true;
@@ -59,6 +66,7 @@ class DataService {
         _clients = snapshot.docs
             .map((doc) => ClientModel.fromJson({...doc.data(), 'id': doc.id}))
             .toList();
+        notifyListeners();
       }, onError: (_) {
         _useLocal = true;
       });
@@ -68,6 +76,7 @@ class DataService {
         _licenses = snapshot.docs
             .map((doc) => LicenseRecord.fromJson({...doc.data(), 'id': doc.id}))
             .toList();
+        notifyListeners();
       }, onError: (_) {
         _useLocal = true;
       });
@@ -84,6 +93,7 @@ class DataService {
             'standard': (data['standard'] as num?)?.toDouble() ?? 400.0,
             'professional': (data['professional'] as num?)?.toDouble() ?? 600.0,
           };
+          notifyListeners();
         }
       });
     } catch (_) {
@@ -118,12 +128,16 @@ class DataService {
             : DateTime.now().microsecondsSinceEpoch.toString(),
       );
       _clients = [..._clients, newClient];
+      notifyListeners();
       return newClient;
     }
 
     final docRef =
         await _firestore!.collection(_clientsCollection).add(client.toJson());
     final newClient = client.copyWith(id: docRef.id);
+    // Local cache update for immediate feedback (Firestore listener will confirm)
+    _clients = [..._clients, newClient];
+    notifyListeners();
     return newClient;
   }
 
@@ -131,6 +145,7 @@ class DataService {
   Future<void> updateClient(ClientModel client) async {
     if (_useLocal) {
       _clients = _clients.map((c) => c.id == client.id ? client : c).toList();
+      notifyListeners();
       return;
     }
 
@@ -138,16 +153,22 @@ class DataService {
         .collection(_clientsCollection)
         .doc(client.id)
         .set(client.toJson(), SetOptions(merge: true));
+    // Optimistic local update
+    _clients = _clients.map((c) => c.id == client.id ? client : c).toList();
+    notifyListeners();
   }
 
   /// Delete client
   Future<void> deleteClient(String id) async {
     if (_useLocal) {
       _clients = _clients.where((c) => c.id != id).toList();
+      notifyListeners();
       return;
     }
 
     await _firestore!.collection(_clientsCollection).doc(id).delete();
+    _clients = _clients.where((c) => c.id != id).toList();
+    notifyListeners();
   }
 
   /// Search clients (uses local cache for performance)
@@ -219,15 +240,18 @@ class DataService {
       'clientId': clientId,
       'clientName': clientName,
       'packageType': packageType,
-      'duration': duration.index,
+      'duration': duration.name,
       'createdAt': Timestamp.fromDate(DateTime.now()),
       'expiresAt': Timestamp.fromDate(expiresAt),
-      'status': (duration == SubscriptionDuration.trial
-              ? LicenseStatus.trial
-              : LicenseStatus.active)
-          .index,
+      'status': LicenseStatus.inactive.name, // دائماً غير مفعّل عند الإنشاء
       'price': price,
       'notes': notes,
+      'machineId': null,
+      'activatedAt': null,
+      'lastCheckin': null,
+      'warningCount': 0,
+      'suspendedAt': null,
+      'suspendedReason': null,
     };
 
     if (_useLocal) {
@@ -250,6 +274,9 @@ class DataService {
         await _firestore!.collection(_licensesCollection).add(licenseData);
 
     final license = LicenseRecord.fromJson({...licenseData, 'id': docRef.id});
+    // Optimistic local update
+    _licenses = [..._licenses, license];
+    notifyListeners();
 
     // Update client's current license and total paid
     final client = getClientById(clientId);
@@ -279,15 +306,23 @@ class DataService {
       'clientId': clientId,
       'clientName': clientName,
       'packageType': packageType,
-      'duration': SubscriptionDuration.monthly.index, // Default for manual
+      'duration': SubscriptionDuration.monthly.name, // Default for manual
       'createdAt': Timestamp.fromDate(DateTime.now()),
       'expiresAt': Timestamp.fromDate(expiresAt),
       'activatedAt':
           hardwareId != null ? Timestamp.fromDate(DateTime.now()) : null,
       'hardwareId': hardwareId,
-      'status': LicenseStatus.active.index,
+      // لو تم تحديد hardwareId يدوياً يصبح active، وإلا inactive
+      'status': hardwareId != null
+          ? LicenseStatus.active.name
+          : LicenseStatus.inactive.name,
       'price': price,
       'notes': notes,
+      'lastCheckin':
+          hardwareId != null ? Timestamp.fromDate(DateTime.now()) : null,
+      'warningCount': 0,
+      'suspendedAt': null,
+      'suspendedReason': null,
     };
 
     if (_useLocal) {
@@ -309,6 +344,8 @@ class DataService {
     final docRef =
         await _firestore!.collection(_licensesCollection).add(licenseData);
     final license = LicenseRecord.fromJson({...licenseData, 'id': docRef.id});
+    _licenses = [..._licenses, license];
+    notifyListeners();
 
     final client = getClientById(clientId);
     if (client != null) {
@@ -321,18 +358,124 @@ class DataService {
     return license;
   }
 
-  /// Activate license (from Web Dashboard perspective - usually done by POS)
+  /// Update license status
   Future<void> updateLicenseStatus(String id, LicenseStatus status) async {
     if (_useLocal) {
       _licenses = _licenses
           .map((l) => l.id == id ? l.copyWith(status: status) : l)
           .toList();
+      notifyListeners();
       return;
     }
-
     await _firestore!.collection(_licensesCollection).doc(id).update({
-      'status': status.index,
+      'status': status.name,
     });
+    _licenses = _licenses
+        .map((l) => l.id == id ? l.copyWith(status: status) : l)
+        .toList();
+    notifyListeners();
+  }
+
+  /// ─── إيقاف الترخيص (Suspend) ────────────────────────────────────────
+  Future<void> suspendLicense(String id, {String? reason}) async {
+    final now = DateTime.now();
+    final updates = {
+      'status': LicenseStatus.suspended.name,
+      'suspendedAt': Timestamp.fromDate(now),
+      'suspendedReason': reason ?? 'تم الإيقاف من لوحة الإدارة',
+    };
+    if (_useLocal) {
+      _licenses = _licenses
+          .map((l) => l.id == id
+              ? l.copyWith(
+                  status: LicenseStatus.suspended,
+                  suspendedAt: now,
+                  suspendedReason: reason ?? 'تم الإيقاف من لوحة الإدارة',
+                )
+              : l)
+          .toList();
+      notifyListeners();
+      return;
+    }
+    await _firestore!.collection(_licensesCollection).doc(id).update(updates);
+    _licenses = _licenses
+        .map((l) => l.id == id
+            ? l.copyWith(
+                status: LicenseStatus.suspended,
+                suspendedAt: now,
+                suspendedReason: reason ?? 'تم الإيقاف من لوحة الإدارة',
+              )
+            : l)
+        .toList();
+    notifyListeners();
+  }
+
+  /// ─── إعادة تفعيل الترخيص الموقوف ──────────────────────────────────
+  Future<void> reactivateLicense(String id) async {
+    final updates = {
+      'status': LicenseStatus.active.name,
+      'suspendedAt': null,
+      'suspendedReason': null,
+      'warningCount': 0,
+    };
+    if (_useLocal) {
+      _licenses = _licenses
+          .map((l) => l.id == id
+              ? l.copyWith(
+                  status: LicenseStatus.active,
+                  warningCount: 0,
+                )
+              : l)
+          .toList();
+      notifyListeners();
+      return;
+    }
+    await _firestore!.collection(_licensesCollection).doc(id).update(updates);
+    _licenses = _licenses
+        .map((l) => l.id == id
+            ? l.copyWith(status: LicenseStatus.active, warningCount: 0)
+            : l)
+        .toList();
+    notifyListeners();
+  }
+
+  /// ─── إرسال تحذير (يزيد warningCount ويُعلم العميل عند التحقق) ────
+  Future<void> sendWarning(String id) async {
+    final license = getLicenseById(id);
+    if (license == null) return;
+    final newCount = license.warningCount + 1;
+    if (_useLocal) {
+      _licenses = _licenses
+          .map((l) => l.id == id ? l.copyWith(warningCount: newCount) : l)
+          .toList();
+      notifyListeners();
+      return;
+    }
+    await _firestore!.collection(_licensesCollection).doc(id).update({
+      'warningCount': newCount,
+    });
+    _licenses = _licenses
+        .map((l) => l.id == id ? l.copyWith(warningCount: newCount) : l)
+        .toList();
+    notifyListeners();
+  }
+
+  /// ─── إعادة تعيين عداد التحذيرات ───────────────────────────────────
+  Future<void> resetWarnings(String id) async {
+    if (_useLocal) {
+      _licenses = _licenses
+          .map((l) => l.id == id ? l.copyWith(warningCount: 0) : l)
+          .toList();
+      notifyListeners();
+      return;
+    }
+    await _firestore!.collection(_licensesCollection).doc(id).update({
+      'warningCount': 0,
+    });
+    _licenses = _licenses
+        .map((l) => l.id == id ? l.copyWith(warningCount: 0) : l)
+        .toList();
+    notifyListeners();
   }
 
   /// Revoke license
@@ -360,7 +503,7 @@ class DataService {
     } else {
       await _firestore!.collection(_licensesCollection).doc(id).update({
         'expiresAt': Timestamp.fromDate(newExpiresAt),
-        'status': LicenseStatus.active.index,
+        'status': LicenseStatus.active.name,
       });
     }
 

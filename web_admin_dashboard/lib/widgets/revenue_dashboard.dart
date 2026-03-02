@@ -18,13 +18,25 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
   @override
   void initState() {
     super.initState();
+    _dataService.addListener(_onDataChanged);
     _loadData();
+  }
+
+  void _onDataChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     await _dataService.init();
     setState(() => _isLoading = false);
+  }
+
+  @override
+  void dispose() {
+    _dataService.removeListener(_onDataChanged);
+    super.dispose();
   }
 
   @override
@@ -44,13 +56,28 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
                     const SizedBox(height: 24),
                     _buildStatsCards(),
                     const SizedBox(height: 24),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 2, child: _buildMonthlyRevenueChart()),
-                        const SizedBox(width: 24),
-                        Expanded(child: _buildPackageDistribution()),
-                      ],
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isMobile = constraints.maxWidth < 600;
+                        if (isMobile) {
+                          return Column(
+                            children: [
+                              _buildMonthlyRevenueChart(),
+                              const SizedBox(height: 24),
+                              _buildPackageDistribution(),
+                            ],
+                          );
+                        }
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                                flex: 2, child: _buildMonthlyRevenueChart()),
+                            const SizedBox(width: 24),
+                            Expanded(child: _buildPackageDistribution()),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 24),
                     _buildPricingTable(),

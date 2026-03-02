@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'package:desktop_window/desktop_window.dart';
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -23,12 +24,17 @@ import 'package:pos_offline_desktop/screens/license/tamper_detected_screen.dart'
 
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'services/security_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  if (!kIsWeb && !io.Platform.isWindows) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
   await SecurityService.initialize();
 
   // Create shared container for all services
@@ -56,7 +62,8 @@ void main() async {
   IntegrityChecker.startPeriodicCheck(db);
   AutoBackupService.start();
 
-  if (!kIsWeb) {
+  // For Windows offline development, skip Firebase and proceed offline
+  if (!kIsWeb && !io.Platform.isWindows) {
     try {
       await DesktopWindow.setMinWindowSize(const Size(800, 800));
     } catch (e) {
@@ -110,7 +117,7 @@ class MyApp extends ConsumerWidget {
         Locale('en'), // English
       ],
       locale: const Locale('ar'), // Set Arabic as default
-      routerConfig: isLicenseValid
+      routerConfig: (isLicenseValid || (!kIsWeb && io.Platform.isWindows))
           ? ref.watch(routerProvider)
           : _createActivationRouter(),
     );

@@ -5,7 +5,9 @@ import 'package:uuid/uuid.dart';
 
 /// License Status
 enum LicenseStatus {
+  inactive, // لم يُفعَّل بعد
   active, // نشط
+  suspended, // موقوف (تحذير أو إيقاف)
   expired, // منتهي
   revoked, // ملغي
   trial, // تجريبي
@@ -34,6 +36,11 @@ class LicenseRecord {
   final LicenseStatus status;
   final double price;
   final String? notes;
+  // ─── حقول جديدة للتحكم الأمني ───
+  final DateTime? lastCheckin; // آخر تحقق أونلاين
+  final int warningCount; // عدد التحذيرات المُرسلة
+  final DateTime? suspendedAt; // تاريخ الإيقاف
+  final String? suspendedReason; // سبب الإيقاف
 
   LicenseRecord({
     required this.id,
@@ -46,9 +53,13 @@ class LicenseRecord {
     required this.expiresAt,
     this.activatedAt,
     this.hardwareId,
-    this.status = LicenseStatus.active,
+    this.status = LicenseStatus.inactive,
     required this.price,
     this.notes,
+    this.lastCheckin,
+    this.warningCount = 0,
+    this.suspendedAt,
+    this.suspendedReason,
   });
 
   static SubscriptionDuration _parseDuration(dynamic raw) {
@@ -115,6 +126,14 @@ class LicenseRecord {
       status: _parseStatus(json['status']),
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
       notes: json['notes'] as String?,
+      lastCheckin: json['lastCheckin'] != null
+          ? _parseDate(json['lastCheckin'], DateTime.now())
+          : null,
+      warningCount: (json['warningCount'] as num?)?.toInt() ?? 0,
+      suspendedAt: json['suspendedAt'] != null
+          ? _parseDate(json['suspendedAt'], DateTime.now())
+          : null,
+      suspendedReason: json['suspendedReason'] as String?,
     );
   }
 
@@ -133,6 +152,10 @@ class LicenseRecord {
       'status': status.name,
       'price': price,
       'notes': notes,
+      'lastCheckin': lastCheckin?.toIso8601String(),
+      'warningCount': warningCount,
+      'suspendedAt': suspendedAt?.toIso8601String(),
+      'suspendedReason': suspendedReason,
     };
   }
 
@@ -150,6 +173,10 @@ class LicenseRecord {
     LicenseStatus? status,
     double? price,
     String? notes,
+    DateTime? lastCheckin,
+    int? warningCount,
+    DateTime? suspendedAt,
+    String? suspendedReason,
   }) {
     return LicenseRecord(
       id: id ?? this.id,
@@ -165,6 +192,10 @@ class LicenseRecord {
       status: status ?? this.status,
       price: price ?? this.price,
       notes: notes ?? this.notes,
+      lastCheckin: lastCheckin ?? this.lastCheckin,
+      warningCount: warningCount ?? this.warningCount,
+      suspendedAt: suspendedAt ?? this.suspendedAt,
+      suspendedReason: suspendedReason ?? this.suspendedReason,
     );
   }
 
@@ -183,8 +214,12 @@ class LicenseRecord {
   /// Get status display name in Arabic
   String get statusDisplayName {
     switch (status) {
+      case LicenseStatus.inactive:
+        return 'غير مفعّل';
       case LicenseStatus.active:
         return 'نشط';
+      case LicenseStatus.suspended:
+        return 'موقوف';
       case LicenseStatus.expired:
         return 'منتهي';
       case LicenseStatus.revoked:

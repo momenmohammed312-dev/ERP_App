@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -22,7 +23,17 @@ void main() async {
   } catch (e) {
     debugPrint("Firebase initialization failed: $e");
   }
-  runApp(const POSAdminDashboard());
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('Flutter Error: ${details.exception}');
+  };
+
+  runZonedGuarded(() {
+    runApp(const POSAdminDashboard());
+  }, (error, stack) {
+    debugPrint('Uncaught Error: $error');
+  });
 }
 
 class POSAdminDashboard extends StatelessWidget {

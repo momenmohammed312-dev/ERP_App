@@ -234,15 +234,42 @@ class _LoginScreenState extends State<LoginScreen> {
           password: _passwordController.text.trim(),
         );
         Get.offAllNamed('/dashboard');
-      } catch (e) {
-        // Fallback for offline/unconfigured mode
-        if (_usernameController.text.trim() == 'admin@mo2.com' &&
-            _passwordController.text.trim() == 'admin123') {
-          Get.offAllNamed('/dashboard');
-        } else {
-          Get.snackbar('خطأ', 'بيانات غير صحيحة أو الخدمة غير متوفرة',
-              backgroundColor: Colors.red, colorText: Colors.white);
+      } on FirebaseAuthException catch (e) {
+        String errorMessage;
+        switch (e.code) {
+          case 'user-not-found':
+            errorMessage = 'لم يتم العثور على حساب بهذا البريد الإلكتروني';
+            break;
+          case 'wrong-password':
+            errorMessage = 'كلمة المرور غير صحيحة';
+            break;
+          case 'invalid-email':
+            errorMessage = 'البريد الإلكتروني غير صحيح';
+            break;
+          case 'user-disabled':
+            errorMessage = 'تم تعطيل هذا الحساب';
+            break;
+          case 'too-many-requests':
+            errorMessage = 'تم حظر المحاولات المؤقتاً. حاول مرة أخرى لاحقاً';
+            break;
+          default:
+            errorMessage =
+                'حدث خطأ في تسجيل الدخول. تحقق من البيانات وحاول مرة أخرى';
         }
+        Get.snackbar(
+          'خطأ في تسجيل الدخول',
+          errorMessage,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 4),
+        );
+      } catch (e) {
+        Get.snackbar(
+          'خطأ',
+          'حدث خطأ غير متوقع. تحقق من الاتصال بالإنترنت وحاول مرة أخرى',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
       } finally {
         setState(() => _isLoading = false);
       }

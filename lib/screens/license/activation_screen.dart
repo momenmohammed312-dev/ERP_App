@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/license_manager.dart';
-import '../../services/activation_service.dart';
+import '../../services/firebase_license_service.dart';
 
 class ActivationScreen extends StatefulWidget {
   const ActivationScreen({super.key});
@@ -13,7 +13,6 @@ class ActivationScreen extends StatefulWidget {
 class _ActivationScreenState extends State<ActivationScreen> {
   final _licenseKeyController = TextEditingController();
   final _licenseManager = LicenseManager();
-  final _activationService = ActivationService();
   bool _isLoading = false;
   String? _errorMessage;
   String? _successMessage;
@@ -54,9 +53,10 @@ class _ActivationScreenState extends State<ActivationScreen> {
     });
 
     try {
-      final result = await _activationService.activate(key);
+      final fbService = FirebaseLicenseService();
+      final result = await fbService.activateLicense(key);
 
-      if (result.isSuccess) {
+      if (result.isAllowed) {
         setState(() {
           _successMessage = result.message;
           _isLoading = false;

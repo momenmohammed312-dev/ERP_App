@@ -223,7 +223,8 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                               Icons.receipt_long,
                               Colors.blue,
                               () async {
-                                final isOpen = await widget.db.dayDao.isDayOpen();
+                                final isOpen = await widget.db.dayDao
+                                    .isDayOpen();
                                 if (!context.mounted) return;
                                 if (!isOpen) {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -366,8 +367,8 @@ class _LicenseBadge extends ConsumerWidget {
         final color = license.isExpired
             ? Colors.red
             : days <= 5
-                ? Colors.orange
-                : Colors.green;
+            ? Colors.orange
+            : Colors.green;
 
         return Padding(
           padding: const EdgeInsets.only(left: 8),
@@ -377,7 +378,10 @@ class _LicenseBadge extends ConsumerWidget {
               onTap: () => _showLicenseDialog(context, license, days),
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
@@ -393,9 +397,7 @@ class _LicenseBadge extends ConsumerWidget {
                     ),
                     const Gap(6),
                     Text(
-                      license.isExpired
-                          ? 'منتهي'
-                          : '$days يوم',
+                      license.isExpired ? 'منتهي' : '$days يوم',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: color,
@@ -410,7 +412,7 @@ class _LicenseBadge extends ConsumerWidget {
         );
       },
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
     );
   }
 

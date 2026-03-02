@@ -132,22 +132,40 @@ class StaffManagementService {
     if (staff != null) {
       await _dao.updateStaff(
         staff.copyWith(
-          name: name != null ? Value(name) : Value.absent(),
-          position: position != null ? Value(position) : Value.absent(),
-          department: department != null ? Value(department) : Value.absent(),
-          employmentType: employmentType != null ? Value(employmentType) : Value.absent(),
-          basicSalary: basicSalary != null ? Value(basicSalary) : Value.absent(),
-          hourlyRate: hourlyRate != null ? Value(hourlyRate) : Value.absent(),
-          phone: phone != null ? Value(phone) : Value.absent(),
-          email: email != null ? Value(email) : Value.absent(),
-          address: address != null ? Value(address) : Value.absent(),
-          bankName: bankName != null ? Value(bankName) : Value.absent(),
-          bankAccount: bankAccount != null ? Value(bankAccount) : Value.absent(),
-          emergencyContact: emergencyContact != null ? Value(emergencyContact) : Value.absent(),
-          emergencyPhone: emergencyPhone != null ? Value(emergencyPhone) : Value.absent(),
-          notes: notes != null ? Value(notes) : Value.absent(),
-          status: status != null ? Value(status) : Value(staff.status),
-          contractEndDate: contractEndDate != null ? Value(contractEndDate) : Value.absent(),
+          // non-nullable fields — pass direct values or fallback to existing value
+          name: name ?? staff.name,
+          position: position ?? staff.position,
+          employmentType: employmentType ?? staff.employmentType,
+          basicSalary: basicSalary ?? staff.basicSalary,
+          status: status ?? staff.status,
+
+          // nullable fields — use Value(...) to signal explicit set/null
+          hourlyRate: hourlyRate != null
+              ? Value(hourlyRate)
+              : staff.hourlyRate != null
+              ? Value(staff.hourlyRate)
+              : const Value.absent(),
+          department: department != null
+              ? Value(department)
+              : const Value.absent(),
+          phone: phone != null ? Value(phone) : const Value.absent(),
+          email: email != null ? Value(email) : const Value.absent(),
+          address: address != null ? Value(address) : const Value.absent(),
+          bankName: bankName != null ? Value(bankName) : const Value.absent(),
+          bankAccount: bankAccount != null
+              ? Value(bankAccount)
+              : const Value.absent(),
+          emergencyContact: emergencyContact != null
+              ? Value(emergencyContact)
+              : const Value.absent(),
+          emergencyPhone: emergencyPhone != null
+              ? Value(emergencyPhone)
+              : const Value.absent(),
+          notes: notes != null ? Value(notes) : const Value.absent(),
+          contractEndDate: contractEndDate != null
+              ? Value(contractEndDate)
+              : const Value.absent(),
+
           updatedAt: DateTime.now(),
         ),
       );

@@ -23,7 +23,14 @@ class _LicensesManagementState extends State<LicensesManagement> {
   @override
   void initState() {
     super.initState();
+    _dataService.addListener(_onDataChanged);
     _loadData();
+  }
+
+  void _onDataChanged() {
+    if (!mounted) return;
+    _applyFilters();
+    setState(() {});
   }
 
   Future<void> _loadData() async {
@@ -50,6 +57,10 @@ class _LicensesManagementState extends State<LicensesManagement> {
             return l.status == LicenseStatus.revoked;
           case 'expiring':
             return l.isExpiringSoon;
+          case 'inactive':
+            return l.status == LicenseStatus.inactive;
+          case 'suspended':
+            return l.status == LicenseStatus.suspended;
           default:
             return true;
         }
@@ -341,7 +352,9 @@ class _LicensesManagementState extends State<LicensesManagement> {
               items: const [
                 DropdownMenuItem(value: 'all', child: Text('الكل')),
                 DropdownMenuItem(value: 'active', child: Text('نشط')),
+                DropdownMenuItem(value: 'inactive', child: Text('غير مفعّل')),
                 DropdownMenuItem(value: 'trial', child: Text('تجريبي')),
+                DropdownMenuItem(value: 'suspended', child: Text('موقوف')),
                 DropdownMenuItem(
                     value: 'expiring', child: Text('ينتهي قريباً')),
                 DropdownMenuItem(value: 'expired', child: Text('منتهي')),
@@ -567,6 +580,47 @@ class _LicensesManagementState extends State<LicensesManagement> {
                 ),
                 Row(
                   children: [
+                    // Warn button
+                    if (license.status == LicenseStatus.active &&
+                        license.warningCount < 3)
+                      IconButton(
+                        icon: const Icon(Icons.warning, size: 20),
+                        color: Colors.orange,
+                        tooltip: 'إرسال تحذير',
+                        onPressed: () async {
+                          await _dataService.sendWarning(license.id);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('تم إرسال التحذير'),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                        },
+                      ),
+                    // Suspend button
+                    if (license.status == LicenseStatus.active)
+                      IconButton(
+                        icon: const Icon(Icons.pause, size: 20),
+                        color: Colors.deepOrange,
+                        tooltip: 'إيقاف الترخيص',
+                        onPressed: () => _confirmSuspend(license),
+                      ),
+                    // Reactivate button
+                    if (license.status == LicenseStatus.suspended)
+                      IconButton(
+                        icon: const Icon(Icons.play_arrow, size: 20),
+                        color: Colors.green,
+                        tooltip: 'إعادة تفعيل الترخيص',
+                        onPressed: () async {
+                          await _dataService.reactivateLicense(license.id);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('تم إعادة تفعيل الترخيص'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        },
+                      ),
                     if (license.status != LicenseStatus.revoked &&
                         !license.isExpired)
                       IconButton(
@@ -641,6 +695,8 @@ class _LicensesManagementState extends State<LicensesManagement> {
     if (license.isExpired) return 'منتهي';
     if (license.isExpiringSoon) return 'ينتهي قريباً';
     if (license.status == LicenseStatus.trial) return 'تجريبي';
+    if (license.status == LicenseStatus.inactive) return 'غير مفعّل';
+    if (license.status == LicenseStatus.suspended) return 'موقوف';
     return 'نشط';
   }
 
@@ -790,6 +846,71 @@ class _LicensesManagementState extends State<LicensesManagement> {
                 foregroundColor: Colors.white,
               ),
               child: const Text(AppStrings.revokeLicense),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmSuspend(LicenseRecord license) {
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.pause, color: Colors.deepOrange),
+              const SizedBox(width: 12),
+              const Text('تأكيد الإيقاف'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                  'هل أنت متأكد من إيقاف ترخيص "${license.clientName}"؟\nسيتم إيقاف العميل عن استخدام البرنامج.'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'سبب الإيقاف (اختياري)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(AppStrings.cancel),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await _dataService.suspendLicense(license.id,
+                    reason: reasonController.text);
+                if (mounted) {
+                  Navigator.pop(context);
+                  _loadData();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('تم إيقاف الترخيص'),
+                      backgroundColor: Colors.deepOrange,
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrange,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('إيقاف'),
             ),
           ],
         ),
@@ -1118,6 +1239,7 @@ class _LicensesManagementState extends State<LicensesManagement> {
 
   @override
   void dispose() {
+    _dataService.removeListener(_onDataChanged);
     _searchController.dispose();
     super.dispose();
   }

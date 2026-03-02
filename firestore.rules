@@ -17,6 +17,10 @@ service cloud.firestore {
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['hardwareId', 'activatedAt', 'status'])
         && resource.data.hardwareId == null;
+        
+      // تطبيق POS يمكنه تحديث lastCheckin بدون مصادقة (للـ 7-day checkin)
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['lastCheckin']);
     }
     
     // منع أي وصول آخر بشكل افتراضي
