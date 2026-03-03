@@ -487,13 +487,12 @@ class _CustomerManagementState extends State<CustomerManagement> {
                   isActive: isActive,
                 );
                 await _dataService.addClient(newClient);
-                if (mounted) {
-                  Navigator.of(context).pop();
-                  setState(() {});
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم إضافة العميل بنجاح')),
-                  );
-                }
+                if (!context.mounted) return; // Flutter 3.7+
+                Navigator.of(context).pop();
+                if (mounted) setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم إضافة العميل بنجاح')),
+                );
               },
               child: const Text('إضافة'),
             ),

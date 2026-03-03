@@ -502,14 +502,28 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     setState(() => _isLoading = true);
 
     try {
+      // Validation
+      if (_nameController.text.trim().isEmpty) {
+        throw Exception('اسم الموظف مطلوب');
+      }
+      if (_positionController.text.trim().isEmpty) {
+        throw Exception('المسمى الوظيفي مطلوب');
+      }
+      if (_basicSalaryController.text.trim().isEmpty) {
+        throw Exception('الراتب الأساسي مطلوب');
+      }
+
+      final salary = double.tryParse(_basicSalaryController.text);
+      if (salary == null || salary <= 0) {
+        throw Exception('الراتب الأساسي يجب أن يكون رقماً موجباً');
+      }
+
       if (widget.staff == null) {
         await _service.addNewStaff(
           name: _nameController.text.trim(),
-          position: _positionController.text.trim().isEmpty
-              ? 'موظف'
-              : _positionController.text.trim(),
+          position: _positionController.text.trim(),
           employmentType: _selectedEmploymentType,
-          basicSalary: double.parse(_basicSalaryController.text),
+          basicSalary: salary,
           nationalId: _nationalIdController.text.trim().isEmpty
               ? null
               : _nationalIdController.text.trim(),
@@ -549,14 +563,12 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         await _service.updateStaffInfo(
           staffId: widget.staff!.staffId,
           name: _nameController.text.trim(),
-          position: _positionController.text.trim().isEmpty
-              ? 'موظف'
-              : _positionController.text.trim(),
+          position: _positionController.text.trim(),
           department: _departmentController.text.trim().isEmpty
               ? null
               : _departmentController.text.trim(),
           employmentType: _selectedEmploymentType,
-          basicSalary: double.parse(_basicSalaryController.text),
+          basicSalary: salary,
           hourlyRate: _hourlyRateController.text.trim().isEmpty
               ? null
               : double.tryParse(_hourlyRateController.text),
@@ -601,13 +613,24 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, st) {
       if (!mounted) return;
+
+      // Log detailed error for debugging
+      debugPrint('Staff form error: $e');
+      debugPrint('Stack trace: $st');
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('خطأ: ${e.toString().replaceFirst('Exception: ', '')}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 }

@@ -17,6 +17,7 @@ import 'package:pos_offline_desktop/services/anti_tamper_service.dart';
 import 'package:pos_offline_desktop/services/integrity_checker.dart';
 import 'package:pos_offline_desktop/services/user_session_service.dart';
 import 'package:pos_offline_desktop/services/user_backup_service.dart';
+import 'package:pos_offline_desktop/services/security_service.dart';
 import 'package:pos_offline_desktop/screens/license/activation_screen.dart';
 import 'package:pos_offline_desktop/screens/license/activation_success_screen.dart';
 import 'package:pos_offline_desktop/screens/license/license_info_screen.dart';
@@ -25,7 +26,7 @@ import 'package:pos_offline_desktop/screens/license/tamper_detected_screen.dart'
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'services/security_service.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,6 +62,9 @@ void main() async {
   UserSessionService.startSessionCleanup();
   IntegrityChecker.startPeriodicCheck(db);
   AutoBackupService.start();
+
+  // Initialize notification service
+  await NotificationService().initialize(db);
 
   // For Windows offline development, skip Firebase and proceed offline
   if (!kIsWeb && !io.Platform.isWindows) {

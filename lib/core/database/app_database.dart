@@ -9,6 +9,8 @@ import 'tables/tables.dart';
 
 import '../utils/security_utils.dart';
 
+import 'amount_types_fix.dart';
+
 part 'app_database.g.dart';
 
 @DriftDatabase(
@@ -56,6 +58,8 @@ part 'app_database.g.dart';
     PurchaseRefunds,
     // User Activity Log
     UserActivityLog,
+    CashSessions,
+    Notifications,
   ],
   daos: [
     ProductDao,
@@ -73,6 +77,8 @@ part 'app_database.g.dart';
     AuditDao,
     UserDao,
     StaffManagementDao,
+    CashSessionDao,
+    NotificationsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -83,7 +89,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 35;
+  int get schemaVersion => 36;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1108,6 +1114,16 @@ class AppDatabase extends _$AppDatabase {
           log('Table staffDocuments already exists or failed: $e');
         }
         log('Migration v35: Finished creating staff management tables');
+      }
+
+      if (from < 36) {
+        // Fix amount column types in purchases table (INTEGER to REAL)
+        try {
+          await AmountTypesFix.fixAmountTypes(this);
+          log('Migration v36: Fixed amount types in purchases table');
+        } catch (e) {
+          log('Migration v36: Amount types fix error: $e');
+        }
       }
     },
     beforeOpen: (details) async {

@@ -4,6 +4,7 @@ import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/utils/app_utils.dart';
 
 /// تقرير اليوم — جدول يومي يعرض الأيام المفتوحة والمبيعات
 class DailyReportPage extends ConsumerStatefulWidget {
@@ -33,34 +34,36 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
       final db = ref.read(appDatabaseProvider);
 
       // Get all days in range
-      final daysRows = await db.customSelect(
-        '''
+      final daysRows = await db
+          .customSelect(
+            '''
         SELECT * FROM days 
         WHERE date >= ? AND date <= ?
         ORDER BY date DESC
         ''',
-        variables: [
-          drift.Variable.withDateTime(DateTime(
-            _startDate!.year,
-            _startDate!.month,
-            _startDate!.day,
-          )),
-          drift.Variable.withDateTime(DateTime(
-            _endDate!.year,
-            _endDate!.month,
-            _endDate!.day,
-            23,
-            59,
-            59,
-          )),
-        ],
-      ).get();
+            variables: [
+              drift.Variable.withDateTime(
+                DateTime(_startDate!.year, _startDate!.month, _startDate!.day),
+              ),
+              drift.Variable.withDateTime(
+                DateTime(
+                  _endDate!.year,
+                  _endDate!.month,
+                  _endDate!.day,
+                  23,
+                  59,
+                  59,
+                ),
+              ),
+            ],
+          )
+          .get();
 
       final result = <Map<String, dynamic>>[];
 
       for (final row in daysRows) {
         final data = row.data;
-        final dayDate = data['date'] as DateTime? ?? DateTime.now();
+        final dayDate = parseDate(data['date']);
         final dateStr = DateFormat('yyyy-MM-dd').format(dayDate);
 
         // Get invoices for this day
@@ -87,8 +90,8 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         final openingBalance =
             (data['opening_balance'] as num?)?.toDouble() ?? 0.0;
         final closingBalance = (data['closing_balance'] as num?)?.toDouble();
-        final createdAt = data['created_at'] as DateTime?;
-        final closedAt = data['closed_at'] as DateTime?;
+        final createdAt = parseDate(data['created_at']);
+        final closedAt = parseDate(data['closed_at']);
         final surplusDeficit = closingBalance != null
             ? closingBalance - openingBalance - totalSales
             : 0.0;
@@ -96,8 +99,8 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         result.add({
           'date': dateStr,
           'dateTime': dayDate,
-          'openTime': createdAt != null ? DateFormat('HH:mm').format(createdAt) : '-',
-          'closeTime': closedAt != null ? DateFormat('HH:mm').format(closedAt) : '-',
+          'openTime': DateFormat('HH:mm').format(createdAt),
+          'closeTime': DateFormat('HH:mm').format(closedAt),
           'openingBalance': openingBalance,
           'closingBalance': closingBalance ?? 0.0,
           'totalSales': totalSales,
@@ -241,24 +244,36 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                             DataCell(Text(d['date'] as String)),
                             DataCell(Text(d['openTime'] as String)),
                             DataCell(Text(d['closeTime'] as String)),
-                            DataCell(Text(
-                              (d['openingBalance'] as num).toStringAsFixed(2),
-                            )),
-                            DataCell(Text(
-                              (d['closingBalance'] as num).toStringAsFixed(2),
-                            )),
-                            DataCell(Text(
-                              (d['totalSales'] as num).toStringAsFixed(2),
-                            )),
-                            DataCell(Text((d['cash'] as num).toStringAsFixed(2))),
-                            DataCell(Text((d['credit'] as num).toStringAsFixed(2))),
-                            DataCell(Text(
-                              sd.toStringAsFixed(2),
-                              style: TextStyle(
-                                color: sd >= 0 ? Colors.green : Colors.red,
+                            DataCell(
+                              Text(
+                                (d['openingBalance'] as num).toStringAsFixed(2),
                               ),
-                            )),
-                            DataCell(Text((d['invoiceCount'] as int).toString())),
+                            ),
+                            DataCell(
+                              Text(
+                                (d['closingBalance'] as num).toStringAsFixed(2),
+                              ),
+                            ),
+                            DataCell(
+                              Text((d['totalSales'] as num).toStringAsFixed(2)),
+                            ),
+                            DataCell(
+                              Text((d['cash'] as num).toStringAsFixed(2)),
+                            ),
+                            DataCell(
+                              Text((d['credit'] as num).toStringAsFixed(2)),
+                            ),
+                            DataCell(
+                              Text(
+                                sd.toStringAsFixed(2),
+                                style: TextStyle(
+                                  color: sd >= 0 ? Colors.green : Colors.red,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text((d['invoiceCount'] as int).toString()),
+                            ),
                           ],
                         );
                       }).toList(),
@@ -290,10 +305,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
           children: [
             Text(
               title,
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(color: color, fontWeight: FontWeight.bold),
             ),
             const Gap(8),
             Text(

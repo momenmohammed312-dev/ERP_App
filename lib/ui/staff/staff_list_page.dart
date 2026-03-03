@@ -122,8 +122,10 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
       padding: const EdgeInsets.all(16.0),
       child: TextField(
         controller: _searchController,
+        style: TextStyle(color: Colors.black87),
         decoration: InputDecoration(
           hintText: 'البحث بالاسم، المنصب، أو الرقم الوظيفي...',
+          hintStyle: TextStyle(color: Colors.grey[600]),
           prefixIcon: const Icon(Icons.search),
           suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
@@ -133,7 +135,7 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
               : null,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           filled: true,
-          fillColor: Colors.grey[50],
+          fillColor: Colors.white,
         ),
       ),
     );

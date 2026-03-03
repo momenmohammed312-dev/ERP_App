@@ -21,3 +21,5 @@ export 'purchase_orders_tables.dart';
 export 'purchase_budget_tables.dart';
 export 'staff_management_tables.dart';
 export 'user_activity_log_table.dart';
+export 'cash_session_table.dart';
+export 'notifications_table.dart';

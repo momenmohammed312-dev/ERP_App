@@ -11,6 +11,7 @@ import 'package:crypto/crypto.dart';
 import '../database/app_database.dart';
 import 'package:path/path.dart' as path;
 import '../utils/logger.dart';
+import '../utils/app_utils.dart';
 
 /// Enhanced Backup Service for POS System
 /// خدمة النسخ الاحتياطي المحسنة لنظام نقاط البيع
@@ -495,7 +496,9 @@ class BackupService {
         await deleteBackup(backups[i].filename);
       }
 
-      AppLogger.i('🧹 تم تنظيف ${backups.length - _maxBackups} نسخة احتياطية قديمة');
+      AppLogger.i(
+        '🧹 تم تنظيف ${backups.length - _maxBackups} نسخة احتياطية قديمة',
+      );
     } catch (e) {
       AppLogger.e('Error cleaning old backups', e);
     }
@@ -504,7 +507,8 @@ class BackupService {
   /// Encrypt data using AES
   /// تشفير البيانات باستخدام AES
   List<int> _encryptData(List<int> data) {
-    final key = encrypt_pkg.Key.fromUtf8(_encryptionKey);
+    final keyBytes = deriveAesKey(_encryptionKey);
+    final key = encrypt_pkg.Key(keyBytes);
     final iv = encrypt_pkg.IV.fromLength(16);
     final encrypter = encrypt_pkg.Encrypter(
       encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
@@ -521,7 +525,8 @@ class BackupService {
       throw Exception('Encrypted data too short');
     }
 
-    final key = encrypt_pkg.Key.fromUtf8(_encryptionKey);
+    final keyBytes = deriveAesKey(_encryptionKey);
+    final key = encrypt_pkg.Key(keyBytes);
     final iv = encrypt_pkg.IV.fromLength(16);
     final encrypter = encrypt_pkg.Encrypter(
       encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),

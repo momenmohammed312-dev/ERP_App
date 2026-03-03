@@ -29106,6 +29106,797 @@ class UserActivityLogCompanion extends UpdateCompanion<UserActivityLogData> {
   }
 }
 
+class $CashSessionsTable extends CashSessions
+    with TableInfo<$CashSessionsTable, CashSession> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CashSessionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _openedByMeta = const VerificationMeta(
+    'openedBy',
+  );
+  @override
+  late final GeneratedColumn<String> openedBy = GeneratedColumn<String>(
+    'opened_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _openedAtMeta = const VerificationMeta(
+    'openedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> openedAt = GeneratedColumn<DateTime>(
+    'opened_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _closedAtMeta = const VerificationMeta(
+    'closedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
+    'closed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('closed'),
+  );
+  static const VerificationMeta _openingBalanceMeta = const VerificationMeta(
+    'openingBalance',
+  );
+  @override
+  late final GeneratedColumn<double> openingBalance = GeneratedColumn<double>(
+    'opening_balance',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    openedBy,
+    openedAt,
+    closedAt,
+    status,
+    openingBalance,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cash_sessions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CashSession> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('opened_by')) {
+      context.handle(
+        _openedByMeta,
+        openedBy.isAcceptableOrUnknown(data['opened_by']!, _openedByMeta),
+      );
+    }
+    if (data.containsKey('opened_at')) {
+      context.handle(
+        _openedAtMeta,
+        openedAt.isAcceptableOrUnknown(data['opened_at']!, _openedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_openedAtMeta);
+    }
+    if (data.containsKey('closed_at')) {
+      context.handle(
+        _closedAtMeta,
+        closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('opening_balance')) {
+      context.handle(
+        _openingBalanceMeta,
+        openingBalance.isAcceptableOrUnknown(
+          data['opening_balance']!,
+          _openingBalanceMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CashSession map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CashSession(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      openedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}opened_by'],
+      ),
+      openedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}opened_at'],
+      )!,
+      closedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}closed_at'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      openingBalance: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}opening_balance'],
+      )!,
+    );
+  }
+
+  @override
+  $CashSessionsTable createAlias(String alias) {
+    return $CashSessionsTable(attachedDatabase, alias);
+  }
+}
+
+class CashSession extends DataClass implements Insertable<CashSession> {
+  final int id;
+  final String? openedBy;
+  final DateTime openedAt;
+  final DateTime? closedAt;
+  final String status;
+  final double openingBalance;
+  const CashSession({
+    required this.id,
+    this.openedBy,
+    required this.openedAt,
+    this.closedAt,
+    required this.status,
+    required this.openingBalance,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    if (!nullToAbsent || openedBy != null) {
+      map['opened_by'] = Variable<String>(openedBy);
+    }
+    map['opened_at'] = Variable<DateTime>(openedAt);
+    if (!nullToAbsent || closedAt != null) {
+      map['closed_at'] = Variable<DateTime>(closedAt);
+    }
+    map['status'] = Variable<String>(status);
+    map['opening_balance'] = Variable<double>(openingBalance);
+    return map;
+  }
+
+  CashSessionsCompanion toCompanion(bool nullToAbsent) {
+    return CashSessionsCompanion(
+      id: Value(id),
+      openedBy: openedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(openedBy),
+      openedAt: Value(openedAt),
+      closedAt: closedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedAt),
+      status: Value(status),
+      openingBalance: Value(openingBalance),
+    );
+  }
+
+  factory CashSession.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CashSession(
+      id: serializer.fromJson<int>(json['id']),
+      openedBy: serializer.fromJson<String?>(json['openedBy']),
+      openedAt: serializer.fromJson<DateTime>(json['openedAt']),
+      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
+      status: serializer.fromJson<String>(json['status']),
+      openingBalance: serializer.fromJson<double>(json['openingBalance']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'openedBy': serializer.toJson<String?>(openedBy),
+      'openedAt': serializer.toJson<DateTime>(openedAt),
+      'closedAt': serializer.toJson<DateTime?>(closedAt),
+      'status': serializer.toJson<String>(status),
+      'openingBalance': serializer.toJson<double>(openingBalance),
+    };
+  }
+
+  CashSession copyWith({
+    int? id,
+    Value<String?> openedBy = const Value.absent(),
+    DateTime? openedAt,
+    Value<DateTime?> closedAt = const Value.absent(),
+    String? status,
+    double? openingBalance,
+  }) => CashSession(
+    id: id ?? this.id,
+    openedBy: openedBy.present ? openedBy.value : this.openedBy,
+    openedAt: openedAt ?? this.openedAt,
+    closedAt: closedAt.present ? closedAt.value : this.closedAt,
+    status: status ?? this.status,
+    openingBalance: openingBalance ?? this.openingBalance,
+  );
+  CashSession copyWithCompanion(CashSessionsCompanion data) {
+    return CashSession(
+      id: data.id.present ? data.id.value : this.id,
+      openedBy: data.openedBy.present ? data.openedBy.value : this.openedBy,
+      openedAt: data.openedAt.present ? data.openedAt.value : this.openedAt,
+      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
+      status: data.status.present ? data.status.value : this.status,
+      openingBalance: data.openingBalance.present
+          ? data.openingBalance.value
+          : this.openingBalance,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashSession(')
+          ..write('id: $id, ')
+          ..write('openedBy: $openedBy, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('status: $status, ')
+          ..write('openingBalance: $openingBalance')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, openedBy, openedAt, closedAt, status, openingBalance);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CashSession &&
+          other.id == this.id &&
+          other.openedBy == this.openedBy &&
+          other.openedAt == this.openedAt &&
+          other.closedAt == this.closedAt &&
+          other.status == this.status &&
+          other.openingBalance == this.openingBalance);
+}
+
+class CashSessionsCompanion extends UpdateCompanion<CashSession> {
+  final Value<int> id;
+  final Value<String?> openedBy;
+  final Value<DateTime> openedAt;
+  final Value<DateTime?> closedAt;
+  final Value<String> status;
+  final Value<double> openingBalance;
+  const CashSessionsCompanion({
+    this.id = const Value.absent(),
+    this.openedBy = const Value.absent(),
+    this.openedAt = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.status = const Value.absent(),
+    this.openingBalance = const Value.absent(),
+  });
+  CashSessionsCompanion.insert({
+    this.id = const Value.absent(),
+    this.openedBy = const Value.absent(),
+    required DateTime openedAt,
+    this.closedAt = const Value.absent(),
+    this.status = const Value.absent(),
+    this.openingBalance = const Value.absent(),
+  }) : openedAt = Value(openedAt);
+  static Insertable<CashSession> custom({
+    Expression<int>? id,
+    Expression<String>? openedBy,
+    Expression<DateTime>? openedAt,
+    Expression<DateTime>? closedAt,
+    Expression<String>? status,
+    Expression<double>? openingBalance,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (openedBy != null) 'opened_by': openedBy,
+      if (openedAt != null) 'opened_at': openedAt,
+      if (closedAt != null) 'closed_at': closedAt,
+      if (status != null) 'status': status,
+      if (openingBalance != null) 'opening_balance': openingBalance,
+    });
+  }
+
+  CashSessionsCompanion copyWith({
+    Value<int>? id,
+    Value<String?>? openedBy,
+    Value<DateTime>? openedAt,
+    Value<DateTime?>? closedAt,
+    Value<String>? status,
+    Value<double>? openingBalance,
+  }) {
+    return CashSessionsCompanion(
+      id: id ?? this.id,
+      openedBy: openedBy ?? this.openedBy,
+      openedAt: openedAt ?? this.openedAt,
+      closedAt: closedAt ?? this.closedAt,
+      status: status ?? this.status,
+      openingBalance: openingBalance ?? this.openingBalance,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (openedBy.present) {
+      map['opened_by'] = Variable<String>(openedBy.value);
+    }
+    if (openedAt.present) {
+      map['opened_at'] = Variable<DateTime>(openedAt.value);
+    }
+    if (closedAt.present) {
+      map['closed_at'] = Variable<DateTime>(closedAt.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (openingBalance.present) {
+      map['opening_balance'] = Variable<double>(openingBalance.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashSessionsCompanion(')
+          ..write('id: $id, ')
+          ..write('openedBy: $openedBy, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('status: $status, ')
+          ..write('openingBalance: $openingBalance')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $NotificationsTable extends Notifications
+    with TableInfo<$NotificationsTable, Notification> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $NotificationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _entityIdMeta = const VerificationMeta(
+    'entityId',
+  );
+  @override
+  late final GeneratedColumn<String> entityId = GeneratedColumn<String>(
+    'entity_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sendAtMeta = const VerificationMeta('sendAt');
+  @override
+  late final GeneratedColumn<DateTime> sendAt = GeneratedColumn<DateTime>(
+    'send_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sentMeta = const VerificationMeta('sent');
+  @override
+  late final GeneratedColumn<int> sent = GeneratedColumn<int>(
+    'sent',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    entityId,
+    title,
+    body,
+    sendAt,
+    sent,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'notifications';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Notification> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('entity_id')) {
+      context.handle(
+        _entityIdMeta,
+        entityId.isAcceptableOrUnknown(data['entity_id']!, _entityIdMeta),
+      );
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('send_at')) {
+      context.handle(
+        _sendAtMeta,
+        sendAt.isAcceptableOrUnknown(data['send_at']!, _sendAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sendAtMeta);
+    }
+    if (data.containsKey('sent')) {
+      context.handle(
+        _sentMeta,
+        sent.isAcceptableOrUnknown(data['sent']!, _sentMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Notification map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Notification(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      entityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_id'],
+      ),
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      sendAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}send_at'],
+      )!,
+      sent: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sent'],
+      )!,
+    );
+  }
+
+  @override
+  $NotificationsTable createAlias(String alias) {
+    return $NotificationsTable(attachedDatabase, alias);
+  }
+}
+
+class Notification extends DataClass implements Insertable<Notification> {
+  final int id;
+  final String? entityId;
+  final String title;
+  final String body;
+  final DateTime sendAt;
+  final int sent;
+  const Notification({
+    required this.id,
+    this.entityId,
+    required this.title,
+    required this.body,
+    required this.sendAt,
+    required this.sent,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    if (!nullToAbsent || entityId != null) {
+      map['entity_id'] = Variable<String>(entityId);
+    }
+    map['title'] = Variable<String>(title);
+    map['body'] = Variable<String>(body);
+    map['send_at'] = Variable<DateTime>(sendAt);
+    map['sent'] = Variable<int>(sent);
+    return map;
+  }
+
+  NotificationsCompanion toCompanion(bool nullToAbsent) {
+    return NotificationsCompanion(
+      id: Value(id),
+      entityId: entityId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(entityId),
+      title: Value(title),
+      body: Value(body),
+      sendAt: Value(sendAt),
+      sent: Value(sent),
+    );
+  }
+
+  factory Notification.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Notification(
+      id: serializer.fromJson<int>(json['id']),
+      entityId: serializer.fromJson<String?>(json['entityId']),
+      title: serializer.fromJson<String>(json['title']),
+      body: serializer.fromJson<String>(json['body']),
+      sendAt: serializer.fromJson<DateTime>(json['sendAt']),
+      sent: serializer.fromJson<int>(json['sent']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'entityId': serializer.toJson<String?>(entityId),
+      'title': serializer.toJson<String>(title),
+      'body': serializer.toJson<String>(body),
+      'sendAt': serializer.toJson<DateTime>(sendAt),
+      'sent': serializer.toJson<int>(sent),
+    };
+  }
+
+  Notification copyWith({
+    int? id,
+    Value<String?> entityId = const Value.absent(),
+    String? title,
+    String? body,
+    DateTime? sendAt,
+    int? sent,
+  }) => Notification(
+    id: id ?? this.id,
+    entityId: entityId.present ? entityId.value : this.entityId,
+    title: title ?? this.title,
+    body: body ?? this.body,
+    sendAt: sendAt ?? this.sendAt,
+    sent: sent ?? this.sent,
+  );
+  Notification copyWithCompanion(NotificationsCompanion data) {
+    return Notification(
+      id: data.id.present ? data.id.value : this.id,
+      entityId: data.entityId.present ? data.entityId.value : this.entityId,
+      title: data.title.present ? data.title.value : this.title,
+      body: data.body.present ? data.body.value : this.body,
+      sendAt: data.sendAt.present ? data.sendAt.value : this.sendAt,
+      sent: data.sent.present ? data.sent.value : this.sent,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Notification(')
+          ..write('id: $id, ')
+          ..write('entityId: $entityId, ')
+          ..write('title: $title, ')
+          ..write('body: $body, ')
+          ..write('sendAt: $sendAt, ')
+          ..write('sent: $sent')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, entityId, title, body, sendAt, sent);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Notification &&
+          other.id == this.id &&
+          other.entityId == this.entityId &&
+          other.title == this.title &&
+          other.body == this.body &&
+          other.sendAt == this.sendAt &&
+          other.sent == this.sent);
+}
+
+class NotificationsCompanion extends UpdateCompanion<Notification> {
+  final Value<int> id;
+  final Value<String?> entityId;
+  final Value<String> title;
+  final Value<String> body;
+  final Value<DateTime> sendAt;
+  final Value<int> sent;
+  const NotificationsCompanion({
+    this.id = const Value.absent(),
+    this.entityId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.body = const Value.absent(),
+    this.sendAt = const Value.absent(),
+    this.sent = const Value.absent(),
+  });
+  NotificationsCompanion.insert({
+    this.id = const Value.absent(),
+    this.entityId = const Value.absent(),
+    required String title,
+    required String body,
+    required DateTime sendAt,
+    this.sent = const Value.absent(),
+  }) : title = Value(title),
+       body = Value(body),
+       sendAt = Value(sendAt);
+  static Insertable<Notification> custom({
+    Expression<int>? id,
+    Expression<String>? entityId,
+    Expression<String>? title,
+    Expression<String>? body,
+    Expression<DateTime>? sendAt,
+    Expression<int>? sent,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (entityId != null) 'entity_id': entityId,
+      if (title != null) 'title': title,
+      if (body != null) 'body': body,
+      if (sendAt != null) 'send_at': sendAt,
+      if (sent != null) 'sent': sent,
+    });
+  }
+
+  NotificationsCompanion copyWith({
+    Value<int>? id,
+    Value<String?>? entityId,
+    Value<String>? title,
+    Value<String>? body,
+    Value<DateTime>? sendAt,
+    Value<int>? sent,
+  }) {
+    return NotificationsCompanion(
+      id: id ?? this.id,
+      entityId: entityId ?? this.entityId,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      sendAt: sendAt ?? this.sendAt,
+      sent: sent ?? this.sent,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (entityId.present) {
+      map['entity_id'] = Variable<String>(entityId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (sendAt.present) {
+      map['send_at'] = Variable<DateTime>(sendAt.value);
+    }
+    if (sent.present) {
+      map['sent'] = Variable<int>(sent.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NotificationsCompanion(')
+          ..write('id: $id, ')
+          ..write('entityId: $entityId, ')
+          ..write('title: $title, ')
+          ..write('body: $body, ')
+          ..write('sendAt: $sendAt, ')
+          ..write('sent: $sent')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -29174,6 +29965,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $UserActivityLogTable userActivityLog = $UserActivityLogTable(
     this,
   );
+  late final $CashSessionsTable cashSessions = $CashSessionsTable(this);
+  late final $NotificationsTable notifications = $NotificationsTable(this);
   late final ProductDao productDao = ProductDao(this as AppDatabase);
   late final CustomerDao customerDao = CustomerDao(this as AppDatabase);
   late final SupplierDao supplierDao = SupplierDao(this as AppDatabase);
@@ -29197,6 +29990,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final AuditDao auditDao = AuditDao(this as AppDatabase);
   late final UserDao userDao = UserDao(this as AppDatabase);
   late final StaffManagementDao staffManagementDao = StaffManagementDao(
+    this as AppDatabase,
+  );
+  late final CashSessionDao cashSessionDao = CashSessionDao(
+    this as AppDatabase,
+  );
+  late final NotificationsDao notificationsDao = NotificationsDao(
     this as AppDatabase,
   );
   @override
@@ -29243,6 +30042,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     purchaseReturnItems,
     purchaseRefunds,
     userActivityLog,
+    cashSessions,
+    notifications,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -48637,6 +49438,434 @@ typedef $$UserActivityLogTableProcessedTableManager =
       UserActivityLogData,
       PrefetchHooks Function({bool userId})
     >;
+typedef $$CashSessionsTableCreateCompanionBuilder =
+    CashSessionsCompanion Function({
+      Value<int> id,
+      Value<String?> openedBy,
+      required DateTime openedAt,
+      Value<DateTime?> closedAt,
+      Value<String> status,
+      Value<double> openingBalance,
+    });
+typedef $$CashSessionsTableUpdateCompanionBuilder =
+    CashSessionsCompanion Function({
+      Value<int> id,
+      Value<String?> openedBy,
+      Value<DateTime> openedAt,
+      Value<DateTime?> closedAt,
+      Value<String> status,
+      Value<double> openingBalance,
+    });
+
+class $$CashSessionsTableFilterComposer
+    extends Composer<_$AppDatabase, $CashSessionsTable> {
+  $$CashSessionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get openedBy => $composableBuilder(
+    column: $table.openedBy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get openedAt => $composableBuilder(
+    column: $table.openedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get openingBalance => $composableBuilder(
+    column: $table.openingBalance,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CashSessionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CashSessionsTable> {
+  $$CashSessionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get openedBy => $composableBuilder(
+    column: $table.openedBy,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get openedAt => $composableBuilder(
+    column: $table.openedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get openingBalance => $composableBuilder(
+    column: $table.openingBalance,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CashSessionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CashSessionsTable> {
+  $$CashSessionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get openedBy =>
+      $composableBuilder(column: $table.openedBy, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get openedAt =>
+      $composableBuilder(column: $table.openedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get closedAt =>
+      $composableBuilder(column: $table.closedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<double> get openingBalance => $composableBuilder(
+    column: $table.openingBalance,
+    builder: (column) => column,
+  );
+}
+
+class $$CashSessionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CashSessionsTable,
+          CashSession,
+          $$CashSessionsTableFilterComposer,
+          $$CashSessionsTableOrderingComposer,
+          $$CashSessionsTableAnnotationComposer,
+          $$CashSessionsTableCreateCompanionBuilder,
+          $$CashSessionsTableUpdateCompanionBuilder,
+          (
+            CashSession,
+            BaseReferences<_$AppDatabase, $CashSessionsTable, CashSession>,
+          ),
+          CashSession,
+          PrefetchHooks Function()
+        > {
+  $$CashSessionsTableTableManager(_$AppDatabase db, $CashSessionsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CashSessionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CashSessionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CashSessionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String?> openedBy = const Value.absent(),
+                Value<DateTime> openedAt = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<double> openingBalance = const Value.absent(),
+              }) => CashSessionsCompanion(
+                id: id,
+                openedBy: openedBy,
+                openedAt: openedAt,
+                closedAt: closedAt,
+                status: status,
+                openingBalance: openingBalance,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String?> openedBy = const Value.absent(),
+                required DateTime openedAt,
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<double> openingBalance = const Value.absent(),
+              }) => CashSessionsCompanion.insert(
+                id: id,
+                openedBy: openedBy,
+                openedAt: openedAt,
+                closedAt: closedAt,
+                status: status,
+                openingBalance: openingBalance,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CashSessionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CashSessionsTable,
+      CashSession,
+      $$CashSessionsTableFilterComposer,
+      $$CashSessionsTableOrderingComposer,
+      $$CashSessionsTableAnnotationComposer,
+      $$CashSessionsTableCreateCompanionBuilder,
+      $$CashSessionsTableUpdateCompanionBuilder,
+      (
+        CashSession,
+        BaseReferences<_$AppDatabase, $CashSessionsTable, CashSession>,
+      ),
+      CashSession,
+      PrefetchHooks Function()
+    >;
+typedef $$NotificationsTableCreateCompanionBuilder =
+    NotificationsCompanion Function({
+      Value<int> id,
+      Value<String?> entityId,
+      required String title,
+      required String body,
+      required DateTime sendAt,
+      Value<int> sent,
+    });
+typedef $$NotificationsTableUpdateCompanionBuilder =
+    NotificationsCompanion Function({
+      Value<int> id,
+      Value<String?> entityId,
+      Value<String> title,
+      Value<String> body,
+      Value<DateTime> sendAt,
+      Value<int> sent,
+    });
+
+class $$NotificationsTableFilterComposer
+    extends Composer<_$AppDatabase, $NotificationsTable> {
+  $$NotificationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get sendAt => $composableBuilder(
+    column: $table.sendAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sent => $composableBuilder(
+    column: $table.sent,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$NotificationsTableOrderingComposer
+    extends Composer<_$AppDatabase, $NotificationsTable> {
+  $$NotificationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get sendAt => $composableBuilder(
+    column: $table.sendAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sent => $composableBuilder(
+    column: $table.sent,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$NotificationsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $NotificationsTable> {
+  $$NotificationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get entityId =>
+      $composableBuilder(column: $table.entityId, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get sendAt =>
+      $composableBuilder(column: $table.sendAt, builder: (column) => column);
+
+  GeneratedColumn<int> get sent =>
+      $composableBuilder(column: $table.sent, builder: (column) => column);
+}
+
+class $$NotificationsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $NotificationsTable,
+          Notification,
+          $$NotificationsTableFilterComposer,
+          $$NotificationsTableOrderingComposer,
+          $$NotificationsTableAnnotationComposer,
+          $$NotificationsTableCreateCompanionBuilder,
+          $$NotificationsTableUpdateCompanionBuilder,
+          (
+            Notification,
+            BaseReferences<_$AppDatabase, $NotificationsTable, Notification>,
+          ),
+          Notification,
+          PrefetchHooks Function()
+        > {
+  $$NotificationsTableTableManager(_$AppDatabase db, $NotificationsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$NotificationsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$NotificationsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$NotificationsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String?> entityId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<DateTime> sendAt = const Value.absent(),
+                Value<int> sent = const Value.absent(),
+              }) => NotificationsCompanion(
+                id: id,
+                entityId: entityId,
+                title: title,
+                body: body,
+                sendAt: sendAt,
+                sent: sent,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String?> entityId = const Value.absent(),
+                required String title,
+                required String body,
+                required DateTime sendAt,
+                Value<int> sent = const Value.absent(),
+              }) => NotificationsCompanion.insert(
+                id: id,
+                entityId: entityId,
+                title: title,
+                body: body,
+                sendAt: sendAt,
+                sent: sent,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$NotificationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $NotificationsTable,
+      Notification,
+      $$NotificationsTableFilterComposer,
+      $$NotificationsTableOrderingComposer,
+      $$NotificationsTableAnnotationComposer,
+      $$NotificationsTableCreateCompanionBuilder,
+      $$NotificationsTableUpdateCompanionBuilder,
+      (
+        Notification,
+        BaseReferences<_$AppDatabase, $NotificationsTable, Notification>,
+      ),
+      Notification,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -48718,4 +49947,8 @@ class $AppDatabaseManager {
       $$PurchaseRefundsTableTableManager(_db, _db.purchaseRefunds);
   $$UserActivityLogTableTableManager get userActivityLog =>
       $$UserActivityLogTableTableManager(_db, _db.userActivityLog);
+  $$CashSessionsTableTableManager get cashSessions =>
+      $$CashSessionsTableTableManager(_db, _db.cashSessions);
+  $$NotificationsTableTableManager get notifications =>
+      $$NotificationsTableTableManager(_db, _db.notifications);
 }

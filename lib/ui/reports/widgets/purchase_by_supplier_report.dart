@@ -50,17 +50,17 @@ class _PurchaseBySupplierReportState
           s.name as supplier_name,
           s.phone as supplier_phone,
           COUNT(p.id) as invoice_count,
-          COALESCE(SUM(p.totalAmount), 0) as total_purchases,
-          COALESCE(SUM(p.paidAmount), 0) as total_paid,
-          COALESCE(SUM(p.totalAmount - p.paidAmount), 0) as total_remaining
+          COALESCE(SUM(p.total_amount), 0) as total_purchases,
+          COALESCE(SUM(p.paid_amount), 0) as total_paid,
+          COALESCE(SUM(p.total_amount - p.paid_amount), 0) as total_remaining
         FROM suppliers s
-        LEFT JOIN purchases p ON s.id = p.supplierId 
-          AND p.purchaseDate >= ? 
-          AND p.purchaseDate <= ?
-          AND p.isDeleted = 0
+        LEFT JOIN purchases p ON s.id = p.supplier_id 
+          AND p.purchase_date >= ? 
+          AND p.purchase_date <= ?
+          AND p.is_deleted = 0
         WHERE s.status = 'Active'
         GROUP BY s.id, s.name, s.phone
-        HAVING COUNT(p.id) > 0 OR COALESCE(SUM(p.totalAmount), 0) > 0
+        HAVING COUNT(p.id) > 0 OR COALESCE(SUM(p.total_amount), 0) > 0
         ORDER BY total_purchases DESC
       ''',
             variables: [

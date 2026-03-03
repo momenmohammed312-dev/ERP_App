@@ -1006,11 +1006,10 @@ class _LicensesManagementState extends State<LicensesManagement> {
                           duration: selectedDuration,
                           notes: notesController.text,
                         );
-                        if (mounted) {
-                          Navigator.pop(context);
-                          _loadData();
-                          _showGeneratedKeyDialog(license);
-                        }
+                        if (!context.mounted) return; // Flutter 3.7+
+                        Navigator.pop(context);
+                        _loadData();
+                        _showGeneratedKeyDialog(license);
                       },
                 child: const Text('توليد وعرض المفتاح'),
               ),
