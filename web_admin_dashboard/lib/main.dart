@@ -9,27 +9,27 @@ import 'utils/constants.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  final options = DefaultFirebaseOptions.currentPlatform;
-  final isPlaceholderConfig = options.projectId.isEmpty ||
-      options.projectId.startsWith('PASTE_') ||
-      options.apiKey.startsWith('PASTE_');
+void main() {
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    final options = DefaultFirebaseOptions.currentPlatform;
+    final isPlaceholderConfig = options.projectId.isEmpty ||
+        options.projectId.startsWith('PASTE_') ||
+        options.apiKey.startsWith('PASTE_');
 
-  try {
-    if (!isPlaceholderConfig) {
-      await Firebase.initializeApp(options: options);
+    try {
+      if (!isPlaceholderConfig) {
+        await Firebase.initializeApp(options: options);
+      }
+    } catch (e) {
+      debugPrint("Firebase initialization failed: $e");
     }
-  } catch (e) {
-    debugPrint("Firebase initialization failed: $e");
-  }
 
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    debugPrint('Flutter Error: ${details.exception}');
-  };
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      debugPrint('Flutter Error: ${details.exception}');
+    };
 
-  runZonedGuarded(() {
     runApp(const POSAdminDashboard());
   }, (error, stack) {
     debugPrint('Uncaught Error: $error');

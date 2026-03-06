@@ -78,19 +78,18 @@ class _PurchaseBySupplierReportState
           )
           .get();
 
-      final supplierData = result
-          .map(
-            (row) => {
-              'supplier_id': row.read<String>('supplier_id'),
-              'supplier_name': row.read<String>('supplier_name'),
-              'supplier_phone': row.read<String?>('supplier_phone') ?? '-',
-              'invoice_count': row.read<int>('invoice_count'),
-              'total_purchases': row.read<double>('total_purchases'),
-              'total_paid': row.read<double>('total_paid'),
-              'total_remaining': row.read<double>('total_remaining'),
-            },
-          )
-          .toList();
+      final supplierData = result.map((row) {
+        final d = row.data;
+        return {
+          'supplier_id': d['supplier_id']?.toString() ?? '',
+          'supplier_name': d['supplier_name']?.toString() ?? '',
+          'supplier_phone': d['supplier_phone']?.toString() ?? '-',
+          'invoice_count': (d['invoice_count'] as int?) ?? 0,
+          'total_purchases': (d['total_purchases'] as num?)?.toDouble() ?? 0.0,
+          'total_paid': (d['total_paid'] as num?)?.toDouble() ?? 0.0,
+          'total_remaining': (d['total_remaining'] as num?)?.toDouble() ?? 0.0,
+        };
+      }).toList();
 
       // Calculate totals
       final totalPurchases = supplierData.fold<double>(

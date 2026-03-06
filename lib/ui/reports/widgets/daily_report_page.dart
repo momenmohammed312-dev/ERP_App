@@ -79,7 +79,11 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         for (final inv in invoices) {
           totalSales += inv.totalAmount;
           final pm = (inv.paymentMethod ?? 'cash').toLowerCase().trim();
-          if (pm == 'credit' || pm == 'آجل') {
+          if (pm == 'credit' ||
+              pm == 'آجل' ||
+              pm == 'اجل' ||
+              pm.contains('آجل') ||
+              pm.contains('credit')) {
             credit += inv.totalAmount;
           } else {
             cash += inv.paidAmount;

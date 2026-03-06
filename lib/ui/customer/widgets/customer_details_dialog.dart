@@ -208,44 +208,9 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
                           ), // Credit (Paid)
                           DataColumn(
                             label: Text(l10n.remaining_amount),
-                          ), // Balance effect?
+                          ), // Running Balance
                         ],
-                        rows: _transactions.map((t) {
-                          // Logic: If sale, Total = Debit. Paid = 0 (initially).
-                          // If payment, Total = 0, Paid = Credit.
-
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(t.receiptNumber ?? '-')),
-                              DataCell(Text(t.origin)), // 'sale', 'payment'
-                              DataCell(
-                                Text(
-                                  DateFormat('yyyy-MM-dd HH:mm').format(t.date),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  t.debit > 0
-                                      ? t.debit.toStringAsFixed(2)
-                                      : '-',
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  t.credit > 0
-                                      ? t.credit.toStringAsFixed(2)
-                                      : '-',
-                                ),
-                              ),
-                              DataCell(
-                                Text('-'),
-                              ), // Running Balance per row is hard to calc efficiently without full replay. Leaving as placeholder or removing if not critical per row. user asked for Remaining Amount.
-                              // Wait, "Remaining Amount" for a specific invoice? Or Account Balance?
-                              // If it's "Customer Details Table", likely the Statement.
-                              // In Statement, "Remaining" usually means "Balance after this transaction".
-                            ],
-                          );
-                        }).toList(),
+                        rows: _buildTransactionRows(),
                       ),
                     ),
             ),
@@ -253,5 +218,39 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
         ),
       ),
     );
+  }
+
+  List<DataRow> _buildTransactionRows() {
+    // Sort chronologically (oldest first) for running balance calculation
+    final sorted = List<LedgerTransaction>.from(_transactions)
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    double runningBalance = 0;
+    final rows = <DataRow>[];
+
+    for (final t in sorted) {
+      runningBalance += t.debit - t.credit;
+      rows.add(
+        DataRow(
+          cells: [
+            DataCell(Text(t.receiptNumber ?? '-')),
+            DataCell(Text(t.origin)),
+            DataCell(Text(DateFormat('yyyy-MM-dd HH:mm').format(t.date))),
+            DataCell(Text(t.debit > 0 ? t.debit.toStringAsFixed(2) : '-')),
+            DataCell(Text(t.credit > 0 ? t.credit.toStringAsFixed(2) : '-')),
+            DataCell(
+              Text(
+                runningBalance.toStringAsFixed(2),
+                style: TextStyle(
+                  color: runningBalance > 0 ? Colors.red : Colors.green,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return rows;
   }
 }

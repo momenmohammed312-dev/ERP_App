@@ -5,6 +5,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
+import 'package:pos_offline_desktop/core/utils/app_utils.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 
 class SuppliersWidget extends ConsumerWidget {
@@ -193,10 +194,13 @@ class SuppliersWidget extends ConsumerWidget {
     );
   }
 
-  Future<List<Map<String, dynamic>>> _getSupplierPurchases(String supplierId) async {
+  Future<List<Map<String, dynamic>>> _getSupplierPurchases(
+    String supplierId,
+  ) async {
     try {
-      final result = await db.customSelect(
-        '''
+      final result = await db
+          .customSelect(
+            '''
         SELECT p.id, p.invoice_number, p.purchase_date, p.total_amount, 
                p.paid_amount, p.payment_method, p.status
         FROM purchases p
@@ -204,18 +208,20 @@ class SuppliersWidget extends ConsumerWidget {
         ORDER BY p.purchase_date DESC
         LIMIT 20
         ''',
-        variables: [Variable.withString(supplierId)],
-      ).get();
+            variables: [Variable.withString(supplierId)],
+          )
+          .get();
 
       return result.map((row) {
+        final d = row.data;
         return {
-          'id': row.read<int>('id'),
-          'invoice_number': row.read<String?>('invoice_number'),
-          'purchase_date': row.read<DateTime>('purchase_date').toIso8601String(),
-          'total_amount': row.read<double>('total_amount'),
-          'paid_amount': row.read<double>('paid_amount'),
-          'payment_method': row.read<String>('payment_method'),
-          'status': row.read<String>('status'),
+          'id': d['id'] as int? ?? 0,
+          'invoice_number': d['invoice_number']?.toString(),
+          'purchase_date': parseDate(d['purchase_date']).toIso8601String(),
+          'total_amount': (d['total_amount'] as num?)?.toDouble() ?? 0.0,
+          'paid_amount': (d['paid_amount'] as num?)?.toDouble() ?? 0.0,
+          'payment_method': d['payment_method']?.toString() ?? 'cash',
+          'status': d['status']?.toString() ?? 'pending',
         };
       }).toList();
     } catch (e) {
@@ -396,7 +402,8 @@ class _SupplierCard extends StatelessWidget {
   final AppDatabase db;
   final BuildContext context;
   final DateTime lastPurchaseDate;
-  final Future<List<Map<String, dynamic>>> Function(String) getSupplierPurchases;
+  final Future<List<Map<String, dynamic>>> Function(String)
+  getSupplierPurchases;
 
   const _SupplierCard({
     required this.supplier,

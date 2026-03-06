@@ -132,10 +132,15 @@ class DataService extends ChangeNotifier {
       return newClient;
     }
 
-    final docRef =
-        await _firestore!.collection(_clientsCollection).add(client.toJson());
+    final docRef = _firestore!.collection(_clientsCollection).doc();
     final newClient = client.copyWith(id: docRef.id);
-    // Local cache update for immediate feedback (Firestore listener will confirm)
+
+    // Fire and forget to support offline-first without blocking
+    docRef.set(newClient.toJson()).catchError((e) {
+      debugPrint('Firestore addClient error: $e');
+    });
+
+    // Local cache update for immediate feedback
     _clients = [..._clients, newClient];
     notifyListeners();
     return newClient;
@@ -149,10 +154,12 @@ class DataService extends ChangeNotifier {
       return;
     }
 
-    await _firestore!
+    _firestore!
         .collection(_clientsCollection)
         .doc(client.id)
-        .set(client.toJson(), SetOptions(merge: true));
+        .set(client.toJson(), SetOptions(merge: true))
+        .catchError((e) => debugPrint('Firestore updateClient error: $e'));
+
     // Optimistic local update
     _clients = _clients.map((c) => c.id == client.id ? client : c).toList();
     notifyListeners();
@@ -166,7 +173,12 @@ class DataService extends ChangeNotifier {
       return;
     }
 
-    await _firestore!.collection(_clientsCollection).doc(id).delete();
+    _firestore!
+        .collection(_clientsCollection)
+        .doc(id)
+        .delete()
+        .catchError((e) => debugPrint('Firestore deleteClient error: $e'));
+
     _clients = _clients.where((c) => c.id != id).toList();
     notifyListeners();
   }
@@ -270,10 +282,14 @@ class DataService extends ChangeNotifier {
       return license;
     }
 
-    final docRef =
-        await _firestore!.collection(_licensesCollection).add(licenseData);
-
+    final docRef = _firestore!.collection(_licensesCollection).doc();
     final license = LicenseRecord.fromJson({...licenseData, 'id': docRef.id});
+
+    // Fire and forget
+    docRef
+        .set(licenseData)
+        .catchError((e) => debugPrint('Firestore generateLicense error: $e'));
+
     // Optimistic local update
     _licenses = [..._licenses, license];
     notifyListeners();
@@ -341,9 +357,13 @@ class DataService extends ChangeNotifier {
       return license;
     }
 
-    final docRef =
-        await _firestore!.collection(_licensesCollection).add(licenseData);
+    final docRef = _firestore!.collection(_licensesCollection).doc();
     final license = LicenseRecord.fromJson({...licenseData, 'id': docRef.id});
+
+    // Fire and forget
+    docRef.set(licenseData).catchError(
+        (e) => debugPrint('Firestore generateLicenseWithKey error: $e'));
+
     _licenses = [..._licenses, license];
     notifyListeners();
 
@@ -367,9 +387,10 @@ class DataService extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    await _firestore!.collection(_licensesCollection).doc(id).update({
+    _firestore!.collection(_licensesCollection).doc(id).update({
       'status': status.name,
-    });
+    }).catchError((e) => debugPrint('Firestore updateLicenseStatus error: $e'));
+
     _licenses = _licenses
         .map((l) => l.id == id ? l.copyWith(status: status) : l)
         .toList();
@@ -397,7 +418,12 @@ class DataService extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    await _firestore!.collection(_licensesCollection).doc(id).update(updates);
+    _firestore!
+        .collection(_licensesCollection)
+        .doc(id)
+        .update(updates)
+        .catchError((e) => debugPrint('Firestore suspendLicense error: $e'));
+
     _licenses = _licenses
         .map((l) => l.id == id
             ? l.copyWith(
@@ -430,7 +456,12 @@ class DataService extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    await _firestore!.collection(_licensesCollection).doc(id).update(updates);
+    _firestore!
+        .collection(_licensesCollection)
+        .doc(id)
+        .update(updates)
+        .catchError((e) => debugPrint('Firestore reactivateLicense error: $e'));
+
     _licenses = _licenses
         .map((l) => l.id == id
             ? l.copyWith(status: LicenseStatus.active, warningCount: 0)
@@ -451,9 +482,10 @@ class DataService extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    await _firestore!.collection(_licensesCollection).doc(id).update({
+    _firestore!.collection(_licensesCollection).doc(id).update({
       'warningCount': newCount,
-    });
+    }).catchError((e) => debugPrint('Firestore sendWarning error: $e'));
+
     _licenses = _licenses
         .map((l) => l.id == id ? l.copyWith(warningCount: newCount) : l)
         .toList();
@@ -469,9 +501,10 @@ class DataService extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    await _firestore!.collection(_licensesCollection).doc(id).update({
+    _firestore!.collection(_licensesCollection).doc(id).update({
       'warningCount': 0,
-    });
+    }).catchError((e) => debugPrint('Firestore resetWarnings error: $e'));
+
     _licenses = _licenses
         .map((l) => l.id == id ? l.copyWith(warningCount: 0) : l)
         .toList();
@@ -501,10 +534,10 @@ class DataService extends ChangeNotifier {
         );
       }).toList();
     } else {
-      await _firestore!.collection(_licensesCollection).doc(id).update({
+      _firestore!.collection(_licensesCollection).doc(id).update({
         'expiresAt': Timestamp.fromDate(newExpiresAt),
         'status': LicenseStatus.active.name,
-      });
+      }).catchError((e) => debugPrint('Firestore renewLicense error: $e'));
     }
 
     // Update client's total paid
@@ -515,6 +548,7 @@ class DataService extends ChangeNotifier {
       ));
     }
 
+    notifyListeners();
     return getLicenseById(id);
   }
 
@@ -582,10 +616,12 @@ class DataService extends ChangeNotifier {
     _packagePrices = Map.from(prices);
     if (_useLocal) return;
 
-    await _firestore!
+    _firestore!
         .collection(_settingsCollection)
         .doc('package_prices')
-        .set(_packagePrices);
+        .set(_packagePrices)
+        .catchError(
+            (e) => debugPrint('Firestore updatePackagePrices error: $e'));
   }
 
   double getPrice(String packageType, SubscriptionDuration duration) {

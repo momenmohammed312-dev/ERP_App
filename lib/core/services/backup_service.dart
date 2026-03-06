@@ -19,7 +19,7 @@ class BackupService {
   final AppDatabase _db;
   static const String _backupDir = 'data/backups';
   static const String _encryptionKey =
-      'POS-BACKUP-KEY-2024-SECURE!!!'; // 32 chars
+      'POS-BACKUP-KEY-2024-SECURE!!!'; // hashed via deriveAesKey to 32 bytes
   static const int _maxBackups = 7; // الاحتفاظ بآخر 7 نسخ
   static Timer? _autoBackupTimer;
 

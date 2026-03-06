@@ -55,97 +55,100 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-            // Logo/Icon
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(Icons.store, size: 80, color: Colors.white),
-            ),
-            const SizedBox(height: 30),
-
-            // App Title
-            const Text(
-              'نظام نقاط البيع',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'POS System',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w300,
-                color: Colors.white70,
-              ),
-            ),
-            const SizedBox(height: 40),
-
-            // Loading Status
-            Text(
-              licenseState.isLoading
-                  ? 'جاري التحقق من الرخصة...'
-                  : 'جاري التحميل...',
-              style: const TextStyle(fontSize: 18, color: Colors.white70),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-
-            // Error or License Status
-            if (licenseState.hasError)
+              // Logo/Icon
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(
-                  'خطأ: ${licenseState.error}',
-                  style: const TextStyle(fontSize: 14, color: Colors.red),
-                  textAlign: TextAlign.center,
+                child: const Icon(Icons.store, size: 80, color: Colors.white),
+              ),
+              const SizedBox(height: 30),
+
+              // App Title
+              const Text(
+                'نظام نقاط البيع',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
               ),
-            if (!licenseState.isLoading && !licenseState.hasError)
+              const SizedBox(height: 8),
+              const Text(
+                'POS System',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w300,
+                  color: Colors.white70,
+                ),
+              ),
+              const SizedBox(height: 40),
+
+              // Loading Status
+              Text(
+                licenseState.isLoading
+                    ? 'جاري التحقق من الرخصة...'
+                    : 'جاري التحميل...',
+                style: const TextStyle(fontSize: 18, color: Colors.white70),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+
+              // Error or License Status
+              if (licenseState.hasError)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'خطأ: ${licenseState.error}',
+                    style: const TextStyle(fontSize: 14, color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              if (!licenseState.isLoading && !licenseState.hasError)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'الرخصة صالحة: ${licenseState.value}',
+                    style: const TextStyle(fontSize: 14, color: Colors.green),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+
+              const SizedBox(height: 30),
+
+              // Loading Indicator
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                strokeWidth: 3,
+              ),
+
+              const SizedBox(height: 20),
+
+              // Developer Info
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(
-                  'الرخصة صالحة: ${licenseState.value}',
-                  style: const TextStyle(fontSize: 14, color: Colors.green),
-                  textAlign: TextAlign.center,
+                child: const Text(
+                  'Developed by MO2',
+                  style: TextStyle(fontSize: 12, color: Colors.white54),
                 ),
               ),
-
-            const SizedBox(height: 30),
-
-            // Loading Indicator
-            const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              strokeWidth: 3,
-            ),
-
-            const SizedBox(height: 20),
-
-            // Developer Info
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Developed by MO2',
-                style: TextStyle(fontSize: 12, color: Colors.white54),
-              ),
-            ),
             ],
           ),
         ),
@@ -159,7 +162,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final authService = ref.watch(authServiceProvider);
 
   return GoRouter(
-    initialLocation: '/splash',
+    initialLocation: '/',
     redirect: (context, state) async {
       final loggedIn = authService.isLoggedIn();
       final isAuthPath =
@@ -180,10 +183,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
       */
 
-      // 3. Auth redirect
+      // 3. Auth redirect (disabled for now)
+      /*
       if (!loggedIn && !isAuthPath) {
         return '/login';
       }
+      */
 
       // 4. Already logged in, trying to access login
       if (loggedIn && state.matchedLocation == '/login') {

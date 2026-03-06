@@ -94,7 +94,11 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           totalInvCount++;
 
           final pm = paymentMethod.toLowerCase().trim();
-          if (pm == 'credit' || pm == 'آجل') {
+          if (pm == 'credit' ||
+              pm == 'آجل' ||
+              pm == 'اجل' ||
+              pm.contains('آجل') ||
+              pm.contains('credit')) {
             credit += totalAmount; // Total amount for credit invoices
             creditInvCount++;
           } else {
@@ -177,7 +181,11 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           totalInvCount++;
 
           final pm = paymentMethod.toLowerCase().trim();
-          if (pm == 'credit' || pm == 'آجل') {
+          if (pm == 'credit' ||
+              pm == 'آجل' ||
+              pm == 'اجل' ||
+              pm.contains('آجل') ||
+              pm.contains('credit')) {
             credit += totalAmount; // Total amount for credit invoices
             creditInvCount++;
           } else {
@@ -600,8 +608,6 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                       },
                     ),
                   ),
-                  const Gap(15),
-                  Expanded(child: Container()),
                 ],
               ),
               const Gap(15),

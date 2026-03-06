@@ -364,21 +364,26 @@ class _CustomerManagementState extends State<CustomerManagement> {
             ),
           ),
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? AppColors.successColor.withValues(alpha: 0.1)
-                    : AppColors.errorColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                isActive ? 'نشط' : 'غير نشط',
-                style: TextStyle(
-                  color:
-                      isActive ? AppColors.successColor : AppColors.errorColor,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 12,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? AppColors.successColor.withValues(alpha: 0.1)
+                      : AppColors.errorColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  isActive ? 'نشط' : 'غير نشط',
+                  style: TextStyle(
+                    color: isActive
+                        ? AppColors.successColor
+                        : AppColors.errorColor,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             ),
@@ -419,84 +424,229 @@ class _CustomerManagementState extends State<CustomerManagement> {
     final addressController = TextEditingController();
     String packageType = 'basic';
     bool isActive = true;
+    bool isLoading = false;
+    final formKey = GlobalKey<FormState>();
 
     showDialog(
       context: context,
-      builder: (context) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          title: const Text('إضافة عميل جديد'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+      barrierDismissible: false, // Prevent dismissing while loading
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: Row(
               children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'اسم العميل'),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryColor.withAlpha(25),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.person_add_rounded,
+                      color: AppColors.primaryColor, size: 28),
                 ),
-                TextField(
-                  controller: phoneController,
-                  decoration: const InputDecoration(labelText: 'الهاتف'),
-                ),
-                TextField(
-                  controller: emailController,
-                  decoration:
-                      const InputDecoration(labelText: 'البريد الإلكتروني'),
-                ),
-                TextField(
-                  controller: addressController,
-                  decoration: const InputDecoration(labelText: 'العنوان'),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: packageType,
-                  decoration: const InputDecoration(labelText: 'الباقة'),
-                  items: [
-                    const DropdownMenuItem(
-                        value: 'basic', child: Text('أساسي')),
-                    const DropdownMenuItem(
-                        value: 'standard', child: Text('قياسي')),
-                    const DropdownMenuItem(
-                        value: 'professional', child: Text('احترافي')),
-                  ],
-                  onChanged: (value) => packageType = value!,
-                ),
-                SwitchListTile(
-                  title: const Text('نشط'),
-                  value: isActive,
-                  onChanged: (value) => setState(() => isActive = value),
-                ),
+                const SizedBox(width: 16),
+                const Text('إضافة عميل جديد',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 22)),
               ],
             ),
+            content: SizedBox(
+              width: 500,
+              child: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: nameController,
+                        decoration: InputDecoration(
+                          labelText: 'اسم العميل',
+                          prefixIcon: const Icon(Icons.badge_outlined),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                        validator: (value) => value == null || value.isEmpty
+                            ? 'يرجى إدخال اسم العميل'
+                            : null,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: phoneController,
+                        decoration: InputDecoration(
+                          labelText: 'الهاتف',
+                          prefixIcon: const Icon(Icons.phone_outlined),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: emailController,
+                        decoration: InputDecoration(
+                          labelText: 'البريد الإلكتروني',
+                          prefixIcon: const Icon(Icons.email_outlined),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: addressController,
+                        decoration: InputDecoration(
+                          labelText: 'العنوان',
+                          prefixIcon: const Icon(Icons.location_on_outlined),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('إعدادات الباقة والحساب',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16)),
+                            const SizedBox(height: 16),
+                            DropdownButtonFormField<String>(
+                              value: packageType,
+                              decoration: InputDecoration(
+                                labelText: 'الباقة',
+                                prefixIcon:
+                                    const Icon(Icons.inventory_2_outlined),
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: 'basic', child: Text('أساسي')),
+                                DropdownMenuItem(
+                                    value: 'standard', child: Text('قياسي')),
+                                DropdownMenuItem(
+                                    value: 'professional',
+                                    child: Text('احترافي')),
+                              ],
+                              onChanged: (value) =>
+                                  setDialogState(() => packageType = value!),
+                            ),
+                            const SizedBox(height: 12),
+                            SwitchListTile(
+                              title: const Text('حساب نشط',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.w600)),
+                              subtitle: const Text(
+                                  'السماح للعميل بتسجيل الدخول',
+                                  style: TextStyle(fontSize: 12)),
+                              value: isActive,
+                              activeColor: AppColors.successColor,
+                              contentPadding: EdgeInsets.zero,
+                              onChanged: (value) =>
+                                  setDialogState(() => isActive = value),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            actions: [
+              TextButton(
+                onPressed: isLoading ? null : () => Navigator.of(context).pop(),
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                child: const Text('إلغاء', style: TextStyle(fontSize: 16)),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                        if (formKey.currentState!.validate()) {
+                          setDialogState(() => isLoading = true);
+                          final navigator = Navigator.of(context);
+                          final messenger = ScaffoldMessenger.of(context);
+
+                          final newClient = ClientModel(
+                            id: '',
+                            name: nameController.text.trim(),
+                            phone: phoneController.text.trim(),
+                            email: emailController.text.trim(),
+                            address: addressController.text.trim(),
+                            packageType: packageType,
+                            createdAt: DateTime.now(),
+                            isActive: isActive,
+                          );
+
+                          try {
+                            await _dataService.addClient(newClient);
+                            navigator.pop();
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('تم إضافة العميل بنجاح'),
+                                backgroundColor: AppColors.successColor,
+                              ),
+                            );
+                          } catch (e) {
+                            setDialogState(() => isLoading = false);
+                            messenger.showSnackBar(
+                              SnackBar(
+                                  content: Text('خطأ في الإضافة: $e'),
+                                  backgroundColor: Colors.red),
+                            );
+                          }
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  backgroundColor: AppColors.primaryColor,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
+                    : const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check, color: Colors.white, size: 20),
+                          SizedBox(width: 8),
+                          Text('إضافة العميل',
+                              style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white)),
+                        ],
+                      ),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('إلغاء'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final newClient = ClientModel(
-                  id: '',
-                  name: nameController.text,
-                  phone: phoneController.text,
-                  email: emailController.text,
-                  address: addressController.text,
-                  packageType: packageType,
-                  createdAt: DateTime.now(),
-                  isActive: isActive,
-                );
-                await _dataService.addClient(newClient);
-                if (!context.mounted) return; // Flutter 3.7+
-                Navigator.of(context).pop();
-                if (mounted) setState(() {});
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم إضافة العميل بنجاح')),
-                );
-              },
-              child: const Text('إضافة'),
-            ),
-          ],
         ),
       ),
     );
@@ -614,6 +764,9 @@ class _CustomerManagementState extends State<CustomerManagement> {
             ),
             ElevatedButton(
               onPressed: () async {
+                final navigator = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+
                 final updatedClient = client.copyWith(
                   name: nameController.text,
                   phone: phoneController.text,
@@ -622,12 +775,18 @@ class _CustomerManagementState extends State<CustomerManagement> {
                   packageType: packageType,
                   isActive: isActive,
                 );
-                await _dataService.updateClient(updatedClient);
-                if (mounted) {
-                  Navigator.of(context).pop();
-                  setState(() {});
-                  ScaffoldMessenger.of(context).showSnackBar(
+
+                try {
+                  await _dataService.updateClient(updatedClient);
+                  navigator.pop();
+                  messenger.showSnackBar(
                     const SnackBar(content: Text('تم تعديل العميل بنجاح')),
+                  );
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                        content: Text('خطأ في التعديل: $e'),
+                        backgroundColor: Colors.red),
                   );
                 }
               },

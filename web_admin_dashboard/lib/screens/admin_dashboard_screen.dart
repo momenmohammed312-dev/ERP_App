@@ -63,7 +63,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ),
         title: const Text(
-          'لوحة تحكم MO2',
+          AppStrings.appName,
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,

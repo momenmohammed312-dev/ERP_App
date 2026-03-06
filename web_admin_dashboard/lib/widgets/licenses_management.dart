@@ -779,15 +779,25 @@ class _LicensesManagementState extends State<LicensesManagement> {
               ),
               ElevatedButton.icon(
                 onPressed: () async {
-                  await _dataService.renewLicense(license.id, selectedDuration);
-                  if (mounted) {
-                    Navigator.pop(context);
+                  final navigator = Navigator.of(context);
+                  final messenger = ScaffoldMessenger.of(context);
+
+                  try {
+                    await _dataService.renewLicense(
+                        license.id, selectedDuration);
+                    navigator.pop();
                     _loadData();
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    messenger.showSnackBar(
                       const SnackBar(
                         content: Text(AppStrings.licenseRenewed),
                         backgroundColor: AppColors.successColor,
                       ),
+                    );
+                  } catch (e) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                          content: Text('خطأ في التجديد: $e'),
+                          backgroundColor: Colors.red),
                     );
                   }
                 },
@@ -829,15 +839,23 @@ class _LicensesManagementState extends State<LicensesManagement> {
             ),
             ElevatedButton(
               onPressed: () async {
-                await _dataService.revokeLicense(license.id);
-                if (mounted) {
-                  Navigator.pop(context);
+                final navigator = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+
+                try {
+                  await _dataService.revokeLicense(license.id);
+                  navigator.pop();
                   _loadData();
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     const SnackBar(
                       content: Text(AppStrings.licenseRevoked),
                       backgroundColor: AppColors.errorColor,
                     ),
+                  );
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                        content: Text('خطأ: $e'), backgroundColor: Colors.red),
                   );
                 }
               },
@@ -935,83 +953,240 @@ class _LicensesManagementState extends State<LicensesManagement> {
     ClientModel? selectedClient;
     SubscriptionDuration selectedDuration = SubscriptionDuration.monthly;
     final notesController = TextEditingController();
+    bool isLoading = false;
+    final formKey = GlobalKey<FormState>();
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => Directionality(
           textDirection: TextDirection.rtl,
           child: AlertDialog(
-            title: const Text('توليد ترخيص جديد'),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryColor.withAlpha(25),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.vpn_key_rounded,
+                      color: AppColors.primaryColor, size: 28),
+                ),
+                const SizedBox(width: 16),
+                const Text('توليد ترخيص جديد',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 22)),
+              ],
+            ),
             content: SizedBox(
               width: 500,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<ClientModel>(
-                    decoration: const InputDecoration(labelText: 'العميل'),
-                    items: _dataService.getClients().map((c) {
-                      return DropdownMenuItem(value: c, child: Text(c.name));
-                    }).toList(),
-                    onChanged: (value) =>
-                        setDialogState(() => selectedClient = value),
+              child: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<ClientModel>(
+                        value: selectedClient,
+                        decoration: InputDecoration(
+                          labelText: 'العميل',
+                          prefixIcon:
+                              const Icon(Icons.business_center_outlined),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                        items: _dataService.getClients().map((c) {
+                          return DropdownMenuItem(
+                              value: c, child: Text(c.name));
+                        }).toList(),
+                        onChanged: (value) =>
+                            setDialogState(() => selectedClient = value),
+                        validator: (value) =>
+                            value == null ? 'يرجى اختيار العميل' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      if (selectedClient != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryColor.withAlpha(15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: AppColors.primaryColor.withAlpha(40)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.inventory_2,
+                                  size: 20, color: AppColors.primaryColor),
+                              const SizedBox(width: 8),
+                              Text(
+                                'الباقة الحالية للعميل: ',
+                                style: TextStyle(
+                                    color: Colors.grey[800],
+                                    fontWeight: FontWeight.w500),
+                              ),
+                              Text(
+                                selectedClient!.packageDisplayName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryColor),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      DropdownButtonFormField<SubscriptionDuration>(
+                        value: selectedDuration,
+                        decoration: InputDecoration(
+                          labelText: 'المدة الزمنية',
+                          prefixIcon: const Icon(Icons.timer_outlined),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                        items: SubscriptionDuration.values.map((d) {
+                          return DropdownMenuItem(
+                              value: d, child: Text(_getDurationName(d)));
+                        }).toList(),
+                        onChanged: (value) =>
+                            setDialogState(() => selectedDuration = value!),
+                      ),
+                      const SizedBox(height: 16),
+                      if (selectedClient != null)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.green.shade50,
+                                Colors.green.shade100
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.green.shade200),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('إجمالي التكلفة:',
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.green)),
+                              Text(
+                                '${_dataService.getPrice(selectedClient!.packageType, selectedDuration).toInt()} ج.م',
+                                style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: notesController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: 'ملاحظات (اختياري)',
+                          prefixIcon: const Icon(Icons.notes),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  if (selectedClient != null) ...[
-                    Text(
-                        'الباقة الحالية: ${selectedClient!.packageDisplayName}',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                  ],
-                  DropdownButtonFormField<SubscriptionDuration>(
-                    initialValue: selectedDuration,
-                    decoration: const InputDecoration(labelText: 'المدة'),
-                    items: SubscriptionDuration.values.map((d) {
-                      return DropdownMenuItem(
-                          value: d, child: Text(_getDurationName(d)));
-                    }).toList(),
-                    onChanged: (value) =>
-                        setDialogState(() => selectedDuration = value!),
-                  ),
-                  const SizedBox(height: 16),
-                  if (selectedClient != null)
-                    Text(
-                      'السعر: ${_dataService.getPrice(selectedClient!.packageType, selectedDuration).toInt()} ج.م',
-                      style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.successColor),
-                    ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: notesController,
-                    decoration: const InputDecoration(labelText: 'ملاحظات'),
-                  ),
-                ],
+                ),
               ),
             ),
+            actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('إلغاء'),
+                onPressed: isLoading ? null : () => Navigator.pop(context),
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                child: const Text('إلغاء', style: TextStyle(fontSize: 16)),
               ),
+              const SizedBox(width: 8),
               ElevatedButton(
-                onPressed: selectedClient == null
+                onPressed: (selectedClient == null || isLoading)
                     ? null
                     : () async {
-                        final license = await _dataService.generateLicense(
-                          clientId: selectedClient!.id,
-                          clientName: selectedClient!.name,
-                          packageType: selectedClient!.packageType,
-                          duration: selectedDuration,
-                          notes: notesController.text,
-                        );
-                        if (!context.mounted) return; // Flutter 3.7+
-                        Navigator.pop(context);
-                        _loadData();
-                        _showGeneratedKeyDialog(license);
+                        if (formKey.currentState!.validate()) {
+                          setDialogState(() => isLoading = true);
+                          final navigator = Navigator.of(context);
+                          final messenger = ScaffoldMessenger.of(context);
+
+                          try {
+                            final license = await _dataService.generateLicense(
+                              clientId: selectedClient!.id,
+                              clientName: selectedClient!.name,
+                              packageType: selectedClient!.packageType,
+                              duration: selectedDuration,
+                              notes: notesController.text,
+                            );
+
+                            navigator.pop();
+                            _loadData(); // Need to call from parent widget state
+                            _showGeneratedKeyDialog(license);
+
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('تم إنشاء الترخيص بنجاح'),
+                                backgroundColor: AppColors.successColor,
+                              ),
+                            );
+                          } catch (e) {
+                            setDialogState(() => isLoading = false);
+                            messenger.showSnackBar(
+                              SnackBar(
+                                  content: Text('حدث خطأ: $e'),
+                                  backgroundColor: Colors.red),
+                            );
+                          }
+                        }
                       },
-                child: const Text('توليد وعرض المفتاح'),
+                style: ElevatedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  backgroundColor: AppColors.primaryColor,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
+                    : const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.vpn_key, color: Colors.white, size: 20),
+                          SizedBox(width: 8),
+                          Text('توليد وعرض المفتاح',
+                              style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white)),
+                        ],
+                      ),
               ),
             ],
           ),
@@ -1032,36 +1207,40 @@ class _LicensesManagementState extends State<LicensesManagement> {
             children: [
               Icon(Icons.key, color: AppColors.successColor),
               const SizedBox(width: 12),
-              const Text('تم توليد المفتاح بنجاح'),
+              const Expanded(child: Text('تم توليد المفتاح بنجاح')),
             ],
           ),
-          content: SizedBox(
-            width: 500,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'هذا المفتاح طافٍ (Floating) ولم يُربط بأي جهاز بعد. '
-                  'سيتم ربطه تلقائياً بالجهاز الأول الذي يُفعَّل عليه.',
-                  style: TextStyle(color: Colors.grey[700]),
-                ),
-                const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
+          content: Container(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'هذا المفتاح طافٍ (Floating) ولم يُربط بأي جهاز بعد. '
+                    'سيتم ربطه تلقائياً بالجهاز الأول الذي يُفعَّل عليه.',
+                    style: TextStyle(color: Colors.grey[700]),
                   ),
-                  child: SelectableText(
-                    license.licenseKey,
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                  const SizedBox(height: 20),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: SelectableText(
+                      license.licenseKey,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           actions: [
@@ -1104,35 +1283,39 @@ class _LicensesManagementState extends State<LicensesManagement> {
             children: [
               Icon(Icons.key, color: AppColors.primaryColor),
               const SizedBox(width: 12),
-              const Text('المفتاح الكامل'),
+              const Expanded(child: Text('المفتاح الكامل')),
             ],
           ),
-          content: SizedBox(
-            width: 500,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'مفتاح الترخيص للعميل: ${license.clientName}',
-                  style: TextStyle(color: Colors.grey[700]),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
+          content: Container(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'مفتاح الترخيص للعميل: ${license.clientName}',
+                    style: TextStyle(color: Colors.grey[700]),
                   ),
-                  child: SelectableText(
-                    license.licenseKey,
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: SelectableText(
+                      license.licenseKey,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           actions: [
