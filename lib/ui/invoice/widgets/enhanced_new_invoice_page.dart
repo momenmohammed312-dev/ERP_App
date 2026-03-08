@@ -105,14 +105,11 @@ class _EnhancedNewInvoicePageState
   Future<void> _initializeInvoice() async {
     try {
       // Check day status first
-      final isOpen = await widget.db.dayDao.isDayOpen();
+      bool isOpen = await widget.db.dayDao.isDayOpen();
 
       if (!isOpen) {
-        setState(() {
-          _isDayOpen = false;
-          _isLoading = false;
-        });
-        return;
+        await widget.db.dayDao.getOrCreateTodayDay(openingBalance: 0.0);
+        isOpen = true;
       }
 
       // Load data
@@ -125,7 +122,7 @@ class _EnhancedNewInvoicePageState
       setState(() {
         _isDayOpen = true;
         _filteredProducts = products;
-        _customers = customers;
+        // _customers = customers;
         _isLoading = false;
       });
     } catch (e) {
@@ -453,7 +450,9 @@ class _EnhancedNewInvoicePageState
     final customerAddress = _selectedCustomer?.address ?? '';
 
     // Determine payment method string
-    final paymentMethodStr = _paymentMethod.name;
+    final paymentMethodStr = _invoiceType == InvoiceType.credit
+        ? 'credit'
+        : _paymentMethod.name;
 
     // Determine status
     String status;

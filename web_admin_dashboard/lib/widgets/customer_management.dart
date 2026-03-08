@@ -527,7 +527,7 @@ class _CustomerManagementState extends State<CustomerManagement> {
                                     fontWeight: FontWeight.bold, fontSize: 16)),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
-                              value: packageType,
+                              initialValue: packageType,
                               decoration: InputDecoration(
                                 labelText: 'الباقة',
                                 prefixIcon:
@@ -556,7 +556,7 @@ class _CustomerManagementState extends State<CustomerManagement> {
                                   'السماح للعميل بتسجيل الدخول',
                                   style: TextStyle(fontSize: 12)),
                               value: isActive,
-                              activeColor: AppColors.successColor,
+                              activeThumbColor: AppColors.successColor,
                               contentPadding: EdgeInsets.zero,
                               onChanged: (value) =>
                                   setDialogState(() => isActive = value),

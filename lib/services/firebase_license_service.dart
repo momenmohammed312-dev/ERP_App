@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'license_manager.dart';
 import '../core/utils/logger.dart';
@@ -43,7 +42,6 @@ class FirebaseLicenseResult {
 ///  3. Cache محلي — يحتفظ بنتيجة آخر تحقق لـ offline use
 /// ════════════════════════════════════════════════════════════════════════
 class FirebaseLicenseService {
-  bool get _isWindows => Platform.isWindows;
   static const String _cachedResultKey = 'fb_license_cache';
   static const String _lastCheckinKey = 'fb_last_checkin';
 

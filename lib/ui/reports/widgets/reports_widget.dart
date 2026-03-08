@@ -206,17 +206,10 @@ class _ReportsWidgetState extends State<ReportsWidget>
 
   Future<void> _showNewInvoiceDialog(BuildContext context) async {
     final messengerContext = context; // Capture context before async
-    final isOpen = await widget.db.dayDao.isDayOpen();
+    bool isOpen = await widget.db.dayDao.isDayOpen();
     if (!isOpen) {
-      if (mounted && messengerContext.mounted) {
-        ScaffoldMessenger.of(messengerContext).showSnackBar(
-          const SnackBar(
-            content: Text('برجاء فتح اليوم أولاً من قائمة الفواتير'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
+      await widget.db.dayDao.getOrCreateTodayDay(openingBalance: 0.0);
+      isOpen = true;
     }
 
     if (mounted && messengerContext.mounted) {

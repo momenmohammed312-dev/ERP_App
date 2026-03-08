@@ -42,16 +42,19 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
       setState(() {
         _supplierData = supplierList.map((row) {
           final data = row.data;
-          final openingBalance = (data['current_balance'] as double?) ?? 0.0;
-          final totalPurchases = (data['total_purchases'] as double?) ?? 0.0;
-          final totalPayments = (data['total_payments'] as double?) ?? 0.0;
+          final openingBalance =
+              (data['current_balance'] as num?)?.toDouble() ?? 0.0;
+          final totalPurchases =
+              (data['total_purchases'] as num?)?.toDouble() ?? 0.0;
+          final totalPayments =
+              (data['total_payments'] as num?)?.toDouble() ?? 0.0;
           final outstanding = totalPurchases - totalPayments + openingBalance;
           return {
             'id': data['id'],
             'name': data['name'],
             'phone': data['phone'],
             'current_balance': openingBalance,
-            'invoice_count': data['invoice_count'] as int? ?? 0,
+            'invoice_count': (data['invoice_count'] as num?)?.toInt() ?? 0,
             'total_purchases': totalPurchases,
             'total_payments': totalPayments,
             'outstanding': outstanding,

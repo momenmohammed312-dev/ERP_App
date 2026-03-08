@@ -14,6 +14,7 @@ class StaffExpensesReport extends StatefulWidget {
 class _StaffExpensesReportState extends State<StaffExpensesReport> {
   bool _isLoading = false;
   List<StaffAdvance> _advances = [];
+  Map<int, String> _staffMap = {};
 
   @override
   void initState() {
@@ -24,10 +25,12 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      // Basic implementation: fetch all advances for now
       final advances = await widget.db.select(widget.db.staffAdvances).get();
+      final staffList = await widget.db.select(widget.db.staffTable).get();
+      final staffMap = {for(var s in staffList) s.staffId: s.name};
       setState(() {
         _advances = advances;
+        _staffMap = staffMap.cast<int, String>();
         _isLoading = false;
       });
     } catch (e) {
@@ -48,13 +51,14 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                     itemCount: _advances.length,
                     itemBuilder: (context, index) {
                       final advance = _advances[index];
+                      final staffName = _staffMap[advance.staffId] ?? 'غير معروف';
                       return ListTile(
-                        title: Text('سلفة - موظف ID: ${advance.staffId}'),
+                        title: Text('سلفة - موظف: $staffName'),
                         subtitle: Text(
                           DateFormat('yyyy/MM/dd').format(advance.requestDate),
                         ),
                         trailing: Text(
-                          advance.amount.toStringAsFixed(2),
+                          '${advance.amount.toStringAsFixed(2)}',
                           style: const TextStyle(
                             color: Colors.red,
                             fontWeight: FontWeight.bold,

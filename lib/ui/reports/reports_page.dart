@@ -41,38 +41,24 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     try {
       final db = ref.read(appDatabaseProvider);
 
-      debugPrint('Loading data for date range: $_startDate to $_endDate');
+      final startOfDay = DateTime(
+        _startDate.year,
+        _startDate.month,
+        _startDate.day,
+      );
+      final endOfDay = DateTime(
+        _endDate.year,
+        _endDate.month,
+        _endDate.day,
+        23,
+        59,
+        59,
+      );
 
       final invoices = await db.invoiceDao.getInvoicesByDateRange(
-        _startDate,
-        _endDate,
+        startOfDay,
+        endOfDay,
       );
-
-      debugPrint(
-        'Found ${invoices.length} invoices between $_startDate and $_endDate',
-      );
-
-      // Handle empty results gracefully
-      if (invoices.isEmpty) {
-        debugPrint('No invoices found in date range');
-        setState(() {
-          _totalSales = 0.0;
-          _totalCash = 0.0;
-          _totalCredit = 0.0;
-          _totalInvoices = 0;
-          _cashInvoices = 0;
-          _creditInvoices = 0;
-        });
-        return;
-      }
-
-      // Print details of first few invoices for debugging
-      for (int i = 0; i < (invoices.length > 5 ? 5 : invoices.length); i++) {
-        final inv = invoices[i];
-        debugPrint(
-          'Invoice ${i + 1}: ID=${inv.id}, Number=${inv.invoiceNumber ?? 'N/A'}, Date=${inv.date}, Amount=${inv.totalAmount}, Method=${inv.paymentMethod}',
-        );
-      }
 
       double sales = 0.0;
       double cash = 0.0;
@@ -82,32 +68,21 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       int creditInvCount = 0;
 
       for (var inv in invoices) {
-        // Access fields safely - handle potential null values
-        try {
-          final totalAmount = inv.totalAmount;
-          final paidAmount = inv.paidAmount;
-          final paymentMethod = inv.paymentMethod ?? 'cash';
-          // invoiceDate variable is declared but unused, removing to fix warning
-          // final invoiceDate = inv.date ?? DateTime.now();
+        final totalAmount = inv.totalAmount;
+        sales += totalAmount;
+        totalInvCount++;
 
-          sales += totalAmount;
-          totalInvCount++;
-
-          final pm = paymentMethod.toLowerCase().trim();
-          if (pm == 'credit' ||
-              pm == 'آجل' ||
-              pm == 'اجل' ||
-              pm.contains('آجل') ||
-              pm.contains('credit')) {
-            credit += totalAmount; // Total amount for credit invoices
-            creditInvCount++;
-          } else {
-            cash += paidAmount; // Paid amount for cash invoices
-            cashInvCount++;
-          }
-        } catch (e) {
-          debugPrint('Error processing invoice ${inv.id}: $e');
-          continue;
+        final pm = (inv.paymentMethod ?? 'cash').toLowerCase().trim();
+        if (pm == 'credit' ||
+            pm == 'آجل' ||
+            pm == 'اجل' ||
+            pm.contains('آجل') ||
+            pm.contains('credit')) {
+          credit += totalAmount;
+          creditInvCount++;
+        } else {
+          cash += inv.paidAmount > 0 ? inv.paidAmount : totalAmount;
+          cashInvCount++;
         }
       }
 
@@ -147,21 +122,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
 
     try {
       final db = ref.read(appDatabaseProvider);
-
-      debugPrint('Loading ALL invoices (no date filter)');
-      debugPrint('Button pressed - _loadAllInvoices called');
-
       final invoices = await db.invoiceDao.getAllInvoices();
-
-      debugPrint('Found ${invoices.length} total invoices');
-
-      // Print details of first few invoices for debugging
-      for (int i = 0; i < (invoices.length > 5 ? 5 : invoices.length); i++) {
-        final inv = invoices[i];
-        debugPrint(
-          'Invoice ${i + 1}: ID=${inv.id}, Number=${inv.invoiceNumber ?? 'N/A'}, Date=${inv.date}, Amount=${inv.totalAmount}, Method=${inv.paymentMethod}',
-        );
-      }
 
       double sales = 0.0;
       double cash = 0.0;
@@ -171,30 +132,21 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       int creditInvCount = 0;
 
       for (var inv in invoices) {
-        // Access fields safely to prevent null check errors
-        try {
-          final totalAmount = inv.totalAmount;
-          final paidAmount = inv.paidAmount;
-          final paymentMethod = inv.paymentMethod ?? 'cash';
+        final totalAmount = inv.totalAmount;
+        sales += totalAmount;
+        totalInvCount++;
 
-          sales += totalAmount;
-          totalInvCount++;
-
-          final pm = paymentMethod.toLowerCase().trim();
-          if (pm == 'credit' ||
-              pm == 'آجل' ||
-              pm == 'اجل' ||
-              pm.contains('آجل') ||
-              pm.contains('credit')) {
-            credit += totalAmount; // Total amount for credit invoices
-            creditInvCount++;
-          } else {
-            cash += paidAmount; // Paid amount for cash invoices
-            cashInvCount++;
-          }
-        } catch (e) {
-          debugPrint('Error processing invoice ${inv.id}: $e');
-          continue;
+        final pm = (inv.paymentMethod ?? 'cash').toLowerCase().trim();
+        if (pm == 'credit' ||
+            pm == 'آجل' ||
+            pm == 'اجل' ||
+            pm.contains('آجل') ||
+            pm.contains('credit')) {
+          credit += totalAmount;
+          creditInvCount++;
+        } else {
+          cash += inv.paidAmount > 0 ? inv.paidAmount : totalAmount;
+          cashInvCount++;
         }
       }
 

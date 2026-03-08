@@ -992,7 +992,7 @@ class _LicensesManagementState extends State<LicensesManagement> {
                     children: [
                       const SizedBox(height: 8),
                       DropdownButtonFormField<ClientModel>(
-                        value: selectedClient,
+                        initialValue: selectedClient,
                         decoration: InputDecoration(
                           labelText: 'العميل',
                           prefixIcon:
@@ -1045,7 +1045,7 @@ class _LicensesManagementState extends State<LicensesManagement> {
                         const SizedBox(height: 16),
                       ],
                       DropdownButtonFormField<SubscriptionDuration>(
-                        value: selectedDuration,
+                        initialValue: selectedDuration,
                         decoration: InputDecoration(
                           labelText: 'المدة الزمنية',
                           prefixIcon: const Icon(Icons.timer_outlined),

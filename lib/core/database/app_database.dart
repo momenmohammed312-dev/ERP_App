@@ -89,7 +89,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 36;
+  int get schemaVersion => 37;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -125,6 +125,31 @@ class AppDatabase extends _$AppDatabase {
         log('Added paidAmount column to invoices table');
       } catch (e) {
         log('paidAmount column already exists or failed to add: $e');
+      }
+
+      if (from < 37) {
+        // Fix Zero Credit/Sales issue: Sync redundant columns if they exist
+        try {
+          await customStatement('''
+            UPDATE invoices 
+            SET total_amount = COALESCE(totalAmount, total_amount),
+                paid_amount = COALESCE(paidAmount, paid_amount)
+            WHERE total_amount = 0 OR total_amount IS NULL
+          ''');
+          log('Synced totalAmount and paidAmount columns in invoices');
+        } catch (e) {
+          log(
+            'Failed to sync invoice columns (redundant columns might not exist): $e',
+          );
+        }
+
+        // Ensure notifications table exists
+        try {
+          await m.createTable(notifications);
+          log('Ensured notifications table exists (v37 migration)');
+        } catch (e) {
+          log('Notifications table already exists or failed to add: $e');
+        }
       }
 
       if (from < 2) {

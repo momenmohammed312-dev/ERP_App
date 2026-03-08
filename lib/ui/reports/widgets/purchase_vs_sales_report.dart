@@ -117,8 +117,8 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
           DATE(date) as report_date,
           COUNT(*) as invoice_count,
           SUM(total_amount) as total_sales,
-          SUM(CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END) as cash_sales,
-          SUM(CASE WHEN payment_method != 'cash' THEN total_amount ELSE 0 END) as credit_sales
+          SUM(CASE WHEN LOWER(TRIM(COALESCE(payment_method, 'cash'))) = 'cash' THEN total_amount ELSE 0 END) as cash_sales,
+          SUM(CASE WHEN LOWER(TRIM(COALESCE(payment_method, 'cash'))) = 'credit' OR LOWER(TRIM(payment_method)) LIKE '%آجل%' THEN total_amount ELSE 0 END) as credit_sales
         FROM invoices 
         WHERE date >= ? AND date <= ? AND status != 'deleted'
         GROUP BY DATE(date)
@@ -139,8 +139,8 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
           DATE(purchase_date) as report_date,
           COUNT(*) as purchase_count,
           SUM(total_amount) as total_purchases,
-          SUM(CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END) as cash_purchases,
-          SUM(CASE WHEN payment_method != 'cash' THEN total_amount ELSE 0 END) as credit_purchases
+          SUM(CASE WHEN LOWER(TRIM(COALESCE(payment_method, 'cash'))) = 'cash' THEN total_amount ELSE 0 END) as cash_purchases,
+          SUM(CASE WHEN LOWER(TRIM(COALESCE(payment_method, 'cash'))) = 'credit' OR LOWER(TRIM(payment_method)) LIKE '%آجل%' THEN total_amount ELSE 0 END) as credit_purchases
         FROM purchases 
         WHERE purchase_date >= ? AND purchase_date <= ? AND is_deleted = 0
         GROUP BY DATE(purchase_date)
@@ -161,10 +161,12 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         final date = row.read<String>('report_date');
         combinedData[date] = {
           'date': date,
-          'sales_count': row.readNullable<int>('invoice_count') ?? 0,
-          'total_sales': row.readNullable<double>('total_sales') ?? 0.0,
-          'cash_sales': row.readNullable<double>('cash_sales') ?? 0.0,
-          'credit_sales': row.readNullable<double>('credit_sales') ?? 0.0,
+          'sales_count': row.readNullable<num>('invoice_count')?.toInt() ?? 0,
+          'total_sales':
+              row.readNullable<num>('total_sales')?.toDouble() ?? 0.0,
+          'cash_sales': row.readNullable<num>('cash_sales')?.toDouble() ?? 0.0,
+          'credit_sales':
+              row.readNullable<num>('credit_sales')?.toDouble() ?? 0.0,
           'purchase_count': 0,
           'total_purchases': 0.0,
           'cash_purchases': 0.0,
@@ -178,16 +180,15 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
       for (final row in purchasesResult) {
         final date = row.read<String>('report_date');
         if (combinedData.containsKey(date)) {
-          combinedData[date]!.updateAll((key, value) {
-            if (key.startsWith('purchase') ||
-                key.startsWith('cash_purchase') ||
-                key.startsWith('credit_purchase')) {
-              return row.readNullable<double>(key) ?? 0.0;
-            }
-            return value;
-          });
-          combinedData[date]!['purchase_count'] =
-              row.readNullable<int>('purchase_count') ?? 0;
+          final data = combinedData[date]!;
+          data['purchase_count'] =
+              row.readNullable<num>('purchase_count')?.toInt() ?? 0;
+          data['total_purchases'] =
+              row.readNullable<num>('total_purchases')?.toDouble() ?? 0.0;
+          data['cash_purchases'] =
+              row.readNullable<num>('cash_purchases')?.toDouble() ?? 0.0;
+          data['credit_purchases'] =
+              row.readNullable<num>('credit_purchases')?.toDouble() ?? 0.0;
         } else {
           combinedData[date] = {
             'date': date,
@@ -195,12 +196,14 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
             'total_sales': 0.0,
             'cash_sales': 0.0,
             'credit_sales': 0.0,
-            'purchase_count': row.readNullable<int>('purchase_count') ?? 0,
+            'purchase_count':
+                row.readNullable<num>('purchase_count')?.toInt() ?? 0,
             'total_purchases':
-                row.readNullable<double>('total_purchases') ?? 0.0,
-            'cash_purchases': row.readNullable<double>('cash_purchases') ?? 0.0,
+                row.readNullable<num>('total_purchases')?.toDouble() ?? 0.0,
+            'cash_purchases':
+                row.readNullable<num>('cash_purchases')?.toDouble() ?? 0.0,
             'credit_purchases':
-                row.readNullable<double>('credit_purchases') ?? 0.0,
+                row.readNullable<num>('credit_purchases')?.toDouble() ?? 0.0,
             'gross_profit': 0.0,
             'profit_margin': 0.0,
           };

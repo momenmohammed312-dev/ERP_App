@@ -68,7 +68,11 @@ class _NewInvoicePageState extends ConsumerState<NewInvoicePage> {
 
   Future<void> _checkDayStatus() async {
     final db = ref.read(appDatabaseProvider);
-    final isOpen = await db.dayDao.isDayOpen();
+    bool isOpen = await db.dayDao.isDayOpen();
+    if (!isOpen) {
+      await db.dayDao.getOrCreateTodayDay(openingBalance: 0.0);
+      isOpen = true;
+    }
     if (mounted) {
       setState(() {
         _isDayOpen = isOpen;
@@ -254,7 +258,9 @@ class _NewInvoicePageState extends ConsumerState<NewInvoicePage> {
           customerAddress: Value(customerAddress ?? ''),
           customerId: Value(customerId),
           paymentMethod: Value(
-            _selectedInvoiceType == 'cash' ? _selectedPaymentMethod : 'credit',
+            _selectedInvoiceType == 'credit'
+                ? 'credit'
+                : _selectedPaymentMethod,
           ),
           totalAmount: Value(_totalAmount),
           paidAmount: Value(_paidAmount),
