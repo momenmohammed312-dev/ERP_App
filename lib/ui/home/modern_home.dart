@@ -31,7 +31,7 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 6, vsync: this); // Removed Staff tab
     _checkLicenseWarning();
   }
 
@@ -177,7 +177,6 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                   icon: const Icon(Icons.inventory_outlined),
                   text: l10n.suppliers,
                 ),
-                Tab(icon: const Icon(Icons.badge_outlined), text: 'الموظفين'),
                 Tab(
                   icon: const Icon(Icons.account_balance_wallet_outlined),
                   text: l10n.cash,

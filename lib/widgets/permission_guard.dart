@@ -1,7 +1,15 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/models/user_model.dart';
 import '../core/provider/auth_provider.dart';
+
+/// Returns true if running on desktop platforms (Windows, macOS, Linux)
+/// On desktop, we bypass all permission checks (single-user offline mode)
+bool get _isDesktopPlatform {
+  return !kIsWeb && !Platform.isAndroid && !Platform.isIOS;
+}
 
 /// ويدجت لحماية المحتوى بناءً على الصلاحيات
 class PermissionGuard extends ConsumerWidget {
@@ -20,6 +28,11 @@ class PermissionGuard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // On desktop, bypass all permission checks (auto-admin)
+    if (_isDesktopPlatform) {
+      return child;
+    }
+
     final hasPermission = ref.watch(
       authProvider.select((user) => user?.hasPermission(permission) ?? false),
     );
@@ -131,6 +144,11 @@ class PermissionListGuard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // On desktop, bypass all permission checks (auto-admin)
+    if (_isDesktopPlatform) {
+      return child;
+    }
+
     final hasPermission = ref.watch(
       authProvider.select((user) {
         if (user == null) return false;
@@ -169,6 +187,11 @@ class PermissionButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // On desktop, bypass all permission checks (auto-admin)
+    if (_isDesktopPlatform) {
+      return ElevatedButton(onPressed: onPressed, style: style, child: child);
+    }
+
     final hasPermission = ref.watch(
       authProvider.select((user) => user?.hasPermission(permission) ?? false),
     );
@@ -227,6 +250,16 @@ class PermissionPopupMenuButton<T> extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // On desktop, bypass all permission checks (auto-admin)
+    if (_isDesktopPlatform) {
+      return PopupMenuButton<T>(
+        tooltip: tooltip?.message,
+        onSelected: onSelected,
+        itemBuilder: (context) => items,
+        child: child,
+      );
+    }
+
     final hasPermission = ref.watch(
       authProvider.select((user) => user?.hasPermission(permission) ?? false),
     );
@@ -265,9 +298,15 @@ class PermissionFormField<T> extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hasPermission = ref.watch(
-      authProvider.select((user) => user?.hasPermission(permission) ?? false),
-    );
+    // On desktop, bypass all permission checks (auto-admin)
+    final bool hasPermission;
+    if (_isDesktopPlatform) {
+      hasPermission = true;
+    } else {
+      hasPermission = ref.watch(
+        authProvider.select((user) => user?.hasPermission(permission) ?? false),
+      );
+    }
     final isEnabled = enabled && hasPermission;
 
     return FormField<T>(

@@ -115,20 +115,21 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
           closingBalance = (dayData['closing_balance'] as num?)?.toDouble();
 
           if (dayData['created_at'] != null) {
-            openTime = DateFormat(
-              'HH:mm',
-            ).format(parseDate(dayData['created_at']));
+            try {
+              openTime = DateFormat('HH:mm').format(parseDate(dayData['created_at']));
+            } catch (_) {}
           }
           if (dayData['closed_at'] != null) {
-            closeTime = DateFormat(
-              'HH:mm',
-            ).format(parseDate(dayData['closed_at']));
+            try {
+              closeTime = DateFormat('HH:mm').format(parseDate(dayData['closed_at']));
+            } catch (_) {}
           }
         }
 
+        // FIX: only calculate surplus/deficit when day is closed
         final surplusDeficit = closingBalance != null
-            ? closingBalance - openingBalance - totalSales
-            : 0.0;
+            ? closingBalance - openingBalance - cash // deficit vs cash collected
+            : null; // null = day still open
 
         result.add({
           'date': dateStr,
@@ -136,10 +137,12 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
           'closeTime': closeTime,
           'openingBalance': openingBalance,
           'closingBalance': closingBalance ?? 0.0,
+          'isOpen': closingBalance == null,
           'totalSales': totalSales,
           'cash': cash,
           'credit': credit,
-          'surplusDeficit': surplusDeficit,
+          'surplusDeficit': surplusDeficit ?? 0.0,
+          'surplusKnown': surplusDeficit != null,
           'invoiceCount': dayInvoices.length,
         });
       }
@@ -285,97 +288,149 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                   ),
                   const Gap(16),
 
-                  // Table
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: cardBg,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Theme.of(context).dividerColor,
+                  // Table — FIX: use LayoutBuilder to ensure full width
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          // ensure table fills at least the available width
+                          constraints: BoxConstraints(
+                            minWidth: constraints.maxWidth,
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: cardBg,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Theme.of(context).dividerColor,
+                              ),
+                            ),
+                            child: DataTable(
+                              columnSpacing: 20,
+                              headingRowColor: WidgetStateProperty.all(
+                                Theme.of(context)
+                                    .colorScheme
+                                    .primaryContainer
+                                    .withValues(alpha: 0.5),
+                              ),
+                              dataTextStyle: TextStyle(color: textColor),
+                              columns: const [
+                                DataColumn(label: Text('التاريخ')),
+                                DataColumn(label: Text('وقت الفتح')),
+                                DataColumn(label: Text('وقت الإغلاق')),
+                                DataColumn(label: Text('الرصيد الافتتاحي')),
+                                DataColumn(label: Text('الرصيد الختامي')),
+                                DataColumn(label: Text('إجمالي المبيعات')),
+                                DataColumn(label: Text('كاش')),
+                                DataColumn(label: Text('آجل')),
+                                DataColumn(label: Text('عجز/زيادة')),
+                                DataColumn(label: Text('عدد الفواتير')),
+                              ],
+                              rows: _dailyData.map((d) {
+                                final sd =
+                                    (d['surplusDeficit'] as num).toDouble();
+                                final sdKnown =
+                                    d['surplusKnown'] as bool? ?? false;
+                                final credit =
+                                    (d['credit'] as num).toDouble();
+                                final isOpen =
+                                    d['isOpen'] as bool? ?? false;
+                                return DataRow(
+                                  cells: [
+                                    DataCell(Text(d['date'] as String)),
+                                    DataCell(Text(d['openTime'] as String)),
+                                    // FIX: show "مفتوح" when day not closed yet
+                                    DataCell(
+                                      isOpen
+                                          ? Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: Colors.orange
+                                                    .withValues(alpha: 0.15),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: const Text('مفتوح',
+                                                  style: TextStyle(
+                                                      color: Colors.orange,
+                                                      fontSize: 12)),
+                                            )
+                                          : Text(d['closeTime'] as String),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        (d['openingBalance'] as num)
+                                            .toStringAsFixed(2),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      isOpen
+                                          ? Text('-',
+                                              style: TextStyle(
+                                                  color: textColor
+                                                      .withValues(alpha: 0.4)))
+                                          : Text(
+                                              (d['closingBalance'] as num)
+                                                  .toStringAsFixed(2),
+                                            ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        (d['totalSales'] as num)
+                                            .toStringAsFixed(2),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                          (d['cash'] as num).toStringAsFixed(2)),
+                                    ),
+                                    // FIX: show credit amount with color
+                                    DataCell(
+                                      Text(
+                                        credit.toStringAsFixed(2),
+                                        style: TextStyle(
+                                          color: credit > 0
+                                              ? Colors.orange.shade700
+                                              : textColor.withValues(alpha: 0.5),
+                                          fontWeight: credit > 0
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                    ),
+                                    // FIX: show surplus/deficit only when day closed
+                                    DataCell(
+                                      sdKnown
+                                          ? Text(
+                                              sd.toStringAsFixed(2),
+                                              style: TextStyle(
+                                                color: sd >= 0
+                                                    ? Colors.green
+                                                    : Colors.red,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            )
+                                          : Text('-',
+                                              style: TextStyle(
+                                                  color: textColor
+                                                      .withValues(alpha: 0.4))),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                          (d['invoiceCount'] as int).toString()),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ),
                         ),
-                      ),
-                      child: DataTable(
-                        columnSpacing: 16,
-                        headingRowColor: WidgetStateProperty.all(
-                          Theme.of(
-                            context,
-                          ).colorScheme.primaryContainer.withValues(alpha: 0.5),
-                        ),
-                        dataTextStyle: TextStyle(color: textColor),
-                        columns: const [
-                          DataColumn(label: Text('التاريخ')),
-                          DataColumn(label: Text('وقت الفتح')),
-                          DataColumn(label: Text('وقت الإغلاق')),
-                          DataColumn(label: Text('الرصيد الافتتاحي')),
-                          DataColumn(label: Text('الرصيد الختامي')),
-                          DataColumn(label: Text('إجمالي المبيعات')),
-                          DataColumn(label: Text('كاش')),
-                          DataColumn(label: Text('آجل')),
-                          DataColumn(label: Text('عجز/زيادة')),
-                          DataColumn(label: Text('عدد الفواتير')),
-                        ],
-                        rows: _dailyData.map((d) {
-                          final sd = (d['surplusDeficit'] as num).toDouble();
-                          final credit = (d['credit'] as num).toDouble();
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(d['date'] as String)),
-                              DataCell(Text(d['openTime'] as String)),
-                              DataCell(Text(d['closeTime'] as String)),
-                              DataCell(
-                                Text(
-                                  (d['openingBalance'] as num).toStringAsFixed(
-                                    2,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  (d['closingBalance'] as num).toStringAsFixed(
-                                    2,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  (d['totalSales'] as num).toStringAsFixed(2),
-                                ),
-                              ),
-                              DataCell(
-                                Text((d['cash'] as num).toStringAsFixed(2)),
-                              ),
-                              DataCell(
-                                Text(
-                                  credit.toStringAsFixed(2),
-                                  style: TextStyle(
-                                    color: credit > 0
-                                        ? textColor
-                                        : textColor,
-                                    fontWeight: credit > 0
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text(
-                                  sd.toStringAsFixed(2),
-                                  style: TextStyle(
-                                    color: sd >= 0 ? Colors.green : Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                Text((d['invoiceCount'] as int).toString()),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
+                      );
+                    },
                   ),
 
                   if (_dailyData.isEmpty) ...[

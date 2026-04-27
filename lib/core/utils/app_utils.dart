@@ -44,7 +44,11 @@ void ensureKeyLen(Uint8List key) {
 
 /// تحويل DateTime آمن من SQLite (int/String/DateTime)
 DateTime parseDate(dynamic raw, {DateTime? fallback}) {
-  if (raw is int) return DateTime.fromMillisecondsSinceEpoch(raw);
+  if (raw is int) {
+    // FIX: Drift stores DateTimeColumn as microsecondsSinceEpoch, not milliseconds
+    // Using milliseconds caused dates like 1970-01-21 to appear for recent timestamps
+    return DateTime.fromMicrosecondsSinceEpoch(raw);
+  }
   if (raw is String) return DateTime.parse(raw);
   if (raw is DateTime) return raw;
   return fallback ?? DateTime.now();

@@ -34,7 +34,10 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   @override
   void initState() {
     super.initState();
-    _loadReportsData();
+    // FIX: use addPostFrameCallback so riverpod ref is fully ready before loading
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadReportsData();
+    });
   }
 
   Future<void> _loadReportsData() async {

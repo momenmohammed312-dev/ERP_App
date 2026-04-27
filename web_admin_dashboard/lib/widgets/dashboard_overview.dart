@@ -303,26 +303,31 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                 const Spacer(),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                   decoration: BoxDecoration(
                     color: (isPositive ? Colors.green : Colors.red)
                         .withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min, // FIX: don't expand
                     children: [
                       Icon(
                         isPositive ? Icons.arrow_upward : Icons.arrow_downward,
                         color: isPositive ? Colors.green : Colors.red,
-                        size: 14,
+                        size: 12,
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        change,
-                        style: TextStyle(
-                          color: isPositive ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
+                      const SizedBox(width: 2),
+                      Flexible( // FIX: allow text to shrink
+                        child: Text(
+                          change,
+                          style: TextStyle(
+                            color: isPositive ? Colors.green : Colors.red,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ),
                     ],

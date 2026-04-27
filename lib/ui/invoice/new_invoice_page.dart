@@ -68,11 +68,7 @@ class _NewInvoicePageState extends ConsumerState<NewInvoicePage> {
 
   Future<void> _checkDayStatus() async {
     final db = ref.read(appDatabaseProvider);
-    bool isOpen = await db.dayDao.isDayOpen();
-    if (!isOpen) {
-      await db.dayDao.getOrCreateTodayDay(openingBalance: 0.0);
-      isOpen = true;
-    }
+    final bool isOpen = await db.dayDao.isDayOpen();
     if (mounted) {
       setState(() {
         _isDayOpen = isOpen;
@@ -80,10 +76,11 @@ class _NewInvoicePageState extends ConsumerState<NewInvoicePage> {
       });
     }
 
-    // Show invoice type selection dialog if day is open
-    if (isOpen) {
+    // لو اليوم مفتوح نعرض اختيار نوع الفاتورة
+    if (isOpen && mounted) {
       _showInvoiceTypeSelection();
     }
+    // لو اليوم مقفول: لا نفتحه تلقائياً — المستخدم يفتحه يدوياً
   }
 
   Future<void> _showInvoiceTypeSelection() async {

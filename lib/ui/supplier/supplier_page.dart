@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:drift/drift.dart' show Variable;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/ui/supplier/widgets/supplier_summary_item.dart';
@@ -21,6 +22,9 @@ class _SupplierPageState extends State<SupplierPage> {
   final ExportService _exportService = ExportService();
   bool _isLoading = true;
   String? _error;
+  // FIX: added missing summary metrics
+  double _paidThisMonth = 0.0;
+  int _activeSuppliers = 0;
 
   @override
   void initState() {
@@ -61,6 +65,7 @@ class _SupplierPageState extends State<SupplierPage> {
 
   Future<void> _loadSupplierBalances() async {
     final balances = <String, double>{};
+    int activeCount = 0;
     for (final supplier in suppliers) {
       try {
         final balance = await widget.db.ledgerDao.getRunningBalance(
@@ -71,9 +76,36 @@ class _SupplierPageState extends State<SupplierPage> {
       } catch (e) {
         balances[supplier.id] = supplier.openingBalance;
       }
+      if (supplier.status == 'Active' ||
+          supplier.status == 'active' ||
+          supplier.status == 'نشط') {
+        activeCount++;
+      }
     }
+
+    // FIX: calculate paid this month from purchases table
+    double paidThisMonth = 0.0;
+    try {
+      final now = DateTime.now();
+      final startOfMonth = DateTime(now.year, now.month, 1);
+      final rows = await widget.db.customSelect(
+        '''
+        SELECT COALESCE(SUM(paid_amount), 0.0) AS total
+        FROM purchases
+        WHERE created_at >= ?
+          AND (is_deleted = 0 OR is_deleted IS NULL)
+        ''',
+        variables: [Variable.withDateTime(startOfMonth)],
+      ).getSingle();
+      paidThisMonth = (rows.data['total'] as num?)?.toDouble() ?? 0.0;
+    } catch (_) {}
+
     if (mounted) {
-      setState(() => supplierBalances = balances);
+      setState(() {
+        supplierBalances = balances;
+        _paidThisMonth = paidThisMonth;
+        _activeSuppliers = activeCount;
+      });
     }
   }
 
@@ -286,6 +318,25 @@ class _SupplierPageState extends State<SupplierPage> {
                               '${supplierBalances.values.where((b) => b > 0).fold(0.0, (sum, b) => sum + b).toStringAsFixed(2)} ج.م',
                           icon: Icons.money_off,
                           color: Colors.red,
+                        ),
+                      ),
+                      // FIX: added missing cards
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: SupplierSummaryItem(
+                          title: 'المدفوع في الشهر',
+                          value: '${_paidThisMonth.toStringAsFixed(2)} ج.م',
+                          icon: Icons.payments,
+                          color: Colors.green,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: SupplierSummaryItem(
+                          title: 'موردون نشطون',
+                          value: _activeSuppliers.toString(),
+                          icon: Icons.check_circle,
+                          color: Colors.teal,
                         ),
                       ),
                     ],

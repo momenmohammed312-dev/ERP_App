@@ -9,8 +9,6 @@ import 'package:pos_offline_desktop/ui/purchase/widgets/enhanced_purchase_invoic
 import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
 import 'package:pos_offline_desktop/ui/admin/admin_dashboard_page.dart';
 import 'package:pos_offline_desktop/ui/setup/first_run_setup_screen.dart';
-import 'package:pos_offline_desktop/ui/auth/login_screen.dart';
-import 'package:pos_offline_desktop/core/services/auth_service.dart';
 
 // Simple splash screen widget
 class SplashScreen extends ConsumerStatefulWidget {
@@ -159,62 +157,30 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
 final routerProvider = Provider<GoRouter>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  final authService = ref.watch(authServiceProvider);
 
   return GoRouter(
     initialLocation: '/',
-    redirect: (context, state) async {
-      final loggedIn = authService.isLoggedIn();
-      final isAuthPath =
-          state.matchedLocation == '/login' ||
-          state.matchedLocation == '/splash' ||
-          state.matchedLocation == '/activation' ||
-          state.matchedLocation == '/setup';
-
-      // 1. Initial splash/activation screen logic (omitted for brevity, keeping simple)
-
-      // 2. Logic for first-run setup
-      /*
-      if (state.matchedLocation != '/setup') {
-        final hasDefault = await db.userDao.hasDefaultAdminPassword();
-        if (hasDefault) {
-          return '/setup';
-        }
-      }
-      */
-
-      // 3. Auth redirect (disabled for now)
-      /*
-      if (!loggedIn && !isAuthPath) {
-        return '/login';
-      }
-      */
-
-      // 4. Already logged in, trying to access login
-      if (loggedIn && state.matchedLocation == '/login') {
-        return '/';
-      }
-
+    redirect: (context, state) {
+      // No auth redirects on desktop - user is automatically logged in
+      // License checks are handled in main.dart
       return null;
     },
     routes: [
-      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      // License & Setup Routes
       GoRoute(
         path: '/setup',
         builder: (context, state) => const FirstRunSetupScreen(),
       ),
       GoRoute(
-        path: '/splash',
-        builder: (context, state) => const SplashScreen(),
-      ),
-      GoRoute(
         path: '/activation',
         builder: (context, state) => const ActivationScreen(),
       ),
+      // Main Application Route
       GoRoute(
         path: '/',
         builder: (context, state) => ModernHomeScreen(db: db),
       ),
+      // Feature Routes
       GoRoute(
         path: '/new-supply-invoice',
         builder: (context, state) => EnhancedPurchaseInvoicePage(db: db),

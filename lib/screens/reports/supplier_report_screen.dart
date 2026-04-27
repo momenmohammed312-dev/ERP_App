@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:drift/drift.dart' as drift;
+import 'package:intl/intl.dart';
 import '../../core/database/app_database.dart';
+import '../../core/utils/app_utils.dart';
 
 class SupplierReportScreen extends StatefulWidget {
   final AppDatabase database;
@@ -314,55 +317,48 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
         final supplier = _supplierData[index];
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Colors.blue.shade100,
-              child: Icon(
-                Icons.business,
-                color: Colors.blue.shade700,
-                size: 20,
+          child: InkWell(
+            // FIX: tap anywhere on row to open transactions table
+            onTap: () => _viewSupplierTransactions(supplier),
+            borderRadius: BorderRadius.circular(8),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.blue.shade100,
+                child: Icon(
+                  Icons.business,
+                  color: Colors.blue.shade700,
+                  size: 20,
+                ),
               ),
-            ),
-            title: Text(
-              supplier['name'],
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  supplier['phone'] ?? 'لا يوجد رقم هاتف',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'المستحق: ${supplier['outstanding'].toStringAsFixed(2)} ج.م',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: supplier['outstanding'] < 0
-                        ? Colors.green
-                        : Colors.red,
+              title: Text(
+                supplier['name'],
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (supplier['phone'] != null &&
+                      (supplier['phone'] as String).isNotEmpty)
+                    Text(
+                      supplier['phone'],
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'المستحق: ${(supplier['outstanding'] as double).toStringAsFixed(2)} ج.م',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: (supplier['outstanding'] as double) <= 0
+                          ? Colors.green
+                          : Colors.red,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.phone),
-                  onPressed: () => _callSupplier(supplier['phone']),
-                  tooltip: 'اتصال',
-                  color: Colors.blue,
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.receipt_long),
-                  onPressed: () => _viewSupplierDetails(supplier),
-                  tooltip: 'عرض التفاصيل',
-                  color: Colors.green,
-                ),
-              ],
+                ],
+              ),
+              // FIX: single icon to view transactions — removed phone/call button
+              trailing: Icon(Icons.chevron_left,
+                  color: Colors.grey.shade400),
             ),
           ),
         );
@@ -370,56 +366,233 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
     );
   }
 
-  void _callSupplier(String? phone) {
-    if (phone != null && phone.isNotEmpty) {
-      debugPrint('Calling supplier: $phone');
+  /// FIX: replaced _callSupplier + simple AlertDialog with full transaction table
+  Future<void> _viewSupplierTransactions(
+      Map<String, dynamic> supplier) async {
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final rows = await widget.database.customSelect('''
+        SELECT 
+          p.id,
+          p.created_at,
+          p.invoice_number,
+          p.total_amount,
+          p.paid_amount,
+          p.is_credit_purchase,
+          p.notes
+        FROM purchases p
+        WHERE p.supplier_id = ?
+          AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+        ORDER BY p.created_at DESC
+      ''', variables: [drift.Variable.withString(supplier['id'].toString())])
+          .get();
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close loading
+
+      final purchases = rows.map((r) => r.data).toList();
+
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade800,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(8),
+                    topRight: Radius.circular(8),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.business, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'معاملات المورد: ${supplier['name']}',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              // Summary row
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    _summaryChip(
+                        'إجمالي المشتريات',
+                        '${(supplier['total_purchases'] as double).toStringAsFixed(2)} ج.م',
+                        Colors.blue),
+                    const SizedBox(width: 8),
+                    _summaryChip(
+                        'المدفوع',
+                        '${(supplier['total_payments'] as double).toStringAsFixed(2)} ج.م',
+                        Colors.green),
+                    const SizedBox(width: 8),
+                    _summaryChip(
+                        'المستحق',
+                        '${(supplier['outstanding'] as double).toStringAsFixed(2)} ج.م',
+                        (supplier['outstanding'] as double) > 0
+                            ? Colors.red
+                            : Colors.green),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              // Transactions table
+              purchases.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Column(
+                        children: [
+                          Icon(Icons.inbox_outlined,
+                              size: 48, color: Colors.grey),
+                          SizedBox(height: 12),
+                          Text('لا توجد معاملات لهذا المورد',
+                              style: TextStyle(color: Colors.grey)),
+                        ],
+                      ),
+                    )
+                  : Flexible(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.vertical,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
+                            columnSpacing: 16,
+                            headingRowColor: WidgetStateProperty.all(
+                              Colors.blue.withValues(alpha: 0.08),
+                            ),
+                            columns: const [
+                              DataColumn(label: Text('التاريخ')),
+                              DataColumn(label: Text('رقم الفاتورة')),
+                              DataColumn(label: Text('المبلغ')),
+                              DataColumn(label: Text('المدفوع')),
+                              DataColumn(label: Text('المتبقي')),
+                              DataColumn(label: Text('النوع')),
+                            ],
+                            rows: purchases.map((p) {
+                              final total =
+                                  (p['total_amount'] as num?)?.toDouble() ??
+                                      0.0;
+                              final paid =
+                                  (p['paid_amount'] as num?)?.toDouble() ??
+                                      0.0;
+                              final remaining = total - paid;
+                              final isCredit =
+                                  (p['is_credit_purchase'] as int?) == 1;
+                              DateTime? date;
+                              try {
+                                date = parseDate(p['created_at']);
+                              } catch (_) {}
+                              return DataRow(cells: [
+                                DataCell(Text(date != null
+                                    ? DateFormat('yyyy-MM-dd').format(date)
+                                    : '-')),
+                                DataCell(Text(
+                                    p['invoice_number']?.toString() ?? '-')),
+                                DataCell(Text(
+                                    '${total.toStringAsFixed(2)} ج.م')),
+                                DataCell(Text(
+                                    '${paid.toStringAsFixed(2)} ج.م',
+                                    style: const TextStyle(
+                                        color: Colors.green))),
+                                DataCell(Text(
+                                    '${remaining.toStringAsFixed(2)} ج.م',
+                                    style: TextStyle(
+                                        color: remaining > 0
+                                            ? Colors.red
+                                            : Colors.green,
+                                        fontWeight: FontWeight.bold))),
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isCredit
+                                          ? Colors.orange.withValues(alpha: 0.15)
+                                          : Colors.green.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      isCredit ? 'آجل' : 'كاش',
+                                      style: TextStyle(
+                                          color: isCredit
+                                              ? Colors.orange.shade700
+                                              : Colors.green.shade700,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12),
+                                    ),
+                                  ),
+                                ),
+                              ]);
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close loading
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('جاري الاتصال بـ $phone'),
-          backgroundColor: Colors.blue,
-        ),
+            content: Text('خطأ في تحميل المعاملات: $e'),
+            backgroundColor: Colors.red),
       );
     }
   }
 
-  void _viewSupplierDetails(Map<String, dynamic> supplier) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('تفاصيل المورد'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildDetailRow('اسم المورد', supplier['name']),
-              _buildDetailRow('رقم الهاتف', supplier['phone'] ?? 'غير محدد'),
-              _buildDetailRow(
-                'الرصيد',
-                supplier['current_balance'].toStringAsFixed(2),
-              ),
-              _buildDetailRow(
-                'إجمالي المشتريات',
-                '${supplier['total_purchases'].toStringAsFixed(2)} ج.م',
-              ),
-              _buildDetailRow(
-                'إجمالي المدفوعات',
-                '${supplier['total_payments'].toStringAsFixed(2)} ج.م',
-              ),
-              _buildDetailRow(
-                'المستحق المتبقي',
-                '${supplier['outstanding'].toStringAsFixed(2)} ج.م',
-              ),
-              _buildDetailRow('عدد الفواتير', '${supplier['invoice_count']}'),
-            ],
-          ),
+  Widget _summaryChip(String label, String value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('موافق'),
-          ),
-        ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text(value,
+                style: TextStyle(
+                    color: color, fontSize: 13, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis),
+          ],
+        ),
       ),
     );
   }

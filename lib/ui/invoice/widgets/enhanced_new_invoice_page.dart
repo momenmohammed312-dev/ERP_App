@@ -48,7 +48,7 @@ class _EnhancedNewInvoicePageState
 
   // Products and search
   List<Product> _filteredProducts = [];
-  List<Customer> _customers = [];
+  final List<Customer> _customers = [];
 
   // Totals
   double _subtotal = 0.0;

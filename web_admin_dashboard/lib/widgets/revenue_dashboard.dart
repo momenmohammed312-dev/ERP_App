@@ -546,26 +546,31 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
             ),
           ),
           const SizedBox(height: 16),
-          Table(
-            columnWidths: const {
-              0: FlexColumnWidth(2),
-              1: FlexColumnWidth(1),
-              2: FlexColumnWidth(1),
-              3: FlexColumnWidth(1),
-              4: FlexColumnWidth(1),
-            },
-            children: [
-              TableRow(
-                decoration: BoxDecoration(
-                  color: AppColors.primaryColor.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                children: const [
-                  Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('الباقة',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
+          // FIX: wrap in horizontal scroll for mobile screens
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 480),
+              child: Table(
+                columnWidths: const {
+                  0: FixedColumnWidth(140),
+                  1: FixedColumnWidth(70),
+                  2: FixedColumnWidth(70),
+                  3: FixedColumnWidth(90),
+                  4: FlexColumnWidth(2),
+                },
+                children: [
+                  TableRow(
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryColor.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    children: const [
+                      Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Text('الباقة',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
                   Padding(
                     padding: EdgeInsets.all(12),
                     child: Text('شهري',
@@ -595,7 +600,9 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
               _buildPricingRow('احترافي', 600, 'كل المميزات + الموظفين',
                   AppColors.professionalColor),
             ],
-          ),
+          ), // end Table
+            ), // end ConstrainedBox
+          ), // end SingleChildScrollView
         ],
       ),
     );

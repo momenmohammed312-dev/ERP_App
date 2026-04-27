@@ -380,17 +380,25 @@ class _ClientsManagementState extends State<ClientsManagement> {
                 ),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(client.name,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  if (client.email.isNotEmpty)
-                    Text(client.email,
-                        style:
-                            TextStyle(fontSize: 12, color: Colors.grey[600])),
-                ],
+              // FIX: constrain width so long names don't overflow
+              SizedBox(
+                width: 140,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(client.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1),
+                    if (client.email.isNotEmpty)
+                      Text(client.email,
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1),
+                  ],
+                ),
               ),
             ],
           ),
