@@ -5,6 +5,7 @@ export 'invoice_dao.dart';
 export 'ledger_dao.dart';
 export 'product_dao.dart';
 export 'purchase_dao.dart';
+export 'sales_dao.dart';
 export 'supplier_dao.dart';
 export 'day_dao.dart';
 export 'enhanced_purchase_dao.dart';

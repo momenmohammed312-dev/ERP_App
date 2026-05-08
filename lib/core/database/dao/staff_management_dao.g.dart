@@ -14,4 +14,38 @@ mixin _$StaffManagementDaoMixin on DatabaseAccessor<AppDatabase> {
   $PerformanceReviewsTable get performanceReviews =>
       attachedDatabase.performanceReviews;
   $StaffDocumentsTable get staffDocuments => attachedDatabase.staffDocuments;
+  StaffManagementDaoManager get managers => StaffManagementDaoManager(this);
+}
+
+class StaffManagementDaoManager {
+  final _$StaffManagementDaoMixin _db;
+  StaffManagementDaoManager(this._db);
+  $$StaffTableTableTableManager get staffTable =>
+      $$StaffTableTableTableManager(_db.attachedDatabase, _db.staffTable);
+  $$AttendanceTableTableTableManager get attendanceTable =>
+      $$AttendanceTableTableTableManager(
+        _db.attachedDatabase,
+        _db.attendanceTable,
+      );
+  $$VacationsTableTableManager get vacations =>
+      $$VacationsTableTableManager(_db.attachedDatabase, _db.vacations);
+  $$StaffAdvancesTableTableManager get staffAdvances =>
+      $$StaffAdvancesTableTableManager(_db.attachedDatabase, _db.staffAdvances);
+  $$PayrollTableTableTableManager get payrollTable =>
+      $$PayrollTableTableTableManager(_db.attachedDatabase, _db.payrollTable);
+  $$RewardsPenaltiesTableTableManager get rewardsPenalties =>
+      $$RewardsPenaltiesTableTableManager(
+        _db.attachedDatabase,
+        _db.rewardsPenalties,
+      );
+  $$PerformanceReviewsTableTableManager get performanceReviews =>
+      $$PerformanceReviewsTableTableManager(
+        _db.attachedDatabase,
+        _db.performanceReviews,
+      );
+  $$StaffDocumentsTableTableManager get staffDocuments =>
+      $$StaffDocumentsTableTableManager(
+        _db.attachedDatabase,
+        _db.staffDocuments,
+      );
 }

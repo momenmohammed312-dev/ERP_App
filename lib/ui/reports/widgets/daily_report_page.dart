@@ -33,6 +33,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
     try {
       final db = ref.read(appDatabaseProvider);
 
+      // Load invoices by date range
       final allInvoices = await db.invoiceDao.getInvoicesByDateRange(
         DateTime(_startDate!.year, _startDate!.month, _startDate!.day),
         DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59),
@@ -116,19 +117,25 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
 
           if (dayData['created_at'] != null) {
             try {
-              openTime = DateFormat('HH:mm').format(parseDate(dayData['created_at']));
+              openTime = DateFormat(
+                'HH:mm',
+              ).format(parseDate(dayData['created_at']));
             } catch (_) {}
           }
           if (dayData['closed_at'] != null) {
             try {
-              closeTime = DateFormat('HH:mm').format(parseDate(dayData['closed_at']));
+              closeTime = DateFormat(
+                'HH:mm',
+              ).format(parseDate(dayData['closed_at']));
             } catch (_) {}
           }
         }
 
         // FIX: only calculate surplus/deficit when day is closed
         final surplusDeficit = closingBalance != null
-            ? closingBalance - openingBalance - cash // deficit vs cash collected
+            ? closingBalance -
+                  openingBalance -
+                  cash // deficit vs cash collected
             : null; // null = day still open
 
         result.add({
@@ -186,7 +193,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
     final bgColor = isDark ? const Color(0xFF121212) : Colors.grey.shade50;
     final cardBg = isDark ? const Color(0xFF1E1E2C) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
-    final subTextColor =isDark ? Colors.white70 : Colors.black54;
+    final subTextColor = isDark ? Colors.white70 : Colors.black54;
     final totalSales = _dailyData.fold<double>(
       0.0,
       (sum, d) => sum + ((d['totalSales'] as num?)?.toDouble() ?? 0.0),
@@ -309,9 +316,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                             child: DataTable(
                               columnSpacing: 20,
                               headingRowColor: WidgetStateProperty.all(
-                                Theme.of(context)
-                                    .colorScheme
-                                    .primaryContainer
+                                Theme.of(context).colorScheme.primaryContainer
                                     .withValues(alpha: 0.5),
                               ),
                               dataTextStyle: TextStyle(color: textColor),
@@ -328,14 +333,12 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                 DataColumn(label: Text('عدد الفواتير')),
                               ],
                               rows: _dailyData.map((d) {
-                                final sd =
-                                    (d['surplusDeficit'] as num).toDouble();
+                                final sd = (d['surplusDeficit'] as num)
+                                    .toDouble();
                                 final sdKnown =
                                     d['surplusKnown'] as bool? ?? false;
-                                final credit =
-                                    (d['credit'] as num).toDouble();
-                                final isOpen =
-                                    d['isOpen'] as bool? ?? false;
+                                final credit = (d['credit'] as num).toDouble();
+                                final isOpen = d['isOpen'] as bool? ?? false;
                                 return DataRow(
                                   cells: [
                                     DataCell(Text(d['date'] as String)),
@@ -346,18 +349,23 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                           ? Container(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 2),
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
                                               decoration: BoxDecoration(
-                                                color: Colors.orange
-                                                    .withValues(alpha: 0.15),
+                                                color: Colors.orange.withValues(
+                                                  alpha: 0.15,
+                                                ),
                                                 borderRadius:
                                                     BorderRadius.circular(8),
                                               ),
-                                              child: const Text('مفتوح',
-                                                  style: TextStyle(
-                                                      color: Colors.orange,
-                                                      fontSize: 12)),
+                                              child: const Text(
+                                                'مفتوح',
+                                                style: TextStyle(
+                                                  color: Colors.orange,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
                                             )
                                           : Text(d['closeTime'] as String),
                                     ),
@@ -369,10 +377,14 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                     ),
                                     DataCell(
                                       isOpen
-                                          ? Text('-',
+                                          ? Text(
+                                              '-',
                                               style: TextStyle(
-                                                  color: textColor
-                                                      .withValues(alpha: 0.4)))
+                                                color: textColor.withValues(
+                                                  alpha: 0.4,
+                                                ),
+                                              ),
+                                            )
                                           : Text(
                                               (d['closingBalance'] as num)
                                                   .toStringAsFixed(2),
@@ -386,7 +398,8 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                     ),
                                     DataCell(
                                       Text(
-                                          (d['cash'] as num).toStringAsFixed(2)),
+                                        (d['cash'] as num).toStringAsFixed(2),
+                                      ),
                                     ),
                                     // FIX: show credit amount with color
                                     DataCell(
@@ -395,7 +408,9 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                         style: TextStyle(
                                           color: credit > 0
                                               ? Colors.orange.shade700
-                                              : textColor.withValues(alpha: 0.5),
+                                              : textColor.withValues(
+                                                  alpha: 0.5,
+                                                ),
                                           fontWeight: credit > 0
                                               ? FontWeight.bold
                                               : FontWeight.normal,
@@ -414,14 +429,19 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             )
-                                          : Text('-',
+                                          : Text(
+                                              '-',
                                               style: TextStyle(
-                                                  color: textColor
-                                                      .withValues(alpha: 0.4))),
+                                                color: textColor.withValues(
+                                                  alpha: 0.4,
+                                                ),
+                                              ),
+                                            ),
                                     ),
                                     DataCell(
                                       Text(
-                                          (d['invoiceCount'] as int).toString()),
+                                        (d['invoiceCount'] as int).toString(),
+                                      ),
                                     ),
                                   ],
                                 );

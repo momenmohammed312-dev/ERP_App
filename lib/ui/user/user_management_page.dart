@@ -909,6 +909,7 @@ class _EditUserDialogState extends State<_EditUserDialog> {
         role: _selectedRole.name,
         fullName: _fullNameController.text.trim(),
         isActive: widget.user.isActive,
+        failedAttempts: widget.user.failedAttempts,
         lastLogin: widget.user.lastLogin,
         createdAt: widget.user.createdAt,
       );

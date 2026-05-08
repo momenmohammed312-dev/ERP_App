@@ -19,6 +19,7 @@ part 'app_database.g.dart';
     Customers,
     Suppliers,
     LedgerTransactions,
+    Sales,
     Invoices,
     InvoiceItems,
     Expenses,
@@ -70,6 +71,7 @@ part 'app_database.g.dart';
     ExpenseDao,
     DayDao,
     PurchaseDao,
+    SalesDao,
     CreditPaymentsDao,
     EnhancedPurchaseDao,
     PurchaseBudgetDao,
@@ -89,7 +91,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 37;
+  int get schemaVersion => 38;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -127,29 +129,76 @@ class AppDatabase extends _$AppDatabase {
         log('paidAmount column already exists or failed to add: $e');
       }
 
-      if (from < 37) {
-        // Fix Zero Credit/Sales issue: Sync redundant columns if they exist
+      if (from < 38) {
+        // Add security related columns to Users table
         try {
-          await customStatement('''
+          await customStatement(
+            'ALTER TABLE users ADD COLUMN failed_attempts INTEGER DEFAULT 0',
+          );
+        } catch (e) {
+          log('failed_attempts column already exists: $e');
+        }
+        try {
+          await customStatement(
+            'ALTER TABLE users ADD COLUMN locked_until INTEGER',
+          );
+        } catch (e) {
+          log('locked_until column already exists: $e');
+        }
+        try {
+          await customStatement(
+            'ALTER TABLE users ADD COLUMN custom_permissions TEXT',
+          );
+        } catch (e) {
+          log('custom_permissions column already exists: $e');
+        }
+        try {
+          await customStatement('ALTER TABLE users ADD COLUMN email TEXT');
+        } catch (e) {
+          log('email column already exists: $e');
+        }
+        try {
+          await customStatement('ALTER TABLE users ADD COLUMN phone TEXT');
+        } catch (e) {
+          log('phone column already exists: $e');
+        }
+      }
+
+      // Fix Zero Credit/Sales issue: Sync redundant columns if they exist
+      try {
+        await customStatement('''
             UPDATE invoices 
             SET total_amount = COALESCE(totalAmount, total_amount),
                 paid_amount = COALESCE(paidAmount, paid_amount)
             WHERE total_amount = 0 OR total_amount IS NULL
           ''');
-          log('Synced totalAmount and paidAmount columns in invoices');
-        } catch (e) {
-          log(
-            'Failed to sync invoice columns (redundant columns might not exist): $e',
-          );
-        }
+        log('Synced totalAmount and paidAmount columns in invoices');
+      } catch (e) {
+        log(
+          'Failed to sync invoice columns (redundant columns might not exist): $e',
+        );
+      }
 
-        // Ensure notifications table exists
+      if (from < 39) {
+        // Add temporary INT column for invoiceId conversion (SQLite cannot change column type directly)
         try {
-          await m.createTable(notifications);
-          log('Ensured notifications table exists (v37 migration)');
+          await customStatement(
+            'ALTER TABLE sales ADD COLUMN invoice_id_int INTEGER',
+          );
+          await customStatement(
+            'UPDATE sales SET invoice_id_int = CAST(invoiceId AS INTEGER) WHERE invoiceId IS NOT NULL AND invoiceId GLOB "[0-9]*"',
+          );
+          log('Added invoice_id_int column and migrated data for sales');
         } catch (e) {
-          log('Notifications table already exists or failed to add: $e');
+          log('Sales invoiceId migration failed: $e');
         }
+      }
+
+      try {
+        await m.createTable(notifications);
+        log('Ensured notifications table exists (v37 migration)');
+      } catch (e) {
+        log('Notifications table already exists or failed to add: $e');
       }
 
       if (from < 2) {

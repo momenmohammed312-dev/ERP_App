@@ -1,15 +1,8 @@
-import 'dart:io';
-// Removed unused imports to reduce warnings and improve tree-shaking
-import 'package:crypto/crypto.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'local_backup_service.dart';
 import '../core/utils/logger.dart';
 
 class CloudBackupService {
-  static final FirebaseStorage _storage = FirebaseStorage.instance;
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static Future<bool> uploadToCloud(
     String backupPath, {
     String? customerId,
@@ -18,43 +11,10 @@ class CloudBackupService {
       throw Exception('Cloud backup upload not supported on web platform');
     }
     try {
-      final backupFile = File(backupPath);
-      if (!await backupFile.exists()) {
-        throw Exception('Backup file not found');
-      }
-
-      // Read backup file
-      final backupBytes = await backupFile.readAsBytes();
-      final checksum = sha256.convert(backupBytes).toString();
-
-      // Create unique filename
-      final fileName =
-          'backup_${DateTime.now().millisecondsSinceEpoch}_${backupFile.uri.pathSegments.last}';
-      final customerPath = customerId ?? 'anonymous';
-      final storageRef = _storage.ref().child(
-        'backups/$customerPath/$fileName',
+      AppLogger.w(
+        'Cloud upload is disabled (Firebase removed). Backup remains local. customerId=$customerId path=$backupPath',
       );
-
-      // Upload to Firebase Storage
-      final uploadTask = storageRef.putData(backupBytes);
-      final snapshot = await uploadTask.whenComplete(() => null);
-
-      // Get download URL
-      final downloadUrl = await snapshot.ref.getDownloadURL();
-
-      // Save metadata to Firestore
-      await _firestore.collection('backups').doc(fileName).set({
-        'fileName': fileName,
-        'customerId': customerId ?? 'anonymous',
-        'created': DateTime.now().toIso8601String(),
-        'size': backupBytes.length,
-        'checksum': checksum,
-        'downloadUrl': downloadUrl,
-        'version': '2.0.0',
-      });
-
-      AppLogger.i('✅ Cloud upload completed successfully: $fileName');
-      return true;
+      return false;
     } catch (e) {
       AppLogger.e('Cloud upload error', e);
       return false;
@@ -67,29 +27,10 @@ class CloudBackupService {
     String localPath,
   ) async {
     try {
-      // Get backup metadata from Firestore
-      final doc = await _firestore.collection('backups').doc(backupId).get();
-      if (!doc.exists) {
-        throw Exception('Backup not found in cloud');
-      }
-
-      final data = doc.data()!;
-      final downloadUrl = data['downloadUrl'] as String;
-
-      // Download from Firebase Storage
-      final ref = _storage.refFromURL(downloadUrl);
-      final bytes = await ref.getData();
-
-      if (bytes == null) {
-        throw Exception('Failed to download backup data');
-      }
-
-      // Save to local path
-      final localFile = File(localPath);
-      await localFile.writeAsBytes(bytes);
-
-      AppLogger.i('✅ Cloud download completed successfully: $backupId');
-      return localPath;
+      AppLogger.w(
+        'Cloud download is disabled (Firebase removed). backupId=$backupId',
+      );
+      return null;
     } catch (e) {
       AppLogger.e('Cloud download error', e);
       return null;
@@ -101,26 +42,10 @@ class CloudBackupService {
     String? customerId,
   }) async {
     try {
-      Query query = _firestore.collection('backups');
-
-      if (customerId != null) {
-        query = query.where('customerId', isEqualTo: customerId);
-      }
-
-      final snapshot = await query.get();
-
-      return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        return CloudBackupInfo(
-          id: doc.id,
-          fileName: data['fileName'] as String,
-          created: DateTime.parse(data['created'] as String),
-          size: data['size'] as int,
-          customerId: data['customerId'] as String,
-          version: data['version'] as String,
-          downloadUrl: data['downloadUrl'] as String,
-        );
-      }).toList();
+      AppLogger.w(
+        'Cloud backups are disabled (Firebase removed). customerId=$customerId',
+      );
+      return [];
     } catch (e) {
       AppLogger.e('Error listing cloud backups', e);
       return [];
@@ -130,24 +55,10 @@ class CloudBackupService {
   /// Delete cloud backup
   static Future<bool> deleteCloudBackup(String backupId) async {
     try {
-      // Get backup metadata from Firestore
-      final doc = await _firestore.collection('backups').doc(backupId).get();
-      if (!doc.exists) {
-        throw Exception('Backup not found in cloud');
-      }
-
-      final data = doc.data()!;
-      final downloadUrl = data['downloadUrl'] as String;
-
-      // Delete from Firebase Storage
-      final ref = _storage.refFromURL(downloadUrl);
-      await ref.delete();
-
-      // Delete metadata from Firestore
-      await _firestore.collection('backups').doc(backupId).delete();
-
-      AppLogger.i('✅ Cloud backup deleted successfully: $backupId');
-      return true;
+      AppLogger.w(
+        'Cloud backup delete is disabled (Firebase removed). backupId=$backupId',
+      );
+      return false;
     } catch (e) {
       AppLogger.e('Error deleting cloud backup', e);
       return false;

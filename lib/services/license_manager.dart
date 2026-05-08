@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:flutter/foundation.dart';
 import '../core/utils/logger.dart';
-import 'package:pos_offline_desktop/config/app_secrets.dart';
+import 'package:pos_offline_desktop/config/license_config.dart';
 
 enum LicenseType {
   trial, // تجريبي - 7 أيام - مستخدم واحد
@@ -73,7 +73,7 @@ class License {
   String get licenseType => type.toString().split('.').last;
 
   static String _generateSignature(String data) {
-    final key = utf8.encode(AppSecrets.licenseSecretKey);
+    final key = utf8.encode(LicenseConfig.secretKey);
     final bytes = utf8.encode(data);
     final hmac = Hmac(sha256, key);
     final digest = hmac.convert(bytes);
@@ -130,7 +130,7 @@ class License {
 
 class LicenseManager {
   static const String _storageKey = 'app_license';
-  static const String _secretKey = AppSecrets.licenseSecretKey;
+  static const String _secretKey = LicenseConfig.secretKey;
 
   // Singleton
   static final LicenseManager _instance = LicenseManager._internal();

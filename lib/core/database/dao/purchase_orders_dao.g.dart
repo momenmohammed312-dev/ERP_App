@@ -12,4 +12,32 @@ mixin _$PurchaseOrdersDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.purchaseOrderItems;
   $PurchaseOrderStatusesTable get purchaseOrderStatuses =>
       attachedDatabase.purchaseOrderStatuses;
+  PurchaseOrdersDaoManager get managers => PurchaseOrdersDaoManager(this);
+}
+
+class PurchaseOrdersDaoManager {
+  final _$PurchaseOrdersDaoMixin _db;
+  PurchaseOrdersDaoManager(this._db);
+  $$EnhancedSuppliersTableTableManager get enhancedSuppliers =>
+      $$EnhancedSuppliersTableTableManager(
+        _db.attachedDatabase,
+        _db.enhancedSuppliers,
+      );
+  $$PurchaseOrdersTableTableManager get purchaseOrders =>
+      $$PurchaseOrdersTableTableManager(
+        _db.attachedDatabase,
+        _db.purchaseOrders,
+      );
+  $$ProductsTableTableManager get products =>
+      $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
+  $$PurchaseOrderItemsTableTableManager get purchaseOrderItems =>
+      $$PurchaseOrderItemsTableTableManager(
+        _db.attachedDatabase,
+        _db.purchaseOrderItems,
+      );
+  $$PurchaseOrderStatusesTableTableManager get purchaseOrderStatuses =>
+      $$PurchaseOrderStatusesTableTableManager(
+        _db.attachedDatabase,
+        _db.purchaseOrderStatuses,
+      );
 }

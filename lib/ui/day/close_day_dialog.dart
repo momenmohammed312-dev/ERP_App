@@ -4,6 +4,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/services/backup_service.dart';
+import 'package:pos_offline_desktop/core/utils/logger.dart';
+import 'dart:async';
 
 class CloseDayDialog extends ConsumerStatefulWidget {
   const CloseDayDialog({super.key});
@@ -250,6 +253,19 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
           dayId: today['id'] as int,
           closingBalance: actualBalance,
           notes: _notesController.text.trim(),
+        );
+
+        unawaited(
+          BackupService(db)
+              .createBackup(
+                type: 'day_close',
+                description:
+                    'نسخة إغلاق يوم ${DateFormat('yyyy-MM-dd').format(DateTime.now())}',
+              )
+              .then((_) {})
+              .catchError((e) {
+                AppLogger.e('Day-close backup failed: $e');
+              }),
         );
 
         if (mounted) {

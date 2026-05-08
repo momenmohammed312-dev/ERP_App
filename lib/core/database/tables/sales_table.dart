@@ -1,10 +1,15 @@
 import 'package:drift/drift.dart';
 
+import 'tables.dart';
+
 @DataClassName('Sale')
 class Sales extends Table {
   TextColumn get id => text()(); // UUID primary key
   TextColumn get employeeId => text()(); // Foreign key to Employees
-  TextColumn get invoiceId => text().nullable()(); // Foreign key to Invoices
+  IntColumn get invoiceId => integer().nullable().references(
+    Invoices,
+    #id,
+  )(); // Foreign key to Invoices
   RealColumn get total => real().withDefault(const Constant(0.0))();
   DateTimeColumn get date => dateTime()();
   TextColumn get paymentMethod => text().nullable()();

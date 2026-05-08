@@ -3,7 +3,12 @@
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
-import 'config/app_secrets.dart';
+
+/// App Secrets - TODO: Move to environment variables or secure storage
+class _AppSecrets {
+  static const String firebaseApiKeyWeb = 'AIzaSyB...YOUR_KEY_HERE';
+  static const String firebaseAppIdWeb = '1:431956537173:web:...YOUR_APP_ID';
+}
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
 ///
@@ -49,8 +54,8 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: AppSecrets.firebaseApiKeyWeb,
-    appId: AppSecrets.firebaseAppIdWeb,
+    apiKey: _AppSecrets.firebaseApiKeyWeb,
+    appId: _AppSecrets.firebaseAppIdWeb,
     messagingSenderId: '431956537173',
     projectId: 'posmo2-13dc1',
     authDomain: 'posmo2-13dc1.firebaseapp.com',

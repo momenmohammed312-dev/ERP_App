@@ -11,7 +11,6 @@ import 'package:archive/archive_io.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
-import '../core/utils/logger.dart';
 
 // ════════════════════════════════════════════════════════════════════════
 // 1. نموذج النسخة الاحتياطية
@@ -52,7 +51,8 @@ class BackupInfo {
 
 class BackupService {
   static const String _backupDir = 'data/backups';
-  static const String _encryptionKey = 'YOUR-32-CHAR-BACKUP-KEY-HERE!!!';
+  // مفتاح التشفير - يجب تغييره لكل تثبيت. يمكن استخدام: dart -e "import 'dart:convert'; import 'dart:math'; print(List.generate(32, (_) => String.fromCharCode(Random().nextInt(94) + 33)).join())"
+  static const String _encryptionKey = 'PosBackup@2024#SecureKey#32CharX';
   static const int _maxBackups = 7; // الاحتفاظ بآخر 7 نسخ
 
   // Singleton
@@ -73,7 +73,7 @@ class BackupService {
       throw Exception('Backup operations not supported on web platform');
     }
     try {
-      AppLogger.i('📦 بدء النسخ الاحتياطي...');
+      print('📦 بدء النسخ الاحتياطي...');
 
       // 1. إنشاء مجلد النسخ الاحتياطية
       final backupDirectory = Directory(_backupDir);
@@ -124,7 +124,7 @@ class BackupService {
       await File(infoPath).writeAsString(jsonEncode(info));
 
       // 8. ضغط الملفات
-      AppLogger.i('📦 ضغط الملفات...');
+      print('📦 ضغط الملفات...');
       final encoder = ZipFileEncoder();
       final tempZipPath = join(_backupDir, 'temp_backup.zip');
       encoder.create(tempZipPath);
@@ -132,7 +132,7 @@ class BackupService {
       encoder.close();
 
       // 9. تشفير الملف
-      AppLogger.i('🔒 تشفير النسخة الاحتياطية...');
+      print('🔒 تشفير النسخة الاحتياطية...');
       final zipFile = File(tempZipPath);
       final zipBytes = await zipFile.readAsBytes();
       final encryptedBytes = _encryptData(zipBytes);
@@ -148,15 +148,14 @@ class BackupService {
       final backupFile = File(backupPath);
       final size = await backupFile.length();
 
-      AppLogger.i('✅ تم إنشاء النسخة الاحتياطية بنجاح');
-      AppLogger.i('📁 الموقع: $backupPath');
-      AppLogger.i('📊 الحجم: ${_formatBytes(size)}');
+      print('✅ تم إنشاء النسخة الاحتياطية بنجاح');
+      print('📁 الموقع: $backupPath');
+      print('📊 الحجم: $_formatBytes(size)');
 
       // 13. تنظيف النسخ القديمة
       await _cleanOldBackups();
 
       return BackupInfo(
-        // ... (rest of model initialization)
         filename: filename,
         createdAt: timestamp,
         size: size,
@@ -165,7 +164,7 @@ class BackupService {
         createdBy: createdBy,
       );
     } catch (e) {
-      AppLogger.e('❌ خطأ في النسخ الاحتياطي', e);
+      print('❌ خطأ في النسخ الاحتياطي: $e');
       rethrow;
     }
   }
@@ -176,7 +175,7 @@ class BackupService {
 
   Future<void> restoreBackup(String filename) async {
     try {
-      AppLogger.i('📥 بدء الاستعادة من: $filename');
+      print('📥 بدء الاستعادة من: $filename');
 
       final backupPath = join(_backupDir, filename);
       final backupFile = File(backupPath);
@@ -186,7 +185,7 @@ class BackupService {
       }
 
       // 1. فك تشفير الملف
-      AppLogger.i('🔓 فك تشفير النسخة الاحتياطية...');
+      print('🔓 فك تشفير النسخة الاحتياطية...');
       final encryptedBytes = await backupFile.readAsBytes();
       final decryptedBytes = _decryptData(encryptedBytes);
 
@@ -195,7 +194,7 @@ class BackupService {
       await File(tempZipPath).writeAsBytes(decryptedBytes);
 
       // 3. فك الضغط
-      AppLogger.i('📦 فك ضغط الملفات...');
+      print('📦 فك ضغط الملفات...');
       final tempDir = Directory('$_backupDir/restore_temp');
       if (await tempDir.exists()) {
         await tempDir.delete(recursive: true);
@@ -216,7 +215,7 @@ class BackupService {
       }
 
       // 4. استعادة قاعدة البيانات
-      AppLogger.i('💾 استعادة قاعدة البيانات...');
+      print('💾 استعادة قاعدة البيانات...');
       final dbPath = await _getDatabasePath();
       final targetDbPath = dbPath;
       final sourceDbPath = join(tempDir.path, 'database.db');
@@ -242,9 +241,9 @@ class BackupService {
       await tempDir.delete(recursive: true);
       await File(tempZipPath).delete();
 
-      AppLogger.i('✅ تمت الاستعادة بنجاح');
+      print('✅ تمت الاستعادة بنجاح');
     } catch (e) {
-      AppLogger.e('❌ خطأ في الاستعادة', e);
+      print('❌ خطأ في الاستعادة: $e');
       rethrow;
     }
   }
@@ -304,7 +303,7 @@ class BackupService {
 
     if (await file.exists()) {
       await file.delete();
-      AppLogger.i('🗑️ تم حذف النسخة الاحتياطية: $filename');
+      print('🗑️ تم حذف النسخة الاحتياطية: $filename');
     }
   }
 
@@ -322,9 +321,7 @@ class BackupService {
       await deleteBackup(backups[i].filename);
     }
 
-    AppLogger.i(
-      '🧹 تم تنظيف ${backups.length - _maxBackups} نسخة احتياطية قديمة',
-    );
+    print('🧹 تم تنظيف ${backups.length - _maxBackups} نسخة احتياطية قديمة');
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -397,32 +394,32 @@ class AutoBackupService {
 
     _timer = Timer.periodic(_interval, (_) async {
       try {
-        AppLogger.i('⏰ بدء النسخ الاحتياطي التلقائي...');
+        print('⏰ بدء النسخ الاحتياطي التلقائي...');
         await BackupService().createBackup(type: 'auto');
-        AppLogger.i('✅ اكتمل النسخ الاحتياطي التلقائي');
+        print('✅ اكتمل النسخ الاحتياطي التلقائي');
       } catch (e) {
-        AppLogger.e('❌ فشل النسخ الاحتياطي التلقائي', e);
+        print('❌ فشل النسخ الاحتياطي التلقائي: $e');
       }
     });
 
-    AppLogger.i('✅ تم تفعيل النسخ الاحتياطي التلقائي (كل 24 ساعة)');
+    print('✅ تم تفعيل النسخ الاحتياطي التلقائي (كل 24 ساعة)');
   }
 
   /// إيقاف النسخ الاحتياطي التلقائي
   static void stop() {
     _timer?.cancel();
     _timer = null;
-    AppLogger.i('⏹️ تم إيقاف النسخ الاحتياطي التلقائي');
+    print('⏹️ تم إيقاف النسخ الاحتياطي التلقائي');
   }
 
   /// إنشاء نسخة فورية
   static Future<void> createNow() async {
     try {
-      AppLogger.i('⏰ إنشاء نسخة احتياطية فورية...');
+      print('⏰ إنشاء نسخة احتياطية فورية...');
       await BackupService().createBackup(type: 'auto');
-      AppLogger.i('✅ اكتملت النسخة الاحتياطية الفورية');
+      print('✅ اكتملت النسخة الاحتياطية الفورية');
     } catch (e) {
-      AppLogger.e('❌ فشلت النسخة الاحتياطية الفورية', e);
+      print('❌ فشلت النسخة الاحتياطية الفورية: $e');
     }
   }
 }

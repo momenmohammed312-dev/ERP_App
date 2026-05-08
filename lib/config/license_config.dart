@@ -1,8 +1,9 @@
-import 'app_secrets.dart';
-
 class LicenseConfig {
   // SECURITY: Secret key moved to AppSecrets
-  static const String secretKey = AppSecrets.licenseSecretKey;
+  static const String secretKey = String.fromEnvironment(
+    'LICENSE_SECRET_KEY',
+    defaultValue: 'CHANGE_ME',
+  );
 
   // License duration types
   static const Map<String, Map<String, dynamic>> licenseDurations = {
