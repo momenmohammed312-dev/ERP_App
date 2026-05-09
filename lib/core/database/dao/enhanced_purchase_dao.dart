@@ -53,7 +53,9 @@ class EnhancedPurchaseDao extends DatabaseAccessor<AppDatabase>
     DateTime end,
   ) {
     return (select(db.enhancedPurchases)
-          ..where((tbl) => tbl.purchaseDate.isBetweenValues(start, end))
+          ..where(
+            (tbl) => tbl.purchaseDate.isBetween(Constant(start), Constant(end)),
+          )
           ..orderBy([
             (tbl) => OrderingTerm(
               expression: tbl.purchaseDate,
@@ -130,7 +132,12 @@ class EnhancedPurchaseDao extends DatabaseAccessor<AppDatabase>
   Future<double> getTotalPurchasesByDateRange(DateTime start, DateTime end) {
     final query = selectOnly(db.enhancedPurchases)
       ..addColumns([db.enhancedPurchases.totalAmount.sum()])
-      ..where(db.enhancedPurchases.purchaseDate.isBetweenValues(start, end));
+      ..where(
+        db.enhancedPurchases.purchaseDate.isBetween(
+          Constant(start),
+          Constant(end),
+        ),
+      );
 
     return query.getSingle().then(
       (result) => result.read(db.enhancedPurchases.totalAmount.sum()) ?? 0.0,
@@ -159,7 +166,7 @@ class EnhancedPurchaseDao extends DatabaseAccessor<AppDatabase>
 
   Future<List<EnhancedSupplier>> getTopSuppliersByBalance(int limit) {
     return (select(db.enhancedSuppliers)
-          ..where((tbl) => tbl.currentBalance.isBiggerThanValue(0))
+          ..where((tbl) => tbl.currentBalance.isBiggerThan(const Constant(0)))
           ..orderBy([(tbl) => OrderingTerm.desc(tbl.currentBalance)])
           ..limit(limit))
         .get();
@@ -168,7 +175,9 @@ class EnhancedPurchaseDao extends DatabaseAccessor<AppDatabase>
   Stream<double> watchTotalSupplierDues() {
     final query = selectOnly(db.enhancedSuppliers)
       ..addColumns([db.enhancedSuppliers.currentBalance.sum()])
-      ..where(db.enhancedSuppliers.currentBalance.isBiggerThanValue(0));
+      ..where(
+        db.enhancedSuppliers.currentBalance.isBiggerThan(const Constant(0)),
+      );
 
     return query.watchSingle().map(
       (result) => result.read(db.enhancedSuppliers.currentBalance.sum()) ?? 0.0,

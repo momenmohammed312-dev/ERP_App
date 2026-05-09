@@ -7,7 +7,8 @@ class PurchaseItemsReportScreen extends StatefulWidget {
   const PurchaseItemsReportScreen({super.key, required this.database});
 
   @override
-  State<PurchaseItemsReportScreen> createState() => _PurchaseItemsReportScreenState();
+  State<PurchaseItemsReportScreen> createState() =>
+      _PurchaseItemsReportScreenState();
 }
 
 class _PurchaseItemsReportScreenState extends State<PurchaseItemsReportScreen> {
@@ -23,11 +24,10 @@ class _PurchaseItemsReportScreenState extends State<PurchaseItemsReportScreen> {
 
   Future<void> _loadPurchaseData() async {
     setState(() => _isLoading = true);
-    
+
     try {
       // Get purchase items summary
-      final purchaseItems = await (widget.database.customSelect(
-        '''
+      final purchaseItems = await (widget.database.customSelect('''
         SELECT 
           p.product_name,
           SUM(pi.quantity) as total_quantity,
@@ -39,9 +39,8 @@ class _PurchaseItemsReportScreenState extends State<PurchaseItemsReportScreen> {
         WHERE si.status = "completed"
         GROUP BY p.product_name
         ORDER BY total_cost DESC
-        '''
-      )).get();
-      
+        ''')).get();
+
       setState(() {
         _purchaseData = purchaseItems.map((row) => row.data).toList();
         _isLoading = false;
@@ -53,15 +52,24 @@ class _PurchaseItemsReportScreenState extends State<PurchaseItemsReportScreen> {
   }
 
   double _totalCost() {
-    return _purchaseData.fold(0.0, (sum, item) => sum + (item['total_cost'] as double? ?? 0.0));
+    return _purchaseData.fold(
+      0.0,
+      (sum, item) => sum + (item['total_cost'] as double? ?? 0.0),
+    );
   }
 
   int _totalQuantity() {
-    return _purchaseData.fold(0, (sum, item) => sum + (item['total_quantity'] as int? ?? 0));
+    return _purchaseData.fold(
+      0,
+      (sum, item) => sum + (item['total_quantity'] as int? ?? 0),
+    );
   }
 
   int _distinctProducts() {
-    return _purchaseData.fold(0, (sum, item) => sum + (item['distinct_products'] as int? ?? 0));
+    return _purchaseData.fold(
+      0,
+      (sum, item) => sum + (item['distinct_products'] as int? ?? 0),
+    );
   }
 
   @override
@@ -105,10 +113,22 @@ class _PurchaseItemsReportScreenState extends State<PurchaseItemsReportScreen> {
                         DropdownButton<String>(
                           value: _selectedPeriod,
                           items: const [
-                            DropdownMenuItem(value: 'all', child: Text('الكل الوقت')),
-                            DropdownMenuItem(value: 'today', child: Text('اليوم فقط')),
-                            DropdownMenuItem(value: 'week', child: Text('هذا الأسبوع')),
-                            DropdownMenuItem(value: 'month', child: Text('هذا الشهر')),
+                            DropdownMenuItem(
+                              value: 'all',
+                              child: Text('الكل الوقت'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'today',
+                              child: Text('اليوم فقط'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'week',
+                              child: Text('هذا الأسبوع'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'month',
+                              child: Text('هذا الشهر'),
+                            ),
                           ],
                           onChanged: (value) {
                             setState(() => _selectedPeriod = value!);
@@ -119,7 +139,7 @@ class _PurchaseItemsReportScreenState extends State<PurchaseItemsReportScreen> {
                     ),
                   ),
                 ),
-                
+
                 // Summary Cards
                 Row(
                   children: [
@@ -145,9 +165,9 @@ class _PurchaseItemsReportScreenState extends State<PurchaseItemsReportScreen> {
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Items List
                 Expanded(
                   child: Card(
@@ -203,7 +223,12 @@ class _PurchaseItemsReportScreenState extends State<PurchaseItemsReportScreen> {
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, IconData icon, Color color) {
+  Widget _buildSummaryCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -266,10 +291,7 @@ class _PurchaseItemsReportScreenState extends State<PurchaseItemsReportScreen> {
           const SizedBox(height: 16),
           Text(
             'اضغط "إنشاء فاتورة شراء" لبدء تسجيل المشتريات',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
             textAlign: TextAlign.center,
           ),
         ],
@@ -295,35 +317,24 @@ class _PurchaseItemsReportScreenState extends State<PurchaseItemsReportScreen> {
             ),
             title: Text(
               item['product_name'],
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'الوحدة: ${item['unit'] ?? 'غير محدد'}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'الكمية: ${item['total_quantity']}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'سعر الوحدة: ${item['unit_price'].toStringAsFixed(2)} ج.م',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -337,10 +348,7 @@ class _PurchaseItemsReportScreenState extends State<PurchaseItemsReportScreen> {
                 const SizedBox(height: 4),
                 Text(
                   'أول شراء: ${item['first_purchase']}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
               ],
             ),

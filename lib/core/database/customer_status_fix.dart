@@ -1,10 +1,10 @@
+import 'package:drift/drift.dart';
 import 'dart:developer';
-import 'app_database.dart';
 
 /// Fix for customer status datatype mismatch
 /// This addresses SqliteException(20): datatype mismatch on INSERT INTO customers
 class CustomerStatusFix {
-  static Future<void> fixCustomerStatusColumn(AppDatabase db) async {
+  static Future<void> fixCustomerStatusColumn(DatabaseConnectionUser db) async {
     try {
       log('🔧 Fixing customer status column...');
 

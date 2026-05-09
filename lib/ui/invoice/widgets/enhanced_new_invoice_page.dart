@@ -43,12 +43,23 @@ class _EnhancedNewInvoicePageState
   // Invoice data
   InvoiceType _invoiceType = InvoiceType.cash;
   PaymentMethod _paymentMethod = PaymentMethod.cash;
-  Customer? _selectedCustomer;
+  String? _selectedCustomerId;
   final List<ProductEntry> _productEntries = [];
 
   // Products and search
   List<Product> _filteredProducts = [];
-  final List<Customer> _customers = [];
+  // Non-final so we can reassign after async load
+  List<Customer> _customers = [];
+
+  Customer? get _selectedCustomer {
+    final id = _selectedCustomerId;
+    if (id == null) return null;
+    try {
+      return _customers.firstWhere((c) => c.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
 
   // Totals
   double _subtotal = 0.0;
@@ -119,17 +130,20 @@ class _EnhancedNewInvoicePageState
       // Generate invoice number
       _invoiceNumber = '${DateTime.now().millisecondsSinceEpoch}';
 
+      if (!mounted) return;
       setState(() {
         _isDayOpen = true;
         _filteredProducts = products;
-        // _customers = customers;
+        _customers = customers; // populate the dropdown
         _isLoading = false;
       });
     } catch (e) {
       log('Error initializing invoice: $e');
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -154,6 +168,7 @@ class _EnhancedNewInvoicePageState
       searchQuery: query.isEmpty ? null : query,
     );
 
+    if (!mounted) return;
     setState(() {
       _filteredProducts = filtered;
     });
@@ -266,12 +281,12 @@ class _EnhancedNewInvoicePageState
         if (!_customers.any((c) => c.id == 'cash')) {
           _customers.add(existingCashCustomer);
         }
-        _selectedCustomer = existingCashCustomer;
+        _selectedCustomerId = existingCashCustomer.id;
         _paymentMethod = PaymentMethod.cash;
         _paidAmount = _grandTotal;
         _paidAmountController.text = _grandTotal.toStringAsFixed(2);
       } else {
-        _selectedCustomer = null; // Require selection for credit
+        _selectedCustomerId = null; // Require selection for credit
         _paidAmount = 0.0;
         _paidAmountController.text = '0.00';
       }
@@ -390,7 +405,7 @@ class _EnhancedNewInvoicePageState
       return;
     }
 
-    if (_invoiceType == InvoiceType.credit && _selectedCustomer == null) {
+    if (_invoiceType == InvoiceType.credit && _selectedCustomerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى اختيار عميل للفاتورة الآجلة')),
       );
@@ -444,10 +459,11 @@ class _EnhancedNewInvoicePageState
     final db = widget.db;
 
     // Determine customer info
-    final customerName = _selectedCustomer?.name ?? 'عميل نقدي';
-    final customerId = _selectedCustomer?.id ?? 'cash';
-    final customerContact = _selectedCustomer?.phone ?? '';
-    final customerAddress = _selectedCustomer?.address ?? '';
+    final selectedCustomer = _selectedCustomer;
+    final customerName = selectedCustomer?.name ?? 'عميل نقدي';
+    final customerId = selectedCustomer?.id ?? 'cash';
+    final customerContact = selectedCustomer?.phone ?? '';
+    final customerAddress = selectedCustomer?.address ?? '';
 
     // Determine payment method string
     final paymentMethodStr = _invoiceType == InvoiceType.credit
@@ -466,9 +482,9 @@ class _EnhancedNewInvoicePageState
 
     // Get customer's actual previous balance BEFORE saving to database
     double previousBalance = 0.0;
-    if (_selectedCustomer != null && _selectedCustomer!.id != 'cash') {
+    if (selectedCustomer != null && selectedCustomer.id != 'cash') {
       previousBalance = await db.ledgerDao.getCustomerBalance(
-        _selectedCustomer!.id,
+        selectedCustomer.id,
       );
     }
 
@@ -578,7 +594,7 @@ class _EnhancedNewInvoicePageState
       id: invoiceId,
       invoiceNumber: _invoiceNumber ?? 'INV$invoiceId',
       customerName: customerName,
-      customerPhone: _selectedCustomer?.phone ?? 'N/A',
+      customerPhone: selectedCustomer?.phone ?? 'N/A',
       customerZipCode: '',
       customerState: '',
       invoiceDate: DateTime.now(),
@@ -835,8 +851,8 @@ class _EnhancedNewInvoicePageState
           // Customer selection
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: DropdownButtonFormField<Customer>(
-              initialValue: _selectedCustomer,
+            child: DropdownButtonFormField<String>(
+              initialValue: _selectedCustomerId,
               decoration: InputDecoration(
                 labelText: 'العميل',
                 prefixIcon: const Icon(Icons.person),
@@ -860,13 +876,13 @@ class _EnhancedNewInvoicePageState
               ),
               items: _customers.map((customer) {
                 return DropdownMenuItem(
-                  value: customer,
+                  value: customer.id,
                   child: Text(customer.name),
                 );
               }).toList(),
-              onChanged: (customer) {
+              onChanged: (customerId) {
                 setState(() {
-                  _selectedCustomer = customer;
+                  _selectedCustomerId = customerId;
                 });
               },
             ),

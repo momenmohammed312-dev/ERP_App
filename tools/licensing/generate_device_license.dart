@@ -5,14 +5,16 @@ import 'package:crypto/crypto.dart';
 void main() async {
   // Get device fingerprint
   print('Generating license key for current device...');
-  
+
   // Simulate getting device fingerprint (in real app, this would come from HardwareFingerprintService)
   const deviceFingerprint = 'CURRENT-DEVICE-FINGERPRINT-PLACEHOLDER';
-  
+
   // Admin license data
   final licenseData = {
     'device': deviceFingerprint,
-    'expires': DateTime.now().add(const Duration(days: 3650)).toIso8601String(), // 10 years
+    'expires': DateTime.now()
+        .add(const Duration(days: 3650))
+        .toIso8601String(), // 10 years
     'features': ['pos', 'inventory', 'customers', 'reports', 'admin', 'all'],
     'max_users': 999,
     'license_type': 'enterprise_admin',

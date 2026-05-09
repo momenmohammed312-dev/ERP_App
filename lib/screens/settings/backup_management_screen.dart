@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../services/user_backup_service.dart';
+import 'package:pos_offline_desktop/services/enhanced_backup_service.dart';
 
 class BackupManagementScreen extends ConsumerStatefulWidget {
   const BackupManagementScreen({super.key});
@@ -12,10 +12,10 @@ class BackupManagementScreen extends ConsumerStatefulWidget {
 
 class _BackupManagementScreenState
     extends ConsumerState<BackupManagementScreen> {
-  List<BackupInfo> _backups = [];
+  List<EnhancedBackupInfo> _backups = [];
   bool _isLoading = true;
   bool _isCreatingBackup = false;
-  final BackupService _backupService = BackupService();
+  final EnhancedBackupService _backupService = EnhancedBackupService();
   bool _autoBackupEnabled = false;
 
   @override
@@ -77,7 +77,7 @@ class _BackupManagementScreenState
     setState(() => _isCreatingBackup = true);
 
     try {
-      final backupService = BackupService();
+      final backupService = EnhancedBackupService();
       await backupService.createBackup(type: 'auto');
 
       if (mounted) {
@@ -104,7 +104,7 @@ class _BackupManagementScreenState
     }
   }
 
-  Future<void> _exportBackup(BackupInfo backup) async {
+  Future<void> _exportBackup(EnhancedBackupInfo backup) async {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -139,7 +139,7 @@ class _BackupManagementScreenState
     );
   }
 
-  Future<void> _restoreBackup(BackupInfo backup) async {
+  Future<void> _restoreBackup(EnhancedBackupInfo backup) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -187,7 +187,7 @@ class _BackupManagementScreenState
     }
   }
 
-  Future<void> _deleteBackup(BackupInfo backup) async {
+  Future<void> _deleteBackup(EnhancedBackupInfo backup) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -393,9 +393,9 @@ class _BackupManagementScreenState
                                       _autoBackupEnabled = value;
                                     });
                                     if (value) {
-                                      AutoBackupService.start();
+                                      EnhancedAutoBackupService.start();
                                     } else {
-                                      AutoBackupService.stop();
+                                      EnhancedAutoBackupService.stop();
                                     }
                                   },
                                 ),

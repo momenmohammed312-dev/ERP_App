@@ -1,4 +1,4 @@
-import 'package:drift/drift.dart' as drift;
+import 'package:drift/drift.dart';
 import '../database/app_database.dart';
 import '../utils/logger.dart';
 
@@ -29,7 +29,7 @@ class ReorderLevelService {
     try {
       final products = await (_database.select(
         _database.products,
-      )..where((p) => p.quantity.isSmallerThanValue(10))).get();
+      )..where((p) => p.quantity.isSmallerThan(const Constant(10)))).get();
 
       return products
           .map(

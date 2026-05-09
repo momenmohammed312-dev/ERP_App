@@ -12,6 +12,11 @@ import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:intl/intl.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:pos_offline_desktop/core/database/database_singleton.dart';
+import 'package:pos_offline_desktop/core/utils/app_utils.dart';
+import 'dart:typed_data';
+import 'package:pos_offline_desktop/core/services/backup_service.dart'
+    as core_backup;
 
 // ════════════════════════════════════════════════════════════════════════
 // 1. نموذج النسخة الاحتياطية المحسّن
@@ -237,6 +242,7 @@ class EnhancedBackupService {
     if (kIsWeb) {
       throw Exception('Backup restore not supported on web platform');
     }
+    Directory? tempDir;
     try {
       debugPrint('📥 بدء الاستعادة من: $filename');
 
@@ -249,23 +255,34 @@ class EnhancedBackupService {
       }
 
       // 1. قراءة الملف
-      final encryptedBytes = await backupFile.readAsBytes();
-
-      // 2. محاولة فك التشفير
-      List<int> zipBytes;
-      try {
-        debugPrint('🔓 فك تشفير النسخة الاحتياطية...');
-        zipBytes = _decryptData(encryptedBytes);
-      } catch (e) {
-        debugPrint('⚠️ فشل فك التشفير، محاولة القراءة كملف ZIP عادي...');
-        zipBytes = encryptedBytes;
+      final rawBytes = await backupFile.readAsBytes();
+      if (rawBytes.isEmpty) {
+        throw Exception('ملف النسخة الاحتياطية فارغ');
       }
 
-      // 3. فك الضغط
+      // 2. اكتشاف التنسيق + فك التشفير (إن وجد)
+      final zipBytes = _detectAndDecrypt(rawBytes);
+
+      // 3. التحقق أن الناتج ZIP فعلاً قبل فك الضغط
+      if (!_isZipBytes(zipBytes)) {
+        // Fallback: some backups are created by core BackupService and contain
+        // encrypted ZIP with backup_data.json (table-dump) using a different key.
+        try {
+          final db = await DatabaseSingleton.getInstance();
+          final coreService = core_backup.BackupService(db);
+          await coreService.restoreBackup(filename);
+          debugPrint('✅ تمت الاستعادة بنجاح (Core BackupService)');
+          return true;
+        } catch (_) {
+          throw Exception(
+            'صيغة النسخة الاحتياطية غير مدعومة أو الملف تالف (ليس ZIP صالحاً)',
+          );
+        }
+      }
+
+      // 4. فك الضغط
       debugPrint('📦 فك ضغط الملفات...');
-      final tempDir = Directory(
-        path.join(backupDirectory.path, 'restore_temp'),
-      );
+      tempDir = Directory(path.join(backupDirectory.path, 'restore_temp'));
       if (await tempDir.exists()) {
         await tempDir.delete(recursive: true);
       }
@@ -284,7 +301,7 @@ class EnhancedBackupService {
         }
       }
 
-      // 4. التحقق من معلومات النسخة
+      // 5. التحقق من معلومات النسخة
       final infoPath = path.join(tempDir.path, 'backup_info.json');
       if (await File(infoPath).exists()) {
         final infoContent = await File(infoPath).readAsString();
@@ -294,12 +311,19 @@ class EnhancedBackupService {
         );
       }
 
-      // 5. استعادة قاعدة البيانات
+      // 6. استعادة قاعدة البيانات
       final dbPath = await _getDatabasePath();
       final targetDbPath = dbPath;
-      final sourceDbPath = path.join(tempDir.path, 'database.db');
+      String? sourceDbPath;
+      for (final candidate in ['database.db', 'pos_database.db']) {
+        final f = File(path.join(tempDir.path, candidate));
+        if (await f.exists()) {
+          sourceDbPath = f.path;
+          break;
+        }
+      }
 
-      if (await File(sourceDbPath).exists()) {
+      if (sourceDbPath != null) {
         // إنشاء نسخة احتياطية من القاعدة الحالية
         if (createPreRestoreBackup && await File(targetDbPath).exists()) {
           final timestamp = _formatTimestamp(DateTime.now());
@@ -317,10 +341,10 @@ class EnhancedBackupService {
         throw Exception('ملف قاعدة البيانات غير موجود في النسخة الاحتياطية');
       }
 
-      // 6. استعادة ملفات الإعدادات
+      // 7. استعادة ملفات الإعدادات
       await _restoreConfigFiles(tempDir.path);
 
-      // 7. تنظيف
+      // 8. تنظيف
       await tempDir.delete(recursive: true);
 
       debugPrint('✅ تمت الاستعادة بنجاح');
@@ -328,6 +352,14 @@ class EnhancedBackupService {
     } catch (e) {
       debugPrint('❌ خطأ في الاستعادة: $e');
       rethrow;
+    } finally {
+      try {
+        if (tempDir != null && await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      } catch (_) {
+        // Ignore cleanup errors
+      }
     }
   }
 
@@ -613,6 +645,78 @@ class EnhancedBackupService {
       Uint8List.fromList(encryptedData.sublist(16)),
     );
     return encrypter.decryptBytes(encrypted, iv: iv);
+  }
+
+  bool _isZipBytes(List<int> bytes) {
+    if (bytes.length < 4) return false;
+    // ZIP local file header magic: PK\x03\x04
+    return bytes[0] == 0x50 &&
+        bytes[1] == 0x4B &&
+        bytes[2] == 0x03 &&
+        bytes[3] == 0x04;
+  }
+
+  List<int> _detectAndDecrypt(List<int> rawBytes) {
+    // 1) Plain ZIP
+    if (_isZipBytes(rawBytes)) {
+      return rawBytes;
+    }
+
+    // 2) Try all known keys and IV formats
+    final keys = [
+      _encryptionKey, // Enhanced (current)
+      'PosBackup@2024#SecureKey#32CharX', // User backup service
+      'POS-BACKUP-KEY-2024-SECURE!!!', // Core backup service
+    ];
+
+    for (final keyStr in keys) {
+      // Try with prepended IV (Enhanced/Core format)
+      if (rawBytes.length > 16) {
+        try {
+          final iv = encrypt_pkg.IV(
+            Uint8List.fromList(rawBytes.sublist(0, 16)),
+          );
+          final encrypted = encrypt_pkg.Encrypted(
+            Uint8List.fromList(rawBytes.sublist(16)),
+          );
+
+          // Try both direct UTF8 key and SHA256 hashed key
+          final keyVariants = [
+            encrypt_pkg.Key.fromUtf8(keyStr.padRight(32).substring(0, 32)),
+            encrypt_pkg.Key(deriveAesKey(keyStr)),
+          ];
+
+          for (final key in keyVariants) {
+            final encrypter = encrypt_pkg.Encrypter(
+              encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
+            );
+            final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
+            if (_isZipBytes(decrypted)) return decrypted;
+          }
+        } catch (_) {}
+      }
+
+      // Try with fixed zero IV (Legacy/User format)
+      try {
+        final iv = encrypt_pkg.IV.fromLength(16);
+        final encrypted = encrypt_pkg.Encrypted(Uint8List.fromList(rawBytes));
+
+        final keyVariants = [
+          encrypt_pkg.Key.fromUtf8(keyStr.padRight(32).substring(0, 32)),
+          encrypt_pkg.Key(deriveAesKey(keyStr)),
+        ];
+
+        for (final key in keyVariants) {
+          final encrypter = encrypt_pkg.Encrypter(
+            encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
+          );
+          final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
+          if (_isZipBytes(decrypted)) return decrypted;
+        }
+      } catch (_) {}
+    }
+
+    return rawBytes;
   }
 
   // ════════════════════════════════════════════════════════════════════

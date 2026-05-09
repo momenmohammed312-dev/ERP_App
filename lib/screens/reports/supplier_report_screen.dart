@@ -341,8 +341,10 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
                       (supplier['phone'] as String).isNotEmpty)
                     Text(
                       supplier['phone'],
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                   const SizedBox(height: 4),
                   Text(
@@ -357,8 +359,7 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
                 ],
               ),
               // FIX: single icon to view transactions — removed phone/call button
-              trailing: Icon(Icons.chevron_left,
-                  color: Colors.grey.shade400),
+              trailing: Icon(Icons.chevron_left, color: Colors.grey.shade400),
             ),
           ),
         );
@@ -367,8 +368,7 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
   }
 
   /// FIX: replaced _callSupplier + simple AlertDialog with full transaction table
-  Future<void> _viewSupplierTransactions(
-      Map<String, dynamic> supplier) async {
+  Future<void> _viewSupplierTransactions(Map<String, dynamic> supplier) async {
     // Show loading indicator
     showDialog(
       context: context,
@@ -377,7 +377,9 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
     );
 
     try {
-      final rows = await widget.database.customSelect('''
+      final rows = await widget.database
+          .customSelect(
+            '''
         SELECT 
           p.id,
           p.created_at,
@@ -390,7 +392,9 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
         WHERE p.supplier_id = ?
           AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
         ORDER BY p.created_at DESC
-      ''', variables: [drift.Variable.withString(supplier['id'].toString())])
+      ''',
+            variables: [drift.Variable.withString(supplier['id'].toString())],
+          )
           .get();
 
       if (!mounted) return;
@@ -401,8 +405,10 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
       showDialog(
         context: context,
         builder: (context) => Dialog(
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -425,9 +431,10 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
                       child: Text(
                         'معاملات المورد: ${supplier['name']}',
                         style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold),
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -444,21 +451,24 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
                 child: Row(
                   children: [
                     _summaryChip(
-                        'إجمالي المشتريات',
-                        '${(supplier['total_purchases'] as double).toStringAsFixed(2)} ج.م',
-                        Colors.blue),
+                      'إجمالي المشتريات',
+                      '${(supplier['total_purchases'] as double).toStringAsFixed(2)} ج.م',
+                      Colors.blue,
+                    ),
                     const SizedBox(width: 8),
                     _summaryChip(
-                        'المدفوع',
-                        '${(supplier['total_payments'] as double).toStringAsFixed(2)} ج.م',
-                        Colors.green),
+                      'المدفوع',
+                      '${(supplier['total_payments'] as double).toStringAsFixed(2)} ج.م',
+                      Colors.green,
+                    ),
                     const SizedBox(width: 8),
                     _summaryChip(
-                        'المستحق',
-                        '${(supplier['outstanding'] as double).toStringAsFixed(2)} ج.م',
-                        (supplier['outstanding'] as double) > 0
-                            ? Colors.red
-                            : Colors.green),
+                      'المستحق',
+                      '${(supplier['outstanding'] as double).toStringAsFixed(2)} ج.م',
+                      (supplier['outstanding'] as double) > 0
+                          ? Colors.red
+                          : Colors.green,
+                    ),
                   ],
                 ),
               ),
@@ -469,11 +479,16 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
                       padding: EdgeInsets.all(32),
                       child: Column(
                         children: [
-                          Icon(Icons.inbox_outlined,
-                              size: 48, color: Colors.grey),
+                          Icon(
+                            Icons.inbox_outlined,
+                            size: 48,
+                            color: Colors.grey,
+                          ),
                           SizedBox(height: 12),
-                          Text('لا توجد معاملات لهذا المورد',
-                              style: TextStyle(color: Colors.grey)),
+                          Text(
+                            'لا توجد معاملات لهذا المورد',
+                            style: TextStyle(color: Colors.grey),
+                          ),
                         ],
                       ),
                     )
@@ -498,10 +513,9 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
                             rows: purchases.map((p) {
                               final total =
                                   (p['total_amount'] as num?)?.toDouble() ??
-                                      0.0;
+                                  0.0;
                               final paid =
-                                  (p['paid_amount'] as num?)?.toDouble() ??
-                                      0.0;
+                                  (p['paid_amount'] as num?)?.toDouble() ?? 0.0;
                               final remaining = total - paid;
                               final isCredit =
                                   (p['is_credit_purchase'] as int?) == 1;
@@ -509,47 +523,74 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
                               try {
                                 date = parseDate(p['created_at']);
                               } catch (_) {}
-                              return DataRow(cells: [
-                                DataCell(Text(date != null
-                                    ? DateFormat('yyyy-MM-dd').format(date)
-                                    : '-')),
-                                DataCell(Text(
-                                    p['invoice_number']?.toString() ?? '-')),
-                                DataCell(Text(
-                                    '${total.toStringAsFixed(2)} ج.م')),
-                                DataCell(Text(
-                                    '${paid.toStringAsFixed(2)} ج.م',
-                                    style: const TextStyle(
-                                        color: Colors.green))),
-                                DataCell(Text(
-                                    '${remaining.toStringAsFixed(2)} ج.م',
-                                    style: TextStyle(
+                              return DataRow(
+                                cells: [
+                                  DataCell(
+                                    Text(
+                                      date != null
+                                          ? DateFormat(
+                                              'yyyy-MM-dd',
+                                            ).format(date)
+                                          : '-',
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Text(
+                                      p['invoice_number']?.toString() ?? '-',
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Text('${total.toStringAsFixed(2)} ج.م'),
+                                  ),
+                                  DataCell(
+                                    Text(
+                                      '${paid.toStringAsFixed(2)} ج.م',
+                                      style: const TextStyle(
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Text(
+                                      '${remaining.toStringAsFixed(2)} ج.م',
+                                      style: TextStyle(
                                         color: remaining > 0
                                             ? Colors.red
                                             : Colors.green,
-                                        fontWeight: FontWeight.bold))),
-                                DataCell(
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: isCredit
-                                          ? Colors.orange.withValues(alpha: 0.15)
-                                          : Colors.green.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(8),
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
-                                    child: Text(
-                                      isCredit ? 'آجل' : 'كاش',
-                                      style: TextStyle(
+                                  ),
+                                  DataCell(
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isCredit
+                                            ? Colors.orange.withValues(
+                                                alpha: 0.15,
+                                              )
+                                            : Colors.green.withValues(
+                                                alpha: 0.15,
+                                              ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        isCredit ? 'آجل' : 'كاش',
+                                        style: TextStyle(
                                           color: isCredit
                                               ? Colors.orange.shade700
                                               : Colors.green.shade700,
                                           fontWeight: FontWeight.bold,
-                                          fontSize: 12),
+                                          fontSize: 12,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ]);
+                                ],
+                              );
                             }).toList(),
                           ),
                         ),
@@ -565,8 +606,9 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
       Navigator.of(context).pop(); // close loading
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('خطأ في تحميل المعاملات: $e'),
-            backgroundColor: Colors.red),
+          content: Text('خطأ في تحميل المعاملات: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -583,14 +625,24 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label,
-                style: TextStyle(
-                    color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const SizedBox(height: 2),
-            Text(value,
-                style: TextStyle(
-                    color: color, fontSize: 13, fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis),
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),

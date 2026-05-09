@@ -63,7 +63,7 @@ class _CashInvoiceDialogState extends State<CashInvoiceDialog> {
                 ),
               ),
               const SizedBox(height: 8),
-              
+
               // Items Section
               Expanded(
                 child: Column(
@@ -80,9 +80,7 @@ class _CashInvoiceDialogState extends State<CashInvoiceDialog> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Expanded(
-                      child: _buildItemsList(),
-                    ),
+                    Expanded(child: _buildItemsList()),
                   ],
                 ),
               ),
@@ -98,10 +96,7 @@ class _CashInvoiceDialogState extends State<CashInvoiceDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('إلغاء'),
         ),
-        ElevatedButton(
-          onPressed: _saveInvoice,
-          child: const Text('حفظ'),
-        ),
+        ElevatedButton(onPressed: _saveInvoice, child: const Text('حفظ')),
       ],
     );
   }
@@ -134,7 +129,9 @@ class _CashInvoiceDialogState extends State<CashInvoiceDialog> {
               children: [
                 Expanded(
                   child: TextFormField(
-                    initialValue: (_items[index]['price'] ?? 0).toStringAsFixed(2),
+                    initialValue: (_items[index]['price'] ?? 0).toStringAsFixed(
+                      2,
+                    ),
                     decoration: const InputDecoration(
                       labelText: 'السعر (ج.م)',
                       border: OutlineInputBorder(),
@@ -204,10 +201,7 @@ class _CashInvoiceDialogState extends State<CashInvoiceDialog> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
           Text(
             '${amount.toStringAsFixed(2)} ج.م',
             style: const TextStyle(fontWeight: FontWeight.bold),
@@ -219,11 +213,7 @@ class _CashInvoiceDialogState extends State<CashInvoiceDialog> {
 
   void _addItem() {
     setState(() {
-      _items.add({
-        'name': 'منتج جديد',
-        'price': 0.0,
-        'quantity': 1,
-      });
+      _items.add({'name': 'منتج جديد', 'price': 0.0, 'quantity': 1});
     });
     _calculateTotals();
   }
@@ -245,13 +235,14 @@ class _CashInvoiceDialogState extends State<CashInvoiceDialog> {
 
   void _calculateTotals() {
     _subtotal = _items.fold(0.0, (sum, item) {
-      final price = (item['price'] as double? ?? 0.0) * (item['quantity'] as int? ?? 1);
+      final price =
+          (item['price'] as double? ?? 0.0) * (item['quantity'] as int? ?? 1);
       return sum + price;
     });
-    
+
     _tax = _subtotal * 0.14; // 14% tax
     _total = _subtotal + _tax;
-    
+
     // Calculate change based on paid amount
     _change = _paidAmount - _total;
   }
@@ -263,7 +254,10 @@ class _CashInvoiceDialogState extends State<CashInvoiceDialog> {
         title: const Text('اختيار عميل'),
         content: const Text('وظيفة اختيار العميل غير مفعلة حالياً.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('إغلاق')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('إغلاق'),
+          ),
         ],
       ),
     );

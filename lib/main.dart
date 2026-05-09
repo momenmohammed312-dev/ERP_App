@@ -5,28 +5,39 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:desktop_window/desktop_window.dart';
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:pos_offline_desktop/core/config/theme.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
+import 'package:drift/drift.dart' as drift;
+
+import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
-import 'package:pos_offline_desktop/core/router/go_router.dart';
-import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
-import 'package:pos_offline_desktop/services/license_manager.dart';
+import 'package:pos_offline_desktop/core/router/go_router.dart';
+import 'package:pos_offline_desktop/core/config/theme.dart';
+import 'package:pos_offline_desktop/l10n/app_localizations.dart';
+
 import 'package:pos_offline_desktop/services/anti_tamper_service.dart';
-import 'package:pos_offline_desktop/services/integrity_checker.dart';
-import 'package:pos_offline_desktop/services/user_session_service.dart';
-import 'package:pos_offline_desktop/services/user_backup_service.dart';
+import 'package:pos_offline_desktop/services/notification_service.dart';
 import 'package:pos_offline_desktop/services/security_service.dart';
+import 'package:pos_offline_desktop/services/user_session_service.dart';
+import 'package:pos_offline_desktop/services/integrity_checker.dart';
+import 'package:pos_offline_desktop/services/enhanced_backup_service.dart';
+import 'package:pos_offline_desktop/core/services/periodic_license_validator.dart';
+
 import 'package:pos_offline_desktop/screens/license/activation_screen.dart';
 import 'package:pos_offline_desktop/screens/license/activation_success_screen.dart';
 import 'package:pos_offline_desktop/screens/license/license_info_screen.dart';
 import 'package:pos_offline_desktop/screens/license/tamper_detected_screen.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'services/notification_service.dart';
+
+import 'package:pos_offline_desktop/core/utils/logger.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize security service first
   await SecurityService.initialize();
 
   // Create shared container for all services
@@ -41,28 +52,38 @@ void main() async {
   // Check for clock tampering (now that services are initialized)
   final isTampered = await AntiTamperService.detectClockTampering();
   if (isTampered) {
-    runApp(const TamperDetectedApp());
+    runApp(const ProviderScope(child: TamperDetectedApp()));
     return;
   }
 
-  // Check license validity
-  final licenseManager = LicenseManager();
-  final isLicenseValid = await licenseManager.isLicenseValid();
+  // Periodic license validation
+  await PeriodicLicenseValidator.validateWithPeriodicCheck();
 
   // Start background services with shared database
   UserSessionService.startSessionCleanup();
   IntegrityChecker.startPeriodicCheck(db);
-  AutoBackupService.start();
+  EnhancedAutoBackupService.start();
 
   // Initialize notification service
   await NotificationService().initialize(db);
 
-  // For Windows offline development, skip Firebase and proceed offline
-  if (!kIsWeb && !io.Platform.isWindows) {
+  // For Windows offline development, setup window size
+  if (!kIsWeb && io.Platform.isWindows) {
     try {
-      await DesktopWindow.setMinWindowSize(const Size(800, 800));
+      await windowManager.ensureInitialized();
+      WindowOptions windowOptions = const WindowOptions(
+        size: Size(1280, 800),
+        center: true,
+        backgroundColor: Colors.transparent,
+        skipTaskbar: false,
+        titleBarStyle: TitleBarStyle.normal,
+      );
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.show();
+        await windowManager.focus();
+      });
     } catch (e) {
-      // Desktop window not supported on this platform
+      debugPrint('Window manager initialization error: $e');
     }
   }
 
@@ -87,7 +108,7 @@ class MyApp extends ConsumerWidget {
       title: 'POS System - Developed by MO2',
       debugShowCheckedModeBanner: false,
       localizationsDelegates: const [
-        AppLocalizations.delegate, // generated localizations
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
@@ -136,7 +157,7 @@ class MyApp extends ConsumerWidget {
         ),
         GoRoute(
           path: '/tamper-detected',
-          builder: (context, state) => TamperDetectedScreen(),
+          builder: (context, state) => const TamperDetectedScreen(),
         ),
       ],
     );
@@ -150,7 +171,7 @@ class TamperDetectedApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'POS System - Security Alert',
-      home: TamperDetectedScreen(),
+      home: const TamperDetectedScreen(),
       theme: ThemeData.dark(),
       debugShowCheckedModeBanner: false,
     );

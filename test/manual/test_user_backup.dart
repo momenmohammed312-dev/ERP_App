@@ -1,7 +1,7 @@
 // Test User Backup System
 // اختبار نظام النسخ الاحتياطي للمستخدم
 
-import 'package:pos_offline_desktop/services/user_backup_service.dart';
+import 'package:pos_offline_desktop/services/enhanced_backup_service.dart';
 
 void main() async {
   print(
@@ -12,7 +12,7 @@ void main() async {
     '═════════════════════════════════════════════════════════════════════════\n',
   );
 
-  final backupService = BackupService();
+  final backupService = EnhancedBackupService();
 
   try {
     // Test 1: Create Manual Backup
@@ -39,18 +39,18 @@ void main() async {
 
     // Test 3: Auto Backup Service
     print('⏰ اختبار 3: خدمة النسخ الاحتياطي التلقائي');
-    AutoBackupService.start();
+    EnhancedAutoBackupService.start();
     print('✅ تم تفعيل النسخ الاحتياطي التلقائي');
 
     // Wait a moment
     await Future.delayed(Duration(seconds: 2));
 
-    AutoBackupService.stop();
+    EnhancedAutoBackupService.stop();
     print('⏹️ تم إيقاف النسخ الاحتياطي التلقائي\n');
 
     // Test 4: Force Backup
     print('⚡ اختبار 4: النسخ الاحتياطي الفوري');
-    await AutoBackupService.createNow();
+    await EnhancedAutoBackupService.createNow();
     print('✅ تم إنشاء نسخة احتياطية فورية\n');
 
     // Test 5: Check cleanup

@@ -8,7 +8,9 @@ class Notifications extends Table {
   TextColumn get title => text()();
   TextColumn get body => text()();
   DateTimeColumn get sendAt => dateTime()();
-  IntColumn get sent => integer().withDefault(const Constant(0))(); // 0=pending, 1=sent (idempotency)
+  IntColumn get sent => integer().withDefault(
+    const Constant(0),
+  )(); // 0=pending, 1=sent (idempotency)
 
   @override
   List<String> get customConstraints => [

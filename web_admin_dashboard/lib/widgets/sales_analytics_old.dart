@@ -12,8 +12,13 @@ class SalesAnalytics extends StatefulWidget {
 
 class _SalesAnalyticsState extends State<SalesAnalytics> {
   String _selectedPeriod = 'اليوم';
-  final List<String> _periods = ['اليوم', 'هذا الأسبوع', 'هذا الشهر', 'هذا العام'];
-  
+  final List<String> _periods = [
+    'اليوم',
+    'هذا الأسبوع',
+    'هذا الشهر',
+    'هذا العام'
+  ];
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -45,7 +50,9 @@ class _SalesAnalyticsState extends State<SalesAnalytics> {
                           _selectedPeriod = period;
                         });
                       },
-                      backgroundColor: isSelected ? AppColors.primaryColor : Colors.grey[200],
+                      backgroundColor: isSelected
+                          ? AppColors.primaryColor
+                          : Colors.grey[200],
                       labelStyle: TextStyle(
                         color: isSelected ? Colors.white : Colors.black87,
                       ),
@@ -55,9 +62,9 @@ class _SalesAnalyticsState extends State<SalesAnalytics> {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Charts Row
           Row(
             children: [
@@ -87,7 +94,7 @@ class _SalesAnalyticsState extends State<SalesAnalytics> {
                 ),
               ),
               const SizedBox(width: 16),
-              
+
               // Bar Chart
               Expanded(
                 child: Card(
@@ -115,9 +122,9 @@ class _SalesAnalyticsState extends State<SalesAnalytics> {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 32),
-          
+
           // Summary Cards
           Row(
             children: [
@@ -282,7 +289,14 @@ class _SalesAnalyticsState extends State<SalesAnalytics> {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) {
-                const months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو'];
+                const months = [
+                  'يناير',
+                  'فبراير',
+                  'مارس',
+                  'أبريل',
+                  'مايو',
+                  'يونيو'
+                ];
                 if (value.toInt() < months.length) {
                   return SideTitleWidget(
                     axisSide: meta.axisSide,
@@ -303,7 +317,8 @@ class _SalesAnalyticsState extends State<SalesAnalytics> {
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, IconData icon, Color color) {
+  Widget _buildSummaryCard(
+      String title, String value, IconData icon, Color color) {
     return Card(
       elevation: 4,
       child: Padding(

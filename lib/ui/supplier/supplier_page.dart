@@ -88,15 +88,17 @@ class _SupplierPageState extends State<SupplierPage> {
     try {
       final now = DateTime.now();
       final startOfMonth = DateTime(now.year, now.month, 1);
-      final rows = await widget.db.customSelect(
-        '''
+      final rows = await widget.db
+          .customSelect(
+            '''
         SELECT COALESCE(SUM(paid_amount), 0.0) AS total
         FROM purchases
         WHERE created_at >= ?
           AND (is_deleted = 0 OR is_deleted IS NULL)
         ''',
-        variables: [Variable.withDateTime(startOfMonth)],
-      ).getSingle();
+            variables: [Variable.withDateTime(startOfMonth)],
+          )
+          .getSingle();
       paidThisMonth = (rows.data['total'] as num?)?.toDouble() ?? 0.0;
     } catch (_) {}
 
@@ -128,10 +130,8 @@ class _SupplierPageState extends State<SupplierPage> {
   Future<void> _showAddEditSupplierDialog({Supplier? supplier}) async {
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => SupplierFormDialog(
-        database: widget.db,
-        supplier: supplier,
-      ),
+      builder: (context) =>
+          SupplierFormDialog(database: widget.db, supplier: supplier),
     );
 
     if (result == true) {

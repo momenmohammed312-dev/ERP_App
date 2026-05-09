@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import '../../../core/database/app_database.dart';
-import '../../../core/provider/app_database_provider.dart';
-import '../../../core/services/inventory_service.dart';
+import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/services/inventory_service.dart';
 
 /// Inventory Report Tab
 /// تبويب تقرير المخزون - عرض حالة المخزون والمنتجات
@@ -237,7 +237,7 @@ class _InventoryReportTabState extends ConsumerState<InventoryReportTab> {
                         '${product.quantity} ${product.unit ?? "قطعة"}',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: product.quantity < 5
+                          color: (product.quantity) < 5
                               ? Colors.red
                               : Colors.orange,
                         ),

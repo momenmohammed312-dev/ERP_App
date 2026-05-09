@@ -506,9 +506,6 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       if (_nameController.text.trim().isEmpty) {
         throw Exception('اسم الموظف مطلوب');
       }
-      if (_positionController.text.trim().isEmpty) {
-        throw Exception('المسمى الوظيفي مطلوب');
-      }
       if (_basicSalaryController.text.trim().isEmpty) {
         throw Exception('الراتب الأساسي مطلوب');
       }
@@ -521,6 +518,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       if (widget.staff == null) {
         await _service.addNewStaff(
           name: _nameController.text.trim(),
+          // position is optional — default to empty string
           position: _positionController.text.trim(),
           employmentType: _selectedEmploymentType,
           basicSalary: salary,
@@ -563,6 +561,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         await _service.updateStaffInfo(
           staffId: widget.staff!.staffId,
           name: _nameController.text.trim(),
+          // position is optional — keep existing value if field is empty
           position: _positionController.text.trim(),
           department: _departmentController.text.trim().isEmpty
               ? null

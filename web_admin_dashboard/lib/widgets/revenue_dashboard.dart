@@ -571,36 +571,36 @@ class _RevenueDashboardState extends State<RevenueDashboard> {
                         child: Text('الباقة',
                             style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
-                  Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('شهري',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
+                      Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Text('شهري',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Text('سنوي',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Text('مدى الحياة',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Text('المميزات',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
                   ),
-                  Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('سنوي',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('مدى الحياة',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('المميزات',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
+                  _buildPricingRow(
+                      'أساسي', 250, 'عمليات البيع فقط', AppColors.basicColor),
+                  _buildPricingRow('قياسي', 400, 'البيع + العملاء والموردين',
+                      AppColors.standardColor),
+                  _buildPricingRow('احترافي', 600, 'كل المميزات + الموظفين',
+                      AppColors.professionalColor),
                 ],
-              ),
-              _buildPricingRow(
-                  'أساسي', 250, 'عمليات البيع فقط', AppColors.basicColor),
-              _buildPricingRow('قياسي', 400, 'البيع + العملاء والموردين',
-                  AppColors.standardColor),
-              _buildPricingRow('احترافي', 600, 'كل المميزات + الموظفين',
-                  AppColors.professionalColor),
-            ],
-          ), // end Table
+              ), // end Table
             ), // end ConstrainedBox
           ), // end SingleChildScrollView
         ],

@@ -518,7 +518,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
                                   ? (difference > 0
                                         ? Colors.red.withValues(alpha: 0.1)
                                         : Colors.green.withValues(alpha: 0.1))
-                                          : Colors.grey.withValues(alpha: 0.1),
+                                  : Colors.grey.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                 color: difference.abs() > 0.01

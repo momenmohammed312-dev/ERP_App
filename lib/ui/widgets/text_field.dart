@@ -13,14 +13,13 @@ Widget buildTextField({
       labelText: label,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
     ),
-    validator:
-        validatorMessage != null
-            ? (value) {
-              if (value == null || value.trim().isEmpty) {
-                return validatorMessage;
-              }
-              return null;
+    validator: validatorMessage != null
+        ? (value) {
+            if (value == null || value.trim().isEmpty) {
+              return validatorMessage;
             }
-            : null,
+            return null;
+          }
+        : null,
   );
 }

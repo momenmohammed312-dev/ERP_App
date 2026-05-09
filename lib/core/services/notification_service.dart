@@ -21,13 +21,14 @@ class NotificationService {
       type: type,
       timestamp: timestamp ?? DateTime.now(),
     );
-    
+
     _notifications.add(notification);
     developer.log('Notification: ${notification.toString()}');
   }
 
   /// Get all notifications
-  List<NotificationMessage> getAllNotifications() => List.unmodifiable(_notifications);
+  List<NotificationMessage> getAllNotifications() =>
+      List.unmodifiable(_notifications);
 
   /// Get notifications by type
   List<NotificationMessage> getNotificationsByType(NotificationType type) =>
@@ -45,13 +46,7 @@ class NotificationService {
   int get unreadCount => _notifications.length;
 }
 
-enum NotificationType {
-  budget,
-  supplier,
-  inventory,
-  purchase,
-  system,
-}
+enum NotificationType { budget, supplier, inventory, purchase, system }
 
 class NotificationMessage {
   final String title;

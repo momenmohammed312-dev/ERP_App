@@ -129,9 +129,12 @@ class CustomersSummaryWidget extends ConsumerWidget {
                     ..where((t) => t.entityType.equals('Customer'))
                     ..where((t) => t.refId.equals(customer.id))
                     ..where(
-                      (t) => t.date.isBetweenValues(currentMonthStart, now),
+                      (t) => t.date.isBetween(
+                        drift.Constant(currentMonthStart),
+                        drift.Constant(now),
+                      ),
                     )
-                    ..where((t) => t.credit.isBiggerThanValue(0.0)))
+                    ..where((t) => t.credit.isBiggerThan(drift.Constant(0.0))))
                   .get();
 
           for (final transaction in monthlyTransactions) {

@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:drift/drift.dart' as drift;
+import 'package:drift/drift.dart';
 import '../database/app_database.dart';
 import 'reorder_level_service.dart';
 
@@ -89,8 +89,8 @@ class InventoryNotificationService {
       final products =
           await (_database.select(_database.products)..where(
                 (p) =>
-                    (p.quantity.isBiggerThanValue(0) &
-                        p.quantity.isSmallerThanValue(10)) &
+                    (p.quantity.isBiggerThan(const Constant(0)) &
+                        p.quantity.isSmallerThan(const Constant(10))) &
                     p.status.equals('Active'),
               ))
               .get();

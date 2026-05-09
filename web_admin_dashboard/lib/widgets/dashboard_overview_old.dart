@@ -34,7 +34,7 @@ class DashboardOverview extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
-          
+
           // Stats Cards
           GridView.count(
             shrinkWrap: true,
@@ -78,9 +78,9 @@ class DashboardOverview extends StatelessWidget {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 32),
-          
+
           // Charts Section
           Row(
             children: [
@@ -110,7 +110,7 @@ class DashboardOverview extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              
+
               // Bar Chart
               Expanded(
                 child: Card(
@@ -138,9 +138,9 @@ class DashboardOverview extends StatelessWidget {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 32),
-          
+
           // Recent Transactions
           Card(
             child: Padding(
@@ -214,14 +214,18 @@ class DashboardOverview extends StatelessWidget {
               children: [
                 Icon(
                   isPositive ? Icons.trending_up : Icons.trending_down,
-                  color: isPositive ? AppColors.successColor : AppColors.errorColor,
+                  color: isPositive
+                      ? AppColors.successColor
+                      : AppColors.errorColor,
                   size: 16,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   change,
                   style: TextStyle(
-                    color: isPositive ? AppColors.successColor : AppColors.errorColor,
+                    color: isPositive
+                        ? AppColors.successColor
+                        : AppColors.errorColor,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -361,7 +365,14 @@ class DashboardOverview extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (value, meta) {
-                const months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو'];
+                const months = [
+                  'يناير',
+                  'فبراير',
+                  'مارس',
+                  'أبريل',
+                  'مايو',
+                  'يونيو'
+                ];
                 if (value.toInt() < months.length) {
                   return SideTitleWidget(
                     axisSide: meta.axisSide,
@@ -384,11 +395,41 @@ class DashboardOverview extends StatelessWidget {
 
   Widget _buildRecentTransactions() {
     final transactions = [
-      {'id': 'INV-001', 'customer': 'أحمد محمد', 'amount': '1,234.50', 'date': '2024-01-15', 'status': 'مدفوع'},
-      {'id': 'INV-002', 'customer': 'فاطمة علي', 'amount': '890.00', 'date': '2024-01-15', 'status': 'مدفوع'},
-      {'id': 'INV-003', 'customer': 'محمد سعيد', 'amount': '2,456.75', 'date': '2024-01-14', 'status': 'مدفوع'},
-      {'id': 'INV-004', 'customer': 'خالد أحمد', 'amount': '567.25', 'date': '2024-01-14', 'status': 'مدفوع'},
-      {'id': 'INV-005', 'customer': 'عمر خالد', 'amount': '3,234.00', 'date': '2024-01-13', 'status': 'مدفوع'},
+      {
+        'id': 'INV-001',
+        'customer': 'أحمد محمد',
+        'amount': '1,234.50',
+        'date': '2024-01-15',
+        'status': 'مدفوع'
+      },
+      {
+        'id': 'INV-002',
+        'customer': 'فاطمة علي',
+        'amount': '890.00',
+        'date': '2024-01-15',
+        'status': 'مدفوع'
+      },
+      {
+        'id': 'INV-003',
+        'customer': 'محمد سعيد',
+        'amount': '2,456.75',
+        'date': '2024-01-14',
+        'status': 'مدفوع'
+      },
+      {
+        'id': 'INV-004',
+        'customer': 'خالد أحمد',
+        'amount': '567.25',
+        'date': '2024-01-14',
+        'status': 'مدفوع'
+      },
+      {
+        'id': 'INV-005',
+        'customer': 'عمر خالد',
+        'amount': '3,234.00',
+        'date': '2024-01-13',
+        'status': 'مدفوع'
+      },
     ];
 
     return DataTable(

@@ -25,23 +25,25 @@ void main() async {
           '${macInfo.systemGUID ?? 'unknown'}-'
           '${macInfo.model}';
     }
-    
+
     // Hash the fingerprint for security
     final bytes = utf8.encode(fingerprint);
     final digest = sha256.convert(bytes);
     final hashedFingerprint = digest.toString();
-    
+
     print('=================================');
     print('   DEVICE FINGERPRINT');
     print('=================================');
     print('Original: $fingerprint');
     print('Hashed: $hashedFingerprint');
     print('=================================');
-    
+
     // Generate license key for this device
     final licenseData = {
       'device': hashedFingerprint,
-      'expires': DateTime.now().add(const Duration(days: 3650)).toIso8601String(),
+      'expires': DateTime.now()
+          .add(const Duration(days: 3650))
+          .toIso8601String(),
       'features': ['pos', 'inventory', 'customers', 'reports', 'admin', 'all'],
       'max_users': 999,
       'license_type': 'enterprise_admin',
@@ -60,7 +62,6 @@ void main() async {
     print('LICENSE KEY FOR THIS DEVICE:');
     print(licenseKey);
     print('=================================');
-    
   } catch (e) {
     print('Error: $e');
   }

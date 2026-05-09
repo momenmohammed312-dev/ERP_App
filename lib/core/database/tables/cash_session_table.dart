@@ -7,6 +7,7 @@ class CashSessions extends Table {
   TextColumn get openedBy => text().nullable()();
   DateTimeColumn get openedAt => dateTime()();
   DateTimeColumn get closedAt => dateTime().nullable()();
-  TextColumn get status => text().withDefault(const Constant('closed'))(); // "open" | "closed"
+  TextColumn get status =>
+      text().withDefault(const Constant('closed'))(); // "open" | "closed"
   RealColumn get openingBalance => real().withDefault(const Constant(0.0))();
 }

@@ -1,16 +1,16 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pos_offline_desktop/services/user_backup_service.dart';
+import 'package:pos_offline_desktop/services/enhanced_backup_service.dart';
 
 void main() {
   // Initialize Flutter binding for tests
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('User Backup Service Integration Test', () {
-    late BackupService backupService;
+    late EnhancedBackupService backupService;
 
     setUpAll(() async {
-      backupService = BackupService();
+      backupService = EnhancedBackupService();
       // Ensure backup directory exists
       final backupDir = Directory('data/backups');
       if (!await backupDir.exists()) {
@@ -19,15 +19,15 @@ void main() {
     });
 
     test('BackupService should be singleton', () {
-      final service1 = BackupService();
-      final service2 = BackupService();
+      final service1 = EnhancedBackupService();
+      final service2 = EnhancedBackupService();
       expect(identical(service1, service2), true);
     });
 
     test('Should list backups successfully', () async {
       try {
         final backups = await backupService.listBackups();
-        expect(backups, isA<List<BackupInfo>>());
+        expect(backups, isA<List<EnhancedBackupInfo>>());
         print('✅ Successfully listed ${backups.length} backups');
       } catch (e) {
         print('❌ Failed to list backups: $e');
@@ -119,10 +119,10 @@ void main() {
   group('AutoBackupService Test', () {
     test('Should start and stop without errors', () async {
       try {
-        AutoBackupService.start();
+        EnhancedAutoBackupService.start();
         print('✅ AutoBackupService started successfully');
 
-        AutoBackupService.stop();
+        EnhancedAutoBackupService.stop();
         print('✅ AutoBackupService stopped successfully');
       } catch (e) {
         print('❌ AutoBackupService error: $e');
@@ -132,7 +132,7 @@ void main() {
 
     test('Should create immediate backup', () async {
       try {
-        await AutoBackupService.createNow();
+        await EnhancedAutoBackupService.createNow();
         print('✅ Immediate backup created successfully');
       } catch (e) {
         print('❌ Failed to create immediate backup: $e');

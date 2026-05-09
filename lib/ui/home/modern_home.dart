@@ -26,12 +26,15 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
+  static const int _tabCount = 7;
+
   bool _licenseWarningShown = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this); // Removed Staff tab
+    // Length MUST equal TabBar tabs count AND TabBarView children count
+    _tabController = TabController(length: _tabCount, vsync: this);
     _checkLicenseWarning();
   }
 
@@ -65,6 +68,158 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+
+    final tabs = <Tab>[
+      // Index 0
+      Tab(icon: const Icon(Icons.dashboard_outlined), text: l10n.dashboard),
+      // Index 1
+      Tab(icon: const Icon(Icons.shopping_bag_outlined), text: l10n.products),
+      // Index 2
+      Tab(icon: const Icon(Icons.people_outline), text: l10n.customer_list),
+      // Index 3
+      Tab(icon: const Icon(Icons.inventory_outlined), text: l10n.suppliers),
+      // Index 4
+      const Tab(icon: Icon(Icons.badge_outlined), text: 'الموظفين'),
+      // Index 5
+      Tab(
+        icon: const Icon(Icons.account_balance_wallet_outlined),
+        text: l10n.cash,
+      ),
+      // Index 6
+      Tab(icon: const Icon(Icons.analytics), text: l10n.reports),
+    ];
+
+    final tabViews = <Widget>[
+      // Control Panel - Simplified with functional buttons
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Gap(40),
+              const Text(
+                'لوحة التحكم',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              ),
+              const Gap(40),
+              Wrap(
+                spacing: 20,
+                runSpacing: 20,
+                alignment: WrapAlignment.center,
+                children: [
+                  // New Invoice Button — Day Guard
+                  _buildLauncherButton(
+                    context,
+                    'فاتورة جديدة',
+                    Icons.receipt_long,
+                    Colors.blue,
+                    () async {
+                      final isOpen = await widget.db.dayDao.isDayOpen();
+                      if (!context.mounted) return;
+                      if (!isOpen) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text(
+                              'يجب فتح اليوم أولاً من تبويب الكاشير',
+                            ),
+                            backgroundColor: Colors.red,
+                            action: SnackBarAction(
+                              label: 'الذهاب للكاشير',
+                              onPressed: () => _tabController.animateTo(5),
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              EnhancedNewInvoicePage(db: widget.db),
+                        ),
+                      );
+                    },
+                  ),
+                  // Add/Edit Customer Button
+                  _buildLauncherButton(
+                    context,
+                    'العملاء',
+                    Icons.person_add,
+                    Colors.green,
+                    () => _tabController.animateTo(2),
+                  ),
+                  // Add/Edit Product Button
+                  _buildLauncherButton(
+                    context,
+                    'المنتجات',
+                    Icons.inventory,
+                    Colors.orange,
+                    () => _tabController.animateTo(1),
+                  ),
+                  // Staff Management Button - Guarded
+                  FeatureGuard(
+                    featureName: 'staff_management',
+                    lockedWidget: _buildLauncherButton(
+                      context,
+                      'الموظفين (مغلق)',
+                      Icons.badge_outlined,
+                      Colors.grey,
+                      () => _tabController.animateTo(4),
+                    ),
+                    child: _buildLauncherButton(
+                      context,
+                      'الموظفين',
+                      Icons.badge_outlined,
+                      Colors.indigo,
+                      () => _tabController.animateTo(4),
+                    ),
+                  ),
+                  // Backup Button
+                  _buildLauncherButton(
+                    context,
+                    'النسخ الاحتياطي',
+                    Icons.backup,
+                    Colors.purple,
+                    () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => EnhancedBackupScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              const Gap(40),
+            ],
+          ),
+        ),
+      ),
+      // Index 1: Products
+      ProductScreen(db: widget.db),
+      // Index 2: Customers
+      CustomerTransactionsWidget(db: widget.db),
+      // Index 3: Suppliers
+      SuppliersWidget(db: widget.db),
+      // Index 4: Staff
+      FeatureGuard(
+        featureName: 'staff_management',
+        child: const StaffListPage(),
+      ),
+      // Index 5: Cash
+      CashierPage(db: widget.db),
+      // Index 6: Reports
+      ReportsPage(),
+    ];
+
+    assert(
+      _tabController.length == tabs.length && tabs.length == tabViews.length,
+      'Tab mismatch: TabController.length (${_tabController.length}) must match '
+      'TabBar tabs (${tabs.length}) and TabBarView children (${tabViews.length}).',
+    );
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: Column(
@@ -160,164 +315,13 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                 ).colorScheme.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              tabs: [
-                Tab(
-                  icon: const Icon(Icons.dashboard_outlined),
-                  text: l10n.dashboard,
-                ),
-                Tab(
-                  icon: const Icon(Icons.shopping_bag_outlined),
-                  text: l10n.products,
-                ),
-                Tab(
-                  icon: const Icon(Icons.people_outline),
-                  text: l10n.customer_list,
-                ),
-                Tab(
-                  icon: const Icon(Icons.inventory_outlined),
-                  text: l10n.suppliers,
-                ),
-                Tab(
-                  icon: const Icon(Icons.account_balance_wallet_outlined),
-                  text: l10n.cash,
-                ),
-                Tab(
-                  icon: const Icon(Icons.analytics),
-                  text: l10n.reports,
-                ), // Added Reports tab
-              ],
+              tabs: tabs,
             ),
           ),
 
           // Tab Content
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                // Control Panel - Simplified with functional buttons
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Gap(40),
-                        const Text(
-                          'لوحة التحكم',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Gap(40),
-                        Wrap(
-                          spacing: 20,
-                          runSpacing: 20,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            // New Invoice Button — Day Guard
-                            _buildLauncherButton(
-                              context,
-                              'فاتورة جديدة',
-                              Icons.receipt_long,
-                              Colors.blue,
-                              () async {
-                                final isOpen = await widget.db.dayDao
-                                    .isDayOpen();
-                                if (!context.mounted) return;
-                                if (!isOpen) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: const Text(
-                                        'يجب فتح اليوم أولاً من تبويب الكاشير',
-                                      ),
-                                      backgroundColor: Colors.red,
-                                      action: SnackBarAction(
-                                        label: 'الذهاب للكاشير',
-                                        onPressed: () =>
-                                            _tabController.animateTo(5),
-                                      ),
-                                    ),
-                                  );
-                                  return;
-                                }
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        EnhancedNewInvoicePage(db: widget.db),
-                                  ),
-                                );
-                              },
-                            ),
-                            // Add/Edit Customer Button
-                            _buildLauncherButton(
-                              context,
-                              'العملاء',
-                              Icons.person_add,
-                              Colors.green,
-                              () => _tabController.animateTo(2),
-                            ),
-                            // Add/Edit Product Button
-                            _buildLauncherButton(
-                              context,
-                              'المنتجات',
-                              Icons.inventory,
-                              Colors.orange,
-                              () => _tabController.animateTo(1),
-                            ),
-                            // Staff Management Button - Guarded
-                            FeatureGuard(
-                              featureName: 'staff_management',
-                              lockedWidget: _buildLauncherButton(
-                                context,
-                                'الموظفين (مغلق)',
-                                Icons.badge_outlined,
-                                Colors.grey,
-                                () => _tabController.animateTo(4),
-                              ),
-                              child: _buildLauncherButton(
-                                context,
-                                'الموظفين',
-                                Icons.badge_outlined,
-                                Colors.indigo,
-                                () => _tabController.animateTo(4),
-                              ),
-                            ),
-                            // Backup Button
-                            _buildLauncherButton(
-                              context,
-                              'النسخ الاحتياطي',
-                              Icons.backup,
-                              Colors.purple,
-                              () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        EnhancedBackupScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        const Gap(40),
-                      ],
-                    ),
-                  ),
-                ),
-                ProductScreen(db: widget.db),
-                CustomerTransactionsWidget(db: widget.db),
-                SuppliersWidget(db: widget.db),
-                FeatureGuard(
-                  featureName: 'staff_management',
-                  child: const StaffListPage(),
-                ),
-                CashierPage(db: widget.db),
-                ReportsPage(),
-              ],
-            ),
+            child: TabBarView(controller: _tabController, children: tabViews),
           ),
         ],
       ),

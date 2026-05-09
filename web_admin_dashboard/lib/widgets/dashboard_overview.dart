@@ -318,7 +318,8 @@ class _DashboardOverviewState extends State<DashboardOverview> {
                         size: 12,
                       ),
                       const SizedBox(width: 2),
-                      Flexible( // FIX: allow text to shrink
+                      Flexible(
+                        // FIX: allow text to shrink
                         child: Text(
                           change,
                           style: TextStyle(

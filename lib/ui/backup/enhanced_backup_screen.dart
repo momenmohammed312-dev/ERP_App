@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:gap/gap.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
-import '../../services/user_backup_service.dart';
+import '../../services/enhanced_backup_service.dart';
 import '../../l10n/app_localizations.dart';
 
 class EnhancedBackupScreen extends StatefulWidget {
@@ -17,8 +17,8 @@ class EnhancedBackupScreen extends StatefulWidget {
 }
 
 class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
-  final BackupService _backupService = BackupService();
-  List<BackupInfo> _backups = [];
+  final EnhancedBackupService _backupService = EnhancedBackupService();
+  List<EnhancedBackupInfo> _backups = [];
   bool _isLoading = false;
   Map<String, dynamic>? _statistics;
   Map<String, dynamic>? _autoBackupStatus;
@@ -34,18 +34,21 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
     try {
       final backups = await _backupService.listBackups();
 
+      bool isAuto(EnhancedBackupInfo b) => b.type.contains('auto');
+      bool isManual(EnhancedBackupInfo b) => b.type.contains('manual');
+
       // Calculate basic statistics
       final statistics = {
         'total_backups': backups.length,
-        'automatic_backups': backups.where((b) => b.type == 'auto').length,
-        'manual_backups': backups.where((b) => b.type == 'manual').length,
+        'automatic_backups': backups.where(isAuto).length,
+        'manual_backups': backups.where(isManual).length,
         'total_size_mb':
             (backups.fold<int>(0, (sum, b) => sum + b.size) / (1024 * 1024))
                 .toStringAsFixed(1),
       };
 
       final autoStatus = {
-        'enabled': true, // User's service doesn't have status method
+        'enabled': true, // EnhancedAutoBackupService doesn't expose status
         'interval': '24 hours',
         'last_backup': backups.isNotEmpty
             ? backups.first.formattedDate
@@ -189,9 +192,9 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
                   value: _autoBackupStatus?['enabled'] ?? false,
                   onChanged: (value) {
                     if (value) {
-                      AutoBackupService.start();
+                      EnhancedAutoBackupService.start();
                     } else {
-                      AutoBackupService.stop();
+                      EnhancedAutoBackupService.stop();
                     }
                     _loadData();
                   },
@@ -346,26 +349,23 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
     );
   }
 
-  Widget _buildBackupItem(BackupInfo backup) {
+  Widget _buildBackupItem(EnhancedBackupInfo backup) {
     Color typeColor;
     IconData typeIcon;
     String typeText;
 
-    switch (backup.type) {
-      case 'manual':
-        typeColor = Colors.blue;
-        typeIcon = Icons.touch_app;
-        typeText = 'يدوي';
-        break;
-      case 'auto':
-        typeColor = Colors.green;
-        typeIcon = Icons.today;
-        typeText = 'تلقائي';
-        break;
-      default:
-        typeColor = Colors.grey;
-        typeIcon = Icons.backup;
-        typeText = 'غير معروف';
+    if (backup.type.contains('manual')) {
+      typeColor = Colors.blue;
+      typeIcon = Icons.touch_app;
+      typeText = 'يدوي';
+    } else if (backup.type.contains('auto')) {
+      typeColor = Colors.green;
+      typeIcon = Icons.today;
+      typeText = 'تلقائي';
+    } else {
+      typeColor = Colors.grey;
+      typeIcon = Icons.backup;
+      typeText = 'غير معروف';
     }
 
     return Container(
@@ -508,7 +508,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
       setState(() => _isLoading = true);
 
       await _backupService.createBackup(
-        type: 'auto',
+        type: 'immediate_auto',
         description: 'نسخة احتياطية فورية',
       );
 
@@ -539,8 +539,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
         );
 
         // Copy to selected location
-        final backupFile = File('data/backups/${backup.filename}');
-        await backupFile.copy(result);
+        await File(backup.filePath).copy(result);
 
         _showSuccessSnackBar('تم تصدير النسخة الاحتياطية بنجاح');
       }
@@ -590,7 +589,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
     }
   }
 
-  Future<void> _restoreBackup(BackupInfo backup) async {
+  Future<void> _restoreBackup(EnhancedBackupInfo backup) async {
     final confirmed = await _showConfirmDialog(
       'هل أنت متأكد من استعادة النسخة الاحتياطية "${backup.filename}"؟\nسيتم استبدال جميع البيانات الحالية.',
     );
@@ -611,7 +610,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
     }
   }
 
-  Future<void> _verifyBackup(BackupInfo backup) async {
+  Future<void> _verifyBackup(EnhancedBackupInfo backup) async {
     try {
       // User's service doesn't have verification method, so just show info
       _showInfoDialog(
@@ -626,7 +625,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
     }
   }
 
-  Future<void> _exportSpecificBackup(BackupInfo backup) async {
+  Future<void> _exportSpecificBackup(EnhancedBackupInfo backup) async {
     try {
       final result = await FilePicker.platform.saveFile(
         dialogTitle: 'حفظ نسخة احتياطية',
@@ -636,8 +635,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
       );
 
       if (result != null) {
-        final backupFile = File('data/backups/${backup.filename}');
-        await backupFile.copy(result);
+        await File(backup.filePath).copy(result);
 
         _showSuccessSnackBar('تم تصدير النسخة الاحتياطية بنجاح');
       }
@@ -646,7 +644,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
     }
   }
 
-  Future<void> _deleteBackup(BackupInfo backup) async {
+  Future<void> _deleteBackup(EnhancedBackupInfo backup) async {
     final confirmed = await _showConfirmDialog(
       'هل أنت متأكد من حذف النسخة الاحتياطية "${backup.filename}"؟\nلا يمكن التراجع عن هذا الإجراء.',
     );

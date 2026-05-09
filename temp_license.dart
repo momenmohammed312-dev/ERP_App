@@ -23,7 +23,8 @@ String _generateSignature(String data) {
 }
 
 void main() {
-  final deviceFingerprint = 'db16569b055a26d5789151f1021b895e4106bdf9cf2045fbfc91e8313eeab023';
+  final deviceFingerprint =
+      'db16569b055a26d5789151f1021b895e4106bdf9cf2045fbfc91e8313eeab023';
   final now = DateTime.now();
   final expiryDate = now.add(Duration(days: 36500));
   final licenseData = {

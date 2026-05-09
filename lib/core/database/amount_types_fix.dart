@@ -1,10 +1,10 @@
+import 'package:drift/drift.dart';
 import 'dart:developer';
-import 'app_database.dart';
 
 /// Migration to fix amount column types in purchases table
 /// Converts total_amount and paid_amount from INTEGER to REAL
 class AmountTypesFix {
-  static Future<void> fixAmountTypes(AppDatabase db) async {
+  static Future<void> fixAmountTypes(DatabaseConnectionUser db) async {
     try {
       log('🔧 Fixing amount types in purchases table...');
 

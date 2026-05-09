@@ -85,8 +85,11 @@ class UserActivityDao extends DatabaseAccessor<AppDatabase>
     int entityId,
   ) {
     return (select(userActivityLog)
-          ..where((log) =>
-              log.entityType.equals(entityType) & log.entityId.equals(entityId))
+          ..where(
+            (log) =>
+                log.entityType.equals(entityType) &
+                log.entityId.equals(entityId),
+          )
           ..orderBy([(log) => OrderingTerm.desc(log.timestamp)]))
         .get();
   }
@@ -94,9 +97,9 @@ class UserActivityDao extends DatabaseAccessor<AppDatabase>
   /// Delete old activity logs (cleanup)
   Future<int> deleteOldLogs(Duration maxAge) {
     final cutoffDate = DateTime.now().subtract(maxAge);
-    return (delete(userActivityLog)
-          ..where((log) => log.timestamp.isSmallerThanValue(cutoffDate)))
-        .go();
+    return (delete(
+      userActivityLog,
+    )..where((log) => log.timestamp.isSmallerThanValue(cutoffDate))).go();
   }
 
   /// Get activity statistics
@@ -121,7 +124,9 @@ class UserActivityDao extends DatabaseAccessor<AppDatabase>
 
     return {
       for (final row in results)
-        row.read(userActivityLog.action)!: row.read(userActivityLog.action.count())!
+        row.read(userActivityLog.action)!: row.read(
+          userActivityLog.action.count(),
+        )!,
     };
   }
 }
