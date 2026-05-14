@@ -83,12 +83,14 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 38;
+  int get schemaVersion => 39;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (Migrator m) async {
       await m.createAll();
+      await _ensureStaffTables(m);
+      await _ensureCriticalColumns(m);
     },
     onUpgrade: (Migrator m, int from, int to) async {
       log('Migration: from $from to $to');
@@ -103,15 +105,18 @@ class AppDatabase extends _$AppDatabase {
         await _runIntermediateMigrations(m, from);
       }
 
-      // 3. Modern migrations (v31 - v38)
-      if (from < 38) {
+      // 3. Modern migrations (v31 - v39)
+      if (from < 39) {
         await _runModernMigrations(m, from);
       }
 
-      // 4. Always ensure critical columns exist (to fix drifted schemas)
+      // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
+      await _ensureStaffTables(m);
+
+      // 5. Always ensure critical columns exist (to fix drifted schemas)
       await _ensureCriticalColumns(m);
       
-      // 5. Special data fixes
+      // 6. Special data fixes
       if (from < 36) {
         try {
           await AmountTypesFix.fixAmountTypes(this);
@@ -193,8 +198,12 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> _runModernMigrations(Migrator m, int from) async {
     if (from < 32) {
-      await m.createTable(inventoryMovements);
-      await m.createTable(auditLog);
+      try {
+        await m.createTable(inventoryMovements);
+        await m.createTable(auditLog);
+      } catch (e) {
+        log('Modern migration v32 warning: $e');
+      }
     }
 
     if (from < 33) {
@@ -243,23 +252,208 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
-  Future<void> _ensureCriticalColumns(Migrator m) async {
-    // List of critical columns that often drift
-    final checks = [
-      {'table': 'invoices', 'column': 'customer_id', 'type': 'TEXT'},
-      {'table': 'invoices', 'column': 'total_amount', 'type': 'REAL DEFAULT 0.0'},
-      {'table': 'invoices', 'column': 'paid_amount', 'type': 'REAL DEFAULT 0.0'},
-      {'table': 'invoices', 'column': 'status', 'type': 'TEXT DEFAULT "pending"'},
-      {'table': 'customers', 'column': 'status', 'type': 'TEXT DEFAULT "Active"'},
-      {'table': 'customers', 'column': 'created_at', 'type': 'INTEGER'},
+  /// Ensures staff-related tables exist (fresh installs only run [onCreate], not [onUpgrade]).
+  Future<void> _ensureStaffTables(Migrator m) async {
+    const staffTableSql = [
+      '''CREATE TABLE IF NOT EXISTS "staff_table" (
+        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "staff_id" TEXT NOT NULL UNIQUE,
+        "name" TEXT NOT NULL,
+        "national_id" TEXT,
+        "phone" TEXT,
+        "email" TEXT,
+        "address" TEXT,
+        "position" TEXT NOT NULL,
+        "department" TEXT,
+        "employment_type" TEXT NOT NULL,
+        "basic_salary" REAL NOT NULL,
+        "hourly_rate" REAL,
+        "hire_date" INTEGER NOT NULL,
+        "contract_end_date" INTEGER,
+        "status" TEXT NOT NULL,
+        "bank_name" TEXT,
+        "bank_account" TEXT,
+        "emergency_contact" TEXT,
+        "emergency_phone" TEXT,
+        "notes" TEXT,
+        "created_at" INTEGER NOT NULL,
+        "updated_at" INTEGER NOT NULL,
+        "is_active" INTEGER NOT NULL DEFAULT 1
+      )''',
+      '''CREATE TABLE IF NOT EXISTS "attendance_table" (
+        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "staff_id" TEXT NOT NULL,
+        "date" INTEGER NOT NULL,
+        "check_in_time" INTEGER,
+        "check_out_time" INTEGER,
+        "check_in_location" TEXT,
+        "check_out_location" TEXT,
+        "working_hours" REAL,
+        "status" TEXT NOT NULL,
+        "leave_type" TEXT,
+        "notes" TEXT,
+        "overtime_hours" REAL NOT NULL DEFAULT 0,
+        "approved_by" TEXT,
+        "approved_at" INTEGER,
+        "created_at" INTEGER NOT NULL,
+        "updated_at" INTEGER NOT NULL
+      )''',
+      '''CREATE TABLE IF NOT EXISTS "vacations" (
+        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "staff_id" TEXT NOT NULL,
+        "vacation_type" TEXT NOT NULL,
+        "start_date" INTEGER NOT NULL,
+        "end_date" INTEGER NOT NULL,
+        "total_days" INTEGER NOT NULL,
+        "reason" TEXT,
+        "status" TEXT NOT NULL,
+        "approved_by" TEXT,
+        "approved_at" INTEGER,
+        "rejection_reason" TEXT,
+        "contact_during_vacation" TEXT,
+        "handover_to" TEXT,
+        "created_at" INTEGER NOT NULL,
+        "updated_at" INTEGER NOT NULL
+      )''',
+      '''CREATE TABLE IF NOT EXISTS "staff_advances" (
+        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "staff_id" TEXT NOT NULL,
+        "amount" REAL NOT NULL,
+        "reason" TEXT,
+        "request_date" INTEGER NOT NULL,
+        "payment_date" INTEGER,
+        "status" TEXT NOT NULL,
+        "approved_by" TEXT,
+        "approved_at" INTEGER,
+        "rejection_reason" TEXT,
+        "payment_method" TEXT,
+        "transaction_reference" TEXT,
+        "installment_months" INTEGER,
+        "monthly_deduction" REAL,
+        "created_at" INTEGER NOT NULL,
+        "updated_at" INTEGER NOT NULL
+      )''',
+      '''CREATE TABLE IF NOT EXISTS "payroll_table" (
+        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "staff_id" TEXT NOT NULL,
+        "payroll_period" TEXT NOT NULL,
+        "period_start" INTEGER NOT NULL,
+        "period_end" INTEGER NOT NULL,
+        "basic_salary" REAL NOT NULL,
+        "overtime_hours" REAL NOT NULL DEFAULT 0,
+        "overtime_rate" REAL,
+        "overtime_pay" REAL NOT NULL DEFAULT 0,
+        "allowances" REAL NOT NULL DEFAULT 0,
+        "deductions" REAL NOT NULL DEFAULT 0,
+        "advances" REAL NOT NULL DEFAULT 0,
+        "taxes" REAL NOT NULL DEFAULT 0,
+        "insurance" REAL NOT NULL DEFAULT 0,
+        "other_deductions" REAL NOT NULL DEFAULT 0,
+        "net_salary" REAL NOT NULL,
+        "working_days" INTEGER NOT NULL DEFAULT 0,
+        "present_days" INTEGER NOT NULL DEFAULT 0,
+        "absent_days" INTEGER NOT NULL DEFAULT 0,
+        "leave_days" INTEGER NOT NULL DEFAULT 0,
+        "status" TEXT NOT NULL,
+        "payment_date" INTEGER,
+        "payment_method" TEXT,
+        "transaction_reference" TEXT,
+        "approved_by" TEXT,
+        "approved_at" INTEGER,
+        "notes" TEXT,
+        "created_at" INTEGER NOT NULL,
+        "updated_at" INTEGER NOT NULL
+      )''',
+      '''CREATE TABLE IF NOT EXISTS "rewards_penalties" (
+        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "staff_id" TEXT NOT NULL,
+        "type" TEXT NOT NULL,
+        "category" TEXT NOT NULL,
+        "title" TEXT NOT NULL,
+        "description" TEXT,
+        "amount" REAL,
+        "incident_date" INTEGER NOT NULL,
+        "issued_by" TEXT NOT NULL,
+        "status" TEXT NOT NULL,
+        "effective_date" INTEGER NOT NULL,
+        "expiry_date" INTEGER,
+        "evidence" TEXT,
+        "notes" TEXT,
+        "created_at" INTEGER NOT NULL,
+        "updated_at" INTEGER NOT NULL
+      )''',
+      '''CREATE TABLE IF NOT EXISTS "performance_reviews" (
+        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "staff_id" TEXT NOT NULL,
+        "review_period" TEXT NOT NULL,
+        "review_date" INTEGER NOT NULL,
+        "reviewer_id" TEXT NOT NULL,
+        "overall_rating" REAL NOT NULL,
+        "work_quality_rating" REAL NOT NULL,
+        "productivity_rating" REAL NOT NULL,
+        "teamwork_rating" REAL NOT NULL,
+        "punctuality_rating" REAL NOT NULL,
+        "initiative_rating" REAL NOT NULL,
+        "strengths" TEXT,
+        "weaknesses" TEXT,
+        "goals" TEXT,
+        "recommendations" TEXT,
+        "employee_comments" TEXT,
+        "status" TEXT NOT NULL,
+        "acknowledged_at" INTEGER,
+        "next_review_date" INTEGER,
+        "action_plan" TEXT,
+        "created_at" INTEGER NOT NULL,
+        "updated_at" INTEGER NOT NULL
+      )''',
+      '''CREATE TABLE IF NOT EXISTS "staff_documents" (
+        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "staff_id" TEXT NOT NULL,
+        "document_type" TEXT NOT NULL,
+        "document_name" TEXT NOT NULL,
+        "file_path" TEXT NOT NULL,
+        "file_name" TEXT NOT NULL,
+        "file_type" TEXT NOT NULL,
+        "file_size" INTEGER NOT NULL,
+        "issue_date" INTEGER,
+        "expiry_date" INTEGER,
+        "issuing_authority" TEXT,
+        "document_number" TEXT,
+        "status" TEXT NOT NULL,
+        "notes" TEXT,
+        "created_at" INTEGER NOT NULL,
+        "updated_at" INTEGER NOT NULL
+      )''',
     ];
 
-    for (final check in checks) {
+    for (final sql in staffTableSql) {
       try {
-        await customStatement('ALTER TABLE ${check['table']} ADD COLUMN ${check['column']} ${check['type']}');
-        log('Ensured column ${check['column']} exists in ${check['table']}');
+        await customStatement(sql);
       } catch (e) {
-        // Ignore if already exists
+        log('_ensureStaffTables error: $e');
+      }
+    }
+  }
+
+  Future<void> _ensureCriticalColumns(Migrator m) async {
+    // Critical columns for existing tables
+    final columnChecks = [
+      {'table': 'invoices', 'column': 'customer_id', 'type': 'TEXT'},
+      {'table': 'invoices', 'column': 'total_amount', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'invoices', 'column': 'paid_amount',  'type': 'REAL DEFAULT 0.0'},
+      {'table': 'invoices', 'column': 'status',       'type': 'TEXT DEFAULT "pending"'},
+      {'table': 'customers','column': 'status',       'type': 'TEXT DEFAULT "Active"'},
+      {'table': 'customers','column': 'created_at',   'type': 'INTEGER'},
+    ];
+
+    for (final check in columnChecks) {
+      try {
+        await customStatement(
+          'ALTER TABLE ${check['table']} ADD COLUMN ${check['column']} ${check['type']}',
+        );
+        log('Ensured column ${check['column']} in ${check['table']}');
+      } catch (e) {
+        // Ignore — column already exists
       }
     }
   }
