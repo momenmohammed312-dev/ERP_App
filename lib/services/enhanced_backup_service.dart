@@ -14,7 +14,6 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:pos_offline_desktop/core/database/database_singleton.dart';
 import 'package:pos_offline_desktop/core/utils/app_utils.dart';
-import 'dart:typed_data';
 import 'package:pos_offline_desktop/core/services/backup_service.dart'
     as core_backup;
 
@@ -86,7 +85,9 @@ class EnhancedBackupInfo {
       size: json['size'] as int,
       type: json['type'] as String,
       description: json['description'] as String?,
-      createdBy: json['created_by'] as int?,
+      createdBy: json['created_by'] == null
+          ? null
+          : int.tryParse(json['created_by'].toString()),
       version: json['version'] as String? ?? '2.0.0',
       checksum: json['checksum'] as String,
       isEncrypted: json['is_encrypted'] as bool? ?? true,

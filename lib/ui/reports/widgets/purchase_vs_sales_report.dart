@@ -125,8 +125,12 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         ORDER BY report_date
       ''',
             variables: [
-              drift.Variable.withDateTime(_selectedDateRange!.start),
-              drift.Variable.withDateTime(_selectedDateRange!.end),
+              drift.Variable.withString(
+                _selectedDateRange!.start.toIso8601String(),
+              ),
+              drift.Variable.withString(
+                _selectedDateRange!.end.toIso8601String(),
+              ),
             ],
           )
           .get();
@@ -147,8 +151,12 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         ORDER BY report_date
       ''',
             variables: [
-              drift.Variable.withDateTime(_selectedDateRange!.start),
-              drift.Variable.withDateTime(_selectedDateRange!.end),
+              drift.Variable.withString(
+                _selectedDateRange!.start.toIso8601String(),
+              ),
+              drift.Variable.withString(
+                _selectedDateRange!.end.toIso8601String(),
+              ),
             ],
           )
           .get();
@@ -158,7 +166,7 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
 
       // Add sales data
       for (final row in salesResult) {
-        final date = row.read<String>('report_date');
+        final date = row.readNullable<String>('report_date') ?? 'unknown';
         combinedData[date] = {
           'date': date,
           'sales_count': row.readNullable<num>('invoice_count')?.toInt() ?? 0,
@@ -178,7 +186,7 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
 
       // Add purchases data
       for (final row in purchasesResult) {
-        final date = row.read<String>('report_date');
+        final date = row.readNullable<String>('report_date') ?? 'unknown';
         if (combinedData.containsKey(date)) {
           final data = combinedData[date]!;
           data['purchase_count'] =
@@ -224,6 +232,8 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
 
         return data;
       }).toList();
+
+      comparisonData.removeWhere((item) => item['date'] == 'unknown');
 
       // Sort by date
       comparisonData.sort(

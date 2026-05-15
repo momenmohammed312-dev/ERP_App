@@ -1,12 +1,12 @@
-import 'package:drift/drift.dart';
 import 'dart:developer';
+import 'app_database.dart';
 
 /// Migration to fix amount column types in purchases table
 /// Converts total_amount and paid_amount from INTEGER to REAL
 class AmountTypesFix {
-  static Future<void> fixAmountTypes(DatabaseConnectionUser db) async {
+  static Future<void> fixAmountTypes(AppDatabase db) async {
     try {
-      log('🔧 Fixing amount types in purchases table...');
+      log(' Fixing amount types in purchases table...');
 
       // Check current schema
       final result = await db
@@ -25,11 +25,11 @@ class AmountTypesFix {
       }
 
       if (!needsFix) {
-        log('✅ Amount columns already have correct REAL type');
+        log(' Amount columns already have correct REAL type');
         return;
       }
 
-      log('🔄 Converting INTEGER amount columns to REAL...');
+      log(' Converting INTEGER amount columns to REAL...');
 
       // 1. Create new table with correct schema
       await db.customStatement('''
@@ -76,9 +76,9 @@ class AmountTypesFix {
       // 4. Rename new table
       await db.customStatement('ALTER TABLE purchases_v2 RENAME TO purchases');
 
-      log('✅ Amount types fixed successfully');
+      log(' Amount types fixed successfully');
     } catch (e) {
-      log('❌ Error fixing amount types: $e');
+      log(' Error fixing amount types: $e');
       rethrow;
     }
   }

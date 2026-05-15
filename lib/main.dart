@@ -2,17 +2,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'package:desktop_window/desktop_window.dart';
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:drift/drift.dart' as drift;
 
-import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/core/router/go_router.dart';
@@ -31,8 +26,6 @@ import 'package:pos_offline_desktop/screens/license/activation_screen.dart';
 import 'package:pos_offline_desktop/screens/license/activation_success_screen.dart';
 import 'package:pos_offline_desktop/screens/license/license_info_screen.dart';
 import 'package:pos_offline_desktop/screens/license/tamper_detected_screen.dart';
-
-import 'package:pos_offline_desktop/core/utils/logger.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -7,10 +7,6 @@ mixin _$PurchaseBudgetDaoMixin on DatabaseAccessor<AppDatabase> {
   $PurchaseBudgetsTable get purchaseBudgets => attachedDatabase.purchaseBudgets;
   $BudgetCategoriesTable get budgetCategories =>
       attachedDatabase.budgetCategories;
-  $EnhancedSuppliersTable get enhancedSuppliers =>
-      attachedDatabase.enhancedSuppliers;
-  $EnhancedPurchasesTable get enhancedPurchases =>
-      attachedDatabase.enhancedPurchases;
   $BudgetTransactionsTable get budgetTransactions =>
       attachedDatabase.budgetTransactions;
   $BudgetAlertsTable get budgetAlerts => attachedDatabase.budgetAlerts;
@@ -29,16 +25,6 @@ class PurchaseBudgetDaoManager {
       $$BudgetCategoriesTableTableManager(
         _db.attachedDatabase,
         _db.budgetCategories,
-      );
-  $$EnhancedSuppliersTableTableManager get enhancedSuppliers =>
-      $$EnhancedSuppliersTableTableManager(
-        _db.attachedDatabase,
-        _db.enhancedSuppliers,
-      );
-  $$EnhancedPurchasesTableTableManager get enhancedPurchases =>
-      $$EnhancedPurchasesTableTableManager(
-        _db.attachedDatabase,
-        _db.enhancedPurchases,
       );
   $$BudgetTransactionsTableTableManager get budgetTransactions =>
       $$BudgetTransactionsTableTableManager(

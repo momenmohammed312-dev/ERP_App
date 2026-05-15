@@ -229,8 +229,8 @@ class _InventoryReportTabState extends ConsumerState<InventoryReportTab> {
                       ),
                       decoration: BoxDecoration(
                         color: product.quantity < 5
-                            ? Colors.red.shade100
-                            : Colors.orange.shade100,
+                          ? Colors.red.shade100
+                          : Colors.orange.shade100,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(

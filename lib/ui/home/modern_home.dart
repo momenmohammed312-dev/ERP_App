@@ -240,50 +240,46 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
               ),
             ),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.point_of_sale,
-                    color: Theme.of(context).colorScheme.onPrimary,
-                    size: 28,
-                  ),
-                ),
-                const Gap(16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Gap(4),
-                      Text(
-                        'Developed by MO2',
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.7),
-                            ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
-                  ),
+                      child: Icon(
+                        Icons.point_of_sale,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        size: 28,
+                      ),
+                    ),
+                    const Gap(16),
+                    Text(
+                      'Developed by MO2',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.7),
+                          ),
+                    ),
+                  ],
                 ),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    // License Badge
                     const _LicenseBadge(),
                     const Gap(8),
-                    // Notifications
                     IconButton(
                       icon: const Icon(Icons.notifications_outlined),
                       onPressed: () {},
                       tooltip: 'Notifications',
                     ),
-                    const Gap(8),
                   ],
                 ),
               ],

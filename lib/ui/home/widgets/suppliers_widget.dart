@@ -215,7 +215,7 @@ class SuppliersWidget extends ConsumerWidget {
       return result.map((row) {
         final d = row.data;
         return {
-          'id': d['id'] as int? ?? 0,
+          'id': int.tryParse(d['id']?.toString() ?? '') ?? 0,
           'invoice_number': d['invoice_number']?.toString(),
           'purchase_date': parseDate(d['purchase_date']).toIso8601String(),
           'total_amount': (d['total_amount'] as num?)?.toDouble() ?? 0.0,
