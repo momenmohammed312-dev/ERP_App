@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/db_schema_cache_service.dart';
 
 // Sales statistics data class
 class SalesStats {
@@ -218,22 +219,10 @@ class _SalesSummaryWidgetState extends State<SalesSummaryWidget> {
       // Check if totalAmount column exists
       String totalColumn = 'totalAmount';
       try {
-        final debugResult = await widget.db
-            .customSelect('PRAGMA table_info(invoices)')
-            .get();
-
-        bool hasTotalAmount = false;
-        for (final row in debugResult) {
-          final columnName = row.read<String>('name');
-          if (columnName == 'totalAmount') {
-            hasTotalAmount = true;
-          }
-        }
-
-        if (!hasTotalAmount) {
-          // Look for alternative column names
-          for (final row in debugResult) {
-            final columnName = row.read<String>('name');
+        final columnNames =
+            await DbSchemaCacheService.getColumns(widget.db, 'invoices');
+        if (!columnNames.contains('totalAmount')) {
+          for (final columnName in columnNames) {
             if (columnName.contains('total') || columnName.contains('amount')) {
               totalColumn = columnName;
               break;
@@ -271,9 +260,9 @@ class _SalesSummaryWidgetState extends State<SalesSummaryWidget> {
       int cashInvoices = 0;
 
       for (final row in salesResult) {
-        final paymentMethod = row.read<String>('paymentMethod');
-        final amount = row.read<double>('total_amount');
-        final count = row.read<int>('invoice_count');
+        final paymentMethod = row.readNullable<String>('paymentMethod') ?? '';
+        final amount = row.readNullable<double>('total_amount') ?? 0.0;
+        final count = row.readNullable<int>('invoice_count') ?? 0;
 
         totalSales += amount;
         totalInvoices += count;

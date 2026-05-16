@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/db_schema_cache_service.dart';
 
 class DailySalesPerformanceWidget extends StatefulWidget {
   final AppDatabase db;
@@ -57,21 +58,10 @@ class _DailySalesPerformanceWidgetState
       // Check if totalAmount column exists in invoices
       String salesTotalColumn = 'totalAmount';
       try {
-        final invoicesColumns = await widget.db
-            .customSelect('PRAGMA table_info(invoices)')
-            .get();
-
-        bool hasTotalAmount = false;
-        for (final row in invoicesColumns) {
-          final columnName = row.read<String>('name');
-          if (columnName == 'totalAmount') {
-            hasTotalAmount = true;
-          }
-        }
-
-        if (!hasTotalAmount) {
-          for (final row in invoicesColumns) {
-            final columnName = row.read<String>('name');
+        final invoicesColumns =
+            await DbSchemaCacheService.getColumns(widget.db, 'invoices');
+        if (!invoicesColumns.contains('totalAmount')) {
+          for (final columnName in invoicesColumns) {
             if (columnName.contains('total') || columnName.contains('amount')) {
               salesTotalColumn = columnName;
               break;
@@ -82,24 +72,12 @@ class _DailySalesPerformanceWidgetState
         debugPrint('Error checking invoices table: $e');
       }
 
-      // Check if totalAmount column exists in purchases
       String purchasesTotalColumn = 'totalAmount';
       try {
-        final purchasesColumns = await widget.db
-            .customSelect('PRAGMA table_info(purchases)')
-            .get();
-
-        bool hasTotalAmount = false;
-        for (final row in purchasesColumns) {
-          final columnName = row.read<String>('name');
-          if (columnName == 'totalAmount') {
-            hasTotalAmount = true;
-          }
-        }
-
-        if (!hasTotalAmount) {
-          for (final row in purchasesColumns) {
-            final columnName = row.read<String>('name');
+        final purchasesColumns =
+            await DbSchemaCacheService.getColumns(widget.db, 'purchases');
+        if (!purchasesColumns.contains('totalAmount')) {
+          for (final columnName in purchasesColumns) {
             if (columnName.contains('total') || columnName.contains('amount')) {
               purchasesTotalColumn = columnName;
               break;
@@ -175,12 +153,12 @@ class _DailySalesPerformanceWidgetState
 
       // Add sales data
       for (final row in salesResult) {
-        final date = row.read<String>('report_date');
+        final date = row.readNullable<String>('report_date') ?? '';
         dailyData[date] = DailySalesData(
           date: DateTime.parse(date),
-          totalSales: row.read<double>('total_sales'),
+          totalSales: row.readNullable<double>('total_sales') ?? 0.0,
           totalPurchases: 0.0,
-          invoiceCount: row.read<int>('invoice_count'),
+          invoiceCount: row.readNullable<int>('invoice_count') ?? 0,
           purchaseCount: 0,
           openingBalance: 0.0,
           closingBalance: 0.0,
@@ -190,19 +168,19 @@ class _DailySalesPerformanceWidgetState
 
       // Add purchases data
       for (final row in purchasesResult) {
-        final date = row.read<String>('report_date');
+        final date = row.readNullable<String>('report_date') ?? '';
         if (dailyData.containsKey(date)) {
           dailyData[date] = dailyData[date]!.copyWith(
-            totalPurchases: row.read<double>('total_purchases'),
-            purchaseCount: row.read<int>('purchase_count'),
+            totalPurchases: row.readNullable<double>('total_purchases') ?? 0.0,
+            purchaseCount: row.readNullable<int>('purchase_count') ?? 0,
           );
         } else {
           dailyData[date] = DailySalesData(
             date: DateTime.parse(date),
             totalSales: 0.0,
-            totalPurchases: row.read<double>('total_purchases'),
+            totalPurchases: row.readNullable<double>('total_purchases') ?? 0.0,
             invoiceCount: 0,
-            purchaseCount: row.read<int>('purchase_count'),
+            purchaseCount: row.readNullable<int>('purchase_count') ?? 0,
             openingBalance: 0.0,
             closingBalance: 0.0,
             isOpen: false,
@@ -212,12 +190,12 @@ class _DailySalesPerformanceWidgetState
 
       // Add days data
       for (final row in daysResult) {
-        final date = row.read<String>('report_date');
+        final date = row.readNullable<String>('report_date') ?? '';
         if (dailyData.containsKey(date)) {
           dailyData[date] = dailyData[date]!.copyWith(
-            openingBalance: row.read<double>('openingBalance'),
-            closingBalance: row.read<double>('closingBalance'),
-            isOpen: row.read<int>('isOpen') == 1,
+            openingBalance: row.readNullable<double>('openingBalance') ?? 0.0,
+            closingBalance: row.readNullable<double>('closingBalance') ?? 0.0,
+            isOpen: (row.readNullable<int>('isOpen') ?? 0) == 1,
           );
         } else {
           dailyData[date] = DailySalesData(
@@ -226,9 +204,9 @@ class _DailySalesPerformanceWidgetState
             totalPurchases: 0.0,
             invoiceCount: 0,
             purchaseCount: 0,
-            openingBalance: row.read<double>('openingBalance'),
-            closingBalance: row.read<double>('closingBalance'),
-            isOpen: row.read<int>('isOpen') == 1,
+            openingBalance: row.readNullable<double>('openingBalance') ?? 0.0,
+            closingBalance: row.readNullable<double>('closingBalance') ?? 0.0,
+            isOpen: (row.readNullable<int>('isOpen') ?? 0) == 1,
           );
         }
       }

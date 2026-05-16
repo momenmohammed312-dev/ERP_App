@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/utils/app_utils.dart';
+import 'package:pos_offline_desktop/core/utils/logger.dart';
 
 /// تقرير اليوم — جدول يومي يعرض الأيام المفتوحة والمبيعات
 class DailyReportPage extends ConsumerStatefulWidget {
@@ -158,12 +159,13 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         _dailyData = result;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stack) {
+      AppLogger.e('Failed to load daily report', e, stack);
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ في تحميل التقرير: $e'),
+          const SnackBar(
+            content: Text('حدث خطأ أثناء تحميل البيانات'),
             backgroundColor: Colors.red,
           ),
         );

@@ -18,7 +18,7 @@ class CreditPaymentsDao extends DatabaseAccessor<AppDatabase>
   Stream<double> watchTotalCreditPayments() {
     return customSelect(
       'SELECT SUM(amount) as total FROM credit_payments',
-    ).map((row) => row.read<double>('total')).watchSingle();
+    ).map((row) => row.readNullable<double>('total') ?? 0.0).watchSingle();
   }
 
   Future<double> getTotalCreditPayments() async {

@@ -74,6 +74,6 @@ class ExpenseDao extends DatabaseAccessor<AppDatabase> with _$ExpenseDaoMixin {
     return customSelect(
       'SELECT COALESCE(SUM(amount), 0) as total FROM expenses',
       readsFrom: {expenses},
-    ).map((row) => row.read<double>('total')).watchSingle();
+    ).map((row) => row.readNullable<double>('total') ?? 0.0).watchSingle();
   }
 }

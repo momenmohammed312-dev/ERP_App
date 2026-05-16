@@ -3,6 +3,7 @@ import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/utils/logger.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/customer_report_tab.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/expenses_report_tab.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/sales_report_tab.dart';
@@ -103,8 +104,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         _creditInvoices = creditInvCount;
       });
     } catch (e, st) {
-      debugPrint('Error loading reports data: $e\n$st');
-      // Show error state to user
+      AppLogger.e('Failed to load reports data', e, st);
       if (mounted) {
         setState(() {
           _totalSales = 0.0;
@@ -114,6 +114,9 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           _cashInvoices = 0;
           _creditInvoices = 0;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('حدث خطأ أثناء تحميل البيانات')),
+        );
       }
     }
   }

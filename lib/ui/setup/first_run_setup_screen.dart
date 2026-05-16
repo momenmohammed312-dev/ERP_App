@@ -120,7 +120,7 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
                     if (value == null || value.isEmpty) {
                       return 'يرجى إدخال كلمة المرور';
                     }
-                    if (value.length < 6) return 'يجب أن لا تقل عن 6 أحرف';
+                    if (value.length < 8) return 'يجب أن لا تقل عن 8 أحرف';
                     if (value == 'admin123') {
                       return 'لا يمكنك استخدام كلمة المرور الافتراضية';
                     }

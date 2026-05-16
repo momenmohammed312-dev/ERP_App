@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'dart:convert';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/utils/logger.dart';
 
 class PurchaseByProductReport extends ConsumerStatefulWidget {
   const PurchaseByProductReport({super.key});
@@ -38,25 +39,13 @@ class _PurchaseByProductReportState
     try {
       final db = ref.read(appDatabaseProvider);
 
-      // Debug: Check actual column names in products table
-      try {
-        final debugResult = await db
-            .customSelect('PRAGMA table_info(products)')
-            .get();
-        debugPrint('Products table columns:');
-        for (final row in debugResult) {
-          debugPrint('  ${row.read<String>('name')}');
-        }
-      } catch (e) {
-        debugPrint('Error checking products table: $e');
-      }
 
       // Simple test query first
       try {
         final testResult = await db
             .customSelect('SELECT COUNT(*) as count FROM products')
             .get();
-        final productCount = testResult.first.read<int>('count');
+        final productCount = testResult.first.readNullable<int>('count') ?? 0;
         debugPrint('Products count: $productCount');
       } catch (e) {
         debugPrint('Error counting products: $e');
@@ -68,7 +57,7 @@ class _PurchaseByProductReportState
         final testResult = await db
             .customSelect('SELECT COUNT(*) as count FROM purchase_items')
             .get();
-        final itemsCount = testResult.first.read<int>('count');
+        final itemsCount = testResult.first.readNullable<int>('count') ?? 0;
         debugPrint('Purchase items count: $itemsCount');
       } catch (e) {
         debugPrint('Error counting purchase items: $e');
@@ -79,7 +68,7 @@ class _PurchaseByProductReportState
                 'SELECT COUNT(*) as count FROM enhanced_purchase_items',
               )
               .get();
-          final itemsCount = testResult.first.read<int>('count');
+          final itemsCount = testResult.first.readNullable<int>('count') ?? 0;
           debugPrint('Enhanced purchase items count: $itemsCount');
         } catch (e2) {
           debugPrint('Error counting enhanced purchase items: $e2');
@@ -111,14 +100,16 @@ class _PurchaseByProductReportState
         final productData = result
             .map(
               (row) => {
-                'product_id': row.read<String>('product_id'),
-                'product_name': row.read<String>('product_name'),
+                'product_id': row.readNullable<String>('product_id') ?? '',
+                'product_name': row.readNullable<String>('product_name') ?? '',
                 'product_barcode': row.read<String?>('product_barcode') ?? '-',
                 'product_unit': row.read<String?>('product_unit') ?? 'قطعة',
                 'product_category': 'بدون تصنيف',
-                'total_quantity': row.read<double>('total_quantity'),
+                'total_quantity':
+                    row.readNullable<double>('total_quantity') ?? 0.0,
                 'avg_unit_price': 0.0,
-                'total_amount': row.read<double>('total_amount'),
+                'total_amount':
+                    row.readNullable<double>('total_amount') ?? 0.0,
                 'purchase_count': 1,
               },
             )
@@ -164,15 +155,18 @@ class _PurchaseByProductReportState
           final productData = result
               .map(
                 (row) => {
-                  'product_id': row.read<String>('product_id'),
-                  'product_name': row.read<String>('product_name'),
+                  'product_id': row.readNullable<String>('product_id') ?? '',
+                  'product_name':
+                      row.readNullable<String>('product_name') ?? '',
                   'product_barcode':
                       row.read<String?>('product_barcode') ?? '-',
                   'product_unit': row.read<String?>('product_unit') ?? 'قطعة',
                   'product_category': 'بدون تصنيف',
-                  'total_quantity': row.read<double>('total_quantity'),
+                  'total_quantity':
+                      row.readNullable<double>('total_quantity') ?? 0.0,
                   'avg_unit_price': 0.0,
-                  'total_amount': row.read<double>('total_amount'),
+                  'total_amount':
+                      row.readNullable<double>('total_amount') ?? 0.0,
                   'purchase_count': 1,
                 },
               )
@@ -198,15 +192,16 @@ class _PurchaseByProductReportState
           rethrow;
         }
       }
-    } catch (e) {
+    } catch (e, stack) {
+      AppLogger.e('Failed to load purchase by product report', e, stack);
       setState(() {
         _isLoading = false;
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading report: $e'),
+          const SnackBar(
+            content: Text('حدث خطأ أثناء تحميل البيانات'),
             backgroundColor: Colors.red,
           ),
         );

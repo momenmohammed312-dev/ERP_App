@@ -3,7 +3,9 @@ import 'package:intl/intl.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/services/db_schema_cache_service.dart';
 import 'package:pos_offline_desktop/core/services/purchase_print_service_simple.dart';
+import 'package:pos_offline_desktop/core/utils/logger.dart';
 
 class PurchaseVsSalesReport extends ConsumerStatefulWidget {
   const PurchaseVsSalesReport({super.key});
@@ -45,29 +47,12 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
       String purchasesTotalColumn = 'totalAmount';
 
       try {
-        final debugResult = await db
-            .customSelect('PRAGMA table_info(invoices)')
-            .get();
-        debugPrint('Invoices table columns:');
-        bool hasTotalAmount = false;
-        for (final row in debugResult) {
-          final columnName = row.read<String>('name');
-          debugPrint('  $columnName');
-          if (columnName == 'totalAmount') {
-            hasTotalAmount = true;
-          }
-        }
-
-        if (!hasTotalAmount) {
-          debugPrint(
-            'totalAmount column not found, checking for alternatives...',
-          );
-          // Check for alternative column names
-          for (final row in debugResult) {
-            final columnName = row.read<String>('name');
+        final invoiceColumns =
+            await DbSchemaCacheService.getColumns(db, 'invoices');
+        if (!invoiceColumns.contains('totalAmount')) {
+          for (final columnName in invoiceColumns) {
             if (columnName.contains('total') || columnName.contains('amount')) {
               salesTotalColumn = columnName;
-              debugPrint('Using alternative column: $columnName');
               break;
             }
           }
@@ -76,31 +61,13 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         debugPrint('Error checking invoices table: $e');
       }
 
-      // Check purchases table as well
       try {
-        final debugResult = await db
-            .customSelect('PRAGMA table_info(purchases)')
-            .get();
-        debugPrint('Purchases table columns:');
-        bool hasTotalAmount = false;
-        for (final row in debugResult) {
-          final columnName = row.read<String>('name');
-          debugPrint('  $columnName');
-          if (columnName == 'totalAmount') {
-            hasTotalAmount = true;
-          }
-        }
-
-        if (!hasTotalAmount) {
-          debugPrint(
-            'totalAmount column not found in purchases, checking for alternatives...',
-          );
-          // Check for alternative column names
-          for (final row in debugResult) {
-            final columnName = row.read<String>('name');
+        final purchaseColumns =
+            await DbSchemaCacheService.getColumns(db, 'purchases');
+        if (!purchaseColumns.contains('totalAmount')) {
+          for (final columnName in purchaseColumns) {
             if (columnName.contains('total') || columnName.contains('amount')) {
               purchasesTotalColumn = columnName;
-              debugPrint('Using alternative purchases column: $columnName');
               break;
             }
           }
@@ -262,12 +229,13 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         _profitMargin = profitMargin;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stack) {
+      AppLogger.e('Failed to load purchase vs sales report', e, stack);
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ في تحميل التقرير: $e'),
+          const SnackBar(
+            content: Text('حدث خطأ أثناء تحميل البيانات'),
             backgroundColor: Colors.red,
           ),
         );

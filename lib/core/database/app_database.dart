@@ -198,11 +198,15 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> _runModernMigrations(Migrator m, int from) async {
     if (from < 32) {
-      try {
-        await m.createTable(inventoryMovements);
-        await m.createTable(auditLog);
-      } catch (e) {
-        log('Modern migration v32 warning: $e');
+      for (final migration in [
+        () => m.createTable(inventoryMovements),
+        () => m.createTable(auditLog),
+      ]) {
+        try {
+          await migration();
+        } catch (e) {
+          log('Migration warning (v32): $e');
+        }
       }
     }
 
@@ -221,14 +225,22 @@ class AppDatabase extends _$AppDatabase {
     }
 
     if (from < 35) {
-      await m.createTable(staffTable);
-      await m.createTable(attendanceTable);
-      await m.createTable(vacations);
-      await m.createTable(staffAdvances);
-      await m.createTable(payrollTable);
-      await m.createTable(rewardsPenalties);
-      await m.createTable(performanceReviews);
-      await m.createTable(staffDocuments);
+      for (final migration in [
+        () => m.createTable(staffTable),
+        () => m.createTable(attendanceTable),
+        () => m.createTable(vacations),
+        () => m.createTable(staffAdvances),
+        () => m.createTable(payrollTable),
+        () => m.createTable(rewardsPenalties),
+        () => m.createTable(performanceReviews),
+        () => m.createTable(staffDocuments),
+      ]) {
+        try {
+          await migration();
+        } catch (e) {
+          log('Migration warning (v35): $e');
+        }
+      }
     }
 
     if (from < 37) {

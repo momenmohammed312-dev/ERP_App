@@ -53,7 +53,7 @@ class SupplierDao extends DatabaseAccessor<AppDatabase>
     return customSelect(
       'SELECT COUNT(*) as count FROM suppliers',
       readsFrom: {suppliers},
-    ).map((row) => row.read<int>('count')).watchSingle();
+    ).map((row) => row.readNullable<int>('count') ?? 0).watchSingle();
   }
 
   Stream<double> watchTotalSuppliersDues() {
@@ -70,6 +70,6 @@ class SupplierDao extends DatabaseAccessor<AppDatabase>
       FROM suppliers 
       WHERE status = 'Active' ''',
       readsFrom: {suppliers, db.ledgerTransactions},
-    ).map((row) => row.read<double>('total_dues')).watchSingle();
+    ).map((row) => row.readNullable<double>('total_dues') ?? 0.0).watchSingle();
   }
 }

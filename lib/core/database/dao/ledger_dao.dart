@@ -244,7 +244,7 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
       '  GROUP BY c.id'
       ') WHERE balance > 0',
       readsFrom: {db.customers, db.ledgerTransactions},
-    ).watchSingle().map((row) => row.read<double>('total'));
+    ).watchSingle().map((row) => row.readNullable<double>('total') ?? 0.0);
   }
 }
 

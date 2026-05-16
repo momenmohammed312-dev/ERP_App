@@ -122,47 +122,79 @@ class _NewInvoicePageState extends ConsumerState<NewInvoicePage> {
   }
 
   Future<void> _loadCustomersAndProducts() async {
-    final db = ref.read(appDatabaseProvider);
-    final customers = await db.customerDao.getAllCustomers();
-    final products = await db.productDao.getAllProducts();
-    final invoices = await db.invoiceDao.getAllInvoices();
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final customers = await db.customerDao.getAllCustomers();
+      final products = await db.productDao.getAllProducts();
+      final invoices = await db.invoiceDao.getAllInvoices();
 
-    setState(() {
-      _customers = customers;
-      _products = products;
-      _recentInvoices = invoices.reversed.take(20).toList();
-    });
+      if (!mounted) return;
+      setState(() {
+        _customers = customers;
+        _products = products;
+        _recentInvoices = invoices.reversed.take(20).toList();
+      });
+    } catch (e, stack) {
+      debugPrint('Failed to load invoice data: $e\n$stack');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('حدث خطأ أثناء تحميل البيانات')),
+        );
+      }
+    }
   }
 
   Future<void> _searchProducts(String q) async {
-    final db = ref.read(appDatabaseProvider);
-    if (q.trim().isEmpty) {
-      final all = await db.productDao.getAllProducts();
-      setState(() => _products = all);
-      return;
+    try {
+      final db = ref.read(appDatabaseProvider);
+      if (q.trim().isEmpty) {
+        final all = await db.productDao.getAllProducts();
+        if (!mounted) return;
+        setState(() => _products = all);
+        return;
+      }
+      final results = await db.productDao.searchProducts(q);
+      if (!mounted) return;
+      setState(() => _products = results);
+    } catch (e, stack) {
+      debugPrint('Failed to search products: $e\n$stack');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('حدث خطأ أثناء تحميل البيانات')),
+        );
+      }
     }
-    final results = await db.productDao.searchProducts(q);
-    setState(() => _products = results);
   }
 
   Future<void> _loadOrder(int invoiceId) async {
-    final db = ref.read(appDatabaseProvider);
-    final items = await db.invoiceDao.getItemsWithProductsByInvoice(invoiceId);
-    setState(() {
-      _selectedEntries.clear();
-      for (final row in items) {
-        final item = row.$1;
-        final product = row.$2;
-        _selectedEntries.add(
-          _SelectedProductEntry()
-            ..product = product
-            ..quantity = item.quantity
-            ..ctn = item.ctn
-            ..customPrice = item.price,
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final items =
+          await db.invoiceDao.getItemsWithProductsByInvoice(invoiceId);
+      if (!mounted) return;
+      setState(() {
+        _selectedEntries.clear();
+        for (final row in items) {
+          final item = row.$1;
+          final product = row.$2;
+          _selectedEntries.add(
+            _SelectedProductEntry()
+              ..product = product
+              ..quantity = item.quantity
+              ..ctn = item.ctn
+              ..customPrice = item.price,
+          );
+        }
+        _calculateTotalAmount();
+      });
+    } catch (e, stack) {
+      debugPrint('Failed to load order: $e\n$stack');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('حدث خطأ أثناء تحميل البيانات')),
         );
       }
-      _calculateTotalAmount();
-    });
+    }
   }
 
   Future<void> _loadCustomerBalance(Customer customer) async {

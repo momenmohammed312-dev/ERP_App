@@ -164,11 +164,11 @@ class WeightedAverageService {
           .map(
             (row) => {
               'movement_date': row.read<DateTime>('movement_date'),
-              'movement_type': row.read<String>('movement_type'),
-              'quantity': row.read<int>('quantity'),
-              'previous_quantity': row.read<int>('previous_quantity'),
-              'new_quantity': row.read<int>('new_quantity'),
-              'unit_cost': row.read<double>('unit_cost'),
+              'movement_type': row.readNullable<String>('movement_type') ?? '',
+              'quantity': row.readNullable<int>('quantity') ?? 0,
+              'previous_quantity': row.readNullable<int>('previous_quantity') ?? 0,
+              'new_quantity': row.readNullable<int>('new_quantity') ?? 0,
+              'unit_cost': row.readNullable<double>('unit_cost') ?? 0.0,
               'notes': row.read<String?>('notes'),
               'reference': row.read<String?>('reference'),
             },
@@ -221,8 +221,9 @@ class WeightedAverageService {
 
       // Calculate weighted average from all purchases
       for (final movement in movements) {
-        final quantity = movement.read<int>('quantity').toDouble();
-        final unitCost = movement.read<double>('unit_cost');
+        final quantity =
+            (movement.readNullable<int>('quantity') ?? 0).toDouble();
+        final unitCost = movement.readNullable<double>('unit_cost') ?? 0.0;
 
         if (totalQuantity == 0) {
           // First purchase
@@ -343,21 +344,27 @@ class WeightedAverageService {
       return {
         'period': {'start': start, 'end': end},
         'summary': {
-          'total_adjustments': costChangesResult.read<int>('total_adjustments'),
-          'purchases_count': costChangesResult.read<int>('purchases_count'),
-          'adjustments_count': costChangesResult.read<int>('adjustments_count'),
-          'avg_cost_price': costChangesResult.read<double>('avg_cost_price'),
-          'min_cost_price': costChangesResult.read<double>('min_cost_price'),
-          'max_cost_price': costChangesResult.read<double>('max_cost_price'),
+          'total_adjustments':
+              costChangesResult.readNullable<int>('total_adjustments') ?? 0,
+          'purchases_count':
+              costChangesResult.readNullable<int>('purchases_count') ?? 0,
+          'adjustments_count':
+              costChangesResult.readNullable<int>('adjustments_count') ?? 0,
+          'avg_cost_price':
+              costChangesResult.readNullable<double>('avg_cost_price') ?? 0.0,
+          'min_cost_price':
+              costChangesResult.readNullable<double>('min_cost_price') ?? 0.0,
+          'max_cost_price':
+              costChangesResult.readNullable<double>('max_cost_price') ?? 0.0,
         },
         'top_products': topProductsResult
             .map(
               (row) => {
-                'product_name': row.read<String>('product_name'),
-                'cost_changes': row.read<int>('cost_changes'),
-                'avg_cost': row.read<double>('avg_cost'),
-                'max_cost': row.read<double>('max_cost'),
-                'min_cost': row.read<double>('min_cost'),
+                'product_name': row.readNullable<String>('product_name') ?? '',
+                'cost_changes': row.readNullable<int>('cost_changes') ?? 0,
+                'avg_cost': row.readNullable<double>('avg_cost') ?? 0.0,
+                'max_cost': row.readNullable<double>('max_cost') ?? 0.0,
+                'min_cost': row.readNullable<double>('min_cost') ?? 0.0,
               },
             )
             .toList(),

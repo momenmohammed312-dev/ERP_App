@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' as drift;
 import '../../core/database/app_database.dart';
+import '../../core/services/db_schema_cache_service.dart';
 
 class SalesPurchaseComparisonCard extends StatefulWidget {
   final AppDatabase database;
@@ -40,23 +41,10 @@ class _SalesPurchaseComparisonCardState
       try {
         String salesTotalColumn = 'totalAmount';
 
-        // Check if totalAmount column exists in invoices
-        final invoicesColumns = await widget.database
-            .customSelect('PRAGMA table_info(invoices)')
-            .get();
-
-        bool hasTotalAmount = false;
-        for (final row in invoicesColumns) {
-          final columnName = row.read<String>('name');
-          if (columnName == 'totalAmount') {
-            hasTotalAmount = true;
-          }
-        }
-
-        if (!hasTotalAmount) {
-          // Look for alternative column names
-          for (final row in invoicesColumns) {
-            final columnName = row.read<String>('name');
+        final invoicesColumns =
+            await DbSchemaCacheService.getColumns(widget.database, 'invoices');
+        if (!invoicesColumns.contains('totalAmount')) {
+          for (final columnName in invoicesColumns) {
             if (columnName.contains('total') || columnName.contains('amount')) {
               salesTotalColumn = columnName;
               break;
@@ -78,7 +66,8 @@ class _SalesPurchaseComparisonCardState
             )
             .get();
 
-        salesTotal = salesResult.first.read<double>('total_sales');
+        salesTotal =
+            salesResult.first.readNullable<double>('total_sales') ?? 0.0;
       } catch (e) {
         debugPrint('Error getting sales data: $e');
         salesTotal = 0.0;
@@ -88,23 +77,10 @@ class _SalesPurchaseComparisonCardState
       try {
         String purchasesTotalColumn = 'totalAmount';
 
-        // Check if totalAmount column exists in purchases
-        final purchasesColumns = await widget.database
-            .customSelect('PRAGMA table_info(purchases)')
-            .get();
-
-        bool hasTotalAmount = false;
-        for (final row in purchasesColumns) {
-          final columnName = row.read<String>('name');
-          if (columnName == 'totalAmount') {
-            hasTotalAmount = true;
-          }
-        }
-
-        if (!hasTotalAmount) {
-          // Look for alternative column names
-          for (final row in purchasesColumns) {
-            final columnName = row.read<String>('name');
+        final purchasesColumns =
+            await DbSchemaCacheService.getColumns(widget.database, 'purchases');
+        if (!purchasesColumns.contains('totalAmount')) {
+          for (final columnName in purchasesColumns) {
             if (columnName.contains('total') || columnName.contains('amount')) {
               purchasesTotalColumn = columnName;
               break;
@@ -126,7 +102,9 @@ class _SalesPurchaseComparisonCardState
             )
             .get();
 
-        purchasesTotal = purchasesResult.first.read<double>('total_purchases');
+        purchasesTotal =
+            purchasesResult.first.readNullable<double>('total_purchases') ??
+            0.0;
       } catch (e) {
         debugPrint('Error getting purchases data: $e');
         purchasesTotal = 0.0;

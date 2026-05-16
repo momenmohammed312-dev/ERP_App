@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
@@ -902,16 +903,24 @@ class _EditUserDialogState extends State<_EditUserDialog> {
     });
 
     try {
-      final appUser = AppUser(
-        id: widget.user.id!,
-        username: widget.user.username,
-        password: widget.user.passwordHash,
+      final existing = await widget.userDao.getUserById(widget.user.id!);
+      if (existing == null) {
+        throw StateError('User not found');
+      }
+
+      final appUser = existing.copyWith(
         role: _selectedRole.name,
         fullName: _fullNameController.text.trim(),
-        isActive: widget.user.isActive,
-        failedAttempts: widget.user.failedAttempts,
-        lastLogin: widget.user.lastLogin,
-        createdAt: widget.user.createdAt,
+        email: Value(
+          _emailController.text.trim().isEmpty
+              ? null
+              : _emailController.text.trim(),
+        ),
+        phone: Value(
+          _phoneController.text.trim().isEmpty
+              ? null
+              : _phoneController.text.trim(),
+        ),
       );
 
       await widget.userDao.updateUser(appUser);

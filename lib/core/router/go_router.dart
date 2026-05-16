@@ -9,7 +9,6 @@ import 'package:pos_offline_desktop/ui/purchase/widgets/enhanced_purchase_invoic
 import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
 import 'package:pos_offline_desktop/ui/admin/admin_dashboard_page.dart';
 import 'package:pos_offline_desktop/ui/setup/first_run_setup_screen.dart';
-
 // Simple splash screen widget
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -160,11 +159,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     initialLocation: '/',
-    redirect: (context, state) {
-      // No auth redirects on desktop - user is automatically logged in
-      // License checks are handled in main.dart
-      return null;
-    },
+    redirect: (context, state) => null,
     routes: [
       // License & Setup Routes
       GoRoute(
