@@ -4,13 +4,17 @@ part of 'notifications_dao.dart';
 
 // ignore_for_file: type=lint
 mixin _$NotificationsDaoMixin on DatabaseAccessor<AppDatabase> {
-  $NotificationsTable get notifications => attachedDatabase.notifications;
+  $AppNotificationsTable get appNotifications =>
+      attachedDatabase.appNotifications;
   NotificationsDaoManager get managers => NotificationsDaoManager(this);
 }
 
 class NotificationsDaoManager {
   final _$NotificationsDaoMixin _db;
   NotificationsDaoManager(this._db);
-  $$NotificationsTableTableManager get notifications =>
-      $$NotificationsTableTableManager(_db.attachedDatabase, _db.notifications);
+  $$AppNotificationsTableTableManager get appNotifications =>
+      $$AppNotificationsTableTableManager(
+        _db.attachedDatabase,
+        _db.appNotifications,
+      );
 }

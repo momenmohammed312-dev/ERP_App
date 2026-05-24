@@ -109,7 +109,7 @@ class NotificationService {
   }) async {
     // Check if similar notification already exists and is not sent
     final existing =
-        await (_db.notificationsDao.select(_db.notifications)
+        await (_db.notificationsDao.select(_db.appNotifications)
               ..where((tbl) => tbl.entityId.equals(entityId))
               ..where((tbl) => tbl.title.equals(title))
               ..where((tbl) => tbl.sent.equals(0)))
@@ -135,7 +135,7 @@ class NotificationService {
     }
   }
 
-  Future<void> _sendNotification(Notification notification) async {
+  Future<void> _sendNotification(AppNotification notification) async {
     // For desktop app, log the notification (could be enhanced with system notifications)
     dev.log(
       '🔔 LICENSE NOTIFICATION: ${notification.title}\n${notification.body}',
@@ -146,13 +146,13 @@ class NotificationService {
     // For now, notifications are logged and stored in database
   }
 
-  Future<List<Notification>> getAllNotifications() =>
+  Future<List<AppNotification>> getAllNotifications() =>
       _db.notificationsDao.getAllNotifications();
 
-  Future<List<Notification>> getPendingNotifications() =>
+  Future<List<AppNotification>> getPendingNotifications() =>
       _db.notificationsDao.getPendingNotifications();
 
-  Future<List<Notification>> getSentNotifications() =>
+  Future<List<AppNotification>> getSentNotifications() =>
       _db.notificationsDao.getSentNotifications();
 
   void dispose() {

@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 
-import 'tables.dart';
+import 'invoice_table.dart';
 
 @DataClassName('Sale')
 class Sales extends Table {

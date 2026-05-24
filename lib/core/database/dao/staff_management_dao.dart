@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
-import '../app_database.dart';
-import '../tables/staff_management_tables.dart' as staff_tables;
+import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/tables/staff_management_tables.dart' as staff_tables;
 
 part 'staff_management_dao.g.dart';
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
+import 'package:pos_offline_desktop/core/services/price_list_print_service.dart';
 
 import '../../widgets/widgets.dart';
 import 'widgets.dart';
@@ -140,6 +141,25 @@ class _ProductContainerState extends State<ProductContainer> {
                     label: Text(
                       context.l10n.export,
                       style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => PriceListPrintService.printPriceList(products),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueGrey,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                    ),
+                    icon: const Icon(
+                      Icons.print,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                    label: const Text(
+                      'طباعة الأسعار',
+                      style: TextStyle(color: Colors.white),
                     ),
                   ),
                 ],

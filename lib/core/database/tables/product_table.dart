@@ -13,4 +13,5 @@ class Products extends Table {
   TextColumn get barcode => text().nullable()(); // Product barcode
   IntColumn get cartonQuantity => integer().nullable()(); // Quantity per carton
   RealColumn get cartonPrice => real().nullable()(); // Price per carton
+  RealColumn get costPrice => real().nullable()(); // Purchase cost price (for profit calculation)
 }

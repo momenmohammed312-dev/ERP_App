@@ -28,6 +28,9 @@ class Expenses extends Table {
   DateTimeColumn get createdAt =>
       dateTime().withDefault(currentDateAndTime)(); // Creation timestamp
 
+  TextColumn get userId => text().nullable()(); // Who added this expense
+  TextColumn get dayId => text().nullable()(); // Which business day
+
   @override
   Set<Column> get primaryKey => {id};
 }

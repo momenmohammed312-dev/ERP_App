@@ -11,6 +11,6 @@ class CustomerScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.watch(appDatabaseProvider);
 
-    return CustomerPage(db: db);
+    return const CustomerPage();
   }
 }

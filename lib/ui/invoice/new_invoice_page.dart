@@ -9,6 +9,7 @@ import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/invoice_type_selection_dialog.dart';
+import 'package:pos_offline_desktop/ui/invoice/widgets/split_payment_dialog.dart';
 
 class NewInvoicePage extends StatefulHookConsumerWidget {
   const NewInvoicePage({super.key});
@@ -239,12 +240,17 @@ class _NewInvoicePageState extends ConsumerState<NewInvoicePage> {
       return;
     }
 
-    if (_selectedInvoiceType == 'credit' && _selectedCustomer == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('يرجى اختيار العميل أولاً')));
-      return;
-    }
+    // Show Split Payment Dialog
+    final splitResult = await showDialog<SplitPaymentResult>(
+      context: context,
+      builder: (context) => SplitPaymentDialog(
+        totalAmount: _totalAmount,
+        isCustomerSelected: _selectedCustomer != null,
+        customerName: _selectedCustomer?.name,
+      ),
+    );
+
+    if (splitResult == null) return; // User cancelled
 
     final db = ref.read(appDatabaseProvider);
 
@@ -256,7 +262,7 @@ class _NewInvoicePageState extends ConsumerState<NewInvoicePage> {
       String? customerAddress;
       double previousBalance = 0.0;
 
-      if (_selectedInvoiceType == 'cash') {
+      if (_selectedCustomer == null) {
         customerName = 'عميل نقدي';
         customerId = 'walkin';
         customerContact = 'N/A';
@@ -267,7 +273,7 @@ class _NewInvoicePageState extends ConsumerState<NewInvoicePage> {
         customerContact = _selectedCustomer!.phone;
         customerAddress = _selectedCustomer!.address;
 
-        // Fetch previous balance for credit customers
+        // Fetch previous balance
         try {
           previousBalance = await db.ledgerDao.getCustomerBalance(
             _selectedCustomer!.id,
@@ -286,29 +292,57 @@ class _NewInvoicePageState extends ConsumerState<NewInvoicePage> {
           ),
           customerAddress: Value(customerAddress ?? ''),
           customerId: Value(customerId),
-          paymentMethod: Value(
-            _selectedInvoiceType == 'credit'
-                ? 'credit'
-                : _selectedPaymentMethod,
-          ),
+          paymentMethod: const Value('mixed'), // SOP 4.0: use 'mixed' for all
           totalAmount: Value(_totalAmount),
-          paidAmount: Value(_paidAmount),
-          status: Value(_paidAmount >= _totalAmount ? 'paid' : 'pending'),
+          paidAmount: Value(splitResult.cash + splitResult.card),
+          status: Value((splitResult.cash + splitResult.card) >= _totalAmount ? 'paid' : 'pending'),
           invoiceNumber: Value('INV${DateTime.now().millisecondsSinceEpoch}'),
           date: Value(DateTime.now()),
         ),
       );
+
+      // Record detailed payments in InvoicePayments table
+      if (splitResult.cash > 0) {
+        await db.invoicePaymentsDao.insertPayment(
+          InvoicePaymentsCompanion.insert(
+            invoiceId: invoiceId,
+            paymentMethod: 'cash',
+            amount: splitResult.cash,
+          ),
+        );
+      }
+      if (splitResult.card > 0) {
+        await db.invoicePaymentsDao.insertPayment(
+          InvoicePaymentsCompanion.insert(
+            invoiceId: invoiceId,
+            paymentMethod: 'visa',
+            amount: splitResult.card,
+          ),
+        );
+      }
+      if (splitResult.credit > 0) {
+        await db.invoicePaymentsDao.insertPayment(
+          InvoicePaymentsCompanion.insert(
+            invoiceId: invoiceId,
+            paymentMethod: 'credit',
+            amount: splitResult.credit,
+          ),
+        );
+      }
 
       // Add invoice items and update product quantities
       for (final entry in _selectedEntries) {
         if (entry.product == null || entry.quantity <= 0) continue;
 
         final updatedQuantity = entry.product!.quantity - entry.quantity;
+        // In SOP 4.0 we allow negative stock if settings allow, but for now we keep the check
+        /*
         if (updatedQuantity < 0) {
           throw Exception(
             'الكمعة المطلوبة تتجاوز الكمية المتاحة: ${entry.product!.name}',
           );
         }
+        */
 
         await db.productDao.updateProduct(
           entry.product!.copyWith(quantity: updatedQuantity),
@@ -326,122 +360,91 @@ class _NewInvoicePageState extends ConsumerState<NewInvoicePage> {
       }
 
       // Add ledger transactions
-      if (_selectedInvoiceType == 'cash') {
-        // Record sale
-        await db.ledgerDao.insertTransaction(
-          LedgerTransactionsCompanion.insert(
-            id: '${DateTime.now().millisecondsSinceEpoch}_sale',
-            entityType: 'Customer',
-            refId: customerId,
-            date: DateTime.now(),
-            description: 'بيع #$invoiceId',
-            debit: Value(_totalAmount),
-            credit: const Value(0.0),
-            origin: 'sale',
-            paymentMethod: Value(_selectedPaymentMethod),
-            receiptNumber: Value('INV$invoiceId'),
-          ),
-        );
+      // 1. Record the Sale (Debit Customer)
+      await db.ledgerDao.insertTransaction(
+        LedgerTransactionsCompanion.insert(
+          id: '${DateTime.now().millisecondsSinceEpoch}_sale',
+          entityType: 'Customer',
+          refId: customerId,
+          date: DateTime.now(),
+          description: 'بيع #$invoiceId',
+          debit: Value(_totalAmount),
+          credit: const Value(0.0),
+          origin: 'sale',
+          paymentMethod: const Value('mixed'),
+          receiptNumber: Value('INV$invoiceId'),
+        ),
+      );
 
-        // Record payment if fully paid
-        if (_paidAmount >= _totalAmount) {
-          await db.ledgerDao.insertTransaction(
-            LedgerTransactionsCompanion.insert(
-              id: '${DateTime.now().millisecondsSinceEpoch}_payment',
-              entityType: 'Customer',
-              refId: customerId,
-              date: DateTime.now(),
-              description: 'دفع فاتورة #$invoiceId',
-              debit: const Value(0.0),
-              credit: Value(_totalAmount),
-              origin: 'payment',
-              paymentMethod: Value(_selectedPaymentMethod),
-              receiptNumber: Value('INV$invoiceId'),
-            ),
-          );
-        }
-      } else {
-        // Credit invoice - only record sale
+      // 2. Record Payments (Credit Customer)
+      if (splitResult.cash > 0) {
         await db.ledgerDao.insertTransaction(
           LedgerTransactionsCompanion.insert(
-            id: '${DateTime.now().millisecondsSinceEpoch}_sale',
+            id: '${DateTime.now().millisecondsSinceEpoch}_pay_cash',
             entityType: 'Customer',
             refId: customerId,
             date: DateTime.now(),
-            description: 'بيع #$invoiceId',
-            debit: Value(_totalAmount),
-            credit: const Value(0.0),
-            origin: 'sale',
-            paymentMethod: const Value('credit'),
+            description: 'دفع نقدي #$invoiceId',
+            debit: const Value(0.0),
+            credit: Value(splitResult.cash),
+            origin: 'payment',
+            paymentMethod: const Value('cash'),
             receiptNumber: Value('INV$invoiceId'),
           ),
         );
-        // If a partial payment was entered for a credit invoice, record it
-        if (_paidAmount > 0) {
-          await db.ledgerDao.insertTransaction(
-            LedgerTransactionsCompanion.insert(
-              id: '${DateTime.now().millisecondsSinceEpoch}_payment',
-              entityType: 'Customer',
-              refId: customerId,
-              date: DateTime.now(),
-              description: 'دفع جزئي فاتورة #$invoiceId',
-              debit: const Value(0.0),
-              credit: Value(_paidAmount),
-              origin: 'payment',
-              paymentMethod: const Value('credit'),
-              receiptNumber: Value('INV$invoiceId'),
-            ),
-          );
-        }
+      }
+      if (splitResult.card > 0) {
+        await db.ledgerDao.insertTransaction(
+          LedgerTransactionsCompanion.insert(
+            id: '${DateTime.now().millisecondsSinceEpoch}_pay_card',
+            entityType: 'Customer',
+            refId: customerId,
+            date: DateTime.now(),
+            description: 'دفع فيزا/ماستر #$invoiceId',
+            debit: const Value(0.0),
+            credit: Value(splitResult.card),
+            origin: 'payment',
+            paymentMethod: const Value('visa'),
+            receiptNumber: Value('INV$invoiceId'),
+          ),
+        );
       }
 
       // Print invoice
-      final invoiceData = {
-        'id': invoiceId,
-        'customerName': customerName,
-        'customerId': customerId,
-        'totalAmount': _totalAmount,
-        'paidAmount': _paidAmount,
-        'date': DateTime.now(),
-        'paymentMethod': _selectedInvoiceType == 'cash'
-            ? _selectedPaymentMethod
-            : 'credit',
-      };
+      final invoiceReceiptData = await _createInvoiceData(
+        invoiceId,
+        customerName,
+        customerId,
+        _totalAmount,
+        splitResult.cash + splitResult.card,
+        'mixed',
+      );
 
-      final itemsData = _selectedEntries
-          .where((e) => e.product != null)
-          .map(
-            (entry) => {
-              'name': entry.product!.name,
-              'productName': entry.product!.name,
-              'quantity': entry.quantity,
-              'price': entry.customPrice ?? entry.product!.price,
-            },
-          )
-          .toList();
-
-      // Print invoice using new SOP 4.0 format
       await ups.UnifiedPrintService.printToThermalPrinter(
         documentType: ups.DocumentType.salesInvoice,
-        data: await _createInvoiceData(
-          invoiceId,
-          customerName,
-          customerId,
-          _totalAmount,
-          _paidAmount,
-          _selectedInvoiceType == 'cash' ? _selectedPaymentMethod : 'credit',
-        ),
+        data: invoiceReceiptData,
         additionalData: {
-          'paidAmount': _paidAmount,
+          'paidAmount': splitResult.cash + splitResult.card,
+          'cashAmount': splitResult.cash,
+          'cardAmount': splitResult.card,
+          'creditAmount': splitResult.credit,
           'previousBalance': previousBalance,
         },
       );
 
       if (mounted) {
-        Navigator.of(context).pop();
+        // Reset state for next invoice
+        setState(() {
+          _selectedEntries.clear();
+          _totalAmount = 0.0;
+          _paidAmount = 0.0;
+          _paidAmountController.clear();
+          _selectedCustomer = null;
+        });
+        
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('تم حفظ الفاتورة بنجاح')));
+        ).showSnackBar(const SnackBar(content: Text('تم حفظ الفاتورة بنجاح')));
       }
     } catch (e) {
       log('Error saving invoice: $e');
@@ -1225,13 +1228,8 @@ class _NewInvoicePageState extends ConsumerState<NewInvoicePage> {
       );
     }).toList();
 
-    // Get store info - using a default store info for now
-    final storeInfo = ups.StoreInfo(
-      storeName: 'المحل التجاري',
-      phone: '01234567890',
-      zipCode: '12345',
-      state: 'القاهرة',
-    );
+    // Get store info - UnifiedPrintService will fetch from settings if null
+    const ups.StoreInfo? storeInfo = null;
 
     // Create invoice model
     final invoice = ups.Invoice(

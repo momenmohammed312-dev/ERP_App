@@ -20,6 +20,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _selectedThermalPrinter;
   String? _selectedA4Printer;
 
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _taxController = TextEditingController();
+  final _footerController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -36,6 +42,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _selectedA4Printer = a4;
       });
     });
+
+    // load business info
+    SettingsService.getBusinessInfo().then((info) {
+      setState(() {
+        _nameController.text = info['name'] ?? '';
+        _phoneController.text = info['phone'] ?? '';
+        _addressController.text = info['address'] ?? '';
+        _taxController.text = info['taxNumber'] ?? '';
+        _footerController.text = info['footer'] ?? '';
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    _taxController.dispose();
+    _footerController.dispose();
+    super.dispose();
   }
 
   @override
@@ -255,6 +282,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const Divider(height: 32),
           ],
 
+          const Divider(height: 32),
+          Text(
+            'معلومات النشاط التجاري (للتحكم في شكل الفاتورة)',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const Gap(15),
+          _buildBusinessInfoSection(),
+          const Divider(height: 32),
+
           Text(
             context.l10n.other_settings,
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -289,5 +325,94 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+  Widget _buildBusinessInfoSection() {
+    return Column(
+      children: [
+        TextFormField(
+          controller: _nameController,
+          decoration: const InputDecoration(
+            labelText: 'اسم النشاط التجاري',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.store),
+          ),
+        ),
+        const Gap(10),
+        TextFormField(
+          controller: _phoneController,
+          decoration: const InputDecoration(
+            labelText: 'رقم الهاتف',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.phone),
+          ),
+        ),
+        const Gap(10),
+        TextFormField(
+          controller: _addressController,
+          decoration: const InputDecoration(
+            labelText: 'العنوان',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.location_on),
+          ),
+        ),
+        const Gap(10),
+        TextFormField(
+          controller: _taxController,
+          decoration: const InputDecoration(
+            labelText: 'الرقم الضريبي (اختياري)',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.receipt),
+          ),
+        ),
+        const Gap(10),
+        TextFormField(
+          controller: _footerController,
+          decoration: const InputDecoration(
+            labelText: 'رسالة أسفل الفاتورة',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.message),
+          ),
+        ),
+        const Gap(15),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _saveBusinessInfo,
+            icon: const Icon(Icons.save),
+            label: const Text('حفظ معلومات النشاط'),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              backgroundColor: Colors.green.shade700,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _saveBusinessInfo() async {
+    try {
+      await SettingsService.setBusinessName(_nameController.text);
+      await SettingsService.setBusinessPhone(_phoneController.text);
+      await SettingsService.setBusinessAddress(_addressController.text);
+      await SettingsService.setTaxNumber(_taxController.text);
+      await SettingsService.setReceiptFooter(_footerController.text);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم حفظ البيانات بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في الحفظ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }

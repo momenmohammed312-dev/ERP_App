@@ -1,7 +1,8 @@
 import 'package:drift/drift.dart';
 
-import '../app_database.dart';
-import '../tables/tables.dart';
+import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/tables/invoice_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/invoice_items_table.dart';
 import '../../models/report_dtos.dart';
 
 part 'invoice_dao.g.dart';
@@ -30,6 +31,35 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
   Future deleteInvoice(Insertable<Invoice> invoice) =>
       delete(invoices).delete(invoice);
 
+  Future<void> voidInvoice(int invoiceId, String reason, String voidedBy) async {
+    return transaction(() async {
+      final invoice = await (select(invoices)..where((t) => t.id.equals(invoiceId))).getSingleOrNull();
+      if (invoice == null) throw Exception('Invoice not found');
+      
+      await (update(invoices)..where((t) => t.id.equals(invoiceId))).write(
+        InvoicesCompanion(
+          status: const Value('voided'),
+          voidedAt: Value(DateTime.now()),
+          voidReason: Value(reason),
+          voidedBy: Value(voidedBy),
+        ),
+      );
+
+      final items = await getItemsByInvoiceId(invoiceId);
+      final productsTable = attachedDatabase.products;
+      for (final item in items) {
+        final product = await (select(productsTable)..where((p) => p.id.equals(item.productId))).getSingleOrNull();
+        if (product != null) {
+          await (update(productsTable)..where((p) => p.id.equals(product.id))).write(
+            ProductsCompanion(
+              quantity: Value(product.quantity + item.quantity),
+            ),
+          );
+        }
+      }
+    });
+  }
+
   // === Invoice Items ===
   Future<List<InvoiceItem>> getItemsByInvoiceId(int invoiceId) {
     return (select(
@@ -56,12 +86,13 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
   Future<List<(InvoiceItem, Product?)>> getItemsWithProductsByInvoice(
     int invoiceId,
   ) {
+    final productsTable = attachedDatabase.products;
     final query = select(invoiceItems).join([
-      leftOuterJoin(products, products.id.equalsExp(invoiceItems.productId)),
+      leftOuterJoin(productsTable, productsTable.id.equalsExp(invoiceItems.productId)),
     ])..where(invoiceItems.invoiceId.equals(invoiceId));
 
     return query.map((row) {
-      return (row.readTable(invoiceItems), row.readTableOrNull(products));
+      return (row.readTable(invoiceItems), row.readTableOrNull(productsTable) as Product?);
     }).get();
   }
 
@@ -102,10 +133,10 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
   }
 
   Future<double> getTotalReceivables() async {
-    final customerList = await db.customerDao.getAllCustomers();
+    final customerList = await attachedDatabase.customerDao.getAllCustomers();
     double total = 0;
     for (final customer in customerList) {
-      final balance = await db.ledgerDao.getCustomerBalance(customer.id);
+      final balance = await attachedDatabase.ledgerDao.getCustomerBalance(customer.id);
       final finalBalance = balance + customer.openingBalance;
       if (finalBalance > 0) {
         total += finalBalance;
@@ -140,8 +171,8 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
     final query =
         select(invoices).join([
             leftOuterJoin(
-              db.customers,
-              db.customers.id.equalsExp(invoices.customerId),
+              attachedDatabase.customers,
+              attachedDatabase.customers.id.equalsExp(invoices.customerId),
             ),
           ])
           ..where(invoices.date.isBetweenValues(start, end))
@@ -154,7 +185,7 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
 
     for (final row in rows) {
       final invoice = row.readTable(invoices);
-      final customer = row.readTableOrNull(db.customers);
+      final customer = row.readTableOrNull(attachedDatabase.customers);
 
       // Get items with product details
       final items = await getItemsWithProductsByInvoice(invoice.id);

@@ -12,6 +12,7 @@ import 'package:pos_offline_desktop/ui/reports/widgets/staff_expenses_report.dar
 import 'package:pos_offline_desktop/ui/reports/widgets/purchase_by_product_report.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/purchase_vs_sales_report.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/daily_report_page.dart';
+import 'package:pos_offline_desktop/ui/analytics/consolidated_accounts_screen.dart';
 
 class ReportsPage extends ConsumerStatefulWidget {
   const ReportsPage({super.key});
@@ -84,16 +85,19 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
             pm.contains('credit')) {
           credit += totalAmount;
           creditInvCount++;
+        } else if (pm == 'mixed') {
+          cash += inv.paidAmount;
+          credit += (totalAmount - inv.paidAmount);
+          if (inv.paidAmount >= totalAmount) {
+            cashInvCount++;
+          } else {
+            creditInvCount++;
+          }
         } else {
           cash += inv.paidAmount > 0 ? inv.paidAmount : totalAmount;
           cashInvCount++;
         }
       }
-
-      debugPrint('Sales: $sales, Cash: $cash, Credit: $credit');
-      debugPrint(
-        'Total: $totalInvCount, Cash: $cashInvCount, Credit: $creditInvCount',
-      );
 
       setState(() {
         _totalSales = sales;
@@ -616,6 +620,22 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (context) => const PurchaseVsSalesReport(),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const Gap(15),
+                  Expanded(
+                    child: _buildActionCard(
+                      'الأرصدة الموحدة',
+                      'ملخص أرصدة العملاء والموردين',
+                      Icons.account_balance_wallet,
+                      Colors.blueAccent,
+                      () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const ConsolidatedAccountsScreen(),
                           ),
                         );
                       },

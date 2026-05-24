@@ -2,7 +2,7 @@ import 'package:drift/drift.dart';
 
 /// Notifications table for license expiry warnings and system alerts
 /// جدول الإشعارات لتحذيرات انتهاء الترخيص والتنبيهات النظامية
-class Notifications extends Table {
+class AppNotifications extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get entityId => text().nullable()(); // license_id or user_id
   TextColumn get title => text()();

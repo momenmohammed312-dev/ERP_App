@@ -17,7 +17,11 @@ class Invoices extends Table {
   DateTimeColumn get date => dateTime().withDefault(currentDateAndTime)();
   TextColumn get status => text().withDefault(
     const Constant('pending'),
-  )(); // 'pending' | 'paid' | 'partial'
+  )(); // 'pending' | 'paid' | 'partial' | 'voided'
+
+  DateTimeColumn get voidedAt => dateTime().nullable()();
+  TextColumn get voidReason => text().nullable()();
+  TextColumn get voidedBy => text().nullable()();
 
   // primaryKey is defined by autoIncrement() on 'id'
 }

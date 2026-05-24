@@ -10,6 +10,8 @@ class AuditLog extends Table {
   TextColumn get details => text().nullable()();
   DateTimeColumn get timestamp => dateTime()();
   TextColumn get ipAddress => text().nullable()();
+  TextColumn get oldValue => text().nullable()(); // JSON snapshot before change
+  TextColumn get newValue => text().nullable()(); // JSON snapshot after change
 
   @override
   Set<Column> get primaryKey => {id};

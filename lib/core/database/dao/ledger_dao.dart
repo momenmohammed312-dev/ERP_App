@@ -240,11 +240,37 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
       'SELECT SUM(balance) as total FROM ('
       '  SELECT c.opening_balance + SUM(COALESCE(l.debit, 0) - COALESCE(l.credit, 0)) as balance '
       '  FROM customers c '
-      '  LEFT JOIN ledger_transactions l ON l.ref_id = c.id AND l.entity_type = "Customer" '
+      '  LEFT JOIN ledger_transactions l ON l.ref_id = c.id AND l.entity_type = \'Customer\' '
       '  GROUP BY c.id'
       ') WHERE balance > 0',
       readsFrom: {db.customers, db.ledgerTransactions},
     ).watchSingle().map((row) => row.readNullable<double>('total') ?? 0.0);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllCustomerBalances() async {
+    final rows = await customSelect(
+      'SELECT c.id, c.name, c.phone, (c.opening_balance + SUM(COALESCE(l.debit, 0) - COALESCE(l.credit, 0))) as balance '
+      'FROM customers c '
+      'LEFT JOIN ledger_transactions l ON l.ref_id = c.id AND l.entity_type = \'Customer\' '
+      'GROUP BY c.id '
+      'ORDER BY balance DESC',
+      readsFrom: {db.customers, db.ledgerTransactions},
+    ).get();
+
+    return rows.map((row) => row.data).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getAllSupplierBalances() async {
+    final rows = await customSelect(
+      'SELECT s.id, s.name, s.phone, (s.opening_balance + SUM(COALESCE(l.credit, 0) - COALESCE(l.debit, 0))) as balance '
+      'FROM suppliers s '
+      'LEFT JOIN ledger_transactions l ON l.ref_id = s.id AND l.entity_type = \'Supplier\' '
+      'GROUP BY s.id '
+      'ORDER BY balance DESC',
+      readsFrom: {db.suppliers, db.ledgerTransactions},
+    ).get();
+
+    return rows.map((row) => row.data).toList();
   }
 }
 

@@ -10,4 +10,10 @@ class CashSessions extends Table {
   TextColumn get status =>
       text().withDefault(const Constant('closed'))(); // "open" | "closed"
   RealColumn get openingBalance => real().withDefault(const Constant(0.0))();
+  RealColumn get closingBalance => real().nullable()();
+  RealColumn get closingCash => real().nullable()(); // Actual cash counted
+  RealColumn get difference => real().nullable()(); // closingCash - expected
+  RealColumn get totalSales => real().withDefault(const Constant(0.0))();
+  RealColumn get totalExpenses => real().withDefault(const Constant(0.0))();
+  TextColumn get notes => text().nullable()();
 }

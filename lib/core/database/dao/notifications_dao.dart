@@ -1,31 +1,31 @@
 import 'package:drift/drift.dart';
 
-import '../tables/notifications_table.dart';
-import '../app_database.dart';
+import 'package:pos_offline_desktop/core/database/tables/notifications_table.dart';
+import 'package:pos_offline_desktop/core/database/app_database.dart';
 
 part 'notifications_dao.g.dart';
 
-@DriftAccessor(tables: [Notifications])
+@DriftAccessor(tables: [AppNotifications])
 class NotificationsDao extends DatabaseAccessor<AppDatabase>
     with _$NotificationsDaoMixin {
   NotificationsDao(super.db);
 
-  Future<List<Notification>> getAllNotifications() =>
-      select(notifications).get();
+  Future<List<AppNotification>> getAllNotifications() =>
+      select(appNotifications).get();
 
-  Future<List<Notification>> getPendingNotifications() =>
-      (select(notifications)..where((tbl) => tbl.sent.equals(0))).get();
+  Future<List<AppNotification>> getPendingNotifications() =>
+      (select(appNotifications)..where((tbl) => tbl.sent.equals(0))).get();
 
-  Future<List<Notification>> getSentNotifications() =>
-      (select(notifications)..where((tbl) => tbl.sent.equals(1))).get();
+  Future<List<AppNotification>> getSentNotifications() =>
+      (select(appNotifications)..where((tbl) => tbl.sent.equals(1))).get();
 
-  Future<Notification> createNotification({
+  Future<AppNotification> createNotification({
     required String title,
     required String body,
     required DateTime sendAt,
     String? entityId,
   }) async {
-    final companion = NotificationsCompanion.insert(
+    final companion = AppNotificationsCompanion.insert(
       entityId: Value(entityId),
       title: title,
       body: body,
@@ -33,25 +33,25 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
       sent: const Value(0),
     );
 
-    final id = await into(notifications).insert(companion);
+    final id = await into(appNotifications).insert(companion);
     return await (select(
-      notifications,
+      appNotifications,
     )..where((tbl) => tbl.id.equals(id))).getSingle();
   }
 
   Future<bool> markAsSent(int notificationId) async {
     final result =
-        await (update(notifications)
+        await (update(appNotifications)
               ..where((tbl) => tbl.id.equals(notificationId)))
-            .write(const NotificationsCompanion(sent: Value(1)));
+            .write(const AppNotificationsCompanion(sent: Value(1)));
     return result > 0;
   }
 
   Future<int> deleteNotification(int id) =>
-      (delete(notifications)..where((tbl) => tbl.id.equals(id))).go();
+      (delete(appNotifications)..where((tbl) => tbl.id.equals(id))).go();
 
-  Future<List<Notification>> getNotificationsDueBefore(DateTime before) =>
-      (select(notifications)
+  Future<List<AppNotification>> getNotificationsDueBefore(DateTime before) =>
+      (select(appNotifications)
             ..where((tbl) => tbl.sendAt.isSmallerThanValue(before))
             ..where((tbl) => tbl.sent.equals(0)))
           .get();

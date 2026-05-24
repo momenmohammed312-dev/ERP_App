@@ -126,7 +126,7 @@ class MyApp extends ConsumerWidget {
         Locale('en'), // English
       ],
       locale: const Locale('ar'), // Set Arabic as default
-      routerConfig: (isLicenseValid || (!kIsWeb && io.Platform.isWindows))
+      routerConfig: isLicenseValid
           ? ref.watch(routerProvider)
           : _createActivationRouter(),
     );

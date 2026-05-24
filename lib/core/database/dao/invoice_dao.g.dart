@@ -5,7 +5,6 @@ part of 'invoice_dao.dart';
 // ignore_for_file: type=lint
 mixin _$InvoiceDaoMixin on DatabaseAccessor<AppDatabase> {
   $InvoicesTable get invoices => attachedDatabase.invoices;
-  $ProductsTable get products => attachedDatabase.products;
   $InvoiceItemsTable get invoiceItems => attachedDatabase.invoiceItems;
   InvoiceDaoManager get managers => InvoiceDaoManager(this);
 }
@@ -15,8 +14,6 @@ class InvoiceDaoManager {
   InvoiceDaoManager(this._db);
   $$InvoicesTableTableManager get invoices =>
       $$InvoicesTableTableManager(_db.attachedDatabase, _db.invoices);
-  $$ProductsTableTableManager get products =>
-      $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
   $$InvoiceItemsTableTableManager get invoiceItems =>
       $$InvoiceItemsTableTableManager(_db.attachedDatabase, _db.invoiceItems);
 }

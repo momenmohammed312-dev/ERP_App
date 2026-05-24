@@ -17,6 +17,7 @@ import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
 import 'package:pos_offline_desktop/ui/invoice/widgets/day_closed_dialog.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/product_card.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/day_opening_page.dart';
+import 'package:pos_offline_desktop/core/services/settings_service.dart';
 
 class EnhancedNewInvoicePage extends StatefulHookConsumerWidget {
   final AppDatabase db;
@@ -584,10 +585,10 @@ class _EnhancedNewInvoicePageState
     }).toList();
 
     final storeInfo = ups.StoreInfo(
-      storeName: 'المحل التجاري',
-      phone: '01234567890',
-      zipCode: '12345',
-      state: 'القاهرة',
+      storeName: await SettingsService.getBusinessName(),
+      phone: await SettingsService.getBusinessPhone(),
+      zipCode: '',
+      state: await SettingsService.getBusinessAddress(),
     );
 
     final invoiceModel = ups.Invoice(

@@ -649,32 +649,7 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Future<void> _exportReport() async {
     debugPrint('Exporting supplier report...');

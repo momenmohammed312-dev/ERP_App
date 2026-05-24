@@ -289,13 +289,12 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
         final updated = CustomersCompanion(
           id: Value(widget.customer!.id),
           name: Value(_nameController.text.trim()),
-          phone: Value(
-            _phoneController.text.trim().isEmpty
-                ? null
-                : _phoneController.text.trim(),
-          ),
-          updatedAt: const Value.absent(),
-          createdAt: const Value.absent(),
+          phone: Value(_phoneController.text.trim().isEmpty ? null : _phoneController.text.trim()),
+          address: Value(_addressController.text.trim().isEmpty ? null : _addressController.text.trim()),
+          email: Value(_emailController.text.trim().isEmpty ? null : _emailController.text.trim()),
+          gstinNumber: Value(_gstinController.text.trim().isEmpty ? null : _gstinController.text.trim()),
+          notes: Value(_notesController.text.trim().isEmpty ? null : _notesController.text.trim()),
+          updatedAt: Value(DateTime.now()),
         );
 
         await database.customerDao.updateCustomer(updated);
@@ -318,16 +317,15 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
         final newCustomer = CustomersCompanion(
           id: Value(uuid),
           name: Value(_nameController.text.trim()),
-          phone: Value(
-            _phoneController.text.trim().isEmpty
-                ? null
-                : _phoneController.text.trim(),
-          ),
-          openingBalance: const Value(0.0),
-          totalDebt: const Value(0.0),
-          totalPaid: const Value(0.0),
+          phone: Value(_phoneController.text.trim().isEmpty ? null : _phoneController.text.trim()),
+          address: Value(_addressController.text.trim().isEmpty ? null : _addressController.text.trim()),
+          email: Value(_emailController.text.trim().isEmpty ? null : _emailController.text.trim()),
+          gstinNumber: Value(_gstinController.text.trim().isEmpty ? null : _gstinController.text.trim()),
+          notes: Value(_notesController.text.trim().isEmpty ? null : _notesController.text.trim()),
+          openingBalance: Value(openingBalance),
           isActive: const Value(true),
           status: const Value(1),
+          createdAt: Value(DateTime.now()),
         );
 
         await database.customerDao.insertCustomer(newCustomer);

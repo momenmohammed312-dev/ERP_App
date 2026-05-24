@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/ui/home/modern_home.dart';
+import 'package:pos_offline_desktop/screens/auth/login_screen.dart';
 import 'package:pos_offline_desktop/screens/license/activation_screen.dart';
 import 'package:pos_offline_desktop/ui/purchase/widgets/enhanced_purchase_invoice_page.dart';
 import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
 import 'package:pos_offline_desktop/ui/admin/admin_dashboard_page.dart';
 import 'package:pos_offline_desktop/ui/setup/first_run_setup_screen.dart';
+import 'package:pos_offline_desktop/ui/product/damaged_items_screen.dart';
 // Simple splash screen widget
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -25,12 +28,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   void _navigateToNextScreen() {
-    // Wait 3.5 seconds then navigate
-    Future.delayed(const Duration(milliseconds: 3500), () {
+    Future.delayed(const Duration(milliseconds: 2500), () {
       if (mounted) {
-        // For development: go directly to home
-        // In production: check license status first
-        context.go('/');
+        // Router redirect will send to / if already authenticated, /login otherwise
+        context.go('/login');
       }
     });
   }
@@ -156,12 +157,37 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
 final routerProvider = Provider<GoRouter>((ref) {
   final db = ref.watch(appDatabaseProvider);
+  // Watch auth state so router rebuilds on login/logout
+  final user = ref.watch(authProvider);
+
+  // Paths that never need authentication
+  const publicPaths = ['/login', '/setup', '/activation', '/splash'];
 
   return GoRouter(
-    initialLocation: '/',
-    redirect: (context, state) => null,
+    initialLocation: '/splash',
+    redirect: (context, state) {
+      final location = state.matchedLocation;
+      final isPublic = publicPaths.any((p) => location.startsWith(p));
+      final isLoggedIn = user != null;
+
+      // Not logged in and trying to access a protected page → /login
+      if (!isLoggedIn && !isPublic) return '/login';
+      // Already logged in and navigating to /login → home
+      if (isLoggedIn && location == '/login') return '/';
+      return null;
+    },
     routes: [
-      // License & Setup Routes
+      // Splash
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
+      // Auth
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      // License & Setup
       GoRoute(
         path: '/setup',
         builder: (context, state) => const FirstRunSetupScreen(),
@@ -170,7 +196,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/activation',
         builder: (context, state) => const ActivationScreen(),
       ),
-      // Main Application Route
+      // Main Application
       GoRoute(
         path: '/',
         builder: (context, state) => ModernHomeScreen(db: db),
@@ -187,6 +213,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin',
         builder: (context, state) => const AdminDashboardPage(),
+      ),
+      GoRoute(
+        path: '/damaged-items',
+        builder: (context, state) => DamagedItemsScreen(db: db),
       ),
     ],
   );

@@ -403,6 +403,94 @@ class StaffManagementService {
     );
   }
 
+  Future<void> payAdvance(int advanceId, String paymentMethod) async {
+    final db = _dao.attachedDatabase;
+    return db.transaction(() async {
+      final advance = await (db.select(db.staffAdvances)..where((t) => t.id.equals(advanceId))).getSingleOrNull();
+      if (advance == null || advance.status == 'paid') return;
+
+      await (db.update(db.staffAdvances)..where((t) => t.id.equals(advanceId))).write(
+        StaffAdvancesCompanion(
+          status: const Value('paid'),
+          paymentDate: Value(DateTime.now()),
+          paymentMethod: Value(paymentMethod),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+      final desc = 'سلفة موظف: ${advance.staffId}';
+      final now = DateTime.now();
+      await db.expenseDao.insertExpense(
+        ExpensesCompanion.insert(
+          id: '${now.millisecondsSinceEpoch}_advance',
+          description: desc,
+          amount: advance.amount,
+          date: Value(now),
+          category: 'other_expenses',
+          paymentMethod: Value(paymentMethod),
+        ),
+      );
+
+      await db.ledgerDao.insertTransaction(
+        LedgerTransactionsCompanion.insert(
+          id: '${now.millisecondsSinceEpoch}_advance',
+          entityType: 'StaffAdvance',
+          refId: advance.staffId,
+          date: DateTime.now(),
+          description: desc,
+          debit: const Value(0.0),
+          credit: Value(advance.amount),
+          origin: 'expense',
+          paymentMethod: Value(paymentMethod),
+        ),
+      );
+    });
+  }
+
+  Future<void> payPayroll(int payrollId, String paymentMethod) async {
+    final db = _dao.attachedDatabase;
+    return db.transaction(() async {
+      final payroll = await (db.select(db.payrollTable)..where((t) => t.id.equals(payrollId))).getSingleOrNull();
+      if (payroll == null || payroll.status == 'paid') return;
+
+      await (db.update(db.payrollTable)..where((t) => t.id.equals(payrollId))).write(
+        PayrollTableCompanion(
+          status: const Value('paid'),
+          paymentDate: Value(DateTime.now()),
+          paymentMethod: Value(paymentMethod),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+      final desc = 'راتب موظف: ${payroll.staffId} للفترة ${payroll.payrollPeriod}';
+      final now = DateTime.now();
+      await db.expenseDao.insertExpense(
+        ExpensesCompanion.insert(
+          id: '${now.millisecondsSinceEpoch}_payroll',
+          description: desc,
+          amount: payroll.netSalary,
+          date: Value(now),
+          category: 'salaries',
+          paymentMethod: Value(paymentMethod),
+        ),
+      );
+
+      await db.ledgerDao.insertTransaction(
+        LedgerTransactionsCompanion.insert(
+          id: '${DateTime.now().millisecondsSinceEpoch}_payroll',
+          entityType: 'Payroll',
+          refId: payroll.staffId,
+          date: DateTime.now(),
+          description: desc,
+          debit: const Value(0.0),
+          credit: Value(payroll.netSalary),
+          origin: 'expense',
+          paymentMethod: Value(paymentMethod),
+        ),
+      );
+    });
+  }
+
   DateTime _getPeriodStart(String period) {
     // Parse period like "2024-01" or "2024-01-W1"
     final parts = period.split('-');

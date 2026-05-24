@@ -79,14 +79,67 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         daysByDate[dateStr] = data;
       }
 
+      // Load expenses
+      final expensesRows = await db
+          .customSelect(
+            '''
+        SELECT * FROM expenses 
+        WHERE date >= ? AND date <= ?
+        ''',
+            variables: [
+              drift.Variable.withDateTime(DateTime(_startDate!.year, _startDate!.month, _startDate!.day)),
+              drift.Variable.withDateTime(DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59)),
+            ],
+          )
+          .get();
+
+      final Map<String, double> expensesByDate = {};
+      for (final row in expensesRows) {
+        final data = row.data;
+        final date = parseDate(data['date']);
+        final dateStr = DateFormat('yyyy-MM-dd').format(date);
+        final amount = (data['amount'] as num).toDouble();
+        expensesByDate[dateStr] = (expensesByDate[dateStr] ?? 0.0) + amount;
+      }
+
+      // Load sales returns
+      final returnsRows = await db
+          .customSelect(
+            '''
+        SELECT * FROM sales_returns 
+        WHERE return_date >= ? AND return_date <= ?
+        ''',
+            variables: [
+              drift.Variable.withDateTime(DateTime(_startDate!.year, _startDate!.month, _startDate!.day)),
+              drift.Variable.withDateTime(DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59)),
+            ],
+          )
+          .get();
+
+      final Map<String, double> returnsByDate = {};
+      for (final row in returnsRows) {
+        final data = row.data;
+        final date = parseDate(data['return_date']);
+        final dateStr = DateFormat('yyyy-MM-dd').format(date);
+        final amount = (data['total_amount'] as num).toDouble();
+        returnsByDate[dateStr] = (returnsByDate[dateStr] ?? 0.0) + amount;
+      }
+
       final result = <Map<String, dynamic>>[];
 
-      final allDatesSet = <String>{...invoicesByDate.keys, ...daysByDate.keys};
+      final allDatesSet = <String>{
+        ...invoicesByDate.keys,
+        ...daysByDate.keys,
+        ...expensesByDate.keys,
+        ...returnsByDate.keys,
+      };
       final allDates = allDatesSet.toList()..sort((a, b) => b.compareTo(a));
 
       for (final dateStr in allDates) {
         final dayInvoices = invoicesByDate[dateStr] ?? [];
         final dayData = daysByDate[dateStr];
+        final dailyExpenses = expensesByDate[dateStr] ?? 0.0;
+        final dailyReturns = returnsByDate[dateStr] ?? 0.0;
 
         double totalSales = 0.0;
         double cash = 0.0;
@@ -101,6 +154,9 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
               pm.contains('آجل') ||
               pm.contains('credit')) {
             credit += inv.totalAmount;
+          } else if (pm == 'mixed') {
+            cash += inv.paidAmount;
+            credit += (inv.totalAmount - inv.paidAmount);
           } else {
             cash += inv.paidAmount > 0 ? inv.paidAmount : inv.totalAmount;
           }
@@ -136,7 +192,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         final surplusDeficit = closingBalance != null
             ? closingBalance -
                   openingBalance -
-                  cash // deficit vs cash collected
+                  cash + dailyExpenses + dailyReturns // deficit vs cash collected minus expenses and returns
             : null; // null = day still open
 
         result.add({
@@ -149,9 +205,12 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
           'totalSales': totalSales,
           'cash': cash,
           'credit': credit,
+          'expenses': dailyExpenses,
+          'returns': dailyReturns,
           'surplusDeficit': surplusDeficit ?? 0.0,
           'surplusKnown': surplusDeficit != null,
           'invoiceCount': dayInvoices.length,
+          'rawInvoices': dayInvoices,
         });
       }
 
@@ -162,15 +221,55 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
     } catch (e, stack) {
       AppLogger.e('Failed to load daily report', e, stack);
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('حدث خطأ أثناء تحميل البيانات'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     }
+  }
+
+  void _showDetailsDialog(Map<String, dynamic> data) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('تفاصيل يوم ${data['date']}'),
+        content: SizedBox(
+          width: 500,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDetailRow('المبيعات الكلية', '${data['totalSales']} ج.م', Colors.blue),
+                _buildDetailRow('المبيعات النقدية', '${data['cash']} ج.م', Colors.green),
+                _buildDetailRow('المبيعات الآجلة', '${data['credit']} ج.م', Colors.purple),
+                const Divider(),
+                _buildDetailRow('المصروفات', '${data['expenses']} ج.م', Colors.red),
+                _buildDetailRow('المرتجعات', '${data['returns']} ج.م', Colors.redAccent),
+                const Divider(),
+                _buildDetailRow('صافي الكاش المتوقع', '${(data['cash'] - data['expenses'] - data['returns']).toStringAsFixed(2)} ج.م', Colors.teal),
+                if (data['surplusKnown'] == true) ...[
+                  _buildDetailRow('العجز / الزيادة', '${data['surplusDeficit']} ج.م', 
+                    (data['surplusDeficit'] as num) >= 0 ? Colors.green : Colors.red),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+          Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
   }
 
   Future<void> _selectDateRange() async {
@@ -316,6 +415,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                               ),
                             ),
                             child: DataTable(
+                              showCheckboxColumn: false,
                               columnSpacing: 20,
                               headingRowColor: WidgetStateProperty.all(
                                 Theme.of(context).colorScheme.primaryContainer
@@ -331,6 +431,8 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                 DataColumn(label: Text('إجمالي المبيعات')),
                                 DataColumn(label: Text('كاش')),
                                 DataColumn(label: Text('آجل')),
+                                DataColumn(label: Text('المصروفات')),
+                                DataColumn(label: Text('المرتجعات')),
                                 DataColumn(label: Text('عجز/زيادة')),
                                 DataColumn(label: Text('عدد الفواتير')),
                               ],
@@ -340,8 +442,11 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                 final sdKnown =
                                     d['surplusKnown'] as bool? ?? false;
                                 final credit = (d['credit'] as num).toDouble();
+                                final expenses = (d['expenses'] as num).toDouble();
+                                final returns = (d['returns'] as num).toDouble();
                                 final isOpen = d['isOpen'] as bool? ?? false;
                                 return DataRow(
+                                  onSelectChanged: (_) => _showDetailsDialog(d),
                                   cells: [
                                     DataCell(Text(d['date'] as String)),
                                     DataCell(Text(d['openTime'] as String)),
@@ -417,6 +522,18 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                               ? FontWeight.bold
                                               : FontWeight.normal,
                                         ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        expenses.toStringAsFixed(2),
+                                        style: const TextStyle(color: Colors.red),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        returns.toStringAsFixed(2),
+                                        style: const TextStyle(color: Colors.redAccent),
                                       ),
                                     ),
                                     // FIX: show surplus/deficit only when day closed

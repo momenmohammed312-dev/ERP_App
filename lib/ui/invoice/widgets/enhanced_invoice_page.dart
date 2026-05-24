@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
+import 'package:pos_offline_desktop/core/services/settings_service.dart';
 
 enum InvoiceType { cash, credit }
 
@@ -433,10 +434,10 @@ class _EnhancedInvoicePageState extends ConsumerState<EnhancedInvoicePage> {
 
       // Create store info
       final storeInfo = ups.StoreInfo(
-        storeName: 'المحل التجاري',
-        phone: '01234567890',
-        zipCode: '12345',
-        state: 'القاهرة',
+        storeName: await SettingsService.getBusinessName(),
+        phone: await SettingsService.getBusinessPhone(),
+        zipCode: '',
+        state: await SettingsService.getBusinessAddress(),
       );
 
       // Get customer's actual previous balance
@@ -513,10 +514,10 @@ class _EnhancedInvoicePageState extends ConsumerState<EnhancedInvoicePage> {
 
       // Create store info
       final storeInfo = ups.StoreInfo(
-        storeName: 'المحل التجاري',
-        phone: '01234567890',
-        zipCode: '12345',
-        state: 'القاهرة',
+        storeName: await SettingsService.getBusinessName(),
+        phone: await SettingsService.getBusinessPhone(),
+        zipCode: '',
+        state: await SettingsService.getBusinessAddress(),
       );
 
       // Get customer's actual previous balance

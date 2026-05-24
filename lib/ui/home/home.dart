@@ -143,7 +143,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       case SideBarPage.purchases:
         return PurchasePage(db: db);
       case SideBarPage.cashier:
-        return CashierPage(db: db);
+        return const CashierPage();
       case SideBarPage.reports:
         return const ReportsPage();
       case SideBarPage.users:

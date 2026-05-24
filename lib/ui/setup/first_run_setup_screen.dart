@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/provider/app_database_provider.dart';
+import '../../core/services/settings_service.dart';
 
 class FirstRunSetupScreen extends ConsumerStatefulWidget {
   const FirstRunSetupScreen({super.key});
@@ -13,6 +14,11 @@ class FirstRunSetupScreen extends ConsumerStatefulWidget {
 
 class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
   final _formKey = GlobalKey<FormState>();
+  // Business info
+  final _businessNameController = TextEditingController();
+  final _businessPhoneController = TextEditingController();
+  final _businessAddressController = TextEditingController();
+  // Password
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
@@ -20,6 +26,9 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
 
   @override
   void dispose() {
+    _businessNameController.dispose();
+    _businessPhoneController.dispose();
+    _businessAddressController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -27,28 +36,33 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
 
   Future<void> _handleSetup() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
-
     try {
       final db = ref.read(appDatabaseProvider);
+
+      // Save business info
+      await SettingsService.setBusinessName(_businessNameController.text.trim());
+      await SettingsService.setBusinessPhone(_businessPhoneController.text.trim());
+      await SettingsService.setBusinessAddress(_businessAddressController.text.trim());
+      await SettingsService.markFirstRunComplete();
+
+      // Update admin password
       await db.userDao.updateAdminPassword(_passwordController.text);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('تم تغيير كلمة المرور بنجاح. يرجى تسجيل الدخول.'),
+            content: Text('تم الإعداد بنجاح. يرجى تسجيل الدخول.'),
+            backgroundColor: Colors.green,
           ),
         );
-        // Navigate to home (which will now redirect to login if auth is implemented,
-        // or just let them in if we are in this specific setup flow)
-        context.go('/');
+        context.go('/login');
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('خطأ أثناء التحديث: $e'),
+            content: Text('خطأ أثناء الإعداد: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -60,118 +74,178 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: theme.colorScheme.surface,
       body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 450),
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                ),
               ),
-            ],
-          ),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.security, size: 64, color: Colors.blue),
-                const SizedBox(height: 24),
-                const Text(
-                  'إعداد الأمان لأول مرة',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'يجب تغيير كلمة المرور الافتراضية للمسؤول لتأمين النظام الخاص بك.',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'كلمة المرور الجديدة',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility
-                            : Icons.visibility_off,
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Icon(
+                        Icons.store_outlined,
+                        size: 56,
+                        color: theme.colorScheme.primary,
                       ),
-                      onPressed: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'يرجى إدخال كلمة المرور';
-                    }
-                    if (value.length < 8) return 'يجب أن لا تقل عن 8 أحرف';
-                    if (value == 'admin123') {
-                      return 'لا يمكنك استخدام كلمة المرور الافتراضية';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _confirmPasswordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'تأكيد كلمة المرور',
-                    prefixIcon: const Icon(Icons.lock_reset),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value != _passwordController.text) {
-                      return 'كلمات المرور غير متطابقة';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 32),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _handleSetup,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
+                      const SizedBox(height: 16),
+                      Text(
+                        'إعداد المنشأة لأول مرة',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'أدخل بيانات منشأتك وحدد كلمة مرور المسؤول',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 28),
+
+                      // ─── Business Info ────────────────────────────────────
+                      _sectionLabel(context, 'بيانات المنشأة'),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _businessNameController,
+                        decoration: const InputDecoration(
+                          labelText: 'اسم المنشأة *',
+                          prefixIcon: Icon(Icons.store),
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'اسم المنشأة مطلوب' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _businessPhoneController,
+                        keyboardType: TextInputType.phone,
+                        textDirection: TextDirection.ltr,
+                        decoration: const InputDecoration(
+                          labelText: 'رقم الهاتف (اختياري)',
+                          prefixIcon: Icon(Icons.phone),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _businessAddressController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'العنوان (اختياري)',
+                          prefixIcon: Icon(Icons.location_on_outlined),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // ─── Password ─────────────────────────────────────────
+                      _sectionLabel(context, 'كلمة مرور المسؤول'),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        textDirection: TextDirection.ltr,
+                        decoration: InputDecoration(
+                          labelText: 'كلمة المرور الجديدة',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword
+                                ? Icons.visibility
+                                : Icons.visibility_off),
+                            onPressed: () =>
+                                setState(() => _obscurePassword = !_obscurePassword),
                           ),
-                        )
-                      : const Text('حفظ وتابع', style: TextStyle(fontSize: 18)),
+                        ),
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return 'يرجى إدخال كلمة المرور';
+                          if (v.length < 6) return 'يجب أن لا تقل عن 6 أحرف';
+                          if (v == 'admin123') return 'لا يمكنك استخدام كلمة المرور الافتراضية';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _confirmPasswordController,
+                        obscureText: _obscurePassword,
+                        textDirection: TextDirection.ltr,
+                        decoration: const InputDecoration(
+                          labelText: 'تأكيد كلمة المرور',
+                          prefixIcon: Icon(Icons.lock_reset),
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (v) =>
+                            v != _passwordController.text ? 'كلمات المرور غير متطابقة' : null,
+                      ),
+                      const SizedBox(height: 28),
+
+                      SizedBox(
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _handleSetup,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  'حفظ وابدأ',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
       ),
     );
   }
+
+  Widget _sectionLabel(BuildContext context, String label) {
+    return Text(
+      label,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+    );
+  }
 }
+

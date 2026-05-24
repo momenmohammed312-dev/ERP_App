@@ -4,6 +4,8 @@ import 'package:drift_flutter/drift_flutter.dart'; // ← Solution: handles Web/
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/app_database.dart';
+import '../services/business_date_service.dart';
+import '../../services/staff_management_service.dart';
 
 // ════════════════════════════════════════════════════════════════════════════
 // Singleton provider for AppDatabase
@@ -20,6 +22,16 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
 // Helper provider for database access in widgets
 final databaseProvider = Provider<AppDatabase>((ref) {
   return ref.watch(appDatabaseProvider);
+});
+
+final businessDateServiceProvider = Provider<BusinessDateService>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return BusinessDateService(db);
+});
+
+final staffManagementServiceProvider = Provider<StaffManagementService>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return StaffManagementService(db.staffManagementDao);
 });
 
 QueryExecutor _openConnection() {

@@ -83,6 +83,8 @@ class PrinterService {
       await printThermalReceipt(
         items: items,
         totalAmount: invoice['totalAmount'] ?? 0.0,
+        paidAmount: invoice['paidAmount'],
+        remainingAmount: invoice['remainingAmount'],
         paymentMethod: paymentMethod,
         receiptNumber: invoice['id']?.toString() ?? '1',
         date: invoice['date'] ?? DateTime.now(),
@@ -422,6 +424,8 @@ class PrinterService {
     required String receiptNumber,
     required DateTime date,
     required String customerName,
+    double? paidAmount,
+    double? remainingAmount,
     Printer? printer,
   }) async {
     await _loadFonts();
@@ -443,6 +447,8 @@ class PrinterService {
           receiptNumber: receiptNumber,
           date: date,
           customerName: customerName,
+          paidAmount: paidAmount,
+          remainingAmount: remainingAmount,
           font: font,
           boldFont: boldFont,
         ),
@@ -569,6 +575,8 @@ class PrinterService {
     required String customerName,
     required pw.Font font,
     required pw.Font boldFont,
+    double? paidAmount,
+    double? remainingAmount,
   }) {
     return pw.Column(
       children: [
@@ -670,14 +678,35 @@ class PrinterService {
         // Total
         pw.Container(
           alignment: pw.Alignment.center,
-          child: pw.Text(
-            'الإجمالي: ${_formatCurrency(totalAmount)}',
-            style: _getTextStyle(
-              fontSize: 16,
-              fontWeight: pw.FontWeight.bold,
-              isBold: true,
-            ),
-            textDirection: pw.TextDirection.rtl,
+          child: pw.Column(
+            children: [
+              pw.Text(
+                'الإجمالي: ${_formatCurrency(totalAmount)}',
+                style: _getTextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  isBold: true,
+                ),
+                textDirection: pw.TextDirection.rtl,
+              ),
+              if (paidAmount != null && paidAmount > 0 && paidAmount != totalAmount) ...[
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  'المدفوع: ${_formatCurrency(paidAmount)}',
+                  style: _getTextStyle(fontSize: 14),
+                  textDirection: pw.TextDirection.rtl,
+                ),
+                pw.Text(
+                  'المتبقي: ${_formatCurrency(remainingAmount ?? (totalAmount - paidAmount))}',
+                  style: _getTextStyle(
+                    fontSize: 14,
+                    fontWeight: pw.FontWeight.bold,
+                    isBold: true,
+                  ),
+                  textDirection: pw.TextDirection.rtl,
+                ),
+              ],
+            ],
           ),
         ),
 

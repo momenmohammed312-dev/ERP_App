@@ -93,20 +93,32 @@ class StaffManagementService {
         staff.copyWith(
           name: name ?? staff.name,
           position: position ?? staff.position,
-          department: department ?? staff.department,
           employmentType: employmentType ?? staff.employmentType,
           basicSalary: basicSalary ?? staff.basicSalary,
-          hourlyRate: hourlyRate ?? staff.hourlyRate,
-          phone: phone ?? staff.phone,
-          email: email ?? staff.email,
-          address: address ?? staff.address,
-          bankName: bankName ?? staff.bankName,
-          bankAccount: bankAccount ?? staff.bankAccount,
-          emergencyContact: emergencyContact ?? staff.emergencyContact,
-          emergencyPhone: emergencyPhone ?? staff.emergencyPhone,
-          notes: notes ?? staff.notes,
           status: status ?? staff.status,
-          contractEndDate: contractEndDate ?? staff.contractEndDate,
+          department: department != null
+              ? Value(department)
+              : const Value.absent(),
+          hourlyRate: hourlyRate != null
+              ? Value(hourlyRate)
+              : const Value.absent(),
+          phone: phone != null ? Value(phone) : const Value.absent(),
+          email: email != null ? Value(email) : const Value.absent(),
+          address: address != null ? Value(address) : const Value.absent(),
+          bankName: bankName != null ? Value(bankName) : const Value.absent(),
+          bankAccount: bankAccount != null
+              ? Value(bankAccount)
+              : const Value.absent(),
+          emergencyContact: emergencyContact != null
+              ? Value(emergencyContact)
+              : const Value.absent(),
+          emergencyPhone: emergencyPhone != null
+              ? Value(emergencyPhone)
+              : const Value.absent(),
+          notes: notes != null ? Value(notes) : const Value.absent(),
+          contractEndDate: contractEndDate != null
+              ? Value(contractEndDate)
+              : const Value.absent(),
           updatedAt: DateTime.now(),
         ),
       );
@@ -197,8 +209,8 @@ class StaffManagementService {
         startDate: startDate,
         endDate: endDate,
         totalDays: totalDays,
-        reason: reason,
-        status: const Value('pending'),
+        reason: Value(reason),
+        status: 'pending',
         contactDuringVacation: Value(contactDuringVacation ?? ''),
         handoverTo: Value(handoverTo ?? ''),
         createdAt: DateTime.now(),
@@ -248,9 +260,9 @@ class StaffManagementService {
       StaffAdvancesCompanion.insert(
         staffId: staffId,
         amount: amount,
-        reason: reason,
+        reason: Value(reason),
         requestDate: DateTime.now(),
-        status: const Value('pending'),
+        status: 'pending',
         installmentMonths: Value(installmentMonths),
         monthlyDeduction: installmentMonths != null
             ? Value(amount / installmentMonths)
@@ -298,29 +310,117 @@ class StaffManagementService {
 
     final netSalary = basicSalary + overtimePay + allowances - deductions;
 
-    await _dao.addPayroll(
-      PayrollTableCompanion.insert(
-        staffId: staffId,
-        payrollPeriod: payrollPeriod,
-        periodStart: periodStart,
-        periodEnd: periodEnd,
-        basicSalary: basicSalary,
-        overtimeHours: attendanceSummary.totalOvertime,
-        overtimeRate: Value(staff.hourlyRate ?? basicSalary / 160),
-        overtimePay: overtimePay,
-        allowances: allowances,
-        deductions: deductions,
-        advances: totalAdvances,
-        netSalary: netSalary,
-        workingDays: attendanceSummary.totalDays,
-        presentDays: attendanceSummary.presentDays,
-        absentDays: attendanceSummary.absentDays,
-        leaveDays: attendanceSummary.leaveDays,
-        status: const Value('calculated'),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-    );
+await _dao.addPayroll(
+          PayrollTableCompanion.insert(
+            staffId: staffId,
+            payrollPeriod: payrollPeriod,
+            periodStart: periodStart,
+            periodEnd: periodEnd,
+            basicSalary: basicSalary,
+            overtimeHours: Value(attendanceSummary.totalOvertime),
+            overtimeRate: Value(staff.hourlyRate ?? basicSalary / 160),
+            overtimePay: Value(overtimePay),
+            allowances: Value(allowances),
+            deductions: Value(deductions),
+            advances: Value(totalAdvances),
+            netSalary: netSalary,
+            workingDays: Value(attendanceSummary.totalDays),
+            presentDays: Value(attendanceSummary.presentDays),
+            absentDays: Value(attendanceSummary.absentDays),
+            leaveDays: Value(attendanceSummary.leaveDays),
+            status: 'calculated',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+  }
+
+  Future<void> payAdvance(int advanceId, String paymentMethod) async {
+    final db = _dao.attachedDatabase;
+    return db.transaction(() async {
+      final advance = await (db.select(db.staffAdvances)..where((t) => t.id.equals(advanceId))).getSingleOrNull();
+      if (advance == null || advance.status == 'paid') return;
+
+      await (db.update(db.staffAdvances)..where((t) => t.id.equals(advanceId))).write(
+        StaffAdvancesCompanion(
+          status: const Value('paid'),
+          paymentDate: Value(DateTime.now()),
+          paymentMethod: Value(paymentMethod),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+      final desc = 'سلفة موظف: ${advance.staffId}';
+      final now = DateTime.now();
+await db.expenseDao.insertExpense(
+          ExpensesCompanion.insert(
+            id: '${now.millisecondsSinceEpoch}_advance',
+            description: desc,
+            amount: advance.amount,
+            date: Value(now),
+            category: 'other_expenses',
+            paymentMethod: Value(paymentMethod),
+          ),
+        );
+
+      await db.ledgerDao.insertTransaction(
+        LedgerTransactionsCompanion.insert(
+          id: '${now.millisecondsSinceEpoch}_advance',
+          entityType: 'StaffAdvance',
+          refId: advance.staffId,
+          date: DateTime.now(),
+          description: desc,
+          debit: const Value(0.0),
+          credit: Value(advance.amount),
+          origin: 'expense',
+          paymentMethod: Value(paymentMethod),
+        ),
+      );
+    });
+  }
+
+  Future<void> payPayroll(int payrollId, String paymentMethod) async {
+    final db = _dao.attachedDatabase;
+    return db.transaction(() async {
+      final payroll = await (db.select(db.payrollTable)..where((t) => t.id.equals(payrollId))).getSingleOrNull();
+      if (payroll == null || payroll.status == 'paid') return;
+
+      await (db.update(db.payrollTable)..where((t) => t.id.equals(payrollId))).write(
+        PayrollTableCompanion(
+          status: const Value('paid'),
+          paymentDate: Value(DateTime.now()),
+          paymentMethod: Value(paymentMethod),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+      final desc = 'راتب موظف: ${payroll.staffId} للفترة ${payroll.payrollPeriod}';
+      final now = DateTime.now();
+      await db.expenseDao.insertExpense(
+        ExpensesCompanion.insert(
+          id: '${now.millisecondsSinceEpoch}_payroll',
+          description: desc,
+          amount: payroll.netSalary,
+          date: Value(now),
+          category: 'salaries',
+          paymentMethod: Value(paymentMethod),
+        ),
+      );
+
+      await db.ledgerDao.insertTransaction(
+        LedgerTransactionsCompanion.insert(
+          id: '${DateTime.now().millisecondsSinceEpoch}_payroll',
+          entityType: 'Payroll',
+          refId: payroll.staffId,
+          date: DateTime.now(),
+          description: desc,
+          debit: const Value(0.0),
+          credit: Value(payroll.netSalary),
+          origin: 'expense',
+          paymentMethod: Value(paymentMethod),
+        ),
+      );
+    });
   }
 
   DateTime _getPeriodStart(String period) {
@@ -387,7 +487,7 @@ class StaffManagementService {
         recommendations: Value(recommendations ?? ''),
         actionPlan: Value(actionPlan ?? ''),
         nextReviewDate: Value(nextReviewDate),
-        status: const Value('submitted'),
+        status: 'submitted',
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),

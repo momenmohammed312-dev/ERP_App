@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
@@ -190,6 +191,16 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                       );
                     },
                   ),
+                  // Damaged Items Button
+                  _buildLauncherButton(
+                    context,
+                    'الهالك',
+                    Icons.delete_sweep,
+                    Colors.redAccent,
+                    () {
+                      context.push('/damaged-items');
+                    },
+                  ),
                 ],
               ),
               const Gap(40),
@@ -209,7 +220,7 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
         child: const StaffListPage(),
       ),
       // Index 5: Cash
-      CashierPage(db: widget.db),
+      const CashierPage(),
       // Index 6: Reports
       ReportsPage(),
     ];

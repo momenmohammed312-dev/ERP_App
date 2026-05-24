@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:pos_offline_desktop/core/services/settings_service.dart';
 
 /// SOP 4.0: Global Unified System Redesign & Financial Reporting
 /// MANDATORY: Single service for ALL document generation
@@ -23,6 +24,17 @@ class UnifiedPrintService {
     Map<String, dynamic>? additionalData,
   }) async {
     final pdf = pw.Document();
+
+    // Load business info from settings if storeInfo is null
+    final businessInfo = await SettingsService.getBusinessInfo();
+    final effectiveStoreInfo = storeInfo ?? StoreInfo(
+      storeName: businessInfo['name'] ?? '',
+      phone: businessInfo['phone'] ?? '',
+      zipCode: '',
+      state: businessInfo['address'] ?? '',
+      taxNumber: businessInfo['taxNumber'],
+    );
+    final footerMsg = businessInfo['footer'] ?? 'شكراً لزيارتكم';
 
     // Load Arabic fonts
     final arabicFont = await _loadArabicFont();
@@ -57,7 +69,7 @@ class UnifiedPrintService {
                 arabicFont,
                 arabicFontBold,
                 documentType,
-                storeInfo,
+                effectiveStoreInfo,
                 logoImage,
               ),
               pw.SizedBox(height: 20),
@@ -67,7 +79,7 @@ class UnifiedPrintService {
 
               /// MANDATORY: Footer
               pw.Expanded(child: pw.Container()),
-              _buildGlobalFooter(arabicFont),
+              _buildGlobalFooter(arabicFont, footerMsg),
             ],
           );
         },
@@ -359,7 +371,42 @@ class UnifiedPrintService {
         ),
         child: pw.Column(
           children: [
-            if (invoiceData.invoice.isCreditAccount) ...[
+            _buildTotalRow(
+              'إجمالي الفاتورة',
+              invoiceData.subtotal,
+              font: arabicFont,
+            ),
+            if (additionalData?['cashAmount'] != null ||
+                additionalData?['cardAmount'] != null ||
+                additionalData?['creditAmount'] != null) ...[
+              pw.SizedBox(height: 5),
+              pw.Divider(thickness: 0.5, color: PdfColors.grey300),
+              if ((additionalData?['cashAmount'] ?? 0) > 0)
+                _buildTotalRow(
+                  'مدفوع نقدي',
+                  additionalData?['cashAmount'],
+                  font: arabicFont,
+                  fontSize: 10,
+                ),
+              if ((additionalData?['cardAmount'] ?? 0) > 0)
+                _buildTotalRow(
+                  'مدفوع فيزا',
+                  additionalData?['cardAmount'],
+                  font: arabicFont,
+                  fontSize: 10,
+                ),
+              if ((additionalData?['creditAmount'] ?? 0) > 0)
+                _buildTotalRow(
+                  'مبلغ آجل',
+                  additionalData?['creditAmount'],
+                  font: arabicFont,
+                  fontSize: 10,
+                  color: PdfColors.red700,
+                ),
+            ],
+            if (invoiceData.invoice.isCreditAccount ||
+                (additionalData?['creditAmount'] ?? 0) > 0) ...[
+              pw.Divider(),
               _buildTotalRow(
                 'الرصيد السابق',
                 invoiceData.invoice.previousBalance,
@@ -367,39 +414,12 @@ class UnifiedPrintService {
               ),
               pw.Divider(),
               _buildTotalRow(
-                'الإجمالي',
-                invoiceData.subtotal,
-                font: arabicFont,
-              ),
-              if (additionalData?['paidAmount'] != null &&
-                  additionalData!['paidAmount'] > 0) ...[
-                pw.Divider(),
-                _buildTotalRow(
-                  'المدفوع',
-                  additionalData['paidAmount'],
-                  font: arabicFont,
-                ),
-              ],
-              pw.Divider(),
-              _buildTotalRow(
-                'إجمالي الرصيد المستحق',
-                invoiceData.grandTotal,
+                'إجمالي الحساب',
+                invoiceData.invoice.previousBalance +
+                    (additionalData?['creditAmount'] ?? 0),
                 isBold: true,
                 fontSize: 14,
                 font: arabicFontBold,
-              ),
-            ] else ...[
-              pw.Divider(),
-              _buildTotalRow(
-                'الإجمالي',
-                invoiceData.subtotal,
-                font: arabicFont,
-              ),
-              pw.Divider(),
-              _buildTotalRow(
-                'المدفوع',
-                invoiceData.grandTotal,
-                font: arabicFont,
               ),
             ],
           ],
@@ -642,10 +662,21 @@ class UnifiedPrintService {
   }
 
   /// MANDATORY: Global Footer
-  static pw.Widget _buildGlobalFooter(pw.Font arabicFont) {
+  static pw.Widget _buildGlobalFooter(pw.Font arabicFont, String footerMsg) {
     return pw.Column(
       children: [
         pw.Divider(thickness: 2),
+        pw.SizedBox(height: 5),
+        pw.Center(
+          child: pw.Text(
+            ArabicHelper.reshapedText(footerMsg),
+            style: pw.TextStyle(
+              fontSize: 10,
+              fontWeight: pw.FontWeight.bold,
+              font: arabicFont,
+            ),
+          ),
+        ),
         pw.SizedBox(height: 5),
         pw.Center(
           child: pw.Text(
@@ -693,6 +724,7 @@ class UnifiedPrintService {
     bool isBold = false,
     double fontSize = 12,
     pw.Font? font,
+    PdfColor? color,
   }) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 3),
@@ -705,6 +737,7 @@ class UnifiedPrintService {
               fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
               fontSize: fontSize,
               font: font,
+              color: color,
             ),
           ),
           pw.Text(
@@ -713,6 +746,7 @@ class UnifiedPrintService {
               fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
               fontSize: fontSize,
               font: font,
+              color: color,
             ),
           ),
         ],

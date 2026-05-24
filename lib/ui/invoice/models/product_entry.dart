@@ -8,6 +8,7 @@ class ProductEntry {
   double discount = 0.0;
   double tax = 0.0;
   double lineTotal = 0.0;
+  double costPrice = 0.0;
   bool priceOverride = false;
 
   ProductEntry({this.product});
@@ -19,6 +20,7 @@ class ProductEntry {
       'quantity': quantity,
       'unit': unit,
       'unitPrice': unitPrice,
+      'costPrice': costPrice,
       'discount': discount,
       'tax': tax,
       'lineTotal': lineTotal,

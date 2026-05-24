@@ -2,10 +2,57 @@ import 'dart:developer';
 
 import 'package:drift/drift.dart';
 
-import 'package:pos_offline_desktop/core/database/dao/dao.dart';
-import 'package:pos_offline_desktop/core/database/tables/tables.dart';
+import 'package:pos_offline_desktop/core/database/dao/customer_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/credit_payments_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/expense_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/invoice_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/ledger_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/product_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/purchase_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/sales_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/supplier_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/day_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/enhanced_purchase_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/inventory_movement_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/purchase_budget_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/audit_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/user_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/staff_management_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/cash_session_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/notifications_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/invoice_payments_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/damaged_items_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/sales_returns_dao.dart';
+import 'package:pos_offline_desktop/core/database/tables/audit_log_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/categories_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/customer_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/credit_payments_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/employees_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/invoice_items_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/invoice_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/ledger_transactions_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/product_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/purchase_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/purchase_items_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/sales_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/supplier_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/expenses_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/users_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/day_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/enhanced_purchase_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/inventory_movements_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/purchase_returns_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/purchase_orders_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/purchase_budget_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/staff_management_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/user_activity_log_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/cash_session_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/notifications_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/invoice_payments_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/damaged_items_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/sales_returns_table.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
-import 'package:pos_offline_desktop/core/database/amount_types_fix.dart';
+// import 'package:pos_offline_desktop/core/database/amount_types_fix.dart';
 
 part 'app_database.g.dart';
 
@@ -52,7 +99,11 @@ part 'app_database.g.dart';
     PurchaseRefunds,
     UserActivityLog,
     CashSessions,
-    Notifications,
+    AppNotifications,
+    InvoicePayments,
+    DamagedItems,
+    SalesReturns,
+    SalesReturnItems,
   ],
   daos: [
     ProductDao,
@@ -73,6 +124,9 @@ part 'app_database.g.dart';
     StaffManagementDao,
     CashSessionDao,
     NotificationsDao,
+    InvoicePaymentsDao,
+    DamagedItemsDao,
+    SalesReturnsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -83,7 +137,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 39;
+  int get schemaVersion => 40;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -110,6 +164,11 @@ class AppDatabase extends _$AppDatabase {
         await _runModernMigrations(m, from);
       }
 
+      // 4b. Schema v40 migrations (new tables + columns)
+      if (from < 40) {
+        await _runV40Migrations(m);
+      }
+
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
       await _ensureStaffTables(m);
 
@@ -119,7 +178,7 @@ class AppDatabase extends _$AppDatabase {
       // 6. Special data fixes
       if (from < 36) {
         try {
-          await AmountTypesFix.fixAmountTypes(this);
+          await _fixPurchaseAmountTypes();
           log('Migration v36: Fixed amount types in purchases');
         } catch (e) {
           log('Migration v36 error: $e');
@@ -245,7 +304,7 @@ class AppDatabase extends _$AppDatabase {
 
     if (from < 37) {
       try {
-        await m.createTable(notifications);
+        await m.createTable(appNotifications);
       } catch (e) {
         log('Notifications table migration warning: $e');
       }
@@ -265,184 +324,167 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Ensures staff-related tables exist (fresh installs only run [onCreate], not [onUpgrade]).
-  Future<void> _ensureStaffTables(Migrator m) async {
-    const staffTableSql = [
-      '''CREATE TABLE IF NOT EXISTS "staff_table" (
-        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "staff_id" TEXT NOT NULL UNIQUE,
-        "name" TEXT NOT NULL,
-        "national_id" TEXT,
-        "phone" TEXT,
-        "email" TEXT,
-        "address" TEXT,
-        "position" TEXT NOT NULL,
-        "department" TEXT,
-        "employment_type" TEXT NOT NULL,
-        "basic_salary" REAL NOT NULL,
-        "hourly_rate" REAL,
-        "hire_date" INTEGER NOT NULL,
-        "contract_end_date" INTEGER,
-        "status" TEXT NOT NULL,
-        "bank_name" TEXT,
-        "bank_account" TEXT,
-        "emergency_contact" TEXT,
-        "emergency_phone" TEXT,
-        "notes" TEXT,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL,
-        "is_active" INTEGER NOT NULL DEFAULT 1
-      )''',
-      '''CREATE TABLE IF NOT EXISTS "attendance_table" (
-        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "staff_id" TEXT NOT NULL,
-        "date" INTEGER NOT NULL,
-        "check_in_time" INTEGER,
-        "check_out_time" INTEGER,
-        "check_in_location" TEXT,
-        "check_out_location" TEXT,
-        "working_hours" REAL,
-        "status" TEXT NOT NULL,
-        "leave_type" TEXT,
-        "notes" TEXT,
-        "overtime_hours" REAL NOT NULL DEFAULT 0,
-        "approved_by" TEXT,
-        "approved_at" INTEGER,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL
-      )''',
-      '''CREATE TABLE IF NOT EXISTS "vacations" (
-        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "staff_id" TEXT NOT NULL,
-        "vacation_type" TEXT NOT NULL,
-        "start_date" INTEGER NOT NULL,
-        "end_date" INTEGER NOT NULL,
-        "total_days" INTEGER NOT NULL,
-        "reason" TEXT,
-        "status" TEXT NOT NULL,
-        "approved_by" TEXT,
-        "approved_at" INTEGER,
-        "rejection_reason" TEXT,
-        "contact_during_vacation" TEXT,
-        "handover_to" TEXT,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL
-      )''',
-      '''CREATE TABLE IF NOT EXISTS "staff_advances" (
-        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "staff_id" TEXT NOT NULL,
-        "amount" REAL NOT NULL,
-        "reason" TEXT,
-        "request_date" INTEGER NOT NULL,
-        "payment_date" INTEGER,
-        "status" TEXT NOT NULL,
-        "approved_by" TEXT,
-        "approved_at" INTEGER,
-        "rejection_reason" TEXT,
-        "payment_method" TEXT,
-        "transaction_reference" TEXT,
-        "installment_months" INTEGER,
-        "monthly_deduction" REAL,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL
-      )''',
-      '''CREATE TABLE IF NOT EXISTS "payroll_table" (
-        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "staff_id" TEXT NOT NULL,
-        "payroll_period" TEXT NOT NULL,
-        "period_start" INTEGER NOT NULL,
-        "period_end" INTEGER NOT NULL,
-        "basic_salary" REAL NOT NULL,
-        "overtime_hours" REAL NOT NULL DEFAULT 0,
-        "overtime_rate" REAL,
-        "overtime_pay" REAL NOT NULL DEFAULT 0,
-        "allowances" REAL NOT NULL DEFAULT 0,
-        "deductions" REAL NOT NULL DEFAULT 0,
-        "advances" REAL NOT NULL DEFAULT 0,
-        "taxes" REAL NOT NULL DEFAULT 0,
-        "insurance" REAL NOT NULL DEFAULT 0,
-        "other_deductions" REAL NOT NULL DEFAULT 0,
-        "net_salary" REAL NOT NULL,
-        "working_days" INTEGER NOT NULL DEFAULT 0,
-        "present_days" INTEGER NOT NULL DEFAULT 0,
-        "absent_days" INTEGER NOT NULL DEFAULT 0,
-        "leave_days" INTEGER NOT NULL DEFAULT 0,
-        "status" TEXT NOT NULL,
-        "payment_date" INTEGER,
-        "payment_method" TEXT,
-        "transaction_reference" TEXT,
-        "approved_by" TEXT,
-        "approved_at" INTEGER,
-        "notes" TEXT,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL
-      )''',
-      '''CREATE TABLE IF NOT EXISTS "rewards_penalties" (
-        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "staff_id" TEXT NOT NULL,
-        "type" TEXT NOT NULL,
-        "category" TEXT NOT NULL,
-        "title" TEXT NOT NULL,
-        "description" TEXT,
-        "amount" REAL,
-        "incident_date" INTEGER NOT NULL,
-        "issued_by" TEXT NOT NULL,
-        "status" TEXT NOT NULL,
-        "effective_date" INTEGER NOT NULL,
-        "expiry_date" INTEGER,
-        "evidence" TEXT,
-        "notes" TEXT,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL
-      )''',
-      '''CREATE TABLE IF NOT EXISTS "performance_reviews" (
-        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "staff_id" TEXT NOT NULL,
-        "review_period" TEXT NOT NULL,
-        "review_date" INTEGER NOT NULL,
-        "reviewer_id" TEXT NOT NULL,
-        "overall_rating" REAL NOT NULL,
-        "work_quality_rating" REAL NOT NULL,
-        "productivity_rating" REAL NOT NULL,
-        "teamwork_rating" REAL NOT NULL,
-        "punctuality_rating" REAL NOT NULL,
-        "initiative_rating" REAL NOT NULL,
-        "strengths" TEXT,
-        "weaknesses" TEXT,
-        "goals" TEXT,
-        "recommendations" TEXT,
-        "employee_comments" TEXT,
-        "status" TEXT NOT NULL,
-        "acknowledged_at" INTEGER,
-        "next_review_date" INTEGER,
-        "action_plan" TEXT,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL
-      )''',
-      '''CREATE TABLE IF NOT EXISTS "staff_documents" (
-        "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "staff_id" TEXT NOT NULL,
-        "document_type" TEXT NOT NULL,
-        "document_name" TEXT NOT NULL,
-        "file_path" TEXT NOT NULL,
-        "file_name" TEXT NOT NULL,
-        "file_type" TEXT NOT NULL,
-        "file_size" INTEGER NOT NULL,
-        "issue_date" INTEGER,
-        "expiry_date" INTEGER,
-        "issuing_authority" TEXT,
-        "document_number" TEXT,
-        "status" TEXT NOT NULL,
-        "notes" TEXT,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL
-      )''',
+
+  /// Migration v40 — adds new tables and columns
+  Future<void> _runV40Migrations(Migrator m) async {
+    // 1. New columns on existing tables
+    final columnMigrations = [
+      // Products
+      'ALTER TABLE products ADD COLUMN cost_price REAL',
+      // InvoiceItems
+      'ALTER TABLE invoice_items ADD COLUMN discount REAL DEFAULT 0',
+      'ALTER TABLE invoice_items ADD COLUMN commission REAL DEFAULT 0',
+      'ALTER TABLE invoice_items ADD COLUMN unit_cost_at_time REAL',
+      // Invoices (void support)
+      'ALTER TABLE invoices ADD COLUMN voided_at INTEGER',
+      'ALTER TABLE invoices ADD COLUMN void_reason TEXT',
+      'ALTER TABLE invoices ADD COLUMN voided_by TEXT',
+      // Expenses
+      'ALTER TABLE expenses ADD COLUMN user_id TEXT',
+      'ALTER TABLE expenses ADD COLUMN day_id TEXT',
+      // CashSessions
+      'ALTER TABLE cash_sessions ADD COLUMN closing_balance REAL',
+      'ALTER TABLE cash_sessions ADD COLUMN closing_cash REAL',
+      'ALTER TABLE cash_sessions ADD COLUMN difference REAL',
+      'ALTER TABLE cash_sessions ADD COLUMN total_sales REAL DEFAULT 0',
+      'ALTER TABLE cash_sessions ADD COLUMN total_expenses REAL DEFAULT 0',
+      'ALTER TABLE cash_sessions ADD COLUMN notes TEXT',
+      // AuditLog
+      'ALTER TABLE audit_log ADD COLUMN old_value TEXT',
+      'ALTER TABLE audit_log ADD COLUMN new_value TEXT',
     ];
 
-    for (final sql in staffTableSql) {
+    for (final sql in columnMigrations) {
       try {
         await customStatement(sql);
       } catch (e) {
-        log('_ensureStaffTables error: $e');
+        log('v40 column migration warning (likely already exists): $e');
+      }
+    }
+
+    // 2. New tables
+    for (final migration in [
+      () => m.createTable(invoicePayments),
+      () => m.createTable(damagedItems),
+      () => m.createTable(salesReturns),
+      () => m.createTable(salesReturnItems),
+    ]) {
+      try {
+        await migration();
+      } catch (e) {
+        log('v40 table creation warning: $e');
+      }
+    }
+
+    // 3. Migrate existing invoice payments → InvoicePayments table
+    // Invoices where paid_amount > 0 get a corresponding payment record
+    try {
+      await customStatement('''
+        INSERT OR IGNORE INTO invoice_payments (invoice_id, payment_method, amount, paid_at)
+        SELECT 
+          id,
+          CASE 
+            WHEN payment_method = 'visa' THEN 'visa'
+            WHEN payment_method = 'bank' THEN 'bank'
+            WHEN payment_method = 'credit' THEN 'credit'
+            ELSE 'cash'
+          END,
+          paid_amount,
+          date
+        FROM invoices
+        WHERE paid_amount > 0
+      ''');
+      log('v40: Migrated existing invoice payments to InvoicePayments table');
+    } catch (e) {
+      log('v40 invoice payment migration warning: $e');
+    }
+  }
+
+  Future<void> _fixPurchaseAmountTypes() async {
+    try {
+      log(' Fixing amount types in purchases table...');
+
+      // Check current schema
+      final result = await customSelect('PRAGMA table_info(purchases)').get();
+
+      bool needsFix = false;
+      for (final row in result) {
+        final columnName = row.data['name'] as String;
+        final columnType = row.data['type'] as String;
+        if ((columnName == 'total_amount' || columnName == 'paid_amount') &&
+            columnType.toUpperCase().contains('INTEGER')) {
+          needsFix = true;
+          log('Found $columnName with INTEGER type, needs conversion to REAL');
+        }
+      }
+
+      if (!needsFix) {
+        log(' Amount columns already have correct REAL type');
+        return;
+      }
+
+      log(' Converting INTEGER amount columns to REAL...');
+
+      // 1. Create new table with correct schema
+      await customStatement('''
+        CREATE TABLE purchases_v2 (
+          id INTEGER PRIMARY KEY,
+          supplier_id TEXT,
+          invoice_number TEXT,
+          description TEXT,
+          total_amount REAL,
+          paid_amount REAL,
+          payment_method TEXT,
+          status TEXT,
+          purchase_date TEXT,
+          created_at TEXT,
+          notes TEXT,
+          created_by TEXT,
+          is_deleted INTEGER DEFAULT 0
+        )
+      ''');
+
+      // 2. Copy data with type conversion
+      await customStatement('''
+        INSERT INTO purchases_v2
+        SELECT 
+          id, supplier_id, invoice_number, description, 
+          CAST(total_amount AS REAL), CAST(paid_amount AS REAL),
+          payment_method, status, purchase_date, created_at, 
+          notes, created_by, is_deleted
+        FROM purchases
+      ''');
+
+      // 3. Drop old table
+      await customStatement('DROP TABLE purchases');
+
+      // 4. Rename new table
+      await customStatement('ALTER TABLE purchases_v2 RENAME TO purchases');
+
+      log(' Amount types fixed successfully');
+    } catch (e) {
+      log(' Error fixing amount types: $e');
+    }
+  }
+
+  Future<void> _ensureStaffTables(Migrator m) async {
+    final staffTablesList = [
+      staffTable,
+      attendanceTable,
+      vacations,
+      staffAdvances,
+      payrollTable,
+      rewardsPenalties,
+      performanceReviews,
+      staffDocuments,
+    ];
+
+    for (final table in staffTablesList) {
+      try {
+        await m.createTable(table as TableInfo);
+        log('Created table');
+      } catch (e) {
+        // Table probably already exists
       }
     }
   }
