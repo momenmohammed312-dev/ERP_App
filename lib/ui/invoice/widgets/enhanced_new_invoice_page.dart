@@ -101,6 +101,35 @@ class _EnhancedNewInvoicePageState
     _checkDayStatus();
   }
 
+  void _showBusinessSetupRequired(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Row(children: [
+            Icon(Icons.business, color: Color(0xFFC9A84C)),
+            SizedBox(width: 8),
+            Text('بيانات المنشأة مطلوبة'),
+          ]),
+          content: const Text(
+            'يرجى إدخال بيانات المنشأة أولاً من شاشة الإعدادات قبل إنشاء الفواتير.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).pop();
+              },
+              child: const Text('حسناً'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _checkDayStatus() async {
     try {
       final isOpen = await widget.db.dayDao.isDayOpen();
@@ -116,6 +145,15 @@ class _EnhancedNewInvoicePageState
 
   Future<void> _initializeInvoice() async {
     try {
+      // Check business info first
+      final bizName = await SettingsService.getBusinessName();
+      if (bizName == 'المحل التجاري' || bizName.isEmpty) {
+        if (mounted) {
+          _showBusinessSetupRequired(context);
+        }
+        return;
+      }
+
       // Check day status first
       bool isOpen = await widget.db.dayDao.isDayOpen();
 

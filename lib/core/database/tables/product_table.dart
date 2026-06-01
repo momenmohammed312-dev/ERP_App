@@ -14,4 +14,5 @@ class Products extends Table {
   IntColumn get cartonQuantity => integer().nullable()(); // Quantity per carton
   RealColumn get cartonPrice => real().nullable()(); // Price per carton
   RealColumn get costPrice => real().nullable()(); // Purchase cost price (for profit calculation)
+  IntColumn get minStockLevel => integer().withDefault(const Constant(0))();
 }

@@ -62,6 +62,19 @@ class ExpenseDao extends DatabaseAccessor<AppDatabase> with _$ExpenseDaoMixin {
     });
   }
 
+  /// إجمالي المصروفات لتاريخ معين
+  Future<double> getTotalExpensesForDate(DateTime date) async {
+    final start = DateTime(date.year, date.month, date.day);
+    final end = DateTime(date.year, date.month, date.day, 23, 59, 59);
+    final items = await (select(expenses)
+      ..where((e) => e.date.isBetweenValues(start, end))).get();
+    double total = 0;
+    for (final e in items) {
+      total += e.amount;
+    }
+    return total;
+  }
+
   // Stream methods for real-time updates
   Stream<List<Expense>> watchAllExpenses() {
     return (select(expenses)..orderBy([

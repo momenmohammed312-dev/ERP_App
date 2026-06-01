@@ -520,6 +520,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<int?> cartonQuantity;
   final Value<double?> cartonPrice;
   final Value<double?> costPrice;
+  final Value<int> minStockLevel;
   const ProductsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -532,6 +533,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.cartonQuantity = const Value.absent(),
     this.cartonPrice = const Value.absent(),
     this.costPrice = const Value.absent(),
+    this.minStockLevel = const Value.absent(),
   });
   ProductsCompanion.insert({
     this.id = const Value.absent(),
@@ -545,6 +547,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.cartonQuantity = const Value.absent(),
     this.cartonPrice = const Value.absent(),
     this.costPrice = const Value.absent(),
+    this.minStockLevel = const Value.absent(),
   }) : name = Value(name),
        quantity = Value(quantity),
        price = Value(price);
@@ -560,6 +563,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<int>? cartonQuantity,
     Expression<double>? cartonPrice,
     Expression<double>? costPrice,
+    Expression<int>? minStockLevel,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -573,6 +577,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (cartonQuantity != null) 'carton_quantity': cartonQuantity,
       if (cartonPrice != null) 'carton_price': cartonPrice,
       if (costPrice != null) 'cost_price': costPrice,
+      if (minStockLevel != null) 'min_stock_level': minStockLevel,
     });
   }
 
@@ -588,6 +593,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Value<int?>? cartonQuantity,
     Value<double?>? cartonPrice,
     Value<double?>? costPrice,
+    Value<int>? minStockLevel,
   }) {
     return ProductsCompanion(
       id: id ?? this.id,
@@ -601,6 +607,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       cartonQuantity: cartonQuantity ?? this.cartonQuantity,
       cartonPrice: cartonPrice ?? this.cartonPrice,
       costPrice: costPrice ?? this.costPrice,
+      minStockLevel: minStockLevel ?? this.minStockLevel,
     );
   }
 
@@ -640,6 +647,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     if (costPrice.present) {
       map['cost_price'] = Variable<double>(costPrice.value);
     }
+    if (minStockLevel.present) {
+      map['min_stock_level'] = Variable<int>(minStockLevel.value);
+    }
     return map;
   }
 
@@ -656,7 +666,8 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('barcode: $barcode, ')
           ..write('cartonQuantity: $cartonQuantity, ')
           ..write('cartonPrice: $cartonPrice, ')
-          ..write('costPrice: $costPrice')
+          ..write('costPrice: $costPrice, ')
+          ..write('minStockLevel: $minStockLevel')
           ..write(')'))
         .toString();
   }

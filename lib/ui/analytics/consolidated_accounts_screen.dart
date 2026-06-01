@@ -3,6 +3,9 @@ import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/utils/logger.dart';
+import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/ui/customer/customer_statement_screen.dart';
+import 'package:pos_offline_desktop/ui/supplier/supplier_statement_screen.dart';
 
 class ConsolidatedAccountsScreen extends ConsumerStatefulWidget {
   const ConsolidatedAccountsScreen({super.key});
@@ -271,7 +274,46 @@ class _ConsolidatedAccountsScreenState
             ],
           ),
           onTap: () {
-            // Future: Open account statement
+            if (type == 'Customer') {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => CustomerStatementScreen(
+                    customer: Customer(
+                      id: item['id'] as String,
+                      name: item['name'] as String,
+                      phone: item['phone'] as String?,
+                      address: null,
+                      gstinNumber: null,
+                      email: null,
+                      openingBalance: (item['openingBalance'] as num?)?.toDouble() ?? 0.0,
+                      totalDebt: (item['totalDebt'] as num?)?.toDouble() ?? 0.0,
+                      totalPaid: (item['totalPaid'] as num?)?.toDouble() ?? 0.0,
+                      createdAt: null,
+                      updatedAt: null,
+                      notes: null,
+                      isActive: true,
+                      status: 1,
+                    ),
+                  ),
+                ),
+              );
+            } else {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SupplierStatementScreen(
+                    supplier: Supplier(
+                      id: item['id'] as String,
+                      name: item['name'] as String,
+                      phone: item['phone'] as String?,
+                      address: null,
+                      openingBalance: (item['openingBalance'] as num?)?.toDouble() ?? 0.0,
+                      createdAt: DateTime.now(),
+                      status: 'Active',
+                    ),
+                  ),
+                ),
+              );
+            }
           },
         );
       },

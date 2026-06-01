@@ -23,5 +23,9 @@ class Invoices extends Table {
   TextColumn get voidReason => text().nullable()();
   TextColumn get voidedBy => text().nullable()();
 
+  RealColumn get cashAmount => real().withDefault(const Constant(0))();
+  RealColumn get cardAmount => real().withDefault(const Constant(0))();
+  RealColumn get creditAmount => real().withDefault(const Constant(0))();
+
   // primaryKey is defined by autoIncrement() on 'id'
 }

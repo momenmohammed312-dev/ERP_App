@@ -22,6 +22,10 @@ class _AddProductDialogState extends ConsumerState<AddProductDialog> {
   final TextEditingController _quantityController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _unitController = TextEditingController();
+  final TextEditingController _barcodeController = TextEditingController();
+  final TextEditingController _categoryController = TextEditingController();
+  final TextEditingController _costPriceController = TextEditingController();
+  final TextEditingController _minStockController = TextEditingController();
 
   void _saveProduct() async {
     if (_formKey.currentState!.validate()) {
@@ -35,6 +39,22 @@ class _AddProductDialogState extends ConsumerState<AddProductDialog> {
               _unitController.text.trim().isEmpty
                   ? null
                   : _unitController.text.trim(),
+            ),
+            barcode: Value(
+              _barcodeController.text.trim().isEmpty
+                  ? null
+                  : _barcodeController.text.trim(),
+            ),
+            category: Value(
+              _categoryController.text.trim().isEmpty
+                  ? null
+                  : _categoryController.text.trim(),
+            ),
+            costPrice: Value(
+              double.tryParse(_costPriceController.text.trim()),
+            ),
+            minStockLevel: Value(
+              int.tryParse(_minStockController.text.trim()) ?? 0,
             ),
           ),
         );
@@ -69,11 +89,16 @@ class _AddProductDialogState extends ConsumerState<AddProductDialog> {
     _quantityController.dispose();
     _priceController.dispose();
     _unitController.dispose();
+    _barcodeController.dispose();
+    _categoryController.dispose();
+    _costPriceController.dispose();
+    _minStockController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
@@ -93,90 +118,120 @@ class _AddProductDialogState extends ConsumerState<AddProductDialog> {
         child: Form(
           key: _formKey,
           child: ListView(
-            shrinkWrap: true, // To prevent overflow
+            shrinkWrap: true,
             children: [
-              // Product Name
               TextFormField(
                 controller: _nameController,
                 decoration: InputDecoration(
-                  labelText: context.l10n.product_name,
-                  border: OutlineInputBorder(),
+                  labelText: l10n.product_name,
+                  border: const OutlineInputBorder(),
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return context.l10n.enter_valid_product_name;
+                    return l10n.enter_valid_product_name;
                   }
                   return null;
                 },
               ),
               const Gap(16),
-
-              // Quantity
               TextFormField(
-                controller: _quantityController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly, // Allow only numbers
-                ],
-                decoration: InputDecoration(
-                  labelText: context.l10n.quantity,
+                controller: _barcodeController,
+                decoration: const InputDecoration(
+                  labelText: 'الباركود (اختياري)',
                   border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.qr_code),
                 ),
-                validator: (value) {
-                  if (value == null ||
-                      value.trim().isEmpty ||
-                      int.tryParse(value.trim()) == null) {
-                    return context.l10n.enter_valid_quantity;
-                  }
-                  return null;
-                },
               ),
               const Gap(16),
-
-              // Price
+              TextFormField(
+                controller: _categoryController,
+                decoration: const InputDecoration(
+                  labelText: 'التصنيف (اختياري)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.category),
+                ),
+              ),
+              const Gap(16),
+              TextFormField(
+                controller: _unitController,
+                decoration: InputDecoration(
+                  labelText: l10n.unit_label,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const Gap(16),
               TextFormField(
                 controller: _priceController,
                 keyboardType: TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly, // Allow only numbers
+                  FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
                 ],
                 decoration: InputDecoration(
-                  labelText: context.l10n.price,
-                  border: OutlineInputBorder(),
+                  labelText: l10n.price,
+                  border: const OutlineInputBorder(),
                 ),
                 validator: (value) {
-                  if (value == null ||
-                      value.trim().isEmpty ||
-                      double.tryParse(value.trim()) == null) {
-                    return context.l10n.enter_valid_price;
+                  if (value == null || value.trim().isEmpty || double.tryParse(value.trim()) == null) {
+                    return l10n.enter_valid_price;
                   }
                   return null;
                 },
               ),
               const Gap(16),
-
-              // Unit
               TextFormField(
-                controller: _unitController,
+                controller: _costPriceController,
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+                ],
+                decoration: const InputDecoration(
+                  labelText: 'سعر التكلفة (اختياري)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.receipt),
+                ),
+              ),
+              const Gap(16),
+              TextFormField(
+                controller: _quantityController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
                 decoration: InputDecoration(
-                  labelText: context.l10n.unit_label,
+                  labelText: l10n.quantity,
                   border: const OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty || int.tryParse(value.trim()) == null) {
+                    return l10n.enter_valid_quantity;
+                  }
+                  return null;
+                },
+              ),
+              const Gap(16),
+              TextFormField(
+                controller: _minStockController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
+                decoration: const InputDecoration(
+                  labelText: 'الحد الأدنى للمخزون (اختياري)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.warning_amber),
                 ),
               ),
               const Gap(24),
-
-              // Buttons
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   CustomButton(
                     onPressed: () => Navigator.of(context).pop(),
                     backgroundColor: Colors.red.shade400,
-
-                    title: context.l10n.cancel,
+                    title: l10n.cancel,
                   ),
                   CustomButton(
-                    title: context.l10n.save,
+                    title: l10n.save,
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     onPressed: _saveProduct,
                   ),

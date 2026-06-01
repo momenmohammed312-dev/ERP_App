@@ -26,7 +26,7 @@ class _PurchasePageState extends State<PurchasePage> {
   Supplier? _selectedSupplier;
   bool _isLoading = true;
   double _todayTotal = 0;
-  String _paymentMethod = 'cash'; // 'cash' or 'credit'
+  String _paymentMethod = 'cash';
 
   @override
   void initState() {
@@ -54,7 +54,6 @@ class _PurchasePageState extends State<PurchasePage> {
       );
 
       _recentPurchases = allPurchases;
-
       _todayTotal = todayPurchases.fold(0, (sum, p) => sum + p.totalAmount);
     } catch (e) {
       debugPrint('Error loading purchases: $e');
@@ -88,10 +87,9 @@ class _PurchasePageState extends State<PurchasePage> {
         status: 'completed',
         purchaseDate: DateTime.now(),
         notes: null,
-        items: [], // Simple purchase with no items for now
+        items: [],
       );
 
-      // If credit, add to supplier ledger
       if (_paymentMethod == 'credit' && _selectedSupplier != null) {
         final supplier = _selectedSupplier!;
         await widget.db.ledgerDao.insertTransaction(
@@ -119,9 +117,7 @@ class _PurchasePageState extends State<PurchasePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              AppLocalizations.of(context).expense_added_successfully,
-            ),
+            content: Text(AppLocalizations.of(context).expense_added_successfully),
             backgroundColor: Colors.green,
           ),
         );
@@ -132,7 +128,7 @@ class _PurchasePageState extends State<PurchasePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('خطأ في حفظ العملية: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Colors.redAccent,
           ),
         );
       }
@@ -141,7 +137,6 @@ class _PurchasePageState extends State<PurchasePage> {
 
   Future<void> _createSampleData() async {
     try {
-      // Create sample purchases using PurchaseDao
       await widget.db.purchaseDao.insertPurchaseWithItems(
         supplierId: null,
         invoiceNumber: 'SAMPLE-${DateTime.now().millisecondsSinceEpoch}',
@@ -181,7 +176,6 @@ class _PurchasePageState extends State<PurchasePage> {
         items: [],
       );
 
-      // Reload data after adding samples
       _loadData();
 
       if (mounted) {
@@ -197,7 +191,7 @@ class _PurchasePageState extends State<PurchasePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('خطأ في إضافة البيانات: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Colors.redAccent,
           ),
         );
       }
@@ -214,7 +208,7 @@ class _PurchasePageState extends State<PurchasePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('خطأ في طباعة التقرير: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Colors.redAccent,
           ),
         );
       }
@@ -223,12 +217,24 @@ class _PurchasePageState extends State<PurchasePage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0D1117) : Colors.grey.shade50;
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
+    final textColor = isDark ? const Color(0xFFE6EDF3) : Colors.black87;
+    final subTextColor = isDark ? const Color(0xFF8B949E) : Colors.black54;
+    final goldColor = const Color(0xFFC9A84C);
+    final borderColor = isDark ? const Color(0xFF30363D) : Colors.grey.shade300;
+
     return Scaffold(
+      backgroundColor: bgColor,
       appBar: AppBar(
+        backgroundColor: bgColor,
+        foregroundColor: textColor,
+        elevation: 0,
         title: const Text('المشتريات والمدخلات'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.print),
+            icon: Icon(Icons.print, color: goldColor),
             onPressed: _recentPurchases.isEmpty ? null : _printPurchases,
             tooltip: 'طباعة تقرير المشتريات',
           ),
@@ -239,9 +245,13 @@ class _PurchasePageState extends State<PurchasePage> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              // Input Form
               Card(
-                elevation: 4,
+                color: cardBg,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: borderColor),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Form(
@@ -251,7 +261,7 @@ class _PurchasePageState extends State<PurchasePage> {
                       children: [
                         Text(
                           'إضافة عملية شراء جديدة',
-                          style: Theme.of(context).textTheme.titleLarge,
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(color: goldColor),
                         ),
                         const SizedBox(height: 16),
                         Row(
@@ -261,10 +271,15 @@ class _PurchasePageState extends State<PurchasePage> {
                               flex: 2,
                               child: TextFormField(
                                 controller: _descriptionController,
-                                decoration: const InputDecoration(
+                                style: TextStyle(color: textColor),
+                                decoration: InputDecoration(
                                   labelText: 'الوصف (مثلاً: خامات، بضاعة)',
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.description),
+                                  labelStyle: TextStyle(color: subTextColor),
+                                  border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                  prefixIcon: Icon(Icons.description, color: goldColor),
+                                  filled: true,
+                                  fillColor: isDark ? const Color(0xFF0D1117) : Colors.grey.shade100,
                                 ),
                                 validator: (val) => val == null || val.isEmpty
                                     ? 'يرجى إدخال الوصف'
@@ -277,10 +292,15 @@ class _PurchasePageState extends State<PurchasePage> {
                               child: TextFormField(
                                 controller: _amountController,
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
+                                style: TextStyle(color: textColor),
+                                decoration: InputDecoration(
                                   labelText: 'المبلغ',
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.attach_money),
+                                  labelStyle: TextStyle(color: subTextColor),
+                                  border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                  prefixIcon: Icon(Icons.attach_money, color: goldColor),
+                                  filled: true,
+                                  fillColor: isDark ? const Color(0xFF0D1117) : Colors.grey.shade100,
                                 ),
                                 validator: (val) =>
                                     val == null || double.tryParse(val) == null
@@ -293,11 +313,17 @@ class _PurchasePageState extends State<PurchasePage> {
                               flex: 2,
                               child: DropdownButtonFormField<Supplier>(
                                 initialValue: _selectedSupplier,
-                                decoration: const InputDecoration(
+                                style: TextStyle(color: textColor),
+                                decoration: InputDecoration(
                                   labelText: 'المورد (اختياري)',
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.person),
+                                  labelStyle: TextStyle(color: subTextColor),
+                                  border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                  prefixIcon: Icon(Icons.person, color: goldColor),
+                                  filled: true,
+                                  fillColor: isDark ? const Color(0xFF0D1117) : Colors.grey.shade100,
                                 ),
+                                dropdownColor: cardBg,
                                 items: _suppliers.map((s) {
                                   return DropdownMenuItem(
                                     value: s,
@@ -313,13 +339,14 @@ class _PurchasePageState extends State<PurchasePage> {
                         const Gap(16),
                         Row(
                           children: [
-                            const Text(
+                            Text(
                               'طريقة الدفع: ',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                              style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
                             ),
                             ChoiceChip(
                               label: const Text('كاش'),
                               selected: _paymentMethod == 'cash',
+                              selectedColor: goldColor.withValues(alpha: 0.3),
                               onSelected: (selected) {
                                 if (selected) {
                                   setState(() => _paymentMethod = 'cash');
@@ -330,6 +357,7 @@ class _PurchasePageState extends State<PurchasePage> {
                             ChoiceChip(
                               label: const Text('آجل (على الحساب)'),
                               selected: _paymentMethod == 'credit',
+                              selectedColor: goldColor.withValues(alpha: 0.3),
                               onSelected: (selected) {
                                 if (selected) {
                                   setState(() => _paymentMethod = 'credit');
@@ -342,6 +370,8 @@ class _PurchasePageState extends State<PurchasePage> {
                               icon: const Icon(Icons.add),
                               label: const Text('إضافة العملية'),
                               style: ElevatedButton.styleFrom(
+                                backgroundColor: goldColor,
+                                foregroundColor: const Color(0xFF0D1117),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 32,
                                   vertical: 16,
@@ -358,33 +388,22 @@ class _PurchasePageState extends State<PurchasePage> {
 
               const SizedBox(height: 24),
 
-              // Stats Row
               Row(
                 children: [
-                  _buildStatCard(
-                    'إجمالي مشتريات اليوم',
-                    _todayTotal,
-                    Colors.blue,
-                  ),
+                  _buildStatCard('إجمالي مشتريات اليوم', _todayTotal, goldColor, cardBg, textColor, borderColor),
                   const SizedBox(width: 16),
-                  _buildStatCard(
-                    'عمليات آخر 30 يوم',
-                    _recentPurchases.length.toDouble(),
-                    Colors.orange,
-                    isCurrency: false,
-                  ),
+                  _buildStatCard('عمليات آخر 30 يوم', _recentPurchases.length.toDouble(), Colors.tealAccent, cardBg, textColor, borderColor, isCurrency: false),
                 ],
               ),
 
               const SizedBox(height: 24),
 
-              // List Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     'آخر المشتريات',
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(color: textColor),
                   ),
                   Row(
                     children: [
@@ -400,8 +419,8 @@ class _PurchasePageState extends State<PurchasePage> {
                       const Gap(8),
                       TextButton.icon(
                         onPressed: _loadData,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('تحديث'),
+                        icon: Icon(Icons.refresh, color: goldColor),
+                        label: Text('تحديث', style: TextStyle(color: goldColor)),
                       ),
                     ],
                   ),
@@ -410,13 +429,12 @@ class _PurchasePageState extends State<PurchasePage> {
 
               const SizedBox(height: 16),
 
-              // Recent Purchases List
               SizedBox(
                 height: 400,
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? Center(child: CircularProgressIndicator(color: goldColor))
                     : _recentPurchases.isEmpty
-                    ? const Center(child: Text('لا توجد مشتريات مسجلة'))
+                    ? Center(child: Text('لا توجد مشتريات مسجلة', style: TextStyle(color: subTextColor)))
                     : ListView.builder(
                         itemCount: _recentPurchases.length,
                         itemBuilder: (context, index) {
@@ -426,66 +444,71 @@ class _PurchasePageState extends State<PurchasePage> {
                               .firstOrNull;
 
                           return Card(
+                            color: cardBg,
+                            margin: const EdgeInsets.only(bottom: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: borderColor.withValues(alpha: 0.3)),
+                            ),
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor:
-                                    purchase.paymentMethod == 'credit'
-                                    ? Colors.orange
-                                    : Colors.blueAccent,
+                                backgroundColor: purchase.paymentMethod == 'credit'
+                                    ? Colors.orange.withValues(alpha: 0.15)
+                                    : goldColor.withValues(alpha: 0.15),
                                 child: Icon(
                                   purchase.paymentMethod == 'credit'
                                       ? Icons.history
                                       : Icons.shopping_cart,
-                                  color: Colors.white,
+                                  color: purchase.paymentMethod == 'credit'
+                                      ? Colors.orange
+                                      : goldColor,
                                 ),
                               ),
-                              title: Text(purchase.description),
+                              title: Text(purchase.description, style: TextStyle(color: textColor)),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    DateFormat(
-                                      'yyyy/MM/dd HH:mm',
-                                    ).format(purchase.purchaseDate),
+                                    DateFormat('yyyy/MM/dd HH:mm').format(purchase.purchaseDate),
+                                    style: TextStyle(color: subTextColor),
                                   ),
                                   if (supplier != null)
                                     Text(
                                       'المورد: ${supplier.name}',
-                                      style: const TextStyle(
-                                        color: Colors.grey,
-                                        fontSize: 12,
-                                      ),
+                                      style: TextStyle(color: subTextColor, fontSize: 12),
                                     ),
                                 ],
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(
-                                    purchase.paymentMethod == 'credit'
-                                        ? 'آجل'
-                                        : 'كاش',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: purchase.paymentMethod == 'credit'
-                                          ? Colors.orange
-                                          : Colors.green,
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: (purchase.paymentMethod == 'credit' ? Colors.orange : Colors.green)
+                                          .withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      purchase.paymentMethod == 'credit' ? 'آجل' : 'كاش',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: purchase.paymentMethod == 'credit' ? Colors.orange : Colors.green,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   IconButton(
-                                    icon: const Icon(Icons.print, size: 20),
+                                    icon: Icon(Icons.print, size: 20, color: goldColor),
                                     tooltip: 'إعادة طباعة',
                                     onPressed: () async {
-                                      final scaffoldMessenger =
-                                          ScaffoldMessenger.of(context);
+                                      final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-                                      // Create purchase data for UnifiedPrintService
                                       final purchaseItems = [
                                         ups.InvoiceItem(
                                           id: 0,
-                                          invoiceId:
-                                              int.tryParse(purchase.id) ?? 0,
+                                          invoiceId: int.tryParse(purchase.id) ?? 0,
                                           description: purchase.description,
                                           unit: 'قطعة',
                                           quantity: 1,
@@ -504,17 +527,13 @@ class _PurchasePageState extends State<PurchasePage> {
                                       final purchaseInvoice = ups.Invoice(
                                         id: int.tryParse(purchase.id) ?? 0,
                                         invoiceNumber: 'PUR-${purchase.id}',
-                                        customerName:
-                                            supplier?.name ?? 'مورد غير محدد',
+                                        customerName: supplier?.name ?? 'مورد غير محدد',
                                         customerPhone: '',
                                         customerZipCode: '',
                                         customerState: '',
                                         invoiceDate: purchase.purchaseDate,
                                         subtotal: purchase.totalAmount,
-                                        isCreditAccount:
-                                            purchase.paymentMethod
-                                                .toLowerCase() !=
-                                            'cash',
+                                        isCreditAccount: purchase.paymentMethod.toLowerCase() != 'cash',
                                         previousBalance: 0.0,
                                         totalAmount: purchase.totalAmount,
                                       );
@@ -525,11 +544,8 @@ class _PurchasePageState extends State<PurchasePage> {
                                         storeInfo: storeInfo,
                                       );
 
-                                      // Print using new SOP 4.0 format
-                                      await ups
-                                          .UnifiedPrintService.printToThermalPrinter(
-                                        documentType:
-                                            ups.DocumentType.salesInvoice,
+                                      await ups.UnifiedPrintService.printToThermalPrinter(
+                                        documentType: ups.DocumentType.salesInvoice,
                                         data: invoiceData,
                                       );
                                     },
@@ -551,12 +567,15 @@ class _PurchasePageState extends State<PurchasePage> {
   Widget _buildStatCard(
     String title,
     double value,
-    Color color, {
+    Color color,
+    Color cardBg,
+    Color textColor,
+    Color borderColor, {
     bool isCurrency = true,
   }) {
     return Expanded(
       child: Card(
-        color: color.withValues(alpha: 0.1),
+        color: cardBg,
         shape: RoundedRectangleBorder(
           side: BorderSide(color: color.withValues(alpha: 0.3)),
           borderRadius: BorderRadius.circular(12),
@@ -575,8 +594,9 @@ class _PurchasePageState extends State<PurchasePage> {
                 isCurrency
                     ? '${value.toStringAsFixed(2)} ج.م'
                     : value.toInt().toString(),
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                style: TextStyle(
                   color: color,
+                  fontSize: 22,
                   fontWeight: FontWeight.bold,
                 ),
               ),

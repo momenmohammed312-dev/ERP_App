@@ -69,6 +69,30 @@ class SalesReturnsDao extends DatabaseAccessor<AppDatabase>
     return getTotalReturnsByDateRange(start, end);
   }
 
+  /// معالجة مرتجع كامل مع تحديث المخزون في معاملة واحدة
+  Future<int> processReturn({
+    required SalesReturnsCompanion returnCompanion,
+    required List<SalesReturnItemsCompanion> items,
+  }) async {
+    int returnId = 0;
+    await db.transaction(() async {
+      returnId = await into(salesReturns).insert(returnCompanion);
+
+      for (final item in items) {
+        final itemWithReturnId = item.copyWith(returnId: Value(returnId));
+        await into(salesReturnItems).insert(itemWithReturnId);
+
+        final product = await db.productDao.getProductById(item.productId.value);
+        if (product != null) {
+          await db.productDao.updateProduct(
+            product.copyWith(quantity: product.quantity + item.quantity.value),
+          );
+        }
+      }
+    });
+    return returnId;
+  }
+
   /// مراقبة كل المرتجعات (Stream)
   Stream<List<SalesReturn>> watchAllReturns() =>
       (select(salesReturns)

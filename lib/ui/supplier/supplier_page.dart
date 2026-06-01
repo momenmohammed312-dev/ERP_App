@@ -22,7 +22,6 @@ class _SupplierPageState extends State<SupplierPage> {
   final ExportService _exportService = ExportService();
   bool _isLoading = true;
   String? _error;
-  // FIX: added missing summary metrics
   double _paidThisMonth = 0.0;
   int _activeSuppliers = 0;
 
@@ -54,9 +53,9 @@ class _SupplierPageState extends State<SupplierPage> {
     } catch (e) {
       if (mounted) {
         setState(() => _error = 'فشل تحميل بيانات الموردين: $e');
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('خطأ في تحميل الموردين: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في تحميل الموردين: $e')),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -83,7 +82,6 @@ class _SupplierPageState extends State<SupplierPage> {
       }
     }
 
-    // FIX: calculate paid this month from purchases table
     double paidThisMonth = 0.0;
     try {
       final now = DateTime.now();
@@ -143,12 +141,16 @@ class _SupplierPageState extends State<SupplierPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
         title: const Text('تأكيد الحذف'),
-        content: Text('هل أنت متأكد من حذف المورد ${supplier.name}؟'),
+        content: Text(
+          'هل أنت متأكد من حذف المورد ${supplier.name}؟',
+          style: const TextStyle(color: Color(0xFFE6EDF3)),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
+            child: const Text('إلغاء', style: TextStyle(color: Color(0xFFC9A84C))),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -163,16 +165,16 @@ class _SupplierPageState extends State<SupplierPage> {
       try {
         await widget.db.supplierDao.deleteSupplier(supplier.id);
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('تم حذف المورد بنجاح')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم حذف المورد بنجاح')),
+          );
           _loadSuppliers();
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('فشل حذف المورد: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('فشل حذف المورد: $e')),
+          );
         }
       }
     }
@@ -188,8 +190,7 @@ class _SupplierPageState extends State<SupplierPage> {
           'name': supplier.name,
           'phone': supplier.phone ?? '',
           'address': supplier.address ?? '',
-          'balance':
-              supplierBalances[supplier.id]?.toStringAsFixed(2) ?? '0.00',
+          'balance': supplierBalances[supplier.id]?.toStringAsFixed(2) ?? '0.00',
           'status': supplier.status == 'Active' ? 'نشط' : 'غير نشط',
         };
       }).toList();
@@ -209,27 +210,38 @@ class _SupplierPageState extends State<SupplierPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('فشل التصدير: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل التصدير: $e')),
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0D1117) : Colors.grey.shade50;
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
+    final textColor = isDark ? const Color(0xFFE6EDF3) : Colors.black87;
+    final subTextColor = isDark ? const Color(0xFF8B949E) : Colors.black54;
+    final goldColor = const Color(0xFFC9A84C);
+    final borderColor = isDark ? const Color(0xFF30363D) : Colors.grey.shade300;
+
     return Scaffold(
+      backgroundColor: bgColor,
       appBar: AppBar(
+        backgroundColor: bgColor,
+        foregroundColor: textColor,
+        elevation: 0,
         title: const Text('إدارة الموردين'),
-        centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.add),
+            icon: Icon(Icons.add, color: goldColor),
             onPressed: () => _showAddEditSupplierDialog(),
             tooltip: 'إضافة مورد جديد',
           ),
           IconButton(
-            icon: const Icon(Icons.file_download),
+            icon: Icon(Icons.file_download, color: goldColor),
             onPressed: _exportToExcel,
             tooltip: 'تصدير إلى إكسل',
           ),
@@ -241,16 +253,20 @@ class _SupplierPageState extends State<SupplierPage> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: goldColor))
           : _error != null
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(_error!),
+                  Text(_error!, style: TextStyle(color: textColor)),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: _loadSuppliers,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: goldColor,
+                      foregroundColor: const Color(0xFF0D1117),
+                    ),
                     child: const Text('إعادة المحاولة'),
                   ),
                 ],
@@ -258,20 +274,28 @@ class _SupplierPageState extends State<SupplierPage> {
             )
           : Column(
               children: [
-                // Search bar
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: TextField(
                     controller: _searchController,
+                    style: TextStyle(color: textColor),
                     decoration: InputDecoration(
                       hintText: 'ابحث عن مورد...',
-                      prefixIcon: const Icon(Icons.search),
+                      hintStyle: TextStyle(color: subTextColor),
+                      prefixIcon: Icon(Icons.search, color: goldColor),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: borderColor),
                       ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: borderColor),
+                      ),
+                      filled: true,
+                      fillColor: cardBg,
                       suffixIcon: _searchController.text.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(Icons.clear),
+                              icon: Icon(Icons.clear, color: subTextColor),
                               onPressed: () {
                                 _searchController.clear();
                                 _searchSuppliers('');
@@ -283,9 +307,8 @@ class _SupplierPageState extends State<SupplierPage> {
                   ),
                 ),
 
-                // Summary Cards
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.0),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: Row(
                     children: [
                       Text(
@@ -293,6 +316,7 @@ class _SupplierPageState extends State<SupplierPage> {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          color: textColor,
                         ),
                       ),
                     ],
@@ -307,20 +331,18 @@ class _SupplierPageState extends State<SupplierPage> {
                           title: 'إجمالي الموردين',
                           value: suppliers.length.toString(),
                           icon: Icons.people,
-                          color: Colors.blue,
+                          color: goldColor,
                         ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: SupplierSummaryItem(
                           title: 'الديون المستحقة',
-                          value:
-                              '${supplierBalances.values.where((b) => b > 0).fold(0.0, (sum, b) => sum + b).toStringAsFixed(2)} ج.م',
+                          value: '${supplierBalances.values.where((b) => b > 0).fold(0.0, (sum, b) => sum + b).toStringAsFixed(2)} ج.م',
                           icon: Icons.money_off,
-                          color: Colors.red,
+                          color: Colors.redAccent,
                         ),
                       ),
-                      // FIX: added missing cards
                       const SizedBox(width: 16),
                       Expanded(
                         child: SupplierSummaryItem(
@@ -336,37 +358,29 @@ class _SupplierPageState extends State<SupplierPage> {
                           title: 'موردون نشطون',
                           value: _activeSuppliers.toString(),
                           icon: Icons.check_circle,
-                          color: Colors.teal,
+                          color: Colors.tealAccent,
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                // Supplier List
                 Expanded(
                   child: filteredSuppliers.isEmpty
                       ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(
-                                Icons.business,
-                                size: 64,
-                                color: Colors.grey,
-                              ),
+                              Icon(Icons.business, size: 64, color: subTextColor),
                               const SizedBox(height: 16),
                               Text(
                                 'لا توجد موردين ${_searchController.text.isNotEmpty ? 'مطابقين للبحث' : 'مسجلين'}',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey,
-                                ),
+                                style: TextStyle(fontSize: 18, color: subTextColor),
                               ),
                               if (_searchController.text.isEmpty)
                                 TextButton(
                                   onPressed: () => _showAddEditSupplierDialog(),
-                                  child: const Text('إضافة مورد جديد'),
+                                  child: const Text('إضافة مورد جديد', style: TextStyle(color: Color(0xFFC9A84C))),
                                 ),
                             ],
                           ),
@@ -374,30 +388,26 @@ class _SupplierPageState extends State<SupplierPage> {
                       : SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: DataTable(
-                            border: TableBorder.all(
-                              color: Colors.grey.shade300,
-                            ),
+                            border: TableBorder.all(color: borderColor),
                             columnSpacing: 24,
                             headingRowColor: WidgetStateColor.resolveWith(
-                              (states) => Colors.grey.shade100,
+                              (states) => const Color(0xFF1E1E2C),
                             ),
-                            columns: const [
-                              DataColumn(label: Text('م')),
-                              DataColumn(label: Text('اسم المورد')),
-                              DataColumn(label: Text('الهاتف')),
-                              DataColumn(label: Text('العنوان')),
-                              DataColumn(label: Text('الرصيد')),
-                              DataColumn(label: Text('الحالة')),
-                              DataColumn(label: Text('الإجراءات')),
+                            dataTextStyle: TextStyle(color: textColor),
+                            columns: [
+                              DataColumn(label: Text('م', style: TextStyle(color: goldColor))),
+                              DataColumn(label: Text('اسم المورد', style: TextStyle(color: goldColor))),
+                              DataColumn(label: Text('الهاتف', style: TextStyle(color: goldColor))),
+                              DataColumn(label: Text('العنوان', style: TextStyle(color: goldColor))),
+                              DataColumn(label: Text('الرصيد', style: TextStyle(color: goldColor))),
+                              DataColumn(label: Text('الحالة', style: TextStyle(color: goldColor))),
+                              DataColumn(label: Text('الإجراءات', style: TextStyle(color: goldColor))),
                             ],
                             rows: filteredSuppliers.map((supplier) {
-                              final balance =
-                                  supplierBalances[supplier.id] ?? 0.0;
+                              final balance = supplierBalances[supplier.id] ?? 0.0;
                               return DataRow(
                                 cells: [
-                                  DataCell(
-                                    Text('${suppliers.indexOf(supplier) + 1}'),
-                                  ),
+                                  DataCell(Text('${suppliers.indexOf(supplier) + 1}')),
                                   DataCell(Text(supplier.name)),
                                   DataCell(Text(supplier.phone ?? '')),
                                   DataCell(Text(supplier.address ?? '')),
@@ -405,23 +415,25 @@ class _SupplierPageState extends State<SupplierPage> {
                                     Text(
                                       '${balance.toStringAsFixed(2)} ج.م',
                                       style: TextStyle(
-                                        color: balance >= 0
-                                            ? Colors.green
-                                            : Colors.red,
+                                        color: balance >= 0 ? Colors.green : Colors.redAccent,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ),
                                   DataCell(
-                                    Text(
-                                      supplier.status == 'Active'
-                                          ? 'نشط'
-                                          : 'غير نشط',
-                                      style: TextStyle(
-                                        color: supplier.status == 'Active'
-                                            ? Colors.green
-                                            : Colors.red,
-                                        fontWeight: FontWeight.bold,
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: (supplier.status == 'Active' ? Colors.green : Colors.redAccent)
+                                            .withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        supplier.status == 'Active' ? 'نشط' : 'غير نشط',
+                                        style: TextStyle(
+                                          color: supplier.status == 'Active' ? Colors.green : Colors.redAccent,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -430,23 +442,13 @@ class _SupplierPageState extends State<SupplierPage> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         IconButton(
-                                          icon: const Icon(
-                                            Icons.edit,
-                                            color: Colors.blue,
-                                          ),
-                                          onPressed: () =>
-                                              _showAddEditSupplierDialog(
-                                                supplier: supplier,
-                                              ),
+                                          icon: Icon(Icons.edit, color: goldColor),
+                                          onPressed: () => _showAddEditSupplierDialog(supplier: supplier),
                                           tooltip: 'تعديل',
                                         ),
                                         IconButton(
-                                          icon: const Icon(
-                                            Icons.delete,
-                                            color: Colors.red,
-                                          ),
-                                          onPressed: () =>
-                                              _deleteSupplier(supplier),
+                                          icon: const Icon(Icons.delete, color: Colors.redAccent),
+                                          onPressed: () => _deleteSupplier(supplier),
                                           tooltip: 'حذف',
                                         ),
                                       ],

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/settings_service.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
@@ -71,6 +72,15 @@ class _AddInvoiceDialogState extends ConsumerState<AddInvoiceDialog> {
 
   Future<void> _checkDayAndLoadData() async {
     final db = widget.db;
+
+    // Step 0: Validate Business Info
+    final bizName = await SettingsService.getBusinessName();
+    if (bizName == 'المحل التجاري' || bizName.isEmpty) {
+      if (mounted) {
+        _showBusinessSetupRequired(context);
+      }
+      return;
+    }
 
     // Step 1c: Validate Day Status
     final isOpen = await db.dayDao.isDayOpen();
@@ -429,6 +439,33 @@ class _AddInvoiceDialogState extends ConsumerState<AddInvoiceDialog> {
         ).showSnackBar(SnackBar(content: Text('${l10n.error}: $e')));
       }
     }
+  }
+
+  void _showBusinessSetupRequired(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Row(children: [
+            Icon(Icons.business, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('معلومات المتجر مطلوبة'),
+          ]),
+          content: const Text('يرجى إعداد معلومات المتجر (الاسم والهاتف) من شاشة الإعدادات قبل إنشاء الفواتير.'),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('حسناً'),
+            ),
+          ],
+        ),
+      ),
+    );
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   @override

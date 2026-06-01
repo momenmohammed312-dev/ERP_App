@@ -21,9 +21,12 @@ class _ProductFormState extends State<ProductForm> {
   late TextEditingController priceCtrl;
   late TextEditingController costPriceCtrl;
   late TextEditingController quantityCtrl;
+  late TextEditingController minStockCtrl;
   late TextEditingController barcodeCtrl;
   late TextEditingController categoryCtrl;
   late TextEditingController unitCtrl;
+  late TextEditingController cartonQtyCtrl;
+  late TextEditingController cartonPriceCtrl;
   String selectedStatus = 'Active';
 
   @override
@@ -39,9 +42,18 @@ class _ProductFormState extends State<ProductForm> {
     quantityCtrl = TextEditingController(
       text: widget.product?.quantity.toString() ?? '',
     );
+    minStockCtrl = TextEditingController(
+      text: widget.product?.minStockLevel?.toString() ?? '0',
+    );
     barcodeCtrl = TextEditingController(text: widget.product?.barcode ?? '');
     categoryCtrl = TextEditingController(text: widget.product?.category ?? '');
     unitCtrl = TextEditingController(text: widget.product?.unit ?? 'قطعة');
+    cartonQtyCtrl = TextEditingController(
+      text: widget.product?.cartonQuantity?.toString() ?? '',
+    );
+    cartonPriceCtrl = TextEditingController(
+      text: widget.product?.cartonPrice?.toString() ?? '',
+    );
     selectedStatus = widget.product?.status ?? 'Active';
   }
 
@@ -51,9 +63,12 @@ class _ProductFormState extends State<ProductForm> {
     priceCtrl.dispose();
     costPriceCtrl.dispose();
     quantityCtrl.dispose();
+    minStockCtrl.dispose();
     barcodeCtrl.dispose();
     categoryCtrl.dispose();
     unitCtrl.dispose();
+    cartonQtyCtrl.dispose();
+    cartonPriceCtrl.dispose();
     super.dispose();
   }
 
@@ -62,10 +77,13 @@ class _ProductFormState extends State<ProductForm> {
       try {
         final newPrice = double.parse(priceCtrl.text);
         final newQuantity = int.parse(quantityCtrl.text);
+        final newMinStock = int.tryParse(minStockCtrl.text) ?? 0;
         final newCostPrice = double.tryParse(costPriceCtrl.text);
         final newBarcode = barcodeCtrl.text.trim().isEmpty ? null : barcodeCtrl.text.trim();
         final newCategory = categoryCtrl.text.trim().isEmpty ? null : categoryCtrl.text.trim();
         final newUnit = unitCtrl.text.trim().isEmpty ? null : unitCtrl.text.trim();
+        final newCartonQty = int.tryParse(cartonQtyCtrl.text);
+        final newCartonPrice = double.tryParse(cartonPriceCtrl.text);
 
         // Check barcode uniqueness
         if (newBarcode != null) {
@@ -103,10 +121,13 @@ class _ProductFormState extends State<ProductForm> {
               name: nameCtrl.text,
               price: newPrice,
               quantity: newQuantity,
+              minStockLevel: Value(newMinStock),
               costPrice: Value(newCostPrice),
               barcode: Value(newBarcode),
               category: Value(newCategory),
               unit: Value(newUnit),
+              cartonQuantity: Value(newCartonQty),
+              cartonPrice: Value(newCartonPrice),
               status: Value(selectedStatus),
             ),
           );
@@ -117,10 +138,13 @@ class _ProductFormState extends State<ProductForm> {
             name: nameCtrl.text,
             price: newPrice,
             quantity: newQuantity,
+            minStockLevel: Value(newMinStock),
             costPrice: Value(newCostPrice),
             barcode: Value(newBarcode),
             category: Value(newCategory),
             unit: Value(newUnit),
+            cartonQuantity: Value(newCartonQty),
+            cartonPrice: Value(newCartonPrice),
             status: Value(selectedStatus),
           );
           
@@ -278,6 +302,18 @@ class _ProductFormState extends State<ProductForm> {
                         ),
                       ),
                     ),
+                    const Gap(16),
+                    Expanded(
+                      child: TextFormField(
+                        controller: minStockCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'الحد الأدنى للمخزون',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.warning_amber),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 const Gap(16),
@@ -301,6 +337,34 @@ class _ProductFormState extends State<ProductForm> {
                           labelText: 'الفئة',
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.category),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Gap(16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: cartonQtyCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'الكمية بالكرتونة',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.inventory),
+                        ),
+                      ),
+                    ),
+                    const Gap(16),
+                    Expanded(
+                      child: TextFormField(
+                        controller: cartonPriceCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'سعر الكرتونة',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.money),
                         ),
                       ),
                     ),

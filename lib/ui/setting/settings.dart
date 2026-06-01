@@ -32,7 +32,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     SettingsService.getCalendarTheme().then((mode) {
       setState(() => _calendarTheme = mode);
     });
-    // load printers and saved choices
     PrinterService.getAvailablePrinters().then((list) async {
       final thermal = await SettingsService.getThermalPrinter();
       final a4 = await SettingsService.getA4Printer();
@@ -43,7 +42,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
     });
 
-    // load business info
     SettingsService.getBusinessInfo().then((info) {
       setState(() {
         _nameController.text = info['name'] ?? '';
@@ -67,36 +65,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0D1117) : Colors.grey.shade50;
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
+    final textColor = isDark ? const Color(0xFFE6EDF3) : Colors.black87;
+    final subTextColor = isDark ? const Color(0xFF8B949E) : Colors.black54;
+    final goldColor = const Color(0xFFC9A84C);
+    final borderColor = isDark ? const Color(0xFF30363D) : Colors.grey.shade300;
+
     return Scaffold(
+      backgroundColor: bgColor,
       appBar: AppBar(
-        title: const Text('Settings'),
-        backgroundColor: Colors.black,
+        title: const Text('الإعدادات'),
+        backgroundColor: bgColor,
+        foregroundColor: textColor,
+        elevation: 0,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
-            'Preferences',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
+          _buildSectionTitle('التفضيلات', goldColor),
           const Gap(10),
 
-          // Dark Mode Toggle
           SwitchListTile(
-            title: Text(context.l10n.dark_mode),
+            title: Text(context.l10n.dark_mode, style: TextStyle(color: textColor)),
             value: _darkModeEnabled,
+            activeColor: goldColor,
             onChanged: (value) {
               setState(() {
                 _darkModeEnabled = value;
               });
             },
-            secondary: const Icon(Icons.dark_mode),
+            secondary: Icon(Icons.dark_mode, color: goldColor),
           ),
 
           const SizedBox(height: 12),
           Text(
             'Calendar Theme',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: textColor),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -111,13 +117,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Radio<CalendarThemeMode>(
                       value: CalendarThemeMode.light,
                       groupValue: _calendarTheme,
+                      activeColor: goldColor,
                       onChanged: (CalendarThemeMode? v) {
                         if (v == null) return;
                         SettingsService.setCalendarTheme(v);
                         setState(() => _calendarTheme = v);
                       },
                     ),
-                    const Text('Light'),
+                    Text('Light', style: TextStyle(color: textColor)),
                   ],
                 ),
               ),
@@ -131,13 +138,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Radio<CalendarThemeMode>(
                       value: CalendarThemeMode.gray,
                       groupValue: _calendarTheme,
+                      activeColor: goldColor,
                       onChanged: (CalendarThemeMode? v) {
                         if (v == null) return;
                         SettingsService.setCalendarTheme(v);
                         setState(() => _calendarTheme = v);
                       },
                     ),
-                    const Text('Gray'),
+                    Text('Gray', style: TextStyle(color: textColor)),
                   ],
                 ),
               ),
@@ -151,13 +159,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Radio<CalendarThemeMode>(
                       value: CalendarThemeMode.dark,
                       groupValue: _calendarTheme,
+                      activeColor: goldColor,
                       onChanged: (CalendarThemeMode? v) {
                         if (v == null) return;
                         SettingsService.setCalendarTheme(v);
                         setState(() => _calendarTheme = v);
                       },
                     ),
-                    const Text('Dark'),
+                    Text('Dark', style: TextStyle(color: textColor)),
                   ],
                 ),
               ),
@@ -166,7 +175,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 12),
           Text(
             'Default Invoice Type',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: textColor),
           ),
           FutureBuilder<String>(
             future: SettingsService.getDefaultInvoiceType(),
@@ -184,13 +193,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Radio<String>(
                           value: 'cash',
                           groupValue: current,
+                          activeColor: goldColor,
                           onChanged: (String? v) async {
                             if (v == null) return;
                             await SettingsService.setDefaultInvoiceType(v);
                             setState(() {});
                           },
                         ),
-                        const Text('Cash (نقدي)'),
+                        Text('Cash (نقدي)', style: TextStyle(color: textColor)),
                       ],
                     ),
                   ),
@@ -204,13 +214,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Radio<String>(
                           value: 'credit',
                           groupValue: current,
+                          activeColor: goldColor,
                           onChanged: (String? v) async {
                             if (v == null) return;
                             await SettingsService.setDefaultInvoiceType(v);
                             setState(() {});
                           },
                         ),
-                        const Text('Credit (آجل)'),
+                        Text('Credit (آجل)', style: TextStyle(color: textColor)),
                       ],
                     ),
                   ),
@@ -219,21 +230,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
 
-          const Divider(height: 32),
-          Text(
-            'Printer Settings',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
+          Divider(color: borderColor, height: 32),
+          _buildSectionTitle('إعدادات الطابعة', goldColor),
           const Gap(10),
           if (_printers.isEmpty) ...[
-            const Text('No printers detected yet.'),
+            Text('لا توجد طابعات متاحة', style: TextStyle(color: subTextColor)),
             const Gap(8),
           ] else ...[
             DropdownButtonFormField<String>(
               initialValue: _selectedThermalPrinter,
-              decoration: const InputDecoration(
+              style: TextStyle(color: textColor),
+              dropdownColor: cardBg,
+              decoration: InputDecoration(
                 labelText: 'Default Thermal Printer',
-                border: OutlineInputBorder(),
+                labelStyle: TextStyle(color: subTextColor),
+                border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
               ),
               items: _printers
                   .where((p) => p['type'] == 'Thermal')
@@ -252,9 +264,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const Gap(8),
             DropdownButtonFormField<String>(
               initialValue: _selectedA4Printer,
-              decoration: const InputDecoration(
+              style: TextStyle(color: textColor),
+              dropdownColor: cardBg,
+              decoration: InputDecoration(
                 labelText: 'Default A4 Printer',
-                border: OutlineInputBorder(),
+                labelStyle: TextStyle(color: subTextColor),
+                border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
               ),
               items: _printers
                   .where((p) => p['type'] == 'A4' || p['type'] == 'PDF')
@@ -273,104 +289,131 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const Gap(12),
             ElevatedButton(
               onPressed: () async {
-                // Refresh printer list
                 final list = await PrinterService.getAvailablePrinters();
                 setState(() => _printers = list);
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: goldColor,
+                foregroundColor: const Color(0xFF0D1117),
+              ),
               child: const Text('Refresh Printers'),
             ),
-            const Divider(height: 32),
           ],
 
-          const Divider(height: 32),
-          Text(
-            'معلومات النشاط التجاري (للتحكم في شكل الفاتورة)',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
+          Divider(color: borderColor, height: 32),
+          _buildSectionTitle('معلومات النشاط التجاري (للتحكم في شكل الفاتورة)', goldColor),
           const Gap(15),
-          _buildBusinessInfoSection(),
-          const Divider(height: 32),
+          _buildBusinessInfoSection(textColor, subTextColor, goldColor, cardBg, borderColor, isDark),
+          Divider(color: borderColor, height: 32),
 
-          Text(
-            context.l10n.other_settings,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
+          _buildSectionTitle(context.l10n.other_settings, goldColor),
           const Gap(10),
 
-          // About
           ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: Text(context.l10n.about),
+            leading: Icon(Icons.info_outline, color: goldColor),
+            title: Text(context.l10n.about, style: TextStyle(color: textColor)),
             onTap: () {
-              // Show about app info
               showAboutDialog(
                 context: context,
                 applicationName: 'POS System',
                 applicationVersion: '1.0.0',
-                applicationIcon: const Icon(Icons.store),
+                applicationIcon: const Icon(Icons.store, color: Color(0xFFC9A84C)),
                 children: [
                   const Text('This is a simple POS system built with Flutter.'),
                 ],
               );
             },
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: subTextColor),
           ),
-          const Divider(height: 32),
+          Divider(color: borderColor, height: 32),
           Center(
             child: Text(
               "${context.l10n.version} 1.0.0",
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(fontSize: 14, color: subTextColor),
             ),
           ),
         ],
       ),
     );
   }
-  Widget _buildBusinessInfoSection() {
+
+  Widget _buildSectionTitle(String title, Color goldColor) {
+    return Text(
+      title,
+      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: goldColor),
+    );
+  }
+
+  Widget _buildBusinessInfoSection(Color textColor, Color subTextColor, Color goldColor, Color cardBg, Color borderColor, bool isDark) {
     return Column(
       children: [
         TextFormField(
           controller: _nameController,
-          decoration: const InputDecoration(
+          style: TextStyle(color: textColor),
+          decoration: InputDecoration(
             labelText: 'اسم النشاط التجاري',
-            border: OutlineInputBorder(),
-            prefixIcon: Icon(Icons.store),
+            labelStyle: TextStyle(color: subTextColor),
+            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            prefixIcon: Icon(Icons.store, color: goldColor),
+            filled: true,
+            fillColor: cardBg,
           ),
         ),
         const Gap(10),
         TextFormField(
           controller: _phoneController,
-          decoration: const InputDecoration(
+          style: TextStyle(color: textColor),
+          decoration: InputDecoration(
             labelText: 'رقم الهاتف',
-            border: OutlineInputBorder(),
-            prefixIcon: Icon(Icons.phone),
+            labelStyle: TextStyle(color: subTextColor),
+            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            prefixIcon: Icon(Icons.phone, color: goldColor),
+            filled: true,
+            fillColor: cardBg,
           ),
         ),
         const Gap(10),
         TextFormField(
           controller: _addressController,
-          decoration: const InputDecoration(
+          style: TextStyle(color: textColor),
+          decoration: InputDecoration(
             labelText: 'العنوان',
-            border: OutlineInputBorder(),
-            prefixIcon: Icon(Icons.location_on),
+            labelStyle: TextStyle(color: subTextColor),
+            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            prefixIcon: Icon(Icons.location_on, color: goldColor),
+            filled: true,
+            fillColor: cardBg,
           ),
         ),
         const Gap(10),
         TextFormField(
           controller: _taxController,
-          decoration: const InputDecoration(
+          style: TextStyle(color: textColor),
+          decoration: InputDecoration(
             labelText: 'الرقم الضريبي (اختياري)',
-            border: OutlineInputBorder(),
-            prefixIcon: Icon(Icons.receipt),
+            labelStyle: TextStyle(color: subTextColor),
+            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            prefixIcon: Icon(Icons.receipt, color: goldColor),
+            filled: true,
+            fillColor: cardBg,
           ),
         ),
         const Gap(10),
         TextFormField(
           controller: _footerController,
-          decoration: const InputDecoration(
+          style: TextStyle(color: textColor),
+          decoration: InputDecoration(
             labelText: 'رسالة أسفل الفاتورة',
-            border: OutlineInputBorder(),
-            prefixIcon: Icon(Icons.message),
+            labelStyle: TextStyle(color: subTextColor),
+            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            prefixIcon: Icon(Icons.message, color: goldColor),
+            filled: true,
+            fillColor: cardBg,
           ),
         ),
         const Gap(15),
@@ -382,8 +425,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             label: const Text('حفظ معلومات النشاط'),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 15),
-              backgroundColor: Colors.green.shade700,
-              foregroundColor: Colors.white,
+              backgroundColor: goldColor,
+              foregroundColor: const Color(0xFF0D1117),
             ),
           ),
         ),
@@ -410,7 +453,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ في الحفظ: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('خطأ في الحفظ: $e'), backgroundColor: Colors.redAccent),
         );
       }
     }

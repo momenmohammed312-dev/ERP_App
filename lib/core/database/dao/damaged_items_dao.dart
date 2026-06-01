@@ -55,4 +55,35 @@ class DamagedItemsDao extends DatabaseAccessor<AppDatabase>
       (select(damagedItems)
             ..orderBy([(t) => OrderingTerm.desc(t.damageDate)]))
           .watch();
+
+  /// JOIN query — returns damaged items with product name (eliminates nested FutureBuilder)
+  Future<List<DamagedItemWithProduct>> getAllDamagedItemsWithProducts() async {
+    final query = select(damagedItems).join([
+      innerJoin(db.products, db.products.id.equalsExp(damagedItems.productId)),
+    ])
+      ..orderBy([OrderingTerm.desc(damagedItems.damageDate)]);
+
+    return query.map((row) => DamagedItemWithProduct(
+      item: row.readTable(damagedItems),
+      productName: row.readTable(db.products).name,
+    )).get();
+  }
+
+  Stream<List<DamagedItemWithProduct>> watchAllDamagedItemsWithProducts() {
+    final query = select(damagedItems).join([
+      innerJoin(db.products, db.products.id.equalsExp(damagedItems.productId)),
+    ])
+      ..orderBy([OrderingTerm.desc(damagedItems.damageDate)]);
+
+    return query.map((row) => DamagedItemWithProduct(
+      item: row.readTable(damagedItems),
+      productName: row.readTable(db.products).name,
+    )).watch();
+  }
+}
+
+class DamagedItemWithProduct {
+  final DamagedItem item;
+  final String productName;
+  const DamagedItemWithProduct({required this.item, required this.productName});
 }

@@ -82,11 +82,21 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0D1117) : Colors.grey.shade50;
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
+    final textColor = isDark ? const Color(0xFFE6EDF3) : Colors.black87;
+    final subTextColor = isDark ? const Color(0xFF8B949E) : Colors.black54;
+    final goldColor = const Color(0xFFC9A84C);
+    final borderColor = isDark ? const Color(0xFF30363D) : Colors.grey.shade300;
+
     return Scaffold(
+      backgroundColor: bgColor,
       appBar: AppBar(
         title: const Text('إدارة الموظفين'),
-        backgroundColor: Colors.blue[700],
-        foregroundColor: Colors.white,
+        backgroundColor: bgColor,
+        foregroundColor: textColor,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -97,57 +107,59 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
       ),
       body: Column(
         children: [
-          _buildSearchBar(),
-          _buildStatsCards(),
+          _buildSearchBar(textColor, subTextColor, goldColor, cardBg, borderColor, isDark),
+          _buildStatsCards(textColor, goldColor, cardBg, borderColor),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(child: CircularProgressIndicator(color: goldColor))
                 : _filteredStaffList.isEmpty
-                ? _buildEmptyState()
-                : _buildStaffList(),
+                ? _buildEmptyState(textColor, subTextColor, goldColor)
+                : _buildStaffList(textColor, subTextColor, goldColor, cardBg, borderColor, isDark),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addNewStaff,
-        backgroundColor: Colors.green,
+        backgroundColor: goldColor,
+        foregroundColor: const Color(0xFF0D1117),
         tooltip: 'إضافة موظف جديد',
-        child: const Icon(Icons.add, color: Colors.white),
+        child: const Icon(Icons.add),
       ),
     );
   }
 
-  Widget _buildSearchBar() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildSearchBar(Color textColor, Color subTextColor, Color goldColor, Color cardBg, Color borderColor, bool isDark) {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: TextField(
         controller: _searchController,
-        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+        style: TextStyle(color: textColor),
         decoration: InputDecoration(
           hintText: 'البحث بالاسم، المنصب، أو الرقم الوظيفي...',
-          hintStyle: TextStyle(
-            color: isDark ? Colors.grey[400] : Colors.grey[600],
-          ),
-          prefixIcon: Icon(
-            Icons.search,
-            color: isDark ? Colors.grey[400] : null,
-          ),
+          hintStyle: TextStyle(color: subTextColor),
+          prefixIcon: Icon(Icons.search, color: goldColor),
           suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear),
+                  icon: Icon(Icons.clear, color: subTextColor),
                   onPressed: () => _searchController.clear(),
                 )
               : null,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: borderColor),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: borderColor),
+          ),
           filled: true,
-          fillColor: isDark ? Colors.grey[800] : Colors.white,
+          fillColor: cardBg,
         ),
       ),
     );
   }
 
-  Widget _buildStatsCards() {
+  Widget _buildStatsCards(Color textColor, Color goldColor, Color cardBg, Color borderColor) {
     final activeStaff = _staffList
         .where((s) => s.status == 'active' && s.isActive)
         .length;
@@ -161,101 +173,64 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Row(
         children: [
-          Expanded(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Text(
-                      '$activeStaff',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    Text(
-                      'موظف نشط',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          _buildStatCard('$activeStaff', 'موظف نشط', Colors.green, cardBg, borderColor),
           const SizedBox(width: 8),
-          Expanded(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Text(
-                      '$totalStaff',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(
-                            color: Colors.blue,
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    Text(
-                      'إجمالي الموظفين',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          _buildStatCard('$totalStaff', 'إجمالي الموظفين', goldColor, cardBg, borderColor),
           const SizedBox(width: 8),
-          Expanded(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Text(
-                      totalSalary.toStringAsFixed(0),
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(
-                            color: Colors.orange,
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    Text(
-                      'إجمالي المرتبات',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          _buildStatCard(totalSalary.toStringAsFixed(0), 'إجمالي المرتبات', Colors.tealAccent, cardBg, borderColor),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildStatCard(String value, String label, Color color, Color cardBg, Color borderColor) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(Color textColor, Color subTextColor, Color goldColor) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.people_outline, size: 80, color: Colors.grey[400]),
+          Icon(Icons.people_outline, size: 80, color: subTextColor),
           const SizedBox(height: 16),
           Text(
             'لا يوجد موظفين',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(color: Colors.grey[600]),
+            style: TextStyle(fontSize: 22, color: textColor),
           ),
           const SizedBox(height: 8),
           Text(
             'اضغط على زر الإضافة لإنشاء موظف جديد',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
+            style: TextStyle(color: subTextColor),
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
@@ -263,8 +238,8 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
             icon: const Icon(Icons.add),
             label: const Text('إضافة موظف جديد'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
+              backgroundColor: goldColor,
+              foregroundColor: const Color(0xFF0D1117),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
           ),
@@ -273,30 +248,35 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
     );
   }
 
-  Widget _buildStaffList() {
+  Widget _buildStaffList(Color textColor, Color subTextColor, Color goldColor, Color cardBg, Color borderColor, bool isDark) {
     return ListView.builder(
       padding: const EdgeInsets.all(8.0),
       itemCount: _filteredStaffList.length,
       itemBuilder: (context, index) {
         final staff = _filteredStaffList[index];
-        return _buildStaffCard(staff);
+        return _buildStaffCard(staff, textColor, subTextColor, goldColor, cardBg, borderColor, isDark);
       },
     );
   }
 
-  Widget _buildStaffCard(Staff staff) {
+  Widget _buildStaffCard(Staff staff, Color textColor, Color subTextColor, Color goldColor, Color cardBg, Color borderColor, bool isDark) {
     final isActive = staff.status == 'active' && staff.isActive;
-    final statusColor = isActive ? Colors.green : Colors.red;
+    final statusColor = isActive ? Colors.green : Colors.redAccent;
     final statusText = isActive ? 'نشط' : 'غير نشط';
 
     return Card(
+      color: cardBg,
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: borderColor.withValues(alpha: 0.3)),
+      ),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: isActive ? Colors.green[100] : Colors.red[100],
+          backgroundColor: isActive ? Colors.green.withValues(alpha: 0.15) : Colors.redAccent.withValues(alpha: 0.15),
           child: Icon(
             Icons.person,
-            color: isActive ? Colors.green[700] : Colors.red[700],
+            color: isActive ? Colors.green : Colors.redAccent,
           ),
         ),
         title: Row(
@@ -304,7 +284,7 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
             Expanded(
               child: Text(
                 staff.name,
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
               ),
             ),
             Container(
@@ -312,7 +292,7 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
               decoration: BoxDecoration(
                 color: statusColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: statusColor),
+                border: Border.all(color: statusColor.withValues(alpha: 0.5)),
               ),
               child: Text(
                 statusText,
@@ -328,31 +308,28 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(staff.position),
+            Text(staff.position, style: TextStyle(color: subTextColor)),
             const SizedBox(height: 4),
             Row(
               children: [
-                Icon(Icons.badge, size: 16, color: Colors.grey[600]),
+                Icon(Icons.badge, size: 16, color: subTextColor),
                 const SizedBox(width: 4),
-                Text(staff.staffId, style: TextStyle(color: Colors.grey[600])),
+                Text(staff.staffId, style: TextStyle(color: subTextColor)),
                 const SizedBox(width: 16),
-                Icon(Icons.phone, size: 16, color: Colors.grey[600]),
+                Icon(Icons.phone, size: 16, color: subTextColor),
                 const SizedBox(width: 4),
-                Text(
-                  staff.phone ?? 'لا يوجد',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
+                Text(staff.phone ?? 'لا يوجد', style: TextStyle(color: subTextColor)),
               ],
             ),
             const SizedBox(height: 4),
             Row(
               children: [
-                Icon(Icons.attach_money, size: 16, color: Colors.green[600]),
+                Icon(Icons.attach_money, size: 16, color: Colors.green),
                 const SizedBox(width: 4),
                 Text(
                   'المرتب الأساسي: ${staff.basicSalary.toStringAsFixed(2)} ج.م',
                   style: TextStyle(
-                    color: Colors.green[700],
+                    color: Colors.green,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -361,57 +338,59 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
           ],
         ),
         trailing: PopupMenuButton<String>(
+          color: cardBg,
+          iconColor: subTextColor,
           onSelected: (value) => _handleMenuAction(value, staff),
           itemBuilder: (context) => [
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'view',
               child: Row(
                 children: [
-                  Icon(Icons.visibility, color: Colors.blue),
-                  SizedBox(width: 8),
-                  Text('عرض التفاصيل'),
+                  Icon(Icons.visibility, color: goldColor),
+                  const SizedBox(width: 8),
+                  Text('عرض التفاصيل', style: TextStyle(color: textColor)),
                 ],
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'edit',
               child: Row(
                 children: [
                   Icon(Icons.edit, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Text('تعديل'),
+                  const SizedBox(width: 8),
+                  Text('تعديل', style: TextStyle(color: textColor)),
                 ],
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'attendance',
               child: Row(
                 children: [
                   Icon(Icons.schedule, color: Colors.green),
-                  SizedBox(width: 8),
-                  Text('سجل الحضور'),
+                  const SizedBox(width: 8),
+                  Text('سجل الحضور', style: TextStyle(color: textColor)),
                 ],
               ),
             ),
             if (isActive) ...[
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'terminate',
                 child: Row(
                   children: [
-                    Icon(Icons.block, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('إنهاء الخدمة'),
+                    Icon(Icons.block, color: Colors.redAccent),
+                    const SizedBox(width: 8),
+                    Text('إنهاء الخدمة', style: TextStyle(color: textColor)),
                   ],
                 ),
               ),
             ] else ...[
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'activate',
                 child: Row(
                   children: [
                     Icon(Icons.check_circle, color: Colors.green),
-                    SizedBox(width: 8),
-                    Text('تفعيل'),
+                    const SizedBox(width: 8),
+                    Text('تفعيل', style: TextStyle(color: textColor)),
                   ],
                 ),
               ),
@@ -481,16 +460,20 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
         title: const Text('تأكيد إنهاء الخدمة'),
-        content: Text('هل أنت متأكد من إنهاء خدمة الموظف "${staff.name}"؟'),
+        content: Text(
+          'هل أنت متأكد من إنهاء خدمة الموظف "${staff.name}"؟',
+          style: const TextStyle(color: Color(0xFFE6EDF3)),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء'),
+            child: const Text('إلغاء', style: TextStyle(color: Color(0xFFC9A84C))),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
             child: const Text('إنهاء الخدمة'),
           ),
         ],
@@ -507,9 +490,9 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
         );
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('خطأ في إنهاء الخدمة: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في إنهاء الخدمة: $e')),
+        );
       }
     }
   }
@@ -519,14 +502,14 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
       await _service.updateStaffInfo(staffId: staff.staffId, status: 'active');
       _loadStaff();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('تم تفعيل الموظف بنجاح')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تفعيل الموظف بنجاح')),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('خطأ في تفعيل الموظف: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في تفعيل الموظف: $e')),
+      );
     }
   }
 }

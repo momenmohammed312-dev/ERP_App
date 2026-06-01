@@ -137,7 +137,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 40;
+  int get schemaVersion => 41;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -167,6 +167,11 @@ class AppDatabase extends _$AppDatabase {
       // 4b. Schema v40 migrations (new tables + columns)
       if (from < 40) {
         await _runV40Migrations(m);
+      }
+
+      // 4c. Schema v41 migrations (new columns)
+      if (from < 41) {
+        await _runV41Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -397,6 +402,24 @@ class AppDatabase extends _$AppDatabase {
       log('v40: Migrated existing invoice payments to InvoicePayments table');
     } catch (e) {
       log('v40 invoice payment migration warning: $e');
+    }
+  }
+
+  /// Migration v41 — adds split payment columns and min stock level
+  Future<void> _runV41Migrations(Migrator m) async {
+    final columnMigrations = [
+      'ALTER TABLE products ADD COLUMN min_stock_level INTEGER DEFAULT 0',
+      'ALTER TABLE invoices ADD COLUMN cash_amount REAL DEFAULT 0',
+      'ALTER TABLE invoices ADD COLUMN card_amount REAL DEFAULT 0',
+      'ALTER TABLE invoices ADD COLUMN credit_amount REAL DEFAULT 0',
+    ];
+
+    for (final sql in columnMigrations) {
+      try {
+        await customStatement(sql);
+      } catch (e) {
+        log('V41 migration warning (column may exist): $e');
+      }
     }
   }
 

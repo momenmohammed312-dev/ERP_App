@@ -41,12 +41,22 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0D1117) : Colors.grey.shade50;
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
+    final textColor = isDark ? const Color(0xFFE6EDF3) : Colors.black87;
+    final subTextColor = isDark ? const Color(0xFF8B949E) : Colors.black54;
+    final goldColor = const Color(0xFFC9A84C);
+    final borderColor = isDark ? const Color(0xFF30363D) : Colors.grey.shade300;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
+        backgroundColor: bgColor,
         appBar: AppBar(
+          backgroundColor: bgColor,
+          foregroundColor: textColor,
+          elevation: 0,
           title: const Text('إدارة العملاء'),
           actions: [
             IconButton(
@@ -57,21 +67,27 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
         ),
         body: Column(
           children: [
-            // Search and Add Bar
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Row(
                 children: [
                   Expanded(
                     child: TextField(
+                      style: TextStyle(color: textColor),
                       decoration: InputDecoration(
                         hintText: 'بحث باسم العميل أو رقم الهاتف...',
-                        prefixIcon: const Icon(Icons.search),
+                        hintStyle: TextStyle(color: subTextColor),
+                        prefixIcon: Icon(Icons.search, color: goldColor),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: borderColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: borderColor),
                         ),
                         filled: true,
-                        fillColor: theme.colorScheme.surface,
+                        fillColor: cardBg,
                       ),
                       onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
                     ),
@@ -88,6 +104,8 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
                     icon: const Icon(Icons.add),
                     label: const Text('إضافة عميل'),
                     style: ElevatedButton.styleFrom(
+                      backgroundColor: goldColor,
+                      foregroundColor: const Color(0xFF0D1117),
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
@@ -95,15 +113,11 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
                 ],
               ),
             ),
-            
-            // Stats Row
-            _buildStatsHeader(),
-
-            // List
+            _buildStatsHeader(goldColor, cardBg, textColor, subTextColor),
             Expanded(
-              child: _isLoading 
-                ? const Center(child: CircularProgressIndicator())
-                : _buildCustomerList(),
+              child: _isLoading
+                  ? Center(child: CircularProgressIndicator(color: goldColor))
+                  : _buildCustomerList(textColor, subTextColor, goldColor, cardBg, borderColor, isDark),
             ),
           ],
         ),
@@ -111,7 +125,7 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
     );
   }
 
-  Widget _buildStatsHeader() {
+  Widget _buildStatsHeader(Color goldColor, Color cardBg, Color textColor, Color subTextColor) {
     double totalDebt = 0.0;
     int hasDebtCount = 0;
 
@@ -127,22 +141,22 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          _buildStatCard('إجمالي المديونيات', '${totalDebt.toStringAsFixed(2)} ج.م', Colors.orange),
+          _buildStatCard('إجمالي المديونيات', '${totalDebt.toStringAsFixed(2)} ج.م', goldColor, cardBg, textColor),
           const Gap(12),
-          _buildStatCard('عملاء مديونين', hasDebtCount.toString(), Colors.blue),
+          _buildStatCard('عملاء مديونين', hasDebtCount.toString(), Colors.redAccent, cardBg, textColor),
           const Gap(12),
-          _buildStatCard('إجمالي العملاء', _customers.length.toString(), Colors.grey),
+          _buildStatCard('إجمالي العملاء', _customers.length.toString(), subTextColor, cardBg, textColor),
         ],
       ),
     );
   }
 
-  Widget _buildStatCard(String label, String value, Color color) {
+  Widget _buildStatCard(String label, String value, Color color, Color cardBg, Color textColor) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
+          color: cardBg,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
@@ -151,14 +165,14 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
           children: [
             Text(label, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.bold)),
             const Gap(4),
-            Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCustomerList() {
+  Widget _buildCustomerList(Color textColor, Color subTextColor, Color goldColor, Color cardBg, Color borderColor, bool isDark) {
     final filtered = _customers.where((c) {
       final name = (c['name'] as String? ?? '').toLowerCase();
       final phone = (c['phone'] as String? ?? '').toLowerCase();
@@ -166,7 +180,7 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
     }).toList();
 
     if (filtered.isEmpty) {
-      return const Center(child: Text('لا يوجد عملاء مطابقين للبحث'));
+      return Center(child: Text('لا يوجد عملاء مطابقين للبحث', style: TextStyle(color: subTextColor)));
     }
 
     return ListView.builder(
@@ -175,18 +189,25 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
       itemBuilder: (context, index) {
         final customerMap = filtered[index];
         final balance = (customerMap['balance'] as num?)?.toDouble() ?? 0.0;
-        
+
         return Card(
+          color: cardBg,
           margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: borderColor.withValues(alpha: 0.3)),
+          ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             leading: CircleAvatar(
-              backgroundColor: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-              child: Text(customerMap['name'][0], style: TextStyle(color: Theme.of(context).primaryColor)),
+              backgroundColor: goldColor.withValues(alpha: 0.15),
+              child: Text(
+                customerMap['name'][0],
+                style: TextStyle(color: goldColor, fontWeight: FontWeight.bold),
+              ),
             ),
-            title: Text(customerMap['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(customerMap['phone'] ?? 'بدون هاتف'),
+            title: Text(customerMap['name'], style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+            subtitle: Text(customerMap['phone'] ?? 'بدون هاتف', style: TextStyle(color: subTextColor)),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -199,33 +220,36 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: balance > 0 ? Colors.red : (balance < 0 ? Colors.green : Colors.grey),
+                        color: balance > 0 ? Colors.redAccent : (balance < 0 ? Colors.green : subTextColor),
                       ),
                     ),
                     Text(
                       balance > 0 ? 'عليه (مدين)' : (balance < 0 ? 'له (دائن)' : 'متعادل'),
                       style: TextStyle(
                         fontSize: 10,
-                        color: balance > 0 ? Colors.red : (balance < 0 ? Colors.green : Colors.grey),
+                        color: balance > 0 ? Colors.redAccent : (balance < 0 ? Colors.green : subTextColor),
                       ),
                     ),
                   ],
                 ),
                 const Gap(8),
-                const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                Icon(Icons.arrow_forward_ios, size: 16, color: subTextColor),
               ],
             ),
-            onTap: () => _showCustomerActions(customerMap),
+            onTap: () => _showCustomerActions(customerMap, textColor, subTextColor, goldColor, cardBg, borderColor, isDark),
           ),
         );
       },
     );
   }
 
-  void _showCustomerActions(Map<String, dynamic> customerMap) {
+  void _showCustomerActions(Map<String, dynamic> customerMap, Color textColor, Color subTextColor, Color goldColor, Color cardBg, Color borderColor, bool isDark) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      backgroundColor: cardBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) => Directionality(
         textDirection: TextDirection.rtl,
         child: Padding(
@@ -233,11 +257,14 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(customerMap['name'], style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(
+                customerMap['name'],
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor),
+              ),
               const Gap(24),
               ListTile(
-                leading: const Icon(Icons.edit, color: Colors.blue),
-                title: const Text('تعديل بيانات العميل'),
+                leading: Icon(Icons.edit, color: goldColor),
+                title: Text('تعديل بيانات العميل', style: TextStyle(color: textColor)),
                 onTap: () async {
                   Navigator.pop(context);
                   final db = ref.read(appDatabaseProvider);
@@ -253,7 +280,7 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.description, color: Colors.green),
-                title: const Text('كشف حساب تفصيلي'),
+                title: Text('كشف حساب تفصيلي', style: TextStyle(color: textColor)),
                 onTap: () async {
                   Navigator.pop(context);
                   final db = ref.read(appDatabaseProvider);
@@ -268,18 +295,17 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.payment, color: Colors.orange),
-                title: const Text('تسجيل دفعة (سداد)'),
+                title: Text('تسجيل دفعة (سداد)', style: TextStyle(color: textColor)),
                 onTap: () {
                   Navigator.pop(context);
-                  // TODO: Navigate to Payment Receipt Screen
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('حذف العميل'),
+                leading: const Icon(Icons.delete, color: Colors.redAccent),
+                title: Text('حذف العميل', style: TextStyle(color: textColor)),
                 onTap: () {
                   Navigator.pop(context);
-                  _confirmDelete(customerMap);
+                  _confirmDelete(customerMap, textColor, subTextColor, goldColor, cardBg);
                 },
               ),
             ],
@@ -289,14 +315,21 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
     );
   }
 
-  void _confirmDelete(Map<String, dynamic> customerMap) {
+  void _confirmDelete(Map<String, dynamic> customerMap, Color textColor, Color subTextColor, Color goldColor, Color cardBg) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: cardBg,
         title: const Text('تأكيد الحذف'),
-        content: Text('هل أنت متأكد من حذف العميل "${customerMap['name']}"؟ سيتم إخفاء العميل من القائمة ولكن ستبقى سجلاته المالية موجودة.'),
+        content: Text(
+          'هل أنت متأكد من حذف العميل "${customerMap['name']}"؟ سيتم إخفاء العميل من القائمة ولكن ستبقى سجلاته المالية موجودة.',
+          style: TextStyle(color: textColor),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('إلغاء', style: TextStyle(color: goldColor)),
+          ),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
@@ -304,7 +337,7 @@ class _CustomerPageState extends ConsumerState<CustomerPage> {
               await db.customerDao.deleteCustomer(customerMap['id']);
               _loadCustomers();
             },
-            child: const Text('حذف', style: TextStyle(color: Colors.red)),
+            child: const Text('حذف', style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
