@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/database/app_database.dart';
+import '../../core/models/user_model.dart';
+import '../../core/provider/auth_provider.dart';
 import '../../core/services/unified_print_service.dart' as ups;
+import '../../widgets/permission_guard.dart';
 
 /// Day Management Screen
 /// شاشة إدارة اليومية المركزية
@@ -405,17 +408,55 @@ class _DayManagementScreenState extends ConsumerState<DayManagementScreen>
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: _closeDay,
-                                icon: const Icon(Icons.lock),
-                                label: const Text('إغلاق اليوم'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                  foregroundColor: Colors.white,
+                              child: PermissionGuard(
+                                permission: Permission.closeDay,
+                                fallback: const SizedBox.shrink(),
+                                child: ElevatedButton.icon(
+                                  onPressed: _closeDay,
+                                  icon: const Icon(Icons.lock),
+                                  label: const Text('إغلاق اليوم'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                    foregroundColor: Colors.white,
+                                  ),
                                 ),
                               ),
                             ),
                           ],
+                        ),
+                      ],
+                    ),
+                ),
+              ),
+
+              // Reopen button for closed days
+              if (!_selectedDay!.isOpen)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'إجراءات اليوم المغلق',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        PermissionGuard(
+                          permission: Permission.openDay,
+                          fallback: const SizedBox.shrink(),
+                          child: ElevatedButton.icon(
+                            onPressed: () => _reopenDay(_selectedDay!),
+                            icon: const Icon(Icons.lock_open),
+                            label: const Text('إعادة فتح اليوم'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -618,9 +659,11 @@ class _DayManagementScreenState extends ConsumerState<DayManagementScreen>
       final dayId = todayDay['id'] as int;
       final closingBalance = await _calculateClosingBalance(dayId);
 
+      final currentUser = ref.read(authProvider);
       await widget.db.dayDao.closeDay(
         dayId: dayId,
         closingBalance: closingBalance,
+        closedBy: currentUser?.username ?? '',
       );
       await _loadDays();
       if (mounted) {
@@ -639,6 +682,58 @@ class _DayManagementScreenState extends ConsumerState<DayManagementScreen>
             backgroundColor: Colors.red,
           ),
         );
+      }
+    }
+  }
+
+  Future<void> _reopenDay(Day day) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('إعادة فتح اليوم'),
+        content: Text('هل تريد إعادة فتح يوم ${DateFormat('yyyy-MM-dd').format(day.date)}؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('إعادة فتح'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final currentUser = ref.read(authProvider);
+        await widget.db.dayDao.reopenDay(
+          dayId: day.id,
+          reopenedBy: currentUser?.username ?? '',
+        );
+        await _loadDays();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('تم إعادة فتح اليوم بنجاح'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('خطأ في إعادة فتح اليوم: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }

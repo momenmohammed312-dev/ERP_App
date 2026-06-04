@@ -10,6 +10,7 @@ enum SideBarPage {
   purchases,
   cashier,
   reports,
+  returns,
   users,
   staff,
   settings,

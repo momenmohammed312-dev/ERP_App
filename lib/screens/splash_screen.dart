@@ -108,16 +108,20 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _startSequence() async {
+    if (!mounted) return;
     // Phase 1: Logo appears (600ms)
     await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
     _logoController.forward();
 
     // Phase 2: Text slides in (400ms after logo)
     await Future.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
     _textController.forward();
 
     // Phase 3: Start loading checks
     await Future.delayed(const Duration(milliseconds: 400));
+    if (!mounted) return;
     await _runLoadingChecks();
   }
 

@@ -128,6 +128,18 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     type: DriftSqlType.double,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _minStockLevelMeta = const VerificationMeta(
+    'minStockLevel',
+  );
+  @override
+  late final GeneratedColumn<int> minStockLevel = GeneratedColumn<int>(
+    'min_stock_level',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -141,6 +153,7 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     cartonQuantity,
     cartonPrice,
     costPrice,
+    minStockLevel,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -229,6 +242,15 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         costPrice.isAcceptableOrUnknown(data['cost_price']!, _costPriceMeta),
       );
     }
+    if (data.containsKey('min_stock_level')) {
+      context.handle(
+        _minStockLevelMeta,
+        minStockLevel.isAcceptableOrUnknown(
+          data['min_stock_level']!,
+          _minStockLevelMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -282,6 +304,10 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         DriftSqlType.double,
         data['${effectivePrefix}cost_price'],
       ),
+      minStockLevel: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}min_stock_level'],
+      )!,
     );
   }
 
@@ -303,6 +329,7 @@ class Product extends DataClass implements Insertable<Product> {
   final int? cartonQuantity;
   final double? cartonPrice;
   final double? costPrice;
+  final int minStockLevel;
   const Product({
     required this.id,
     required this.name,
@@ -315,6 +342,7 @@ class Product extends DataClass implements Insertable<Product> {
     this.cartonQuantity,
     this.cartonPrice,
     this.costPrice,
+    required this.minStockLevel,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -344,6 +372,7 @@ class Product extends DataClass implements Insertable<Product> {
     if (!nullToAbsent || costPrice != null) {
       map['cost_price'] = Variable<double>(costPrice);
     }
+    map['min_stock_level'] = Variable<int>(minStockLevel);
     return map;
   }
 
@@ -372,6 +401,7 @@ class Product extends DataClass implements Insertable<Product> {
       costPrice: costPrice == null && nullToAbsent
           ? const Value.absent()
           : Value(costPrice),
+      minStockLevel: Value(minStockLevel),
     );
   }
 
@@ -392,6 +422,7 @@ class Product extends DataClass implements Insertable<Product> {
       cartonQuantity: serializer.fromJson<int?>(json['cartonQuantity']),
       cartonPrice: serializer.fromJson<double?>(json['cartonPrice']),
       costPrice: serializer.fromJson<double?>(json['costPrice']),
+      minStockLevel: serializer.fromJson<int>(json['minStockLevel']),
     );
   }
   @override
@@ -409,6 +440,7 @@ class Product extends DataClass implements Insertable<Product> {
       'cartonQuantity': serializer.toJson<int?>(cartonQuantity),
       'cartonPrice': serializer.toJson<double?>(cartonPrice),
       'costPrice': serializer.toJson<double?>(costPrice),
+      'minStockLevel': serializer.toJson<int>(minStockLevel),
     };
   }
 
@@ -424,6 +456,7 @@ class Product extends DataClass implements Insertable<Product> {
     Value<int?> cartonQuantity = const Value.absent(),
     Value<double?> cartonPrice = const Value.absent(),
     Value<double?> costPrice = const Value.absent(),
+    int? minStockLevel,
   }) => Product(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -438,6 +471,7 @@ class Product extends DataClass implements Insertable<Product> {
         : this.cartonQuantity,
     cartonPrice: cartonPrice.present ? cartonPrice.value : this.cartonPrice,
     costPrice: costPrice.present ? costPrice.value : this.costPrice,
+    minStockLevel: minStockLevel ?? this.minStockLevel,
   );
   Product copyWithCompanion(ProductsCompanion data) {
     return Product(
@@ -456,6 +490,9 @@ class Product extends DataClass implements Insertable<Product> {
           ? data.cartonPrice.value
           : this.cartonPrice,
       costPrice: data.costPrice.present ? data.costPrice.value : this.costPrice,
+      minStockLevel: data.minStockLevel.present
+          ? data.minStockLevel.value
+          : this.minStockLevel,
     );
   }
 
@@ -472,7 +509,8 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('barcode: $barcode, ')
           ..write('cartonQuantity: $cartonQuantity, ')
           ..write('cartonPrice: $cartonPrice, ')
-          ..write('costPrice: $costPrice')
+          ..write('costPrice: $costPrice, ')
+          ..write('minStockLevel: $minStockLevel')
           ..write(')'))
         .toString();
   }
@@ -490,6 +528,7 @@ class Product extends DataClass implements Insertable<Product> {
     cartonQuantity,
     cartonPrice,
     costPrice,
+    minStockLevel,
   );
   @override
   bool operator ==(Object other) =>
@@ -505,7 +544,8 @@ class Product extends DataClass implements Insertable<Product> {
           other.barcode == this.barcode &&
           other.cartonQuantity == this.cartonQuantity &&
           other.cartonPrice == this.cartonPrice &&
-          other.costPrice == this.costPrice);
+          other.costPrice == this.costPrice &&
+          other.minStockLevel == this.minStockLevel);
 }
 
 class ProductsCompanion extends UpdateCompanion<Product> {
@@ -2810,6 +2850,42 @@ class $InvoicesTable extends Invoices with TableInfo<$InvoicesTable, Invoice> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _cashAmountMeta = const VerificationMeta(
+    'cashAmount',
+  );
+  @override
+  late final GeneratedColumn<double> cashAmount = GeneratedColumn<double>(
+    'cash_amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _cardAmountMeta = const VerificationMeta(
+    'cardAmount',
+  );
+  @override
+  late final GeneratedColumn<double> cardAmount = GeneratedColumn<double>(
+    'card_amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _creditAmountMeta = const VerificationMeta(
+    'creditAmount',
+  );
+  @override
+  late final GeneratedColumn<double> creditAmount = GeneratedColumn<double>(
+    'credit_amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2826,6 +2902,9 @@ class $InvoicesTable extends Invoices with TableInfo<$InvoicesTable, Invoice> {
     voidedAt,
     voidReason,
     voidedBy,
+    cashAmount,
+    cardAmount,
+    creditAmount,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2938,6 +3017,27 @@ class $InvoicesTable extends Invoices with TableInfo<$InvoicesTable, Invoice> {
         voidedBy.isAcceptableOrUnknown(data['voided_by']!, _voidedByMeta),
       );
     }
+    if (data.containsKey('cash_amount')) {
+      context.handle(
+        _cashAmountMeta,
+        cashAmount.isAcceptableOrUnknown(data['cash_amount']!, _cashAmountMeta),
+      );
+    }
+    if (data.containsKey('card_amount')) {
+      context.handle(
+        _cardAmountMeta,
+        cardAmount.isAcceptableOrUnknown(data['card_amount']!, _cardAmountMeta),
+      );
+    }
+    if (data.containsKey('credit_amount')) {
+      context.handle(
+        _creditAmountMeta,
+        creditAmount.isAcceptableOrUnknown(
+          data['credit_amount']!,
+          _creditAmountMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3003,6 +3103,18 @@ class $InvoicesTable extends Invoices with TableInfo<$InvoicesTable, Invoice> {
         DriftSqlType.string,
         data['${effectivePrefix}voided_by'],
       ),
+      cashAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}cash_amount'],
+      )!,
+      cardAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}card_amount'],
+      )!,
+      creditAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}credit_amount'],
+      )!,
     );
   }
 
@@ -3027,6 +3139,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
   final DateTime? voidedAt;
   final String? voidReason;
   final String? voidedBy;
+  final double cashAmount;
+  final double cardAmount;
+  final double creditAmount;
   const Invoice({
     required this.id,
     this.invoiceNumber,
@@ -3042,6 +3157,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
     this.voidedAt,
     this.voidReason,
     this.voidedBy,
+    required this.cashAmount,
+    required this.cardAmount,
+    required this.creditAmount,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3078,6 +3196,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
     if (!nullToAbsent || voidedBy != null) {
       map['voided_by'] = Variable<String>(voidedBy);
     }
+    map['cash_amount'] = Variable<double>(cashAmount);
+    map['card_amount'] = Variable<double>(cardAmount);
+    map['credit_amount'] = Variable<double>(creditAmount);
     return map;
   }
 
@@ -3115,6 +3236,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
       voidedBy: voidedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(voidedBy),
+      cashAmount: Value(cashAmount),
+      cardAmount: Value(cardAmount),
+      creditAmount: Value(creditAmount),
     );
   }
 
@@ -3138,6 +3262,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
       voidedAt: serializer.fromJson<DateTime?>(json['voidedAt']),
       voidReason: serializer.fromJson<String?>(json['voidReason']),
       voidedBy: serializer.fromJson<String?>(json['voidedBy']),
+      cashAmount: serializer.fromJson<double>(json['cashAmount']),
+      cardAmount: serializer.fromJson<double>(json['cardAmount']),
+      creditAmount: serializer.fromJson<double>(json['creditAmount']),
     );
   }
   @override
@@ -3158,6 +3285,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
       'voidedAt': serializer.toJson<DateTime?>(voidedAt),
       'voidReason': serializer.toJson<String?>(voidReason),
       'voidedBy': serializer.toJson<String?>(voidedBy),
+      'cashAmount': serializer.toJson<double>(cashAmount),
+      'cardAmount': serializer.toJson<double>(cardAmount),
+      'creditAmount': serializer.toJson<double>(creditAmount),
     };
   }
 
@@ -3176,6 +3306,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
     Value<DateTime?> voidedAt = const Value.absent(),
     Value<String?> voidReason = const Value.absent(),
     Value<String?> voidedBy = const Value.absent(),
+    double? cashAmount,
+    double? cardAmount,
+    double? creditAmount,
   }) => Invoice(
     id: id ?? this.id,
     invoiceNumber: invoiceNumber.present
@@ -3199,6 +3332,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
     voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
     voidReason: voidReason.present ? voidReason.value : this.voidReason,
     voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
+    cashAmount: cashAmount ?? this.cashAmount,
+    cardAmount: cardAmount ?? this.cardAmount,
+    creditAmount: creditAmount ?? this.creditAmount,
   );
   Invoice copyWithCompanion(InvoicesCompanion data) {
     return Invoice(
@@ -3234,6 +3370,15 @@ class Invoice extends DataClass implements Insertable<Invoice> {
           ? data.voidReason.value
           : this.voidReason,
       voidedBy: data.voidedBy.present ? data.voidedBy.value : this.voidedBy,
+      cashAmount: data.cashAmount.present
+          ? data.cashAmount.value
+          : this.cashAmount,
+      cardAmount: data.cardAmount.present
+          ? data.cardAmount.value
+          : this.cardAmount,
+      creditAmount: data.creditAmount.present
+          ? data.creditAmount.value
+          : this.creditAmount,
     );
   }
 
@@ -3253,7 +3398,10 @@ class Invoice extends DataClass implements Insertable<Invoice> {
           ..write('status: $status, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidReason: $voidReason, ')
-          ..write('voidedBy: $voidedBy')
+          ..write('voidedBy: $voidedBy, ')
+          ..write('cashAmount: $cashAmount, ')
+          ..write('cardAmount: $cardAmount, ')
+          ..write('creditAmount: $creditAmount')
           ..write(')'))
         .toString();
   }
@@ -3274,6 +3422,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
     voidedAt,
     voidReason,
     voidedBy,
+    cashAmount,
+    cardAmount,
+    creditAmount,
   );
   @override
   bool operator ==(Object other) =>
@@ -3292,7 +3443,10 @@ class Invoice extends DataClass implements Insertable<Invoice> {
           other.status == this.status &&
           other.voidedAt == this.voidedAt &&
           other.voidReason == this.voidReason &&
-          other.voidedBy == this.voidedBy);
+          other.voidedBy == this.voidedBy &&
+          other.cashAmount == this.cashAmount &&
+          other.cardAmount == this.cardAmount &&
+          other.creditAmount == this.creditAmount);
 }
 
 class InvoicesCompanion extends UpdateCompanion<Invoice> {
@@ -3310,6 +3464,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
   final Value<DateTime?> voidedAt;
   final Value<String?> voidReason;
   final Value<String?> voidedBy;
+  final Value<double> cashAmount;
+  final Value<double> cardAmount;
+  final Value<double> creditAmount;
   const InvoicesCompanion({
     this.id = const Value.absent(),
     this.invoiceNumber = const Value.absent(),
@@ -3325,6 +3482,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
     this.voidedAt = const Value.absent(),
     this.voidReason = const Value.absent(),
     this.voidedBy = const Value.absent(),
+    this.cashAmount = const Value.absent(),
+    this.cardAmount = const Value.absent(),
+    this.creditAmount = const Value.absent(),
   });
   InvoicesCompanion.insert({
     this.id = const Value.absent(),
@@ -3341,6 +3501,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
     this.voidedAt = const Value.absent(),
     this.voidReason = const Value.absent(),
     this.voidedBy = const Value.absent(),
+    this.cashAmount = const Value.absent(),
+    this.cardAmount = const Value.absent(),
+    this.creditAmount = const Value.absent(),
   });
   static Insertable<Invoice> custom({
     Expression<int>? id,
@@ -3357,6 +3520,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
     Expression<DateTime>? voidedAt,
     Expression<String>? voidReason,
     Expression<String>? voidedBy,
+    Expression<double>? cashAmount,
+    Expression<double>? cardAmount,
+    Expression<double>? creditAmount,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -3373,6 +3539,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
       if (voidedAt != null) 'voided_at': voidedAt,
       if (voidReason != null) 'void_reason': voidReason,
       if (voidedBy != null) 'voided_by': voidedBy,
+      if (cashAmount != null) 'cash_amount': cashAmount,
+      if (cardAmount != null) 'card_amount': cardAmount,
+      if (creditAmount != null) 'credit_amount': creditAmount,
     });
   }
 
@@ -3391,6 +3560,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
     Value<DateTime?>? voidedAt,
     Value<String?>? voidReason,
     Value<String?>? voidedBy,
+    Value<double>? cashAmount,
+    Value<double>? cardAmount,
+    Value<double>? creditAmount,
   }) {
     return InvoicesCompanion(
       id: id ?? this.id,
@@ -3407,6 +3579,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
       voidedAt: voidedAt ?? this.voidedAt,
       voidReason: voidReason ?? this.voidReason,
       voidedBy: voidedBy ?? this.voidedBy,
+      cashAmount: cashAmount ?? this.cashAmount,
+      cardAmount: cardAmount ?? this.cardAmount,
+      creditAmount: creditAmount ?? this.creditAmount,
     );
   }
 
@@ -3455,6 +3630,15 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
     if (voidedBy.present) {
       map['voided_by'] = Variable<String>(voidedBy.value);
     }
+    if (cashAmount.present) {
+      map['cash_amount'] = Variable<double>(cashAmount.value);
+    }
+    if (cardAmount.present) {
+      map['card_amount'] = Variable<double>(cardAmount.value);
+    }
+    if (creditAmount.present) {
+      map['credit_amount'] = Variable<double>(creditAmount.value);
+    }
     return map;
   }
 
@@ -3474,7 +3658,10 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
           ..write('status: $status, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidReason: $voidReason, ')
-          ..write('voidedBy: $voidedBy')
+          ..write('voidedBy: $voidedBy, ')
+          ..write('cashAmount: $cashAmount, ')
+          ..write('cardAmount: $cardAmount, ')
+          ..write('creditAmount: $creditAmount')
           ..write(')'))
         .toString();
   }
@@ -5370,6 +5557,50 @@ class $DaysTable extends Days with TableInfo<$DaysTable, Day> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _openedByMeta = const VerificationMeta(
+    'openedBy',
+  );
+  @override
+  late final GeneratedColumn<String> openedBy = GeneratedColumn<String>(
+    'opened_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _closedByMeta = const VerificationMeta(
+    'closedBy',
+  );
+  @override
+  late final GeneratedColumn<String> closedBy = GeneratedColumn<String>(
+    'closed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _reopenedAtMeta = const VerificationMeta(
+    'reopenedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> reopenedAt = GeneratedColumn<DateTime>(
+    'reopened_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _reopenedByMeta = const VerificationMeta(
+    'reopenedBy',
+  );
+  @override
+  late final GeneratedColumn<String> reopenedBy = GeneratedColumn<String>(
+    'reopened_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -5380,6 +5611,10 @@ class $DaysTable extends Days with TableInfo<$DaysTable, Day> {
     notes,
     createdAt,
     closedAt,
+    openedBy,
+    closedBy,
+    reopenedAt,
+    reopenedBy,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5446,6 +5681,30 @@ class $DaysTable extends Days with TableInfo<$DaysTable, Day> {
         closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
       );
     }
+    if (data.containsKey('opened_by')) {
+      context.handle(
+        _openedByMeta,
+        openedBy.isAcceptableOrUnknown(data['opened_by']!, _openedByMeta),
+      );
+    }
+    if (data.containsKey('closed_by')) {
+      context.handle(
+        _closedByMeta,
+        closedBy.isAcceptableOrUnknown(data['closed_by']!, _closedByMeta),
+      );
+    }
+    if (data.containsKey('reopened_at')) {
+      context.handle(
+        _reopenedAtMeta,
+        reopenedAt.isAcceptableOrUnknown(data['reopened_at']!, _reopenedAtMeta),
+      );
+    }
+    if (data.containsKey('reopened_by')) {
+      context.handle(
+        _reopenedByMeta,
+        reopenedBy.isAcceptableOrUnknown(data['reopened_by']!, _reopenedByMeta),
+      );
+    }
     return context;
   }
 
@@ -5487,6 +5746,22 @@ class $DaysTable extends Days with TableInfo<$DaysTable, Day> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}closed_at'],
       ),
+      openedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}opened_by'],
+      ),
+      closedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}closed_by'],
+      ),
+      reopenedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reopened_at'],
+      ),
+      reopenedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reopened_by'],
+      ),
     );
   }
 
@@ -5505,6 +5780,10 @@ class Day extends DataClass implements Insertable<Day> {
   final String? notes;
   final DateTime createdAt;
   final DateTime? closedAt;
+  final String? openedBy;
+  final String? closedBy;
+  final DateTime? reopenedAt;
+  final String? reopenedBy;
   const Day({
     required this.id,
     required this.date,
@@ -5514,6 +5793,10 @@ class Day extends DataClass implements Insertable<Day> {
     this.notes,
     required this.createdAt,
     this.closedAt,
+    this.openedBy,
+    this.closedBy,
+    this.reopenedAt,
+    this.reopenedBy,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5531,6 +5814,18 @@ class Day extends DataClass implements Insertable<Day> {
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || closedAt != null) {
       map['closed_at'] = Variable<DateTime>(closedAt);
+    }
+    if (!nullToAbsent || openedBy != null) {
+      map['opened_by'] = Variable<String>(openedBy);
+    }
+    if (!nullToAbsent || closedBy != null) {
+      map['closed_by'] = Variable<String>(closedBy);
+    }
+    if (!nullToAbsent || reopenedAt != null) {
+      map['reopened_at'] = Variable<DateTime>(reopenedAt);
+    }
+    if (!nullToAbsent || reopenedBy != null) {
+      map['reopened_by'] = Variable<String>(reopenedBy);
     }
     return map;
   }
@@ -5551,6 +5846,18 @@ class Day extends DataClass implements Insertable<Day> {
       closedAt: closedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(closedAt),
+      openedBy: openedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(openedBy),
+      closedBy: closedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedBy),
+      reopenedAt: reopenedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reopenedAt),
+      reopenedBy: reopenedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reopenedBy),
     );
   }
 
@@ -5568,6 +5875,10 @@ class Day extends DataClass implements Insertable<Day> {
       notes: serializer.fromJson<String?>(json['notes']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
+      openedBy: serializer.fromJson<String?>(json['openedBy']),
+      closedBy: serializer.fromJson<String?>(json['closedBy']),
+      reopenedAt: serializer.fromJson<DateTime?>(json['reopenedAt']),
+      reopenedBy: serializer.fromJson<String?>(json['reopenedBy']),
     );
   }
   @override
@@ -5582,6 +5893,10 @@ class Day extends DataClass implements Insertable<Day> {
       'notes': serializer.toJson<String?>(notes),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'closedAt': serializer.toJson<DateTime?>(closedAt),
+      'openedBy': serializer.toJson<String?>(openedBy),
+      'closedBy': serializer.toJson<String?>(closedBy),
+      'reopenedAt': serializer.toJson<DateTime?>(reopenedAt),
+      'reopenedBy': serializer.toJson<String?>(reopenedBy),
     };
   }
 
@@ -5594,6 +5909,10 @@ class Day extends DataClass implements Insertable<Day> {
     Value<String?> notes = const Value.absent(),
     DateTime? createdAt,
     Value<DateTime?> closedAt = const Value.absent(),
+    Value<String?> openedBy = const Value.absent(),
+    Value<String?> closedBy = const Value.absent(),
+    Value<DateTime?> reopenedAt = const Value.absent(),
+    Value<String?> reopenedBy = const Value.absent(),
   }) => Day(
     id: id ?? this.id,
     date: date ?? this.date,
@@ -5605,6 +5924,10 @@ class Day extends DataClass implements Insertable<Day> {
     notes: notes.present ? notes.value : this.notes,
     createdAt: createdAt ?? this.createdAt,
     closedAt: closedAt.present ? closedAt.value : this.closedAt,
+    openedBy: openedBy.present ? openedBy.value : this.openedBy,
+    closedBy: closedBy.present ? closedBy.value : this.closedBy,
+    reopenedAt: reopenedAt.present ? reopenedAt.value : this.reopenedAt,
+    reopenedBy: reopenedBy.present ? reopenedBy.value : this.reopenedBy,
   );
   Day copyWithCompanion(DaysCompanion data) {
     return Day(
@@ -5620,6 +5943,14 @@ class Day extends DataClass implements Insertable<Day> {
       notes: data.notes.present ? data.notes.value : this.notes,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
+      openedBy: data.openedBy.present ? data.openedBy.value : this.openedBy,
+      closedBy: data.closedBy.present ? data.closedBy.value : this.closedBy,
+      reopenedAt: data.reopenedAt.present
+          ? data.reopenedAt.value
+          : this.reopenedAt,
+      reopenedBy: data.reopenedBy.present
+          ? data.reopenedBy.value
+          : this.reopenedBy,
     );
   }
 
@@ -5633,7 +5964,11 @@ class Day extends DataClass implements Insertable<Day> {
           ..write('closingBalance: $closingBalance, ')
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
-          ..write('closedAt: $closedAt')
+          ..write('closedAt: $closedAt, ')
+          ..write('openedBy: $openedBy, ')
+          ..write('closedBy: $closedBy, ')
+          ..write('reopenedAt: $reopenedAt, ')
+          ..write('reopenedBy: $reopenedBy')
           ..write(')'))
         .toString();
   }
@@ -5648,6 +5983,10 @@ class Day extends DataClass implements Insertable<Day> {
     notes,
     createdAt,
     closedAt,
+    openedBy,
+    closedBy,
+    reopenedAt,
+    reopenedBy,
   );
   @override
   bool operator ==(Object other) =>
@@ -5660,7 +5999,11 @@ class Day extends DataClass implements Insertable<Day> {
           other.closingBalance == this.closingBalance &&
           other.notes == this.notes &&
           other.createdAt == this.createdAt &&
-          other.closedAt == this.closedAt);
+          other.closedAt == this.closedAt &&
+          other.openedBy == this.openedBy &&
+          other.closedBy == this.closedBy &&
+          other.reopenedAt == this.reopenedAt &&
+          other.reopenedBy == this.reopenedBy);
 }
 
 class DaysCompanion extends UpdateCompanion<Day> {
@@ -5672,6 +6015,10 @@ class DaysCompanion extends UpdateCompanion<Day> {
   final Value<String?> notes;
   final Value<DateTime> createdAt;
   final Value<DateTime?> closedAt;
+  final Value<String?> openedBy;
+  final Value<String?> closedBy;
+  final Value<DateTime?> reopenedAt;
+  final Value<String?> reopenedBy;
   const DaysCompanion({
     this.id = const Value.absent(),
     this.date = const Value.absent(),
@@ -5681,6 +6028,10 @@ class DaysCompanion extends UpdateCompanion<Day> {
     this.notes = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.closedAt = const Value.absent(),
+    this.openedBy = const Value.absent(),
+    this.closedBy = const Value.absent(),
+    this.reopenedAt = const Value.absent(),
+    this.reopenedBy = const Value.absent(),
   });
   DaysCompanion.insert({
     this.id = const Value.absent(),
@@ -5691,6 +6042,10 @@ class DaysCompanion extends UpdateCompanion<Day> {
     this.notes = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.closedAt = const Value.absent(),
+    this.openedBy = const Value.absent(),
+    this.closedBy = const Value.absent(),
+    this.reopenedAt = const Value.absent(),
+    this.reopenedBy = const Value.absent(),
   }) : date = Value(date);
   static Insertable<Day> custom({
     Expression<int>? id,
@@ -5701,6 +6056,10 @@ class DaysCompanion extends UpdateCompanion<Day> {
     Expression<String>? notes,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? closedAt,
+    Expression<String>? openedBy,
+    Expression<String>? closedBy,
+    Expression<DateTime>? reopenedAt,
+    Expression<String>? reopenedBy,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -5711,6 +6070,10 @@ class DaysCompanion extends UpdateCompanion<Day> {
       if (notes != null) 'notes': notes,
       if (createdAt != null) 'created_at': createdAt,
       if (closedAt != null) 'closed_at': closedAt,
+      if (openedBy != null) 'opened_by': openedBy,
+      if (closedBy != null) 'closed_by': closedBy,
+      if (reopenedAt != null) 'reopened_at': reopenedAt,
+      if (reopenedBy != null) 'reopened_by': reopenedBy,
     });
   }
 
@@ -5723,6 +6086,10 @@ class DaysCompanion extends UpdateCompanion<Day> {
     Value<String?>? notes,
     Value<DateTime>? createdAt,
     Value<DateTime?>? closedAt,
+    Value<String?>? openedBy,
+    Value<String?>? closedBy,
+    Value<DateTime?>? reopenedAt,
+    Value<String?>? reopenedBy,
   }) {
     return DaysCompanion(
       id: id ?? this.id,
@@ -5733,6 +6100,10 @@ class DaysCompanion extends UpdateCompanion<Day> {
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
       closedAt: closedAt ?? this.closedAt,
+      openedBy: openedBy ?? this.openedBy,
+      closedBy: closedBy ?? this.closedBy,
+      reopenedAt: reopenedAt ?? this.reopenedAt,
+      reopenedBy: reopenedBy ?? this.reopenedBy,
     );
   }
 
@@ -5763,6 +6134,18 @@ class DaysCompanion extends UpdateCompanion<Day> {
     if (closedAt.present) {
       map['closed_at'] = Variable<DateTime>(closedAt.value);
     }
+    if (openedBy.present) {
+      map['opened_by'] = Variable<String>(openedBy.value);
+    }
+    if (closedBy.present) {
+      map['closed_by'] = Variable<String>(closedBy.value);
+    }
+    if (reopenedAt.present) {
+      map['reopened_at'] = Variable<DateTime>(reopenedAt.value);
+    }
+    if (reopenedBy.present) {
+      map['reopened_by'] = Variable<String>(reopenedBy.value);
+    }
     return map;
   }
 
@@ -5776,7 +6159,11 @@ class DaysCompanion extends UpdateCompanion<Day> {
           ..write('closingBalance: $closingBalance, ')
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
-          ..write('closedAt: $closedAt')
+          ..write('closedAt: $closedAt, ')
+          ..write('openedBy: $openedBy, ')
+          ..write('closedBy: $closedBy, ')
+          ..write('reopenedAt: $reopenedAt, ')
+          ..write('reopenedBy: $reopenedBy')
           ..write(')'))
         .toString();
   }
@@ -21284,6 +21671,75 @@ class $PayrollTableTable extends PayrollTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _bonusMeta = const VerificationMeta('bonus');
+  @override
+  late final GeneratedColumn<double> bonus = GeneratedColumn<double>(
+    'bonus',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _commissionMeta = const VerificationMeta(
+    'commission',
+  );
+  @override
+  late final GeneratedColumn<double> commission = GeneratedColumn<double>(
+    'commission',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _incentivesMeta = const VerificationMeta(
+    'incentives',
+  );
+  @override
+  late final GeneratedColumn<double> incentives = GeneratedColumn<double>(
+    'incentives',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _rewardsTotalMeta = const VerificationMeta(
+    'rewardsTotal',
+  );
+  @override
+  late final GeneratedColumn<double> rewardsTotal = GeneratedColumn<double>(
+    'rewards_total',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _penaltiesTotalMeta = const VerificationMeta(
+    'penaltiesTotal',
+  );
+  @override
+  late final GeneratedColumn<double> penaltiesTotal = GeneratedColumn<double>(
+    'penalties_total',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _expenseRefIdMeta = const VerificationMeta(
+    'expenseRefId',
+  );
+  @override
+  late final GeneratedColumn<String> expenseRefId = GeneratedColumn<String>(
+    'expense_ref_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -21335,6 +21791,12 @@ class $PayrollTableTable extends PayrollTable
     approvedBy,
     approvedAt,
     notes,
+    bonus,
+    commission,
+    incentives,
+    rewardsTotal,
+    penaltiesTotal,
+    expenseRefId,
     createdAt,
     updatedAt,
   ];
@@ -21559,6 +22021,51 @@ class $PayrollTableTable extends PayrollTable
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
       );
     }
+    if (data.containsKey('bonus')) {
+      context.handle(
+        _bonusMeta,
+        bonus.isAcceptableOrUnknown(data['bonus']!, _bonusMeta),
+      );
+    }
+    if (data.containsKey('commission')) {
+      context.handle(
+        _commissionMeta,
+        commission.isAcceptableOrUnknown(data['commission']!, _commissionMeta),
+      );
+    }
+    if (data.containsKey('incentives')) {
+      context.handle(
+        _incentivesMeta,
+        incentives.isAcceptableOrUnknown(data['incentives']!, _incentivesMeta),
+      );
+    }
+    if (data.containsKey('rewards_total')) {
+      context.handle(
+        _rewardsTotalMeta,
+        rewardsTotal.isAcceptableOrUnknown(
+          data['rewards_total']!,
+          _rewardsTotalMeta,
+        ),
+      );
+    }
+    if (data.containsKey('penalties_total')) {
+      context.handle(
+        _penaltiesTotalMeta,
+        penaltiesTotal.isAcceptableOrUnknown(
+          data['penalties_total']!,
+          _penaltiesTotalMeta,
+        ),
+      );
+    }
+    if (data.containsKey('expense_ref_id')) {
+      context.handle(
+        _expenseRefIdMeta,
+        expenseRefId.isAcceptableOrUnknown(
+          data['expense_ref_id']!,
+          _expenseRefIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -21692,6 +22199,30 @@ class $PayrollTableTable extends PayrollTable
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       ),
+      bonus: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}bonus'],
+      )!,
+      commission: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}commission'],
+      )!,
+      incentives: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}incentives'],
+      )!,
+      rewardsTotal: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}rewards_total'],
+      )!,
+      penaltiesTotal: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}penalties_total'],
+      )!,
+      expenseRefId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}expense_ref_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -21737,6 +22268,12 @@ class Payroll extends DataClass implements Insertable<Payroll> {
   final String? approvedBy;
   final DateTime? approvedAt;
   final String? notes;
+  final double bonus;
+  final double commission;
+  final double incentives;
+  final double rewardsTotal;
+  final double penaltiesTotal;
+  final String? expenseRefId;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Payroll({
@@ -21767,6 +22304,12 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     this.approvedBy,
     this.approvedAt,
     this.notes,
+    required this.bonus,
+    required this.commission,
+    required this.incentives,
+    required this.rewardsTotal,
+    required this.penaltiesTotal,
+    this.expenseRefId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -21813,6 +22356,14 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     }
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
+    }
+    map['bonus'] = Variable<double>(bonus);
+    map['commission'] = Variable<double>(commission);
+    map['incentives'] = Variable<double>(incentives);
+    map['rewards_total'] = Variable<double>(rewardsTotal);
+    map['penalties_total'] = Variable<double>(penaltiesTotal);
+    if (!nullToAbsent || expenseRefId != null) {
+      map['expense_ref_id'] = Variable<String>(expenseRefId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -21862,6 +22413,14 @@ class Payroll extends DataClass implements Insertable<Payroll> {
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
+      bonus: Value(bonus),
+      commission: Value(commission),
+      incentives: Value(incentives),
+      rewardsTotal: Value(rewardsTotal),
+      penaltiesTotal: Value(penaltiesTotal),
+      expenseRefId: expenseRefId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expenseRefId),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -21902,6 +22461,12 @@ class Payroll extends DataClass implements Insertable<Payroll> {
       approvedBy: serializer.fromJson<String?>(json['approvedBy']),
       approvedAt: serializer.fromJson<DateTime?>(json['approvedAt']),
       notes: serializer.fromJson<String?>(json['notes']),
+      bonus: serializer.fromJson<double>(json['bonus']),
+      commission: serializer.fromJson<double>(json['commission']),
+      incentives: serializer.fromJson<double>(json['incentives']),
+      rewardsTotal: serializer.fromJson<double>(json['rewardsTotal']),
+      penaltiesTotal: serializer.fromJson<double>(json['penaltiesTotal']),
+      expenseRefId: serializer.fromJson<String?>(json['expenseRefId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -21937,6 +22502,12 @@ class Payroll extends DataClass implements Insertable<Payroll> {
       'approvedBy': serializer.toJson<String?>(approvedBy),
       'approvedAt': serializer.toJson<DateTime?>(approvedAt),
       'notes': serializer.toJson<String?>(notes),
+      'bonus': serializer.toJson<double>(bonus),
+      'commission': serializer.toJson<double>(commission),
+      'incentives': serializer.toJson<double>(incentives),
+      'rewardsTotal': serializer.toJson<double>(rewardsTotal),
+      'penaltiesTotal': serializer.toJson<double>(penaltiesTotal),
+      'expenseRefId': serializer.toJson<String?>(expenseRefId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -21970,6 +22541,12 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     Value<String?> approvedBy = const Value.absent(),
     Value<DateTime?> approvedAt = const Value.absent(),
     Value<String?> notes = const Value.absent(),
+    double? bonus,
+    double? commission,
+    double? incentives,
+    double? rewardsTotal,
+    double? penaltiesTotal,
+    Value<String?> expenseRefId = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Payroll(
@@ -22004,6 +22581,12 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     approvedBy: approvedBy.present ? approvedBy.value : this.approvedBy,
     approvedAt: approvedAt.present ? approvedAt.value : this.approvedAt,
     notes: notes.present ? notes.value : this.notes,
+    bonus: bonus ?? this.bonus,
+    commission: commission ?? this.commission,
+    incentives: incentives ?? this.incentives,
+    rewardsTotal: rewardsTotal ?? this.rewardsTotal,
+    penaltiesTotal: penaltiesTotal ?? this.penaltiesTotal,
+    expenseRefId: expenseRefId.present ? expenseRefId.value : this.expenseRefId,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -22070,6 +22653,22 @@ class Payroll extends DataClass implements Insertable<Payroll> {
           ? data.approvedAt.value
           : this.approvedAt,
       notes: data.notes.present ? data.notes.value : this.notes,
+      bonus: data.bonus.present ? data.bonus.value : this.bonus,
+      commission: data.commission.present
+          ? data.commission.value
+          : this.commission,
+      incentives: data.incentives.present
+          ? data.incentives.value
+          : this.incentives,
+      rewardsTotal: data.rewardsTotal.present
+          ? data.rewardsTotal.value
+          : this.rewardsTotal,
+      penaltiesTotal: data.penaltiesTotal.present
+          ? data.penaltiesTotal.value
+          : this.penaltiesTotal,
+      expenseRefId: data.expenseRefId.present
+          ? data.expenseRefId.value
+          : this.expenseRefId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -22105,6 +22704,12 @@ class Payroll extends DataClass implements Insertable<Payroll> {
           ..write('approvedBy: $approvedBy, ')
           ..write('approvedAt: $approvedAt, ')
           ..write('notes: $notes, ')
+          ..write('bonus: $bonus, ')
+          ..write('commission: $commission, ')
+          ..write('incentives: $incentives, ')
+          ..write('rewardsTotal: $rewardsTotal, ')
+          ..write('penaltiesTotal: $penaltiesTotal, ')
+          ..write('expenseRefId: $expenseRefId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -22140,6 +22745,12 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     approvedBy,
     approvedAt,
     notes,
+    bonus,
+    commission,
+    incentives,
+    rewardsTotal,
+    penaltiesTotal,
+    expenseRefId,
     createdAt,
     updatedAt,
   ]);
@@ -22174,6 +22785,12 @@ class Payroll extends DataClass implements Insertable<Payroll> {
           other.approvedBy == this.approvedBy &&
           other.approvedAt == this.approvedAt &&
           other.notes == this.notes &&
+          other.bonus == this.bonus &&
+          other.commission == this.commission &&
+          other.incentives == this.incentives &&
+          other.rewardsTotal == this.rewardsTotal &&
+          other.penaltiesTotal == this.penaltiesTotal &&
+          other.expenseRefId == this.expenseRefId &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -22206,6 +22823,12 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
   final Value<String?> approvedBy;
   final Value<DateTime?> approvedAt;
   final Value<String?> notes;
+  final Value<double> bonus;
+  final Value<double> commission;
+  final Value<double> incentives;
+  final Value<double> rewardsTotal;
+  final Value<double> penaltiesTotal;
+  final Value<String?> expenseRefId;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const PayrollTableCompanion({
@@ -22236,6 +22859,12 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     this.approvedBy = const Value.absent(),
     this.approvedAt = const Value.absent(),
     this.notes = const Value.absent(),
+    this.bonus = const Value.absent(),
+    this.commission = const Value.absent(),
+    this.incentives = const Value.absent(),
+    this.rewardsTotal = const Value.absent(),
+    this.penaltiesTotal = const Value.absent(),
+    this.expenseRefId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -22267,6 +22896,12 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     this.approvedBy = const Value.absent(),
     this.approvedAt = const Value.absent(),
     this.notes = const Value.absent(),
+    this.bonus = const Value.absent(),
+    this.commission = const Value.absent(),
+    this.incentives = const Value.absent(),
+    this.rewardsTotal = const Value.absent(),
+    this.penaltiesTotal = const Value.absent(),
+    this.expenseRefId = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
   }) : staffId = Value(staffId),
@@ -22306,6 +22941,12 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     Expression<String>? approvedBy,
     Expression<DateTime>? approvedAt,
     Expression<String>? notes,
+    Expression<double>? bonus,
+    Expression<double>? commission,
+    Expression<double>? incentives,
+    Expression<double>? rewardsTotal,
+    Expression<double>? penaltiesTotal,
+    Expression<String>? expenseRefId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -22338,6 +22979,12 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
       if (approvedBy != null) 'approved_by': approvedBy,
       if (approvedAt != null) 'approved_at': approvedAt,
       if (notes != null) 'notes': notes,
+      if (bonus != null) 'bonus': bonus,
+      if (commission != null) 'commission': commission,
+      if (incentives != null) 'incentives': incentives,
+      if (rewardsTotal != null) 'rewards_total': rewardsTotal,
+      if (penaltiesTotal != null) 'penalties_total': penaltiesTotal,
+      if (expenseRefId != null) 'expense_ref_id': expenseRefId,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -22371,6 +23018,12 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     Value<String?>? approvedBy,
     Value<DateTime?>? approvedAt,
     Value<String?>? notes,
+    Value<double>? bonus,
+    Value<double>? commission,
+    Value<double>? incentives,
+    Value<double>? rewardsTotal,
+    Value<double>? penaltiesTotal,
+    Value<String?>? expenseRefId,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -22402,6 +23055,12 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
       approvedBy: approvedBy ?? this.approvedBy,
       approvedAt: approvedAt ?? this.approvedAt,
       notes: notes ?? this.notes,
+      bonus: bonus ?? this.bonus,
+      commission: commission ?? this.commission,
+      incentives: incentives ?? this.incentives,
+      rewardsTotal: rewardsTotal ?? this.rewardsTotal,
+      penaltiesTotal: penaltiesTotal ?? this.penaltiesTotal,
+      expenseRefId: expenseRefId ?? this.expenseRefId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -22493,6 +23152,24 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (bonus.present) {
+      map['bonus'] = Variable<double>(bonus.value);
+    }
+    if (commission.present) {
+      map['commission'] = Variable<double>(commission.value);
+    }
+    if (incentives.present) {
+      map['incentives'] = Variable<double>(incentives.value);
+    }
+    if (rewardsTotal.present) {
+      map['rewards_total'] = Variable<double>(rewardsTotal.value);
+    }
+    if (penaltiesTotal.present) {
+      map['penalties_total'] = Variable<double>(penaltiesTotal.value);
+    }
+    if (expenseRefId.present) {
+      map['expense_ref_id'] = Variable<String>(expenseRefId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -22532,6 +23209,12 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
           ..write('approvedBy: $approvedBy, ')
           ..write('approvedAt: $approvedAt, ')
           ..write('notes: $notes, ')
+          ..write('bonus: $bonus, ')
+          ..write('commission: $commission, ')
+          ..write('incentives: $incentives, ')
+          ..write('rewardsTotal: $rewardsTotal, ')
+          ..write('penaltiesTotal: $penaltiesTotal, ')
+          ..write('expenseRefId: $expenseRefId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -34003,6 +34686,7 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<int?> cartonQuantity,
       Value<double?> cartonPrice,
       Value<double?> costPrice,
+      Value<int> minStockLevel,
     });
 typedef $$ProductsTableUpdateCompanionBuilder =
     ProductsCompanion Function({
@@ -34017,6 +34701,7 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<int?> cartonQuantity,
       Value<double?> cartonPrice,
       Value<double?> costPrice,
+      Value<int> minStockLevel,
     });
 
 final class $$ProductsTableReferences
@@ -34247,6 +34932,11 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<double> get costPrice => $composableBuilder(
     column: $table.costPrice,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get minStockLevel => $composableBuilder(
+    column: $table.minStockLevel,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -34490,6 +35180,11 @@ class $$ProductsTableOrderingComposer
     column: $table.costPrice,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get minStockLevel => $composableBuilder(
+    column: $table.minStockLevel,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ProductsTableAnnotationComposer
@@ -34537,6 +35232,11 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<double> get costPrice =>
       $composableBuilder(column: $table.costPrice, builder: (column) => column);
+
+  GeneratedColumn<int> get minStockLevel => $composableBuilder(
+    column: $table.minStockLevel,
+    builder: (column) => column,
+  );
 
   Expression<T> invoiceItemsRefs<T extends Object>(
     Expression<T> Function($$InvoiceItemsTableAnnotationComposer a) f,
@@ -34765,6 +35465,7 @@ class $$ProductsTableTableManager
                 Value<int?> cartonQuantity = const Value.absent(),
                 Value<double?> cartonPrice = const Value.absent(),
                 Value<double?> costPrice = const Value.absent(),
+                Value<int> minStockLevel = const Value.absent(),
               }) => ProductsCompanion(
                 id: id,
                 name: name,
@@ -34777,6 +35478,7 @@ class $$ProductsTableTableManager
                 cartonQuantity: cartonQuantity,
                 cartonPrice: cartonPrice,
                 costPrice: costPrice,
+                minStockLevel: minStockLevel,
               ),
           createCompanionCallback:
               ({
@@ -34791,6 +35493,7 @@ class $$ProductsTableTableManager
                 Value<int?> cartonQuantity = const Value.absent(),
                 Value<double?> cartonPrice = const Value.absent(),
                 Value<double?> costPrice = const Value.absent(),
+                Value<int> minStockLevel = const Value.absent(),
               }) => ProductsCompanion.insert(
                 id: id,
                 name: name,
@@ -34803,6 +35506,7 @@ class $$ProductsTableTableManager
                 cartonQuantity: cartonQuantity,
                 cartonPrice: cartonPrice,
                 costPrice: costPrice,
+                minStockLevel: minStockLevel,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -35986,6 +36690,9 @@ typedef $$InvoicesTableCreateCompanionBuilder =
       Value<DateTime?> voidedAt,
       Value<String?> voidReason,
       Value<String?> voidedBy,
+      Value<double> cashAmount,
+      Value<double> cardAmount,
+      Value<double> creditAmount,
     });
 typedef $$InvoicesTableUpdateCompanionBuilder =
     InvoicesCompanion Function({
@@ -36003,6 +36710,9 @@ typedef $$InvoicesTableUpdateCompanionBuilder =
       Value<DateTime?> voidedAt,
       Value<String?> voidReason,
       Value<String?> voidedBy,
+      Value<double> cashAmount,
+      Value<double> cardAmount,
+      Value<double> creditAmount,
     });
 
 final class $$InvoicesTableReferences
@@ -36185,6 +36895,21 @@ class $$InvoicesTableFilterComposer
 
   ColumnFilters<String> get voidedBy => $composableBuilder(
     column: $table.voidedBy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get cashAmount => $composableBuilder(
+    column: $table.cashAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get cardAmount => $composableBuilder(
+    column: $table.cardAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get creditAmount => $composableBuilder(
+    column: $table.creditAmount,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -36392,6 +37117,21 @@ class $$InvoicesTableOrderingComposer
     column: $table.voidedBy,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<double> get cashAmount => $composableBuilder(
+    column: $table.cashAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get cardAmount => $composableBuilder(
+    column: $table.cardAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get creditAmount => $composableBuilder(
+    column: $table.creditAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$InvoicesTableAnnotationComposer
@@ -36462,6 +37202,21 @@ class $$InvoicesTableAnnotationComposer
 
   GeneratedColumn<String> get voidedBy =>
       $composableBuilder(column: $table.voidedBy, builder: (column) => column);
+
+  GeneratedColumn<double> get cashAmount => $composableBuilder(
+    column: $table.cashAmount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get cardAmount => $composableBuilder(
+    column: $table.cardAmount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get creditAmount => $composableBuilder(
+    column: $table.creditAmount,
+    builder: (column) => column,
+  );
 
   Expression<T> salesRefs<T extends Object>(
     Expression<T> Function($$SalesTableAnnotationComposer a) f,
@@ -36637,6 +37392,9 @@ class $$InvoicesTableTableManager
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidReason = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
+                Value<double> cashAmount = const Value.absent(),
+                Value<double> cardAmount = const Value.absent(),
+                Value<double> creditAmount = const Value.absent(),
               }) => InvoicesCompanion(
                 id: id,
                 invoiceNumber: invoiceNumber,
@@ -36652,6 +37410,9 @@ class $$InvoicesTableTableManager
                 voidedAt: voidedAt,
                 voidReason: voidReason,
                 voidedBy: voidedBy,
+                cashAmount: cashAmount,
+                cardAmount: cardAmount,
+                creditAmount: creditAmount,
               ),
           createCompanionCallback:
               ({
@@ -36669,6 +37430,9 @@ class $$InvoicesTableTableManager
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidReason = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
+                Value<double> cashAmount = const Value.absent(),
+                Value<double> cardAmount = const Value.absent(),
+                Value<double> creditAmount = const Value.absent(),
               }) => InvoicesCompanion.insert(
                 id: id,
                 invoiceNumber: invoiceNumber,
@@ -36684,6 +37448,9 @@ class $$InvoicesTableTableManager
                 voidedAt: voidedAt,
                 voidReason: voidReason,
                 voidedBy: voidedBy,
+                cashAmount: cashAmount,
+                cardAmount: cardAmount,
+                creditAmount: creditAmount,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -38047,6 +38814,10 @@ typedef $$DaysTableCreateCompanionBuilder =
       Value<String?> notes,
       Value<DateTime> createdAt,
       Value<DateTime?> closedAt,
+      Value<String?> openedBy,
+      Value<String?> closedBy,
+      Value<DateTime?> reopenedAt,
+      Value<String?> reopenedBy,
     });
 typedef $$DaysTableUpdateCompanionBuilder =
     DaysCompanion Function({
@@ -38058,6 +38829,10 @@ typedef $$DaysTableUpdateCompanionBuilder =
       Value<String?> notes,
       Value<DateTime> createdAt,
       Value<DateTime?> closedAt,
+      Value<String?> openedBy,
+      Value<String?> closedBy,
+      Value<DateTime?> reopenedAt,
+      Value<String?> reopenedBy,
     });
 
 class $$DaysTableFilterComposer extends Composer<_$AppDatabase, $DaysTable> {
@@ -38105,6 +38880,26 @@ class $$DaysTableFilterComposer extends Composer<_$AppDatabase, $DaysTable> {
 
   ColumnFilters<DateTime> get closedAt => $composableBuilder(
     column: $table.closedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get openedBy => $composableBuilder(
+    column: $table.openedBy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get closedBy => $composableBuilder(
+    column: $table.closedBy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get reopenedAt => $composableBuilder(
+    column: $table.reopenedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reopenedBy => $composableBuilder(
+    column: $table.reopenedBy,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -38156,6 +38951,26 @@ class $$DaysTableOrderingComposer extends Composer<_$AppDatabase, $DaysTable> {
     column: $table.closedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get openedBy => $composableBuilder(
+    column: $table.openedBy,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get closedBy => $composableBuilder(
+    column: $table.closedBy,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get reopenedAt => $composableBuilder(
+    column: $table.reopenedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reopenedBy => $composableBuilder(
+    column: $table.reopenedBy,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$DaysTableAnnotationComposer
@@ -38194,6 +39009,22 @@ class $$DaysTableAnnotationComposer
 
   GeneratedColumn<DateTime> get closedAt =>
       $composableBuilder(column: $table.closedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get openedBy =>
+      $composableBuilder(column: $table.openedBy, builder: (column) => column);
+
+  GeneratedColumn<String> get closedBy =>
+      $composableBuilder(column: $table.closedBy, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get reopenedAt => $composableBuilder(
+    column: $table.reopenedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get reopenedBy => $composableBuilder(
+    column: $table.reopenedBy,
+    builder: (column) => column,
+  );
 }
 
 class $$DaysTableTableManager
@@ -38232,6 +39063,10 @@ class $$DaysTableTableManager
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> closedAt = const Value.absent(),
+                Value<String?> openedBy = const Value.absent(),
+                Value<String?> closedBy = const Value.absent(),
+                Value<DateTime?> reopenedAt = const Value.absent(),
+                Value<String?> reopenedBy = const Value.absent(),
               }) => DaysCompanion(
                 id: id,
                 date: date,
@@ -38241,6 +39076,10 @@ class $$DaysTableTableManager
                 notes: notes,
                 createdAt: createdAt,
                 closedAt: closedAt,
+                openedBy: openedBy,
+                closedBy: closedBy,
+                reopenedAt: reopenedAt,
+                reopenedBy: reopenedBy,
               ),
           createCompanionCallback:
               ({
@@ -38252,6 +39091,10 @@ class $$DaysTableTableManager
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> closedAt = const Value.absent(),
+                Value<String?> openedBy = const Value.absent(),
+                Value<String?> closedBy = const Value.absent(),
+                Value<DateTime?> reopenedAt = const Value.absent(),
+                Value<String?> reopenedBy = const Value.absent(),
               }) => DaysCompanion.insert(
                 id: id,
                 date: date,
@@ -38261,6 +39104,10 @@ class $$DaysTableTableManager
                 notes: notes,
                 createdAt: createdAt,
                 closedAt: closedAt,
+                openedBy: openedBy,
+                closedBy: closedBy,
+                reopenedAt: reopenedAt,
+                reopenedBy: reopenedBy,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -48430,6 +49277,12 @@ typedef $$PayrollTableTableCreateCompanionBuilder =
       Value<String?> approvedBy,
       Value<DateTime?> approvedAt,
       Value<String?> notes,
+      Value<double> bonus,
+      Value<double> commission,
+      Value<double> incentives,
+      Value<double> rewardsTotal,
+      Value<double> penaltiesTotal,
+      Value<String?> expenseRefId,
       required DateTime createdAt,
       required DateTime updatedAt,
     });
@@ -48462,6 +49315,12 @@ typedef $$PayrollTableTableUpdateCompanionBuilder =
       Value<String?> approvedBy,
       Value<DateTime?> approvedAt,
       Value<String?> notes,
+      Value<double> bonus,
+      Value<double> commission,
+      Value<double> incentives,
+      Value<double> rewardsTotal,
+      Value<double> penaltiesTotal,
+      Value<String?> expenseRefId,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -48607,6 +49466,36 @@ class $$PayrollTableTableFilterComposer
 
   ColumnFilters<String> get notes => $composableBuilder(
     column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get bonus => $composableBuilder(
+    column: $table.bonus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get commission => $composableBuilder(
+    column: $table.commission,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get incentives => $composableBuilder(
+    column: $table.incentives,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get rewardsTotal => $composableBuilder(
+    column: $table.rewardsTotal,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get penaltiesTotal => $composableBuilder(
+    column: $table.penaltiesTotal,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get expenseRefId => $composableBuilder(
+    column: $table.expenseRefId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -48765,6 +49654,36 @@ class $$PayrollTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get bonus => $composableBuilder(
+    column: $table.bonus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get commission => $composableBuilder(
+    column: $table.commission,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get incentives => $composableBuilder(
+    column: $table.incentives,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get rewardsTotal => $composableBuilder(
+    column: $table.rewardsTotal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get penaltiesTotal => $composableBuilder(
+    column: $table.penaltiesTotal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get expenseRefId => $composableBuilder(
+    column: $table.expenseRefId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -48900,6 +49819,34 @@ class $$PayrollTableTableAnnotationComposer
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
+  GeneratedColumn<double> get bonus =>
+      $composableBuilder(column: $table.bonus, builder: (column) => column);
+
+  GeneratedColumn<double> get commission => $composableBuilder(
+    column: $table.commission,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get incentives => $composableBuilder(
+    column: $table.incentives,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get rewardsTotal => $composableBuilder(
+    column: $table.rewardsTotal,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get penaltiesTotal => $composableBuilder(
+    column: $table.penaltiesTotal,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get expenseRefId => $composableBuilder(
+    column: $table.expenseRefId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -48962,6 +49909,12 @@ class $$PayrollTableTableTableManager
                 Value<String?> approvedBy = const Value.absent(),
                 Value<DateTime?> approvedAt = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<double> bonus = const Value.absent(),
+                Value<double> commission = const Value.absent(),
+                Value<double> incentives = const Value.absent(),
+                Value<double> rewardsTotal = const Value.absent(),
+                Value<double> penaltiesTotal = const Value.absent(),
+                Value<String?> expenseRefId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => PayrollTableCompanion(
@@ -48992,6 +49945,12 @@ class $$PayrollTableTableTableManager
                 approvedBy: approvedBy,
                 approvedAt: approvedAt,
                 notes: notes,
+                bonus: bonus,
+                commission: commission,
+                incentives: incentives,
+                rewardsTotal: rewardsTotal,
+                penaltiesTotal: penaltiesTotal,
+                expenseRefId: expenseRefId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -49024,6 +49983,12 @@ class $$PayrollTableTableTableManager
                 Value<String?> approvedBy = const Value.absent(),
                 Value<DateTime?> approvedAt = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<double> bonus = const Value.absent(),
+                Value<double> commission = const Value.absent(),
+                Value<double> incentives = const Value.absent(),
+                Value<double> rewardsTotal = const Value.absent(),
+                Value<double> penaltiesTotal = const Value.absent(),
+                Value<String?> expenseRefId = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
               }) => PayrollTableCompanion.insert(
@@ -49054,6 +50019,12 @@ class $$PayrollTableTableTableManager
                 approvedBy: approvedBy,
                 approvedAt: approvedAt,
                 notes: notes,
+                bonus: bonus,
+                commission: commission,
+                incentives: incentives,
+                rewardsTotal: rewardsTotal,
+                penaltiesTotal: penaltiesTotal,
+                expenseRefId: expenseRefId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),

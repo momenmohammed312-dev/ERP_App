@@ -65,7 +65,6 @@ dependencies:
   get: ^4.6.6
   
   # Additional dependencies for new features
-  provider: ^6.1.2
   collection: ^1.19.0
   archive: ^3.6.1
   
@@ -91,8 +90,8 @@ flutter:
 
   assets:
     - assets/logo/
-    - assets/recipt/
-    - assets/recipt/recipt_logo.png
+    - assets/receipt/
+    - assets/receipt/receipt_logo.png
     - assets/svg/
 
   fonts:

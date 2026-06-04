@@ -299,18 +299,41 @@ class StaffManagementService {
       (sum, a) => sum + a.amount,
     );
 
+    // Get rewards and penalties for the period
+    final db = _dao.attachedDatabase as AppDatabase;
+    final allRewardsPenalties = await (db.select(db.rewardsPenalties)
+      ..where((t) => t.staffId.equals(staffId) & t.status.equals('active'))
+    ).get();
+    final periodRewards = allRewardsPenalties.where((rp) =>
+      rp.effectiveDate.isAfter(periodStart.subtract(const Duration(days: 1))) &&
+      rp.effectiveDate.isBefore(periodEnd.add(const Duration(days: 1))),
+    ).toList();
+
+    double rewardsTotal = 0.0;
+    double penaltiesTotal = 0.0;
+    double allowancesTotal = 0.0;
+    for (final rp in periodRewards) {
+      final amount = rp.amount ?? 0.0;
+      if (rp.category == 'allowance') {
+        allowancesTotal += amount;
+      } else if (rp.type == 'reward') {
+        rewardsTotal += amount;
+      } else if (rp.type == 'penalty') {
+        penaltiesTotal += amount;
+      }
+    }
+
     // Calculate payroll
     final basicSalary = staff.basicSalary;
     final overtimePay =
         attendanceSummary.totalOvertime *
         (staff.hourlyRate ?? basicSalary / 160);
-    final allowances = 0.0; // Calculate based on company policy
-    final deductions =
-        totalAdvances; // Plus other deductions like taxes, insurance
 
-    final netSalary = basicSalary + overtimePay + allowances - deductions;
+    final deductions = totalAdvances + penaltiesTotal;
 
-await _dao.addPayroll(
+    final netSalary = basicSalary + overtimePay + allowancesTotal + rewardsTotal - deductions;
+
+    await db.into(db.payrollTable).insert(
           PayrollTableCompanion.insert(
             staffId: staffId,
             payrollPeriod: payrollPeriod,
@@ -320,7 +343,7 @@ await _dao.addPayroll(
             overtimeHours: Value(attendanceSummary.totalOvertime),
             overtimeRate: Value(staff.hourlyRate ?? basicSalary / 160),
             overtimePay: Value(overtimePay),
-            allowances: Value(allowances),
+            allowances: Value(allowancesTotal),
             deductions: Value(deductions),
             advances: Value(totalAdvances),
             netSalary: netSalary,
@@ -328,6 +351,8 @@ await _dao.addPayroll(
             presentDays: Value(attendanceSummary.presentDays),
             absentDays: Value(attendanceSummary.absentDays),
             leaveDays: Value(attendanceSummary.leaveDays),
+            rewardsTotal: Value(rewardsTotal),
+            penaltiesTotal: Value(penaltiesTotal),
             status: 'calculated',
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
@@ -396,14 +421,21 @@ await db.expenseDao.insertExpense(
 
       final desc = 'راتب موظف: ${payroll.staffId} للفترة ${payroll.payrollPeriod}';
       final now = DateTime.now();
+      final expenseId = '${now.millisecondsSinceEpoch}_payroll';
       await db.expenseDao.insertExpense(
         ExpensesCompanion.insert(
-          id: '${now.millisecondsSinceEpoch}_payroll',
+          id: expenseId,
           description: desc,
           amount: payroll.netSalary,
           date: Value(now),
           category: 'salaries',
           paymentMethod: Value(paymentMethod),
+        ),
+      );
+
+      await (db.update(db.payrollTable)..where((t) => t.id.equals(payrollId))).write(
+        PayrollTableCompanion(
+          expenseRefId: Value(expenseId),
         ),
       );
 

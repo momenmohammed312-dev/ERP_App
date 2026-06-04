@@ -24,6 +24,7 @@ import 'package:pos_offline_desktop/ui/reports/reports_page.dart';
 import 'package:pos_offline_desktop/ui/pages/sidebar_page.dart';
 import 'package:pos_offline_desktop/ui/widgets/side_bar.dart';
 import '../staff/staff_list_page.dart';
+import '../../screens/reports/returns_report_screen.dart';
 
 class HomeScreen extends StatefulHookConsumerWidget {
   const HomeScreen({super.key});
@@ -146,6 +147,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return const CashierPage();
       case SideBarPage.reports:
         return const ReportsPage();
+      case SideBarPage.returns:
+        return ReturnsReportScreen(database: db);
       case SideBarPage.users:
         return UserManagementPage(database: db, authService: authService);
       case SideBarPage.staff:

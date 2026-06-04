@@ -86,7 +86,7 @@ class SalesReportService {
     var query = db.select(db.invoices);
 
     if (startDate != null) {
-      query = query..where((tbl) => tbl.date.isBiggerThan(Constant(startDate)));
+      query = query..where((tbl) => tbl.date.isBiggerOrEqualValue(startDate));
     }
 
     if (endDate != null) {

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
+import 'package:pos_offline_desktop/core/services/validation/permission_validator.dart';
 
 class DayOpeningPage extends ConsumerStatefulWidget {
   final AppDatabase db;
@@ -36,9 +39,13 @@ class _DayOpeningPageState extends ConsumerState<DayOpeningPage> {
     setState(() => _isLoading = true);
 
     try {
+      final currentUser = ref.read(authProvider);
+      PermissionValidator.requirePermission(currentUser, Permission.openDay, 'فتح اليوم');
+
       final openingBalance =
           double.tryParse(_openingBalanceController.text) ?? 0.0;
-      await widget.db.dayDao.openDay(openingBalance: openingBalance);
+      final openedBy = currentUser?.username ?? '';
+      await widget.db.dayDao.openDay(openingBalance: openingBalance, openedBy: openedBy);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

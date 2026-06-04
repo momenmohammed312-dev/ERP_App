@@ -8,6 +8,7 @@ mixin _$EnhancedPurchaseDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.enhancedSuppliers;
   $EnhancedPurchasesTable get enhancedPurchases =>
       attachedDatabase.enhancedPurchases;
+  $ProductsTable get products => attachedDatabase.products;
   $EnhancedPurchaseItemsTable get enhancedPurchaseItems =>
       attachedDatabase.enhancedPurchaseItems;
   $SupplierPaymentsTable get supplierPayments =>
@@ -28,6 +29,8 @@ class EnhancedPurchaseDaoManager {
         _db.attachedDatabase,
         _db.enhancedPurchases,
       );
+  $$ProductsTableTableManager get products =>
+      $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
   $$EnhancedPurchaseItemsTableTableManager get enhancedPurchaseItems =>
       $$EnhancedPurchaseItemsTableTableManager(
         _db.attachedDatabase,

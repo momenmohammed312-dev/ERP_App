@@ -4,11 +4,13 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 class ReturnInvoiceDialog extends StatefulWidget {
   final AppDatabase db;
   final Function(Invoice) onInvoiceCreated;
+  final String? currentUserId;
 
   const ReturnInvoiceDialog({
     super.key,
     required this.db,
     required this.onInvoiceCreated,
+    this.currentUserId,
   });
 
   @override
@@ -19,10 +21,11 @@ class _ReturnInvoiceDialogState extends State<ReturnInvoiceDialog> {
   final _formKey = GlobalKey<FormState>();
   final _customerController = TextEditingController();
   final _originalInvoiceController = TextEditingController();
-  final _reasonController = TextEditingController(); // Added controller for reason
+  final _reasonController = TextEditingController();
   final List<Map<String, dynamic>> _items = [];
   double _subtotal = 0.0;
   double _refundAmount = 0.0;
+  Invoice? _selectedOriginalInvoice;
 
   @override
   Widget build(BuildContext context) {
@@ -294,20 +297,77 @@ class _ReturnInvoiceDialogState extends State<ReturnInvoiceDialog> {
     _refundAmount = _subtotal;
   }
 
-  void _searchOriginalInvoice() {
-    showDialog<void>(
+  void _searchOriginalInvoice() async {
+    final controller = TextEditingController();
+    final invoices = await widget.db.invoiceDao.getAllInvoices();
+    List<Invoice> filtered = invoices;
+
+    final result = await showDialog<Invoice>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('بحث عن الفاتورة الأصلية'),
-        content: const Text('وظيفة البحث غير مفعلة حالياً.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('إغلاق'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('بحث عن الفاتورة الأصلية'),
+          content: SizedBox(
+            width: 500,
+            height: 400,
+            child: Column(
+              children: [
+                TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    hintText: 'رقم الفاتورة أو اسم العميل',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      final q = value.trim().toLowerCase();
+                      if (q.isEmpty) {
+                        filtered = invoices;
+                      } else {
+                        filtered = invoices.where((inv) =>
+                          (inv.invoiceNumber?.toLowerCase().contains(q) ?? false) ||
+                          (inv.customerName?.toLowerCase().contains(q) ?? false)
+                        ).toList();
+                      }
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: filtered.length,
+                    itemBuilder: (ctx, i) {
+                      final inv = filtered[i];
+                      return ListTile(
+                        title: Text('${inv.invoiceNumber ?? inv.id}'),
+                        subtitle: Text('${inv.customerName ?? "نقدي"} - ${inv.totalAmount.toStringAsFixed(2)} ج.م'),
+                        trailing: Text(inv.status),
+                        onTap: () => Navigator.of(ctx).pop(inv),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('إلغاء'),
+            ),
+          ],
+        ),
       ),
     );
+
+    if (result != null) {
+      setState(() {
+        _selectedOriginalInvoice = result;
+        _originalInvoiceController.text = '${result.invoiceNumber ?? result.id} - ${result.customerName ?? "نقدي"}';
+        _customerController.text = result.customerName ?? '';
+      });
+    }
   }
 
   void _showCustomerSelection() {
@@ -336,41 +396,76 @@ class _ReturnInvoiceDialogState extends State<ReturnInvoiceDialog> {
           return;
         }
 
-        // Create return record using the new SalesReturns tables
+        if (_selectedOriginalInvoice == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('الرجاء البحث عن الفاتورة الأصلية'), backgroundColor: Colors.red),
+          );
+          return;
+        }
+
         final now = DateTime.now();
-        final salesReturn = SalesReturnsCompanion.insert(
+        final originalInvoice = _selectedOriginalInvoice!;
+        final customerName = _customerController.text.trim().isEmpty ? 'عميل نقدي' : _customerController.text.trim();
+        final originalInvoiceId = originalInvoice.id;
+
+        // Build return items companions
+        final returnItems = _items.map((item) => SalesReturnItemsCompanion.insert(
+          productId: int.tryParse(item['productId']?.toString() ?? '1') ?? 1,
+          productName: item['name']?.toString() ?? '',
+          quantity: item['quantity'] as int,
+          unitPrice: item['price'] as double,
+          totalPrice: (item['quantity'] as int) * (item['price'] as double),
+        )).toList();
+
+        // Create return companion
+        final returnCompanion = SalesReturnsCompanion.insert(
           returnNumber: 'RET-${now.millisecondsSinceEpoch}',
-          originalInvoiceId: 0,
-          customerName: _customerController.text.trim().isEmpty ? 'عميل نقدي' : _customerController.text.trim(),
+          originalInvoiceId: originalInvoiceId,
+          customerName: customerName,
           totalAmount: _refundAmount,
           returnDate: now,
           returnReason: _reasonController.text.trim(),
         );
 
-        final insertedId = await widget.db.salesReturnsDao.insertReturn(salesReturn);
+        // Use processReturn() which restores stock in a transaction
+        final insertedId = await widget.db.salesReturnsDao.processReturn(
+          returnCompanion: returnCompanion,
+          items: returnItems,
+        );
 
-        // Create return items
-        for (final item in _items) {
-          final returnItem = SalesReturnItemsCompanion.insert(
-            returnId: insertedId,
-            productId: int.tryParse(item['productId']?.toString() ?? '1') ?? 1,
-            productName: item['productName']?.toString() ?? '',
-            quantity: item['quantity'] as int,
-            unitPrice: item['price'] as double,
-            totalPrice: (item['quantity'] as int) * (item['price'] as double),
-          );
-          await widget.db.salesReturnsDao.insertReturnItem(returnItem);
+        // Create ledger reversal entry (credit for customer — reduces what they owe)
+        await widget.db.ledgerDao.insertTransaction(
+          LedgerTransactionsCompanion.insert(
+            id: 'REV-${now.millisecondsSinceEpoch}-$insertedId',
+            entityType: 'Customer',
+            refId: originalInvoice.customerId ?? originalInvoiceId.toString(),
+            date: now,
+            description: 'مرتجع فاتورة رقم ${originalInvoice.invoiceNumber ?? originalInvoiceId.toString()}',
+            credit: _refundAmount,
+            debit: 0.0,
+            origin: 'reversal',
+            paymentMethod: const Value(null),
+            receiptNumber: Value('RET-$insertedId'),
+            lockBatch: const Value(null),
+          ),
+        );
+
+        // Update original invoice paidAmount and status
+        final newPaidAmount = (originalInvoice.paidAmount - _refundAmount).clamp(0.0, originalInvoice.totalAmount);
+        String newStatus;
+        if (newPaidAmount <= 0) {
+          newStatus = 'pending';
+        } else if (newPaidAmount < originalInvoice.totalAmount) {
+          newStatus = 'partial';
+        } else {
+          newStatus = 'paid';
         }
 
-        // Create a dummy Invoice object to satisfy the callback interface
-        final dummyInvoice = Invoice(
-          id: insertedId,
-          invoiceNumber: 'RET-$insertedId',
-          customerName: _customerController.text,
-          totalAmount: _refundAmount,
-          paidAmount: _refundAmount,
-          date: DateTime.now(),
-          status: 'return',
+        await widget.db.invoiceDao.updateInvoice(
+          originalInvoice.copyWith(
+            paidAmount: newPaidAmount,
+            status: newStatus,
+          ),
         );
 
         final messengerContext = context;
@@ -384,8 +479,17 @@ class _ReturnInvoiceDialogState extends State<ReturnInvoiceDialog> {
           );
         }
 
-        // Notify parent 
-        widget.onInvoiceCreated(dummyInvoice);
+        // Notify parent with a return invoice object
+        final returnInvoice = Invoice(
+          id: insertedId,
+          invoiceNumber: 'RET-$insertedId',
+          customerName: customerName,
+          totalAmount: _refundAmount,
+          paidAmount: _refundAmount,
+          date: now,
+          status: 'return',
+        );
+        widget.onInvoiceCreated(returnInvoice);
       } catch (e) {
         final messengerContext = context;
         if (messengerContext.mounted) {

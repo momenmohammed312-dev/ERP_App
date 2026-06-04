@@ -254,6 +254,13 @@ class PayrollTable extends Table {
 
   TextColumn get notes => text().nullable()(); // Payroll notes
 
+  RealColumn get bonus => real().withDefault(const Constant(0.0))();
+  RealColumn get commission => real().withDefault(const Constant(0.0))();
+  RealColumn get incentives => real().withDefault(const Constant(0.0))();
+  RealColumn get rewardsTotal => real().withDefault(const Constant(0.0))();
+  RealColumn get penaltiesTotal => real().withDefault(const Constant(0.0))();
+  TextColumn get expenseRefId => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
 
   DateTimeColumn get updatedAt => dateTime()();

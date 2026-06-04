@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -104,7 +105,7 @@ class PriceListPrintService {
   }
 
   static String _r(String text) {
-    return ArabicReshaper.reshapeText(text);
+    return ArabicReshaper.instance.reshape(text);
   }
 
   static pw.Widget _buildCell(String text, {bool isHeader = false}) {

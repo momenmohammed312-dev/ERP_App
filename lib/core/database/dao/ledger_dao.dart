@@ -119,7 +119,11 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
     for (final row in result) {
       final debit = row.read(ledgerTransactions.debit) ?? 0.0;
       final credit = row.read(ledgerTransactions.credit) ?? 0.0;
-      total += debit - credit;
+      if (entityType == 'Supplier') {
+        total += credit - debit;
+      } else {
+        total += debit - credit;
+      }
     }
     return total;
   }
@@ -167,7 +171,11 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
     }
 
     for (final transaction in transactions) {
-      runningBalance += (transaction.debit - transaction.credit);
+      if (entityType == 'Supplier') {
+        runningBalance += (transaction.credit - transaction.debit);
+      } else {
+        runningBalance += (transaction.debit - transaction.credit);
+      }
       result.add(
         LedgerTransactionWithBalance(
           transaction: transaction,

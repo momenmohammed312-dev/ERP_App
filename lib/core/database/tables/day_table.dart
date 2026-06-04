@@ -9,4 +9,8 @@ class Days extends Table {
   TextColumn get notes => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get closedAt => dateTime().nullable()();
+  TextColumn get openedBy => text().nullable()();
+  TextColumn get closedBy => text().nullable()();
+  DateTimeColumn get reopenedAt => dateTime().nullable()();
+  TextColumn get reopenedBy => text().nullable()();
 }

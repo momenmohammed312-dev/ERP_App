@@ -6,8 +6,12 @@ import 'package:intl/intl.dart';
 import 'package:gap/gap.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/enhanced_backup_service.dart';
 import '../../l10n/app_localizations.dart';
+import '../../core/models/user_model.dart';
+import '../../core/provider/auth_provider.dart';
+import '../../widgets/permission_guard.dart';
 
 class EnhancedBackupScreen extends StatefulWidget {
   const EnhancedBackupScreen({super.key});
@@ -243,40 +247,56 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
               spacing: 12,
               runSpacing: 12,
               children: [
-                ElevatedButton.icon(
-                  onPressed: _createManualBackup,
-                  icon: const Icon(Icons.add),
-                  label: const Text('إنشاء نسخة يدوية'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
+                PermissionGuard(
+                  permission: Permission.createBackup,
+                  showUpgradePrompt: false,
+                  child: ElevatedButton.icon(
+                    onPressed: _createManualBackup,
+                    icon: const Icon(Icons.add),
+                    label: const Text('إنشاء نسخة يدوية'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
                 ),
-                ElevatedButton.icon(
-                  onPressed: _exportBackup,
-                  icon: const Icon(Icons.upload),
-                  label: const Text('تصدير نسخة'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
+                PermissionGuard(
+                  permission: Permission.createBackup,
+                  showUpgradePrompt: false,
+                  child: ElevatedButton.icon(
+                    onPressed: _exportBackup,
+                    icon: const Icon(Icons.upload),
+                    label: const Text('تصدير نسخة'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
                 ),
-                ElevatedButton.icon(
-                  onPressed: _importBackup,
-                  icon: const Icon(Icons.download),
-                  label: const Text('استيراد نسخة'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purple,
-                    foregroundColor: Colors.white,
+                PermissionGuard(
+                  permission: Permission.restoreBackup,
+                  showUpgradePrompt: false,
+                  child: ElevatedButton.icon(
+                    onPressed: _importBackup,
+                    icon: const Icon(Icons.download),
+                    label: const Text('استيراد نسخة'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
                 ),
-                ElevatedButton.icon(
-                  onPressed: _createImmediateBackup,
-                  icon: const Icon(Icons.flash_on),
-                  label: const Text('نسخ فوري'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
+                PermissionGuard(
+                  permission: Permission.createBackup,
+                  showUpgradePrompt: false,
+                  child: ElevatedButton.icon(
+                    onPressed: _createImmediateBackup,
+                    icon: const Icon(Icons.flash_on),
+                    label: const Text('نسخ فوري'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
                 ),
               ],
@@ -438,51 +458,70 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
                 break;
             }
           },
-          itemBuilder: (context) => [
-            const PopupMenuItem(
-              value: 'restore',
-              child: Row(
-                children: [
-                  Icon(Icons.restore, color: Colors.green),
-                  Gap(8),
-                  Text('استعادة'),
-                ],
+          itemBuilder: (context) {
+            final items = <PopupMenuEntry<String>>[
+              const PopupMenuItem(
+                value: 'verify',
+                child: Row(
+                  children: [
+                    Icon(Icons.verified, color: Colors.blue),
+                    Gap(8),
+                    Text('تحقق'),
+                  ],
+                ),
               ),
-            ),
-            const PopupMenuItem(
-              value: 'verify',
-              child: Row(
-                children: [
-                  Icon(Icons.verified, color: Colors.blue),
-                  Gap(8),
-                  Text('تحقق'),
-                ],
+              const PopupMenuItem(
+                value: 'export',
+                child: Row(
+                  children: [
+                    Icon(Icons.upload, color: Colors.orange),
+                    Gap(8),
+                    Text('تصدير'),
+                  ],
+                ),
               ),
-            ),
-            const PopupMenuItem(
-              value: 'export',
-              child: Row(
-                children: [
-                  Icon(Icons.upload, color: Colors.orange),
-                  Gap(8),
-                  Text('تصدير'),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'delete',
-              child: Row(
-                children: [
-                  Icon(Icons.delete, color: Colors.red),
-                  Gap(8),
-                  Text('حذف'),
-                ],
-              ),
-            ),
-          ],
+            ];
+
+            // Conditionally add restore and delete based on permissions
+            final user = _getCurrentUser();
+            if (user?.hasPermission(Permission.restoreBackup) == true) {
+              items.insert(0, const PopupMenuItem(
+                value: 'restore',
+                child: Row(
+                  children: [
+                    Icon(Icons.restore, color: Colors.green),
+                    Gap(8),
+                    Text('استعادة'),
+                  ],
+                ),
+              ));
+            }
+            if (user?.hasPermission(Permission.deleteBackup) == true) {
+              items.add(const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, color: Colors.red),
+                    Gap(8),
+                    Text('حذف'),
+                  ],
+                ),
+              ));
+            }
+
+            return items;
+          },
         ),
       ),
     );
+  }
+
+  User? _getCurrentUser() {
+    try {
+      return ProviderScope.containerOf(context).read(authProvider);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _createManualBackup() async {

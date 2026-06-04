@@ -137,7 +137,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 41;
+  int get schemaVersion => 45;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -174,6 +174,26 @@ class AppDatabase extends _$AppDatabase {
         await _runV41Migrations(m);
       }
 
+      // 4d. Schema v42 — days audit trail columns
+      if (from < 42) {
+        await _runV42Migrations(m);
+      }
+
+      // 4e. Schema v43 — payroll columns
+      if (from < 43) {
+        await _runV43Migrations(m);
+      }
+
+      // 4f. Schema v44 — attendance index + open-day trigger
+      if (from < 44) {
+        await _runV44Migrations(m);
+      }
+
+      // 4g. Schema v45 — partial unique index on days
+      if (from < 45) {
+        await _runV45Migrations(m);
+      }
+
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
       await _ensureStaffTables(m);
 
@@ -192,6 +212,7 @@ class AppDatabase extends _$AppDatabase {
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
+      await _ensureMigrationLogTable();
     },
   );
 
@@ -421,6 +442,117 @@ class AppDatabase extends _$AppDatabase {
         log('V41 migration warning (column may exist): $e');
       }
     }
+  }
+
+  Future<void> _ensureMigrationLogTable() async {
+    try {
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS _migration_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          version INTEGER NOT NULL,
+          step TEXT NOT NULL,
+          status TEXT NOT NULL,
+          error TEXT,
+          ran_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      ''');
+    } catch (_) {}
+  }
+
+  Future<void> _logMigrationStep(int version, String step, String status, {String? error}) async {
+    try {
+      await customStatement(
+        'INSERT INTO _migration_log (version, step, status, error) VALUES (?, ?, ?, ?)',
+        [version, step, status, error],
+      );
+    } catch (_) {}
+  }
+
+  /// Schema v42 — days audit trail columns
+  Future<void> _runV42Migrations(Migrator m) async {
+    final columns = [
+      'ALTER TABLE days ADD COLUMN opened_by TEXT',
+      'ALTER TABLE days ADD COLUMN closed_by TEXT',
+      'ALTER TABLE days ADD COLUMN reopened_at TEXT',
+      'ALTER TABLE days ADD COLUMN reopened_by TEXT',
+    ];
+    for (final sql in columns) {
+      try {
+        await customStatement(sql);
+      } catch (e) {
+        log('v42 migration warning (column may exist): $e');
+      }
+    }
+    await _logMigrationStep(42, 'days_audit_columns', 'completed');
+  }
+
+  /// Schema v43 — payroll bonus/commission/incentives columns
+  Future<void> _runV43Migrations(Migrator m) async {
+    final columns = [
+      'ALTER TABLE payroll_table ADD COLUMN bonus REAL DEFAULT 0.0',
+      'ALTER TABLE payroll_table ADD COLUMN commission REAL DEFAULT 0.0',
+      'ALTER TABLE payroll_table ADD COLUMN incentives REAL DEFAULT 0.0',
+      'ALTER TABLE payroll_table ADD COLUMN rewards_total REAL DEFAULT 0.0',
+      'ALTER TABLE payroll_table ADD COLUMN penalties_total REAL DEFAULT 0.0',
+      'ALTER TABLE payroll_table ADD COLUMN expense_ref_id TEXT',
+    ];
+    for (final sql in columns) {
+      try {
+        await customStatement(sql);
+      } catch (e) {
+        log('v43 migration warning (column may exist): $e');
+      }
+    }
+    await _logMigrationStep(43, 'payroll_columns', 'completed');
+  }
+
+  /// Schema v44 — attendance index + open-day trigger + cleanup
+  Future<void> _runV44Migrations(Migrator m) async {
+    // Cleanup: close duplicate open days before creating trigger
+    try {
+      await customStatement('''
+        UPDATE days SET is_open = 0 WHERE id NOT IN (
+          SELECT MIN(id) FROM days WHERE is_open = 1
+        ) AND is_open = 1
+      ''');
+    } catch (e) {
+      log('v44 cleanup warning: $e');
+    }
+
+    // Attendance index
+    try {
+      await customStatement('CREATE INDEX IF NOT EXISTS idx_attendance_staff ON attendance_table(staffId)');
+    } catch (e) {
+      log('v44 index warning: $e');
+    }
+
+    // Open-day prevention trigger
+    try {
+      await customStatement('''
+        CREATE TRIGGER IF NOT EXISTS trg_prevent_multi_open
+        BEFORE INSERT ON days
+        WHEN NEW.is_open = 1
+        BEGIN
+          SELECT RAISE(ABORT, 'يوجد يوم مفتوح بالفعل')
+          FROM days
+          WHERE is_open = 1
+          LIMIT 1;
+        END
+      ''');
+    } catch (e) {
+      log('v44 trigger warning: $e');
+    }
+    await _logMigrationStep(44, 'attendance_index_trigger', 'completed');
+  }
+
+  /// Schema v45 — partial unique index on open days
+  Future<void> _runV45Migrations(Migrator m) async {
+    try {
+      await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_days_one_open ON days(date) WHERE is_open = 1');
+    } catch (e) {
+      log('v45 index warning: $e');
+    }
+    await _logMigrationStep(45, 'days_partial_unique_index', 'completed');
   }
 
   Future<void> _fixPurchaseAmountTypes() async {

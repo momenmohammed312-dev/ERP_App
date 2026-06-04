@@ -45,14 +45,19 @@ class DayDao extends DatabaseAccessor<AppDatabase> with _$DayDaoMixin {
     return created.data;
   }
 
-  Future<int> openDay({required double openingBalance}) async {
+  Future<int> openDay({required double openingBalance, String? openedBy}) async {
+    final isOpen = await isDayOpen();
+    if (isOpen) {
+      throw Exception('يوجد يوم مفتوح بالفعل');
+    }
     final id = await customInsert(
-      'INSERT INTO days (date, is_open, opening_balance, created_at) VALUES (?, ?, ?, ?)',
+      'INSERT INTO days (date, is_open, opening_balance, created_at, opened_by) VALUES (?, ?, ?, ?, ?)',
       variables: [
         Variable.withDateTime(DateTime.now()),
         Variable.withBool(true),
         Variable.withReal(openingBalance),
         Variable.withDateTime(DateTime.now()),
+        Variable.withString(openedBy ?? ''),
       ],
     );
     return id;
@@ -62,13 +67,29 @@ class DayDao extends DatabaseAccessor<AppDatabase> with _$DayDaoMixin {
     required int dayId,
     required double closingBalance,
     String? notes,
+    String? closedBy,
   }) async {
     await customUpdate(
-      'UPDATE days SET is_open = 0, closing_balance = ?, notes = ?, closed_at = ? WHERE id = ?',
+      'UPDATE days SET is_open = 0, closing_balance = ?, notes = ?, closed_at = ?, closed_by = ? WHERE id = ?',
       variables: [
         Variable.withReal(closingBalance),
         Variable.withString(notes ?? ''),
         Variable.withDateTime(DateTime.now()),
+        Variable.withString(closedBy ?? ''),
+        Variable.withInt(dayId),
+      ],
+    );
+  }
+
+  Future<void> reopenDay({
+    required int dayId,
+    String? reopenedBy,
+  }) async {
+    await customUpdate(
+      'UPDATE days SET is_open = 1, reopened_at = ?, reopened_by = ? WHERE id = ?',
+      variables: [
+        Variable.withDateTime(DateTime.now()),
+        Variable.withString(reopenedBy ?? ''),
         Variable.withInt(dayId),
       ],
     );

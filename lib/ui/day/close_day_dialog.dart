@@ -4,7 +4,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/services/backup_service.dart';
+import 'package:pos_offline_desktop/core/services/validation/permission_validator.dart';
 import 'package:pos_offline_desktop/core/utils/logger.dart';
 import 'dart:async';
 
@@ -239,6 +242,9 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
       setState(() => _isLoading = true);
 
       try {
+        final currentUser = ref.read(authProvider);
+        PermissionValidator.requirePermission(currentUser, Permission.closeDay, 'إقفال اليوم');
+
         final db = ref.read(appDatabaseProvider);
         final today = await db.dayDao.getTodayDay();
 
@@ -248,11 +254,14 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
 
         final actualBalance =
             double.tryParse(_actualBalanceController.text) ?? 0.0;
+        final currentUser = ref.read(authProvider);
+        final closedBy = currentUser?.username ?? '';
 
         await db.dayDao.closeDay(
           dayId: today['id'] as int,
           closingBalance: actualBalance,
           notes: _notesController.text.trim(),
+          closedBy: closedBy,
         );
 
         unawaited(

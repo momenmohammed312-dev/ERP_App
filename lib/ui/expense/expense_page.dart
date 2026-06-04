@@ -3,8 +3,10 @@ import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
+import 'package:pos_offline_desktop/widgets/permission_guard.dart';
 
 class ExpensePage extends StatefulWidget {
   final AppDatabase db;
@@ -647,24 +649,29 @@ class _ExpensePageState extends State<ExpensePage> {
                         ),
                       ),
                       const Gap(20),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _addExpense,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
+                      PermissionGuard(
+                        permission: Permission.editSettings,
+                        showUpgradePrompt: false,
+                        fallback: const SizedBox.shrink(),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _addExpense,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Text(l10n.add_expense),
                           ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : Text(l10n.add_expense),
                         ),
                       ),
                     ],

@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
@@ -12,6 +13,7 @@ import 'package:pos_offline_desktop/ui/admin/admin_dashboard_page.dart';
 import 'package:pos_offline_desktop/ui/setup/first_run_setup_screen.dart';
 import 'package:pos_offline_desktop/screens/splash_screen.dart';
 import 'package:pos_offline_desktop/ui/product/damaged_items_screen.dart';
+import 'package:pos_offline_desktop/screens/reports/returns_report_screen.dart';
 
 final firstRunCompleteProvider = FutureProvider<bool>((ref) async {
   return SettingsService.isFirstRunComplete();
@@ -40,6 +42,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!isLoggedIn && !isPublic) return '/login';
       // Already logged in and navigating to /login → home
       if (isLoggedIn && location == '/login') return '/';
+
+      // Role guard: /admin requires admin role
+      if (isLoggedIn && location == '/admin' && user!.role != UserRole.admin) return '/';
+
       return null;
     },
     routes: [
@@ -83,6 +89,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/damaged-items',
         builder: (context, state) => DamagedItemsScreen(db: db),
+      ),
+      GoRoute(
+        path: '/returns-report',
+        builder: (context, state) => ReturnsReportScreen(database: db),
       ),
     ],
   );

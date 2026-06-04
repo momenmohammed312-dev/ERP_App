@@ -94,6 +94,17 @@ class SideBarMenu extends StatelessWidget {
           ),
         ),
 
+        // مرتجعات المبيعات - يتطلب صلاحية عرض المبيعات
+        PermissionGuard(
+          permission: Permission.viewSales,
+          child: _buildMenuItem(
+            context,
+            svgAssetPath: 'assets/svg/graph.svg',
+            title: 'مرتجعات المبيعات',
+            page: SideBarPage.returns,
+          ),
+        ),
+
         // الكاشير - يتطلب صلاحية عرض المبيعات
         PermissionGuard(
           permission: Permission.viewSales,

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
-import 'package:pos_offline_desktop/core/services/audit_service.dart';
+import 'package:pos_offline_desktop/core/services/audit_log_service.dart';
 
 class ProductForm extends StatefulWidget {
   final Product? product; // لو null → إضافة، لو مش null → تعديل
@@ -138,7 +138,7 @@ class _ProductFormState extends State<ProductForm> {
             name: nameCtrl.text,
             price: newPrice,
             quantity: newQuantity,
-            minStockLevel: Value(newMinStock),
+            minStockLevel: newMinStock,
             costPrice: Value(newCostPrice),
             barcode: Value(newBarcode),
             category: Value(newCategory),

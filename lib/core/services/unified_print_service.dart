@@ -13,7 +13,7 @@ import 'package:pos_offline_desktop/core/services/settings_service.dart';
 /// MANDATORY: Single service for ALL document generation
 /// NO EXCEPTIONS - Every export must use this service
 class UnifiedPrintService {
-  static const String _logoAssetPath = 'assets/recipt/recipt_logo.png';
+  static const String _logoAssetPath = 'assets/receipt/receipt_logo.png';
 
   /// 1. GENERATE UNIFIED DOCUMENT
   /// Central method for all document types (Sales, Purchases, Customers, Suppliers)

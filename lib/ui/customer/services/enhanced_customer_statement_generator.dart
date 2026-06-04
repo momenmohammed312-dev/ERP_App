@@ -5,9 +5,9 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/settings_service.dart';
 
 class EnhancedCustomerStatementGenerator {
-  static const String _companyName = 'شركة رحيم للأعلاف والمواد الغذائية';
 
   // Font loading with better error handling
   static Future<Map<String, pw.Font?>> _loadFonts() async {
@@ -143,6 +143,11 @@ class EnhancedCustomerStatementGenerator {
       debugPrint('GENERATOR: Transactions out of range: $outOfRangeCount');
     }
 
+    // Fetch business info from SettingsService
+    final businessName = await SettingsService.getBusinessName();
+    final taxNumber = await SettingsService.getTaxNumber();
+    final logoPath = await SettingsService.getBusinessLogoPath();
+
     debugPrint('GENERATOR: Building PDF...');
     debugPrint('GENERATOR: === PDF GENERATION VERIFICATION ===');
     debugPrint('GENERATOR: Customer: $customerName ($customerId)');
@@ -183,6 +188,8 @@ class EnhancedCustomerStatementGenerator {
                   currentBalance,
                   fromDate,
                   toDate,
+                  businessName: businessName,
+                  taxNumber: taxNumber,
                 ),
                 pw.SizedBox(height: 16),
 
@@ -222,8 +229,10 @@ class EnhancedCustomerStatementGenerator {
     double openingBalance,
     double currentBalance,
     DateTime fromDate,
-    DateTime toDate,
-  ) {
+    DateTime toDate, {
+    String businessName = '',
+    String taxNumber = '',
+  }) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
       decoration: pw.BoxDecoration(
@@ -233,9 +242,9 @@ class EnhancedCustomerStatementGenerator {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
-          // Company Name only
+          // Company Name (dynamic from SettingsService)
           pw.Text(
-            _companyName, // Use simple text without reshaping to avoid Bidi errors
+            businessName.isNotEmpty ? businessName : 'كشف حساب',
             style: pw.TextStyle(
               fontSize: 18,
               fontWeight: pw.FontWeight.bold,
@@ -244,6 +253,19 @@ class EnhancedCustomerStatementGenerator {
             ),
             textDirection: pw.TextDirection.rtl,
           ),
+          if (taxNumber.isNotEmpty)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 4),
+              child: pw.Text(
+                'الرقم الضريبي: $taxNumber',
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  color: PdfColors.grey700,
+                  font: fonts['arabic'],
+                ),
+                textDirection: pw.TextDirection.rtl,
+              ),
+            ),
           pw.SizedBox(height: 12),
 
           // Summary Info
@@ -257,7 +279,7 @@ class EnhancedCustomerStatementGenerator {
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(
-                      'اسم العميل: $customerName', // Use simple text without reshaping
+                      'اسم العميل: $customerName',
                       style: pw.TextStyle(
                         fontSize: 14,
                         fontWeight: pw.FontWeight.bold,
@@ -266,7 +288,7 @@ class EnhancedCustomerStatementGenerator {
                       textDirection: pw.TextDirection.rtl,
                     ),
                     pw.Text(
-                      'كشف حساب عميل', // Use simple text without reshaping
+                      'كشف حساب عميل',
                       style: pw.TextStyle(
                         fontSize: 18,
                         fontWeight: pw.FontWeight.bold,
@@ -283,7 +305,7 @@ class EnhancedCustomerStatementGenerator {
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(
-                      'الرصيد الحالي: ${formatCurrency(currentBalance)}', // Use simple text
+                      'الرصيد الحالي: ${formatCurrency(currentBalance)}',
                       style: pw.TextStyle(
                         fontSize: 14,
                         fontWeight: pw.FontWeight.bold,
@@ -295,7 +317,7 @@ class EnhancedCustomerStatementGenerator {
                       textDirection: pw.TextDirection.rtl,
                     ),
                     pw.Text(
-                      'الرصيد السابق: ${formatCurrency(openingBalance)}', // Use simple text
+                      'الرصيد السابق: ${formatCurrency(openingBalance)}',
                       style: pw.TextStyle(fontSize: 12, font: fonts['arabic']),
                       textDirection: pw.TextDirection.rtl,
                     ),
@@ -308,7 +330,7 @@ class EnhancedCustomerStatementGenerator {
                   mainAxisAlignment: pw.MainAxisAlignment.center,
                   children: [
                     pw.Text(
-                      'الفترة: من ${DateFormat('yyyy/MM/dd').format(fromDate)} إلى ${DateFormat('yyyy/MM/dd').format(toDate)}', // Use simple text
+                      'الفترة: من ${DateFormat('yyyy/MM/dd').format(fromDate)} إلى ${DateFormat('yyyy/MM/dd').format(toDate)}',
                       style: pw.TextStyle(fontSize: 12, font: fonts['arabic']),
                       textDirection: pw.TextDirection.rtl,
                     ),
@@ -584,7 +606,7 @@ class EnhancedCustomerStatementGenerator {
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
-              '', // Remove branding
+              'Developed by MO2',
               style: pw.TextStyle(
                 fontSize: 8,
                 color: PdfColors.grey600,
@@ -608,7 +630,7 @@ class EnhancedCustomerStatementGenerator {
           child: pw.Text(
             DateFormat(
               'yyyy-MM-dd hh:mm a',
-            ).format(DateTime.now()), // Remove Arabic
+            ).format(DateTime.now()),
             style: pw.TextStyle(
               fontSize: 8,
               color: PdfColors.grey500,

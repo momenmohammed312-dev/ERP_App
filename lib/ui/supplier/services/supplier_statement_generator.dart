@@ -6,11 +6,11 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/ledger_dao.dart';
+import 'package:pos_offline_desktop/core/services/settings_service.dart';
 
 /// Supplier Statement Generator (PDF)
 /// مولد كشف حساب المورد - نسخة PDF محسنة
 class SupplierStatementGenerator {
-  static const String _companyName = 'شركة رحيم للأعلاف والمواد الغذائية';
 
   static Future<Map<String, pw.Font?>> _loadFonts() async {
     pw.Font? arabicFont;
@@ -62,6 +62,10 @@ class SupplierStatementGenerator {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
 
+    // Fetch business info from SettingsService
+    final businessName = await SettingsService.getBusinessName();
+    final taxNumber = await SettingsService.getTaxNumber();
+
     final transactions = await db.ledgerDao.getTransactionsWithRunningBalance(
       'Supplier',
       supplierId,
@@ -86,6 +90,8 @@ class SupplierStatementGenerator {
                   currentBalance,
                   fromDate,
                   toDate,
+                  businessName: businessName,
+                  taxNumber: taxNumber,
                 ),
                 pw.SizedBox(height: 16),
                 _buildFinancialSummary(
@@ -118,8 +124,10 @@ class SupplierStatementGenerator {
     double openingBalance,
     double currentBalance,
     DateTime fromDate,
-    DateTime toDate,
-  ) {
+    DateTime toDate, {
+    String businessName = '',
+    String taxNumber = '',
+  }) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
       decoration: pw.BoxDecoration(
@@ -130,7 +138,7 @@ class SupplierStatementGenerator {
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
           pw.Text(
-            _companyName,
+            businessName.isNotEmpty ? businessName : 'كشف حساب',
             style: pw.TextStyle(
               fontSize: 18,
               fontWeight: pw.FontWeight.bold,
@@ -138,6 +146,19 @@ class SupplierStatementGenerator {
               font: fonts['arabicBold'],
             ),
           ),
+          if (taxNumber.isNotEmpty)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 4),
+              child: pw.Text(
+                'الرقم الضريبي: $taxNumber',
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  color: PdfColors.grey700,
+                  font: fonts['arabic'],
+                ),
+                textDirection: pw.TextDirection.rtl,
+              ),
+            ),
           pw.SizedBox(height: 12),
           pw.Container(
             width: double.infinity,
@@ -399,7 +420,7 @@ class SupplierStatementGenerator {
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
-              'تاريخ الطباعة: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+              'Developed by MO2',
               style: pw.TextStyle(fontSize: 8, font: fonts['arabic']),
             ),
             pw.Text(
