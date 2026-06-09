@@ -1134,7 +1134,7 @@ class _SupplierCard extends StatelessWidget {
       }).toList();
 
       await exportService.exportToPDF(
-        title: 'كشف حساب المورد ${supplier.name}',
+        title: 'كشف حساب مختصر - ${supplier.name}',
         data: data,
         headers: ['التاريخ', 'الوصف', 'المبلغ', 'النوع', 'طريقة الدفع'],
         columns: ['التاريخ', 'الوصف', 'المبلغ', 'النوع', 'طريقة الدفع'],

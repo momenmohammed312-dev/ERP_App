@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/app_database.dart';
 import '../services/business_date_service.dart';
+import '../services/invoice_service.dart';
 import '../../services/staff_management_service.dart';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -32,6 +33,11 @@ final businessDateServiceProvider = Provider<BusinessDateService>((ref) {
 final staffManagementServiceProvider = Provider<StaffManagementService>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return StaffManagementService(db.staffManagementDao);
+});
+
+final invoiceServiceProvider = Provider<InvoiceService>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return InvoiceService(db);
 });
 
 QueryExecutor _openConnection() {

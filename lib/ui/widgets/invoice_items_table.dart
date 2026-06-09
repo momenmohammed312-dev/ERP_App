@@ -35,6 +35,7 @@ class InvoiceItemsTable extends StatelessWidget {
 
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
+    final goldColor = const Color(0xFFC9A84C);
 
     return Container(
       decoration: BoxDecoration(
@@ -46,7 +47,11 @@ class InvoiceItemsTable extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: DataTable(
           headingRowColor: WidgetStateProperty.all(
-            theme.primaryColor.withValues(alpha: 0.05),
+            goldColor.withValues(alpha: 0.15),
+          ),
+          headingTextStyle: TextStyle(
+            color: goldColor.withValues(alpha: 0.9),
+            fontWeight: FontWeight.bold,
           ),
           columnSpacing: 20,
           columns: [
@@ -78,8 +83,15 @@ class InvoiceItemsTable extends StatelessWidget {
               numeric: true,
             ),
           ],
-          rows: items.map((item) {
+          rows: List.generate(items.length, (index) {
+            final item = items[index];
+            final isEven = index.isEven;
+            final rowColor = isEven
+                ? Colors.transparent
+                : theme.dividerColor.withValues(alpha: 0.05);
+
             return DataRow(
+              color: WidgetStateProperty.all(rowColor),
               cells: [
                 DataCell(
                   SizedBox(
@@ -103,17 +115,25 @@ class InvoiceItemsTable extends StatelessWidget {
                   ),
                 ),
                 DataCell(
-                  Text(
-                    item.total.toStringAsFixed(2),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: goldColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      item.total.toStringAsFixed(2),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                        color: goldColor.withValues(alpha: 0.9),
+                      ),
                     ),
                   ),
                 ),
               ],
             );
-          }).toList(),
+          }),
         ),
       ),
     );

@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:drift/drift.dart';
 import '../core/database/app_database.dart';
 import '../core/database/dao/staff_management_dao.dart';
+import '../core/models/user_model.dart';
+import '../core/services/validation/permission_validator.dart';
 
 class StaffManagementService {
   final StaffManagementDao _dao;
@@ -21,7 +23,8 @@ class StaffManagementService {
     return 'STAFF${(maxId + 1).toString().padLeft(4, '0')}';
   }
 
-  Future<void> addNewStaff({
+  Future<void> addNewStaff(
+    User? user, {
     required String name,
     required String position,
     required String employmentType,
@@ -39,6 +42,7 @@ class StaffManagementService {
     String? emergencyPhone,
     String? notes,
   }) async {
+    PermissionValidator.requirePermission(user, Permission.editSettings, 'إضافة موظف');
     final staffId = await generateStaffId();
 
     try {
@@ -86,7 +90,8 @@ class StaffManagementService {
     }
   }
 
-  Future<void> updateStaffInfo({
+  Future<void> updateStaffInfo(
+    User? user, {
     required String staffId,
     String? name,
     String? position,
@@ -105,6 +110,7 @@ class StaffManagementService {
     String? status,
     DateTime? contractEndDate,
   }) async {
+    PermissionValidator.requirePermission(user, Permission.editSettings, 'تعديل موظف');
     final staff = await _dao.getStaffById(staffId);
     if (staff != null) {
       await _dao.updateStaff(
@@ -149,8 +155,9 @@ class StaffManagementService {
     }
   }
 
-  Future<void> terminateStaff(String staffId) async {
-    await updateStaffInfo(staffId: staffId, status: 'terminated');
+  Future<void> terminateStaff(User? user, String staffId) async {
+    PermissionValidator.requirePermission(user, Permission.editSettings, 'إنهاء خدمة موظف');
+    await updateStaffInfo(user, staffId: staffId, status: 'terminated');
   }
 
   // ATTENDANCE MANAGEMENT
@@ -307,12 +314,14 @@ class StaffManagementService {
 
   // ADVANCE MANAGEMENT
 
-  Future<void> requestAdvance({
+  Future<void> requestAdvance(
+    User? user, {
     required String staffId,
     required double amount,
     required String reason,
     int? installmentMonths,
   }) async {
+    PermissionValidator.requirePermission(user, Permission.editSettings, 'طلب سلفة');
     await _dao.addAdvance(
       StaffAdvancesCompanion.insert(
         staffId: staffId,
@@ -334,7 +343,8 @@ class StaffManagementService {
 
   // PAYROLL MANAGEMENT
 
-  Future<void> calculatePayroll(String staffId, String payrollPeriod) async {
+  Future<void> calculatePayroll(User? user, String staffId, String payrollPeriod) async {
+    PermissionValidator.requirePermission(user, Permission.editSettings, 'حساب الرواتب');
     final staff = await _dao.getStaffById(staffId);
     if (staff == null) return;
 
@@ -358,20 +368,38 @@ class StaffManagementService {
       (sum, a) => sum + a.amount,
     );
 
+    // Get rewards and penalties for the period
+    final db = _dao.attachedDatabase;
+    final allRewardsPenalties = await (db.select(db.rewardsPenalties)
+      ..where((t) => t.staffId.equals(staffId) & t.status.equals('active'))
+    ).get();
+    final periodRewards = allRewardsPenalties.where((rp) =>
+      rp.effectiveDate.isAfter(periodStart.subtract(const Duration(days: 1))) &&
+      rp.effectiveDate.isBefore(periodEnd.add(const Duration(days: 1))),
+    ).toList();
+
+    double rewardsTotal = 0.0;
+    double penaltiesTotal = 0.0;
+    double allowancesTotal = 0.0;
+    for (final rp in periodRewards) {
+      final amount = rp.amount ?? 0.0;
+      if (rp.category == 'allowance') {
+        allowancesTotal += amount;
+      } else if (rp.type == 'reward') {
+        rewardsTotal += amount;
+      } else if (rp.type == 'penalty') {
+        penaltiesTotal += amount;
+      }
+    }
+
     // Calculate payroll
     final basicSalary = staff.basicSalary;
     final overtimePay =
         attendanceSummary.totalOvertime *
         (staff.hourlyRate ?? basicSalary / 160);
-    final allowances = 0.0; // Calculate based on company policy
-    final deductions = 0.0;
-    final taxes = 0.0;
-    final insurance = 0.0;
-    final otherDeductions = 0.0;
 
-    final totalDeductions =
-        deductions + totalAdvances + taxes + insurance + otherDeductions;
-    final netSalary = basicSalary + overtimePay + allowances - totalDeductions;
+    final totalDeductions = totalAdvances + penaltiesTotal;
+    final netSalary = basicSalary + overtimePay + allowancesTotal + rewardsTotal - totalDeductions;
 
     await _dao.addPayroll(
       PayrollTableCompanion.insert(
@@ -385,12 +413,11 @@ class StaffManagementService {
             ? Value(staff.hourlyRate)
             : const Value.absent(),
         overtimePay: Value(overtimePay),
-        allowances: Value(allowances),
-        deductions: Value(deductions),
+        allowances: Value(allowancesTotal),
+        deductions: Value(totalDeductions),
         advances: Value(totalAdvances),
-        taxes: Value(taxes),
-        insurance: Value(insurance),
-        otherDeductions: Value(otherDeductions),
+        rewardsTotal: Value(rewardsTotal),
+        penaltiesTotal: Value(penaltiesTotal),
         netSalary: netSalary,
         workingDays: Value(attendanceSummary.totalDays),
         presentDays: Value(attendanceSummary.presentDays),
@@ -403,8 +430,13 @@ class StaffManagementService {
     );
   }
 
-  Future<void> payAdvance(int advanceId, String paymentMethod) async {
+  Future<void> payAdvance(User? user, int advanceId, String paymentMethod) async {
+    PermissionValidator.requirePermission(user, Permission.editSettings, 'صرف سلفة');
     final db = _dao.attachedDatabase;
+    final isDayOpen = await db.dayDao.isDayOpen();
+    if (!isDayOpen) {
+      throw Exception('يجب فتح يوم مالي أولاً');
+    }
     return db.transaction(() async {
       final advance = await (db.select(db.staffAdvances)..where((t) => t.id.equals(advanceId))).getSingleOrNull();
       if (advance == null || advance.status == 'paid') return;
@@ -447,8 +479,13 @@ class StaffManagementService {
     });
   }
 
-  Future<void> payPayroll(int payrollId, String paymentMethod) async {
+  Future<void> payPayroll(User? user, int payrollId, String paymentMethod) async {
+    PermissionValidator.requirePermission(user, Permission.editSettings, 'صرف رواتب');
     final db = _dao.attachedDatabase;
+    final isDayOpen = await db.dayDao.isDayOpen();
+    if (!isDayOpen) {
+      throw Exception('يجب فتح يوم مالي أولاً');
+    }
     return db.transaction(() async {
       final payroll = await (db.select(db.payrollTable)..where((t) => t.id.equals(payrollId))).getSingleOrNull();
       if (payroll == null || payroll.status == 'paid') return;
@@ -519,7 +556,8 @@ class StaffManagementService {
 
   // PERFORMANCE MANAGEMENT
 
-  Future<void> createPerformanceReview({
+  Future<void> createPerformanceReview(
+    User? user, {
     required String staffId,
     required String reviewPeriod,
     required String reviewerId,
@@ -536,6 +574,7 @@ class StaffManagementService {
     String? actionPlan,
     DateTime? nextReviewDate,
   }) async {
+    PermissionValidator.requirePermission(user, Permission.editSettings, 'تقييم أداء');
     await _dao.addPerformanceReview(
       PerformanceReviewsCompanion.insert(
         staffId: staffId,

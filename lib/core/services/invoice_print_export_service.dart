@@ -165,6 +165,11 @@ class InvoicePrintExportService {
                       pw.Text(invoiceData.storeInfo.phone),
                       pw.Text(invoiceData.storeInfo.zipCode),
                       pw.Text(invoiceData.storeInfo.state),
+                      if (invoiceData.storeInfo.taxNumber != null &&
+                          invoiceData.storeInfo.taxNumber!.isNotEmpty)
+                        pw.Text(
+                          'الرقم الضريبي: ${invoiceData.storeInfo.taxNumber}',
+                        ),
                     ],
                   ),
                 ],
@@ -272,7 +277,7 @@ class InvoicePrintExportService {
                     if (invoiceData.invoice.isCreditAccount) ...[
                       pw.Divider(thickness: 2),
                       _pdfTotalRow(
-                        'الرصيد السابق',
+                        'الرصيد الافتتاحي',
                         invoiceData.invoice.previousBalance,
                       ),
                       pw.Divider(thickness: 2),

@@ -4,8 +4,6 @@ enum SideBarPage {
   customers,
   suppliers,
   invoice,
-  newInvoice,
-  enhancedInvoice,
   expenses,
   purchases,
   cashier,

@@ -429,7 +429,7 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
       if (mounted && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('تم طباعة كشف حساب العميل: ${customer.name} بنجاح'),
+            content: Text('تم طباعة كشف حساب مختصر للعميل: ${customer.name} بنجاح'),
             backgroundColor: Colors.green,
           ),
         );

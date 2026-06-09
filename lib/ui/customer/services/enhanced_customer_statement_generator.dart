@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:pdf/pdf.dart';
@@ -190,6 +191,7 @@ class EnhancedCustomerStatementGenerator {
                   toDate,
                   businessName: businessName,
                   taxNumber: taxNumber,
+                  logoPath: logoPath,
                 ),
                 pw.SizedBox(height: 16),
 
@@ -232,6 +234,7 @@ class EnhancedCustomerStatementGenerator {
     DateTime toDate, {
     String businessName = '',
     String taxNumber = '',
+    String? logoPath,
   }) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
@@ -242,6 +245,12 @@ class EnhancedCustomerStatementGenerator {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
+          // Company Logo
+          if (logoPath != null && logoPath.isNotEmpty)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 8),
+              child: _buildLogo(logoPath),
+            ),
           // Company Name (dynamic from SettingsService)
           pw.Text(
             businessName.isNotEmpty ? businessName : 'كشف حساب',
@@ -317,7 +326,7 @@ class EnhancedCustomerStatementGenerator {
                       textDirection: pw.TextDirection.rtl,
                     ),
                     pw.Text(
-                      'الرصيد السابق: ${formatCurrency(openingBalance)}',
+                      'الرصيد الافتتاحي: ${formatCurrency(openingBalance)}',
                       style: pw.TextStyle(fontSize: 12, font: fonts['arabic']),
                       textDirection: pw.TextDirection.rtl,
                     ),
@@ -397,7 +406,7 @@ class EnhancedCustomerStatementGenerator {
             decoration: const pw.BoxDecoration(color: PdfColors.grey200),
             children: [
               _buildTableCell(
-                'الرصيد السابق',
+                'الرصيد الافتتاحي',
                 fonts['arabicBold'],
                 isHeader: true,
               ),
@@ -701,6 +710,19 @@ class EnhancedCustomerStatementGenerator {
         textDirection: textDirection,
       ),
     );
+  }
+
+  static pw.Widget _buildLogo(String logoPath) {
+    try {
+      final file = File(logoPath);
+      if (file.existsSync()) {
+        final bytes = file.readAsBytesSync();
+        return pw.Image(pw.MemoryImage(bytes), height: 60);
+      }
+    } catch (e) {
+      debugPrint('Logo load failed: $e');
+    }
+    return pw.SizedBox.shrink();
   }
 
   static String formatCurrency(double amount) {

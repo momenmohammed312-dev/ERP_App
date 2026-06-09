@@ -32,26 +32,26 @@ Future<void> main() async {
     // Check if totalAmount column exists
     try {
       final result = await db
-          .customSelect("SELECT totalAmount FROM invoices LIMIT 1")
+          .customSelect("SELECT total_amount FROM invoices LIMIT 1")
           .get();
-      print('✅ totalAmount column already exists');
+      print('✅ total_amount column already exists');
     } catch (e) {
-      print('⚠️ totalAmount column missing, adding it...');
+      print('⚠️ total_amount column missing, adding it...');
 
       // Add the column
       await db.customStatement(
-        'ALTER TABLE invoices ADD COLUMN totalAmount REAL DEFAULT 0.0',
+        'ALTER TABLE invoices ADD COLUMN total_amount REAL DEFAULT 0.0',
       );
 
-      // Add paidAmount column if missing
+      // Add paid_amount column if missing
       try {
-        await db.customSelect("SELECT paidAmount FROM invoices LIMIT 1").get();
-        print('✅ paidAmount column already exists');
+        await db.customSelect("SELECT paid_amount FROM invoices LIMIT 1").get();
+        print('✅ paid_amount column already exists');
       } catch (e) {
         await db.customStatement(
-          'ALTER TABLE invoices ADD COLUMN paidAmount REAL DEFAULT 0.0',
+          'ALTER TABLE invoices ADD COLUMN paid_amount REAL DEFAULT 0.0',
         );
-        print('✅ Added paidAmount column');
+        print('✅ Added paid_amount column');
       }
 
       print('✅ Database schema updated successfully!');
@@ -62,7 +62,7 @@ Future<void> main() async {
       final result = await db.customSelect('''
         SELECT 
             COUNT(*) as invoice_count,
-            SUM(totalAmount) as total_sales
+            SUM(total_amount) as total_sales
         FROM invoices 
         WHERE status != 'deleted'
         LIMIT 1

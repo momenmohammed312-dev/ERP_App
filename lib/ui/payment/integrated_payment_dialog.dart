@@ -38,6 +38,20 @@ class _IntegratedPaymentDialogState extends State<IntegratedPaymentDialog> {
   }
 
   Future<void> _processPayment() async {
+    final isDayOpen = await widget.db.dayDao.isDayOpen();
+    if (!isDayOpen) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('يجب فتح يوم مالي أولاً'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      setState(() => _isLoading = false);
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {

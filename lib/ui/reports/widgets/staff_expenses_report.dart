@@ -14,7 +14,7 @@ class StaffExpensesReport extends StatefulWidget {
 class _StaffExpensesReportState extends State<StaffExpensesReport> {
   bool _isLoading = false;
   List<StaffAdvance> _advances = [];
-  // FIX: staffId is TextColumn (String) not int — was Map<int, String>
+  List<Expense> _salaryExpenses = [];
   Map<String, String> _staffMap = {};
   String? _errorMessage;
 
@@ -32,12 +32,16 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
     try {
       final advances = await widget.db.select(widget.db.staffAdvances).get();
       final staffList = await widget.db.select(widget.db.staffTable).get();
-      // FIX: build Map<String,String> directly — no broken .cast<int,String>()
+      final salaryExpenses = await (widget.db.select(widget.db.expenses)
+        ..where((t) => t.category.equals('salaries'))
+      ).get();
+      salaryExpenses.sort((a, b) => b.date.compareTo(a.date));
       final staffMap = <String, String>{
         for (final s in staffList) s.staffId: s.name,
       };
       setState(() {
         _advances = advances;
+        _salaryExpenses = salaryExpenses;
         _staffMap = staffMap;
         _isLoading = false;
       });
@@ -49,7 +53,8 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
     }
   }
 
-  double get _totalAmount => _advances.fold(0.0, (sum, a) => sum + a.amount);
+  double get _totalAdvances => _advances.fold(0.0, (sum, a) => sum + a.amount);
+  double get _totalSalaries => _salaryExpenses.fold(0.0, (sum, e) => sum + e.amount);
 
   @override
   Widget build(BuildContext context) {
@@ -101,228 +106,289 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
             )
           : Column(
               children: [
-                // Summary card
-                if (_advances.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Card(
-                      color: cardBg,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: Colors.red.withValues(alpha: 0.3),
+                // Summary cards
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Card(
+                        color: cardBg,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: Colors.red.withValues(alpha: 0.3),
+                          ),
                         ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.red.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.payments,
+                                  color: Colors.red,
+                                  size: 28,
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.payments,
-                                color: Colors.red,
-                                size: 28,
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'إجمالي السلف',
+                                      style: TextStyle(
+                                        color: Colors.red.shade400,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${_totalAdvances.toStringAsFixed(2)} ج.م',
+                                      style: TextStyle(
+                                        color: textColor,
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    'إجمالي السلف',
+                                    'عدد السلف',
                                     style: TextStyle(
-                                      color: Colors.red.shade400,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 14,
+                                      color: textColor.withValues(alpha: 0.6),
+                                      fontSize: 12,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
                                   Text(
-                                    '${_totalAmount.toStringAsFixed(2)} ج.م',
+                                    '${_advances.length}',
                                     style: TextStyle(
                                       color: textColor,
-                                      fontSize: 22,
+                                      fontSize: 20,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  'عدد السلف',
-                                  style: TextStyle(
-                                    color: textColor.withValues(alpha: 0.6),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                Text(
-                                  '${_advances.length}',
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // Advances List
-                Expanded(
-                  child: _advances.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.inbox_outlined,
-                                size: 64,
-                                color: textColor.withValues(alpha: 0.3),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'لا توجد سلف مسجلة',
-                                style: TextStyle(
-                                  color: textColor.withValues(alpha: 0.6),
-                                  fontSize: 16,
-                                ),
-                              ),
                             ],
                           ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Card(
+                        color: cardBg,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: Colors.orange.withValues(alpha: 0.3),
                           ),
-                          itemCount: _advances.length,
-                          itemBuilder: (context, index) {
-                            final advance = _advances[index];
-                            // FIX: lookup by String key now
-                            final staffName =
-                                _staffMap[advance.staffId] ?? 'غير معروف';
-                            final statusColor = advance.status == 'paid'
-                                ? Colors.green
-                                : advance.status == 'approved'
-                                ? Colors.blue
-                                : advance.status == 'rejected'
-                                ? Colors.red
-                                : Colors.orange;
-                            final statusText = advance.status == 'paid'
-                                ? 'مدفوع'
-                                : advance.status == 'approved'
-                                ? 'موافق عليه'
-                                : advance.status == 'rejected'
-                                ? 'مرفوض'
-                                : 'معلق';
-
-                            return Card(
-                              color: cardBg,
-                              margin: const EdgeInsets.only(bottom: 8),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                leading: CircleAvatar(
-                                  backgroundColor: Colors.blueGrey.withValues(
-                                    alpha: 0.2,
+                                child: const Icon(
+                                  Icons.receipt_long,
+                                  color: Colors.orange,
+                                  size: 28,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'المرتبات المصروفة',
+                                      style: TextStyle(
+                                        color: Colors.orange.shade400,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${_totalSalaries.toStringAsFixed(2)} ج.م',
+                                      style: TextStyle(
+                                        color: textColor,
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    'عدد المرتبات',
+                                    style: TextStyle(
+                                      color: textColor.withValues(alpha: 0.6),
+                                      fontSize: 12,
+                                    ),
                                   ),
-                                  child: Text(
-                                    staffName.isNotEmpty ? staffName[0] : '?',
-                                    style: const TextStyle(
+                                  Text(
+                                    '${_salaryExpenses.length}',
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontSize: 20,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                ),
-                                title: Text(
-                                  'سلفة - $staffName',
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      DateFormat(
-                                        'yyyy/MM/dd',
-                                      ).format(advance.requestDate),
-                                      style: TextStyle(
-                                        color: textColor.withValues(alpha: 0.6),
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    if (advance.reason != null &&
-                                        advance.reason!.isNotEmpty)
-                                      Text(
-                                        advance.reason!,
-                                        style: TextStyle(
-                                          color: textColor.withValues(
-                                            alpha: 0.5,
-                                          ),
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                trailing: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      '${advance.amount.toStringAsFixed(2)} ج.م',
-                                      style: const TextStyle(
-                                        color: Colors.red,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: statusColor.withValues(
-                                          alpha: 0.15,
-                                        ),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Text(
-                                        statusText,
-                                        style: TextStyle(
-                                          color: statusColor,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                ],
                               ),
-                            );
-                          },
+                            ],
+                          ),
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Tab bar for switching between advances and salaries
+                DefaultTabController(
+                  length: 2,
+                  child: Column(
+                    children: [
+                      TabBar(
+                        labelColor: Colors.orange,
+                        unselectedLabelColor: textColor.withValues(alpha: 0.5),
+                        indicatorColor: Colors.orange,
+                        tabs: const [
+                          Tab(text: 'السلف', icon: Icon(Icons.payments, size: 18)),
+                          Tab(text: 'المرتبات', icon: Icon(Icons.receipt_long, size: 18)),
+                        ],
+                      ),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.5,
+                        child: TabBarView(
+                          children: [
+                            // Advances tab
+                            _advances.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.inbox_outlined, size: 64, color: textColor.withValues(alpha: 0.3)),
+                                        const SizedBox(height: 16),
+                                        Text('لا توجد سلف مسجلة', style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 16)),
+                                      ],
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    itemCount: _advances.length,
+                                    itemBuilder: (context, index) {
+                                      final advance = _advances[index];
+                                      final staffName = _staffMap[advance.staffId] ?? 'غير معروف';
+                                      final statusColor = advance.status == 'paid'
+                                          ? Colors.green
+                                          : advance.status == 'approved'
+                                          ? Colors.blue
+                                          : advance.status == 'rejected'
+                                          ? Colors.red
+                                          : Colors.orange;
+                                      final statusText = advance.status == 'paid'
+                                          ? 'مدفوع'
+                                          : advance.status == 'approved'
+                                          ? 'موافق عليه'
+                                          : advance.status == 'rejected'
+                                          ? 'مرفوض'
+                                          : 'معلق';
+                                      return Card(
+                                        color: cardBg,
+                                        margin: const EdgeInsets.only(bottom: 8),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        child: ListTile(
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                          leading: CircleAvatar(
+                                            backgroundColor: Colors.blueGrey.withValues(alpha: 0.2),
+                                            child: Text(staffName.isNotEmpty ? staffName[0] : '?', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                          ),
+                                          title: Text('سلفة - $staffName', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                                          subtitle: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const SizedBox(height: 4),
+                                              Text(DateFormat('yyyy/MM/dd').format(advance.requestDate), style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 12)),
+                                              if (advance.reason != null && advance.reason!.isNotEmpty)
+                                                Text(advance.reason!, style: TextStyle(color: textColor.withValues(alpha: 0.5), fontSize: 11)),
+                                            ],
+                                          ),
+                                          trailing: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            children: [
+                                              Text('${advance.amount.toStringAsFixed(2)} ج.م', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 15)),
+                                              const SizedBox(height: 4),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                                                child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+
+                            // Salaries tab
+                            _salaryExpenses.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.receipt_long_outlined, size: 64, color: textColor.withValues(alpha: 0.3)),
+                                        const SizedBox(height: 16),
+                                        Text('لا توجد مرتبات مصروفة', style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 16)),
+                                      ],
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    itemCount: _salaryExpenses.length,
+                                    itemBuilder: (context, index) {
+                                      final exp = _salaryExpenses[index];
+                                      return Card(
+                                        color: cardBg,
+                                        margin: const EdgeInsets.only(bottom: 8),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        child: ListTile(
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                          leading: CircleAvatar(
+                                            backgroundColor: Colors.orange.withValues(alpha: 0.2),
+                                            child: const Icon(Icons.person, color: Colors.orange, size: 20),
+                                          ),
+                                          title: Text(exp.description, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14)),
+                                          subtitle: Text(DateFormat('yyyy/MM/dd').format(exp.date), style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 12)),
+                                          trailing: Text('${exp.amount.toStringAsFixed(2)} ج.م', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 15)),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

@@ -7,12 +7,16 @@ class StoreInfo {
   final String phone;
   final String zipCode;
   final String state;
+  final String? taxNumber;
+  final String? logoPath;
 
   StoreInfo({
     required this.storeName,
     required this.phone,
     required this.zipCode,
     required this.state,
+    this.taxNumber,
+    this.logoPath,
   });
 }
 
@@ -70,6 +74,12 @@ class InvoicePrintView extends StatelessWidget {
                   'المدينة, الرمز البريدي: ${invoiceData.storeInfo.zipCode}',
                 ),
                 Text('الدولة: ${invoiceData.storeInfo.phone}'),
+                if (invoiceData.storeInfo.taxNumber != null &&
+                    invoiceData.storeInfo.taxNumber!.isNotEmpty)
+                  Text(
+                    'الرقم الضريبي: ${invoiceData.storeInfo.taxNumber}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
               ],
             ),
           ],
@@ -169,7 +179,7 @@ class InvoicePrintView extends StatelessWidget {
         if (isCredit) ...[
           const Divider(),
           _buildTotalRow(
-            'الرصيد السابق',
+            'الرصيد الافتتاحي',
             0.0,
           ), // Would need to fetch from customer
           _buildTotalRow('الإجمالي', subtotal, isBold: true),

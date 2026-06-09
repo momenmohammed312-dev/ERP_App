@@ -13,7 +13,9 @@ import 'package:pos_offline_desktop/ui/reports/reports_page.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/enhanced_new_invoice_page.dart';
 import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
 import 'package:pos_offline_desktop/ui/staff/staff_list_page.dart';
+import 'package:pos_offline_desktop/ui/setting/settings.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 
 class ModernHomeScreen extends ConsumerStatefulWidget {
   final AppDatabase db;
@@ -290,6 +292,28 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                       icon: const Icon(Icons.notifications_outlined),
                       onPressed: () {},
                       tooltip: 'Notifications',
+                    ),
+                    const Gap(4),
+                    IconButton(
+                      icon: const Icon(Icons.settings),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SettingsScreen(),
+                          ),
+                        );
+                      },
+                      tooltip: 'الإعدادات',
+                    ),
+                    const Gap(4),
+                    IconButton(
+                      icon: const Icon(Icons.logout),
+                      onPressed: () {
+                        ref.read(authProvider.notifier).logout();
+                        context.go('/login');
+                      },
+                      tooltip: 'تسجيل خروج',
                     ),
                   ],
                 ),

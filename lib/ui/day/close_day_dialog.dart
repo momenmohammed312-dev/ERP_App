@@ -96,7 +96,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
           SUM(CASE WHEN payment_method != 'cash' THEN total_amount ELSE 0 END) as credit_sales,
           SUM(total_amount) as total_sales
         FROM invoices 
-        WHERE created_at >= ? AND created_at <= ? AND status = 'active'
+        WHERE date >= ? AND date <= ? AND status = 'active'
       ''',
             variables: [
               drift.Variable.withDateTime(startOfDay),
@@ -254,7 +254,6 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
 
         final actualBalance =
             double.tryParse(_actualBalanceController.text) ?? 0.0;
-        final currentUser = ref.read(authProvider);
         final closedBy = currentUser?.username ?? '';
 
         await db.dayDao.closeDay(
@@ -267,6 +266,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
         unawaited(
           BackupService(db)
               .createBackup(
+                currentUser,
                 type: 'day_close',
                 description:
                     'نسخة إغلاق يوم ${DateFormat('yyyy-MM-dd').format(DateTime.now())}',

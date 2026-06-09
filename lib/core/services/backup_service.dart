@@ -10,8 +10,10 @@ import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:crypto/crypto.dart';
 import '../database/app_database.dart';
 import 'package:path/path.dart' as path;
+import '../models/user_model.dart';
 import '../utils/logger.dart';
 import '../utils/app_utils.dart';
+import 'validation/permission_validator.dart';
 
 /// Enhanced Backup Service for POS System
 /// خدمة النسخ الاحتياطي المحسنة لنظام نقاط البيع
@@ -27,11 +29,13 @@ class BackupService {
 
   /// Create a complete backup of the database with encryption
   /// إنشاء نسخة احتياطية كاملة ومشفرة من قاعدة البيانات
-  Future<BackupInfo> createBackup({
+  Future<BackupInfo> createBackup(
+    User? user, {
     String type = 'manual',
     String? description,
     int? createdBy,
   }) async {
+    PermissionValidator.requirePermission(user, Permission.createBackup, 'إنشاء نسخة احتياطية');
     if (kIsWeb) {
       throw Exception('Backup operations not supported on web platform');
     }
@@ -116,7 +120,8 @@ class BackupService {
 
   /// Restore database from encrypted backup file
   /// استعادة قاعدة البيانات من ملف النسخ الاحتياطي المشفر
-  Future<void> restoreBackup(String filename) async {
+  Future<void> restoreBackup(User? user, String filename) async {
+    PermissionValidator.requirePermission(user, Permission.restoreBackup, 'استعادة نسخة احتياطية');
     if (kIsWeb) {
       throw Exception('Backup restore not supported on web platform');
     }
@@ -294,7 +299,8 @@ class BackupService {
 
   /// Delete an encrypted backup file
   /// حذف ملف نسخ احتياطي مشفر
-  Future<void> deleteBackup(String filename) async {
+  Future<void> deleteBackup(User? user, String filename) async {
+    PermissionValidator.requirePermission(user, Permission.deleteBackup, 'حذف نسخة احتياطية');
     if (kIsWeb) {
       throw Exception('Backup deletion not supported on web platform');
     }
@@ -322,6 +328,7 @@ class BackupService {
       try {
         AppLogger.i('⏰ بدء النسخ الاحتياطي التلقائي...');
         await createBackup(
+          null,
           type: 'auto',
           description: 'نسخة احتياطية تلقائية مجدولة',
         );
@@ -350,6 +357,7 @@ class BackupService {
     try {
       AppLogger.i('⏰ إنشاء نسخة احتياطية فورية...');
       final backup = await createBackup(
+        null,
         type: 'manual',
         description: description ?? 'نسخة احتياطية فورية',
       );
@@ -493,7 +501,7 @@ class BackupService {
 
       // حذف النسخ الزائدة
       for (var i = _maxBackups; i < backups.length; i++) {
-        await deleteBackup(backups[i].filename);
+        await deleteBackup(null, backups[i].filename);
       }
 
       AppLogger.i(

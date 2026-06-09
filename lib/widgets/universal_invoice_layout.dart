@@ -182,7 +182,7 @@ class UniversalInvoiceLayout extends StatelessWidget {
           if (invoiceData.invoice.isCreditAccount) ...[
             const Divider(thickness: 2),
             _buildTotalRow(
-              'الرصيد السابق',
+              'الرصيد الافتتاحي',
               invoiceData.invoice.previousBalance,
               color: Colors.orange[700],
             ),
@@ -291,7 +291,9 @@ class InvoiceData {
   double get subtotal => items.fold(0.0, (sum, item) => sum + item.totalPrice);
 
   double get grandTotal =>
-      invoice.isCreditAccount ? subtotal + invoice.previousBalance : subtotal;
+      invoice.isCreditAccount
+          ? invoice.previousBalance + (invoice.totalAmount - invoice.paidAmount)
+          : invoice.totalAmount;
 
   /// MANDATORY: Invoice type labels for different document types
   String get invoiceTypeLabel {
@@ -345,6 +347,7 @@ class Invoice {
   final bool isCreditAccount;
   final double previousBalance;
   final double totalAmount;
+  final double paidAmount;
   final String? notes;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -364,6 +367,7 @@ class Invoice {
     required this.isCreditAccount,
     required this.previousBalance,
     required this.totalAmount,
+    this.paidAmount = 0,
     this.notes,
     required this.createdAt,
     required this.updatedAt,

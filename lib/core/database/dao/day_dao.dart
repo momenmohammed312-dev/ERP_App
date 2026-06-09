@@ -24,17 +24,24 @@ class DayDao extends DatabaseAccessor<AppDatabase> with _$DayDaoMixin {
 
   Future<Map<String, Object?>?> getOrCreateTodayDay({
     double? openingBalance,
+    String? openedBy,
   }) async {
+    final isOpen = await isDayOpen();
+    if (isOpen) {
+      throw Exception('يوجد يوم مفتوح بالفعل');
+    }
+
     final existing = await getTodayDay();
     if (existing != null) return existing;
 
     await customInsert(
-      'INSERT INTO days (date, is_open, opening_balance, created_at) VALUES (?, ?, ?, ?)',
+      'INSERT INTO days (date, is_open, opening_balance, created_at, opened_by) VALUES (?, ?, ?, ?, ?)',
       variables: [
         Variable.withDateTime(DateTime.now()),
         Variable.withBool(true),
         Variable.withReal(openingBalance ?? 0.0),
         Variable.withDateTime(DateTime.now()),
+        Variable.withString(openedBy ?? ''),
       ],
     );
 

@@ -137,7 +137,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 45;
+  int get schemaVersion => 46;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -192,6 +192,11 @@ class AppDatabase extends _$AppDatabase {
       // 4g. Schema v45 — partial unique index on days
       if (from < 45) {
         await _runV45Migrations(m);
+      }
+
+      // 4h. Schema v46 — ensure cash_sessions + damaged_items tables exist
+      if (from < 46) {
+        await _runV46Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -300,8 +305,8 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(users);
         final adminPassword = _hashPassword('admin123');
         await customStatement(
-          "INSERT INTO users (username, password_hash, full_name, role, is_active, created_at, updated_at) "
-          "VALUES ('admin', ?, 'مدير النظام', 0, 1, datetime('now'), datetime('now'))",
+          "INSERT INTO users (username, password, full_name, role, is_active, created_at, updated_at) "
+          "VALUES ('admin', ?, 'مدير النظام', 'admin', 1, datetime('now'), datetime('now'))",
           [adminPassword],
         );
       } catch (e) {
@@ -456,7 +461,9 @@ class AppDatabase extends _$AppDatabase {
           ran_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
       ''');
-    } catch (_) {}
+    } catch (e) {
+      log('CRITICAL: migration log table creation failed: $e');
+    }
   }
 
   Future<void> _logMigrationStep(int version, String step, String status, {String? error}) async {
@@ -465,94 +472,154 @@ class AppDatabase extends _$AppDatabase {
         'INSERT INTO _migration_log (version, step, status, error) VALUES (?, ?, ?, ?)',
         [version, step, status, error],
       );
-    } catch (_) {}
+    } catch (e) {
+      log('WARNING: migration log insert failed (version=$version step=$step status=$status): $e');
+    }
   }
 
   /// Schema v42 — days audit trail columns
   Future<void> _runV42Migrations(Migrator m) async {
-    final columns = [
-      'ALTER TABLE days ADD COLUMN opened_by TEXT',
-      'ALTER TABLE days ADD COLUMN closed_by TEXT',
-      'ALTER TABLE days ADD COLUMN reopened_at TEXT',
-      'ALTER TABLE days ADD COLUMN reopened_by TEXT',
-    ];
-    for (final sql in columns) {
-      try {
-        await customStatement(sql);
-      } catch (e) {
-        log('v42 migration warning (column may exist): $e');
+    await _logMigrationStep(42, 'days_audit_columns', 'started');
+    try {
+      final columns = [
+        'ALTER TABLE days ADD COLUMN opened_by TEXT',
+        'ALTER TABLE days ADD COLUMN closed_by TEXT',
+        'ALTER TABLE days ADD COLUMN reopened_at TEXT',
+        'ALTER TABLE days ADD COLUMN reopened_by TEXT',
+      ];
+      for (final sql in columns) {
+        try {
+          await customStatement(sql);
+        } catch (e) {
+          log('v42 migration warning (column may exist): $e');
+        }
       }
+      await _logMigrationStep(42, 'days_audit_columns', 'completed');
+    } catch (e) {
+      await _logMigrationStep(42, 'days_audit_columns', 'failed', error: e.toString());
+      rethrow;
     }
-    await _logMigrationStep(42, 'days_audit_columns', 'completed');
   }
 
   /// Schema v43 — payroll bonus/commission/incentives columns
   Future<void> _runV43Migrations(Migrator m) async {
-    final columns = [
-      'ALTER TABLE payroll_table ADD COLUMN bonus REAL DEFAULT 0.0',
-      'ALTER TABLE payroll_table ADD COLUMN commission REAL DEFAULT 0.0',
-      'ALTER TABLE payroll_table ADD COLUMN incentives REAL DEFAULT 0.0',
-      'ALTER TABLE payroll_table ADD COLUMN rewards_total REAL DEFAULT 0.0',
-      'ALTER TABLE payroll_table ADD COLUMN penalties_total REAL DEFAULT 0.0',
-      'ALTER TABLE payroll_table ADD COLUMN expense_ref_id TEXT',
-    ];
-    for (final sql in columns) {
-      try {
-        await customStatement(sql);
-      } catch (e) {
-        log('v43 migration warning (column may exist): $e');
+    await _logMigrationStep(43, 'payroll_columns', 'started');
+    try {
+      final columns = [
+        'ALTER TABLE payroll_table ADD COLUMN bonus REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN commission REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN incentives REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN rewards_total REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN penalties_total REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN expense_ref_id TEXT',
+      ];
+      for (final sql in columns) {
+        try {
+          await customStatement(sql);
+        } catch (e) {
+          log('v43 migration warning (column may exist): $e');
+        }
       }
+      await _logMigrationStep(43, 'payroll_columns', 'completed');
+    } catch (e) {
+      await _logMigrationStep(43, 'payroll_columns', 'failed', error: e.toString());
+      rethrow;
     }
-    await _logMigrationStep(43, 'payroll_columns', 'completed');
   }
 
   /// Schema v44 — attendance index + open-day trigger + cleanup
   Future<void> _runV44Migrations(Migrator m) async {
-    // Cleanup: close duplicate open days before creating trigger
+    await _logMigrationStep(44, 'attendance_index_trigger', 'started');
     try {
-      await customStatement('''
-        UPDATE days SET is_open = 0 WHERE id NOT IN (
-          SELECT MIN(id) FROM days WHERE is_open = 1
-        ) AND is_open = 1
-      ''');
-    } catch (e) {
-      log('v44 cleanup warning: $e');
-    }
+      // Cleanup: close duplicate open days before creating trigger
+      try {
+        await customStatement('''
+          UPDATE days SET is_open = 0 WHERE id NOT IN (
+            SELECT MIN(id) FROM days WHERE is_open = 1
+          ) AND is_open = 1
+        ''');
+      } catch (e) {
+        log('v44 cleanup warning: $e');
+      }
 
-    // Attendance index
-    try {
-      await customStatement('CREATE INDEX IF NOT EXISTS idx_attendance_staff ON attendance_table(staffId)');
-    } catch (e) {
-      log('v44 index warning: $e');
-    }
+      // Attendance index
+      try {
+        await customStatement('CREATE INDEX IF NOT EXISTS idx_attendance_staff ON attendance_table(staff_id)');
+      } catch (e) {
+        log('v44 index warning: $e');
+      }
 
-    // Open-day prevention trigger
-    try {
-      await customStatement('''
-        CREATE TRIGGER IF NOT EXISTS trg_prevent_multi_open
-        BEFORE INSERT ON days
-        WHEN NEW.is_open = 1
-        BEGIN
-          SELECT RAISE(ABORT, 'يوجد يوم مفتوح بالفعل')
-          FROM days
-          WHERE is_open = 1
-          LIMIT 1;
-        END
-      ''');
+      // Open-day prevention trigger
+      try {
+        await customStatement('''
+          CREATE TRIGGER IF NOT EXISTS trg_prevent_multi_open
+          BEFORE INSERT ON days
+          WHEN NEW.is_open = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'يوجد يوم مفتوح بالفعل')
+            WHERE EXISTS (SELECT 1 FROM days WHERE is_open = 1);
+          END
+        ''');
+      } catch (e) {
+        log('v44 trigger warning: $e');
+      }
+      await _logMigrationStep(44, 'attendance_index_trigger', 'completed');
     } catch (e) {
-      log('v44 trigger warning: $e');
+      await _logMigrationStep(44, 'attendance_index_trigger', 'failed', error: e.toString());
+      rethrow;
     }
-    await _logMigrationStep(44, 'attendance_index_trigger', 'completed');
   }
 
   /// Schema v45 — partial unique index on open days
   Future<void> _runV45Migrations(Migrator m) async {
+    await _logMigrationStep(45, 'days_partial_unique_index', 'started');
     try {
-      await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_days_one_open ON days(date) WHERE is_open = 1');
+      await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_days_one_open ON days(is_open) WHERE is_open = 1');
+      await _logMigrationStep(45, 'days_partial_unique_index', 'completed');
     } catch (e) {
-      log('v45 index warning: $e');
+      await _logMigrationStep(45, 'days_partial_unique_index', 'failed', error: e.toString());
+      rethrow;
     }
-    await _logMigrationStep(45, 'days_partial_unique_index', 'completed');
+  }
+
+  /// Schema v46 — ensure cash_sessions and damaged_items tables exist
+  /// These tables were missing in some upgrades because they had no createTable migration
+  Future<void> _runV46Migrations(Migrator m) async {
+    await _logMigrationStep(46, 'ensure_missing_tables', 'started');
+
+    // Create cash_sessions table if missing
+    try {
+      await m.createTable(cashSessions);
+      log('v46: Created cash_sessions table');
+    } catch (e) {
+      log('v46: cash_sessions table likely already exists: $e');
+    }
+
+    // Create damaged_items table if missing
+    try {
+      await m.createTable(damagedItems);
+      log('v46: Created damaged_items table');
+    } catch (e) {
+      log('v46: damaged_items table likely already exists: $e');
+    }
+
+    // Ensure critical columns that may have been missed in v40
+    final missingColumns = [
+      'ALTER TABLE products ADD COLUMN cost_price REAL',
+      'ALTER TABLE products ADD COLUMN min_stock_level INTEGER DEFAULT 0',
+      'ALTER TABLE suppliers ADD COLUMN opening_balance REAL DEFAULT 0',
+      'ALTER TABLE customers ADD COLUMN opening_balance REAL DEFAULT 0',
+      'ALTER TABLE customers ADD COLUMN total_debt REAL DEFAULT 0',
+      'ALTER TABLE customers ADD COLUMN total_paid REAL DEFAULT 0',
+    ];
+    for (final sql in missingColumns) {
+      try {
+        await customStatement(sql);
+        log('v46: Added missing column: $sql');
+      } catch (_) {}
+    }
+
+    await _logMigrationStep(46, 'ensure_missing_tables', 'completed');
   }
 
   Future<void> _fixPurchaseAmountTypes() async {

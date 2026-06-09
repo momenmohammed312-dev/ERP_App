@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
 import '../../core/utils/currency_helper.dart';
-import 'package:intl/intl.dart';
+import '../../core/provider/auth_provider.dart';
+import '../../services/staff_management_service.dart';
 
 class PayrollPage extends ConsumerStatefulWidget {
   final Staff staff;
@@ -205,17 +207,39 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
   }
 
   void _calculatePayroll() {
+    final periodOptions = ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'];
+    final selectedPeriod = periodOptions[DateTime.now().month - 1];
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('احتساب المرتب'),
-        content: const Text(
-          'سيتم احتساب المرتب بناءً على سجل الحضور والسلف لهذه الفترة.',
-        ),
+        content: Text('سيتم احتساب المرتب للموظف ${widget.staff.name} للفترة $selectedPeriod'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('إغلاق'),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                final db = ref.read(appDatabaseProvider);
+                final service = StaffManagementService(StaffManagementDao(db));
+                final user = ref.read(authProvider);
+                await service.calculatePayroll(user, widget.staff.staffId, selectedPeriod);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم احتساب المرتب بنجاح'), backgroundColor: Colors.green),
+                );
+                _loadData();
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('احتساب'),
           ),
         ],
       ),

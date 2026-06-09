@@ -113,12 +113,12 @@ class _DailySalesPerformanceWidgetState
           .customSelect(
             '''
         SELECT 
-          DATE(purchaseDate) as report_date,
+          DATE(purchase_date) as report_date,
           COALESCE(SUM($purchasesTotalColumn), 0) as total_purchases,
           COUNT(*) as purchase_count
         FROM purchases 
-        WHERE purchaseDate >= ? AND purchaseDate <= ? AND isDeleted = 0
-        GROUP BY DATE(purchaseDate)
+        WHERE purchase_date >= ? AND purchase_date <= ? AND is_deleted = 0
+        GROUP BY DATE(purchase_date)
         ORDER BY report_date DESC
       ''',
             variables: [
@@ -134,9 +134,9 @@ class _DailySalesPerformanceWidgetState
             '''
         SELECT 
           DATE(date) as report_date,
-          openingBalance,
-          closingBalance,
-          isOpen
+          opening_balance,
+          closing_balance,
+          is_open
         FROM days 
         WHERE date >= ? AND date <= ?
         ORDER BY report_date DESC
@@ -193,9 +193,9 @@ class _DailySalesPerformanceWidgetState
         final date = row.readNullable<String>('report_date') ?? '';
         if (dailyData.containsKey(date)) {
           dailyData[date] = dailyData[date]!.copyWith(
-            openingBalance: row.readNullable<double>('openingBalance') ?? 0.0,
-            closingBalance: row.readNullable<double>('closingBalance') ?? 0.0,
-            isOpen: (row.readNullable<int>('isOpen') ?? 0) == 1,
+            openingBalance: row.readNullable<double>('opening_balance') ?? 0.0,
+            closingBalance: row.readNullable<double>('closing_balance') ?? 0.0,
+            isOpen: (row.readNullable<int>('is_open') ?? 0) == 1,
           );
         } else {
           dailyData[date] = DailySalesData(
@@ -204,9 +204,9 @@ class _DailySalesPerformanceWidgetState
             totalPurchases: 0.0,
             invoiceCount: 0,
             purchaseCount: 0,
-            openingBalance: row.readNullable<double>('openingBalance') ?? 0.0,
-            closingBalance: row.readNullable<double>('closingBalance') ?? 0.0,
-            isOpen: (row.readNullable<int>('isOpen') ?? 0) == 1,
+            openingBalance: row.readNullable<double>('opening_balance') ?? 0.0,
+            closingBalance: row.readNullable<double>('closing_balance') ?? 0.0,
+            isOpen: (row.readNullable<int>('is_open') ?? 0) == 1,
           );
         }
       }

@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/services/settings_service.dart';
+import '../../core/router/go_router.dart';
 
 class FirstRunSetupScreen extends ConsumerStatefulWidget {
   const FirstRunSetupScreen({super.key});
@@ -45,6 +46,7 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
       await SettingsService.setBusinessPhone(_businessPhoneController.text.trim());
       await SettingsService.setBusinessAddress(_businessAddressController.text.trim());
       await SettingsService.markFirstRunComplete();
+      ref.invalidate(firstRunCompleteProvider);
 
       // Update admin password
       await db.userDao.updateAdminPassword(_passwordController.text);
@@ -203,11 +205,13 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
                         child: ElevatedButton(
                           onPressed: _isLoading ? null : _handleSetup,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primary,
+                            backgroundColor: const Color(0xFFC9A84C),
                             foregroundColor: Colors.white,
+                            disabledBackgroundColor: const Color(0xFFC9A84C).withValues(alpha: 0.5),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
+                            elevation: 2,
                           ),
                           child: _isLoading
                               ? const SizedBox(

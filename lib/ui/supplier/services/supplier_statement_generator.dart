@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:pdf/pdf.dart';
@@ -65,6 +66,7 @@ class SupplierStatementGenerator {
     // Fetch business info from SettingsService
     final businessName = await SettingsService.getBusinessName();
     final taxNumber = await SettingsService.getTaxNumber();
+    final logoPath = await SettingsService.getBusinessLogoPath();
 
     final transactions = await db.ledgerDao.getTransactionsWithRunningBalance(
       'Supplier',
@@ -92,6 +94,7 @@ class SupplierStatementGenerator {
                   toDate,
                   businessName: businessName,
                   taxNumber: taxNumber,
+                  logoPath: logoPath,
                 ),
                 pw.SizedBox(height: 16),
                 _buildFinancialSummary(
@@ -127,6 +130,7 @@ class SupplierStatementGenerator {
     DateTime toDate, {
     String businessName = '',
     String taxNumber = '',
+    String? logoPath,
   }) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
@@ -137,6 +141,12 @@ class SupplierStatementGenerator {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
+          // Company Logo
+          if (logoPath != null && logoPath.isNotEmpty)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 8),
+              child: _buildLogo(logoPath),
+            ),
           pw.Text(
             businessName.isNotEmpty ? businessName : 'كشف حساب',
             style: pw.TextStyle(
@@ -472,6 +482,19 @@ class SupplierStatementGenerator {
         ),
       ),
     );
+  }
+
+  static pw.Widget _buildLogo(String logoPath) {
+    try {
+      final file = File(logoPath);
+      if (file.existsSync()) {
+        final bytes = file.readAsBytesSync();
+        return pw.Image(pw.MemoryImage(bytes), height: 60);
+      }
+    } catch (e) {
+      debugPrint('Logo load failed: $e');
+    }
+    return pw.SizedBox.shrink();
   }
 
   static String formatCurrency(double amount) {

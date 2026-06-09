@@ -1339,12 +1339,14 @@ class PrinterService {
         );
       }).toList();
 
-      // Create store info
+      // Create store info from settings
       final storeInfo = ups.StoreInfo(
-        storeName: 'المحل التجاري',
-        phone: '01234567890',
-        zipCode: '12345',
-        state: 'القاهرة',
+        storeName: await SettingsService.getBusinessName(),
+        phone: await SettingsService.getBusinessPhone(),
+        zipCode: '',
+        state: await SettingsService.getBusinessAddress(),
+        taxNumber: await SettingsService.getTaxNumber(),
+        logoPath: await SettingsService.getBusinessLogoPath(),
       );
 
       // Create invoice model

@@ -167,6 +167,17 @@ class UnifiedPrintService {
   ) {
     return pw.Column(
       children: [
+        /// Logo (if available)
+        if (logoImage != null)
+          pw.Center(
+            child: pw.Column(
+              children: [
+                pw.Image(logoImage, width: 80, height: 80),
+                pw.SizedBox(height: 8),
+              ],
+            ),
+          ),
+
         /// Company Info (from StoreInfoTable)
         if (storeInfo != null) ...[
           pw.Center(
@@ -408,15 +419,14 @@ class UnifiedPrintService {
                 (additionalData?['creditAmount'] ?? 0) > 0) ...[
               pw.Divider(),
               _buildTotalRow(
-                'الرصيد السابق',
+                'الرصيد الافتتاحي',
                 invoiceData.invoice.previousBalance,
                 font: arabicFont,
               ),
               pw.Divider(),
               _buildTotalRow(
                 'إجمالي الحساب',
-                invoiceData.invoice.previousBalance +
-                    (additionalData?['creditAmount'] ?? 0),
+                invoiceData.grandTotal,
                 isBold: true,
                 fontSize: 14,
                 font: arabicFontBold,
@@ -807,6 +817,14 @@ class UnifiedPrintService {
   /// Helper: Load logo image for PDF generation
   static Future<pw.MemoryImage?> _loadLogoImage() async {
     try {
+      final logoPath = await SettingsService.getBusinessLogoPath();
+      if (logoPath != null && logoPath.isNotEmpty) {
+        final file = File(logoPath);
+        if (await file.exists()) {
+          final logoData = await file.readAsBytes();
+          return pw.MemoryImage(logoData);
+        }
+      }
       final logoData = await rootBundle.load(_logoAssetPath);
       return pw.MemoryImage(logoData.buffer.asUint8List());
     } catch (e) {
@@ -870,8 +888,10 @@ class InvoiceData {
 
   double get subtotal => items.fold(0.0, (sum, item) => sum + item.totalPrice);
 
-  double get grandTotal =>
-      invoice.isCreditAccount ? subtotal + invoice.previousBalance : subtotal;
+double get grandTotal =>
+    invoice.isCreditAccount
+        ? invoice.previousBalance + (invoice.totalAmount - invoice.paidAmount)
+        : invoice.totalAmount;
 }
 
 /// Enhanced Invoice Model for SOP 4.0
@@ -887,6 +907,7 @@ class Invoice {
   final bool isCreditAccount;
   final double previousBalance;
   final double totalAmount;
+  final double paidAmount;
   final String? notes;
 
   Invoice({
@@ -901,6 +922,7 @@ class Invoice {
     required this.isCreditAccount,
     required this.previousBalance,
     required this.totalAmount,
+    this.paidAmount = 0,
     this.notes,
   });
 }

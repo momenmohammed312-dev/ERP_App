@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../database/app_database.dart';
 import '../database/dao/product_dao.dart';
 import '../database/dao/inventory_movement_dao.dart';
+import '../models/user_model.dart';
+import 'validation/permission_validator.dart';
 
 /// Service for managing inventory operations
 /// حدمة إدارة المخزون
@@ -18,7 +20,8 @@ class InventoryService {
 
   /// Update product stock with movement tracking
   /// تحديث مخزون المنتج مع تسجيل الحركة
-  Future<void> updateStock({
+  Future<void> updateStock(
+    User? user, {
     required int productId,
     required int quantityChange,
     required String type, // 'purchase', 'sale', 'adjustment'
@@ -27,6 +30,7 @@ class InventoryService {
     String? performedBy,
     String? notes,
   }) async {
+    PermissionValidator.requirePermission(user, Permission.adjustInventory, 'تعديل المخزون');
     try {
       final product = await _productDao.getProductById(productId);
       if (product == null) {

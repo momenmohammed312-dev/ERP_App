@@ -8,6 +8,7 @@ class OrderLineItem extends StatefulWidget {
   final int index;
   final Function(ProductEntry) onEdit;
   final VoidCallback onDelete;
+  final bool canDelete;
 
   const OrderLineItem({
     super.key,
@@ -15,6 +16,7 @@ class OrderLineItem extends StatefulWidget {
     required this.index,
     required this.onEdit,
     required this.onDelete,
+    this.canDelete = true,
   });
 
   @override
@@ -148,11 +150,13 @@ class _OrderLineItemState extends State<OrderLineItem> {
                   },
                   tooltip: 'Edit Details',
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                  onPressed: widget.onDelete,
-                  tooltip: 'Remove Item',
-                ),
+                if (widget.canDelete)
+                  IconButton(
+                    icon:
+                        const Icon(Icons.delete, color: Colors.red, size: 20),
+                    onPressed: widget.onDelete,
+                    tooltip: 'Remove Item',
+                  ),
               ],
             ),
           ),

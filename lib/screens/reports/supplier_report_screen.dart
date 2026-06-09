@@ -68,6 +68,14 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
       debugPrint('Error loading supplier data: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ في تحميل بيانات الموردين: ${e.toString().contains('no such column') ? 'يرجى تحديث قاعدة البيانات' : e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -386,7 +394,7 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
           p.invoice_number,
           p.total_amount,
           p.paid_amount,
-          p.is_credit_purchase,
+          p.payment_method,
           p.notes
         FROM purchases p
         WHERE p.supplier_id = ?
@@ -517,8 +525,8 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
                               final paid =
                                   (p['paid_amount'] as num?)?.toDouble() ?? 0.0;
                               final remaining = total - paid;
-                              final isCredit =
-                                  (p['is_credit_purchase'] as int?) == 1;
+              final isCredit =
+                  (p['payment_method'] as String?)?.toLowerCase() == 'credit';
                               DateTime? date;
                               try {
                                 date = parseDate(p['created_at']);

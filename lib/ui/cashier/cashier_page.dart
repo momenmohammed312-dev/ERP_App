@@ -4,7 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import '../../core/database/app_database.dart';
-import '../../core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 
 class CashierPage extends ConsumerStatefulWidget {
@@ -80,8 +81,11 @@ class _CashierPageState extends ConsumerState<CashierPage> {
     } catch (e) {
       if (mounted) {
         final l10n = AppLocalizations.of(context);
+        final msg = e.toString().contains('no such table')
+            ? 'خطأ في قاعدة البيانات: بعض الجداول مفقودة. يرجى إعادة تشغيل التطبيق.'
+            : '${l10n.error_loading_data}: يرجى التأكد من فتح اليوم أولاً.';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${l10n.error_loading_data}: $e')),
+          SnackBar(content: Text(msg)),
         );
       }
     } finally {
@@ -98,8 +102,9 @@ class _CashierPageState extends ConsumerState<CashierPage> {
 
     try {
       final service = ref.read(businessDateServiceProvider);
+      final currentUser = ref.read(authProvider);
       await service.openSession(
-        openedBy: 'Admin', // In production, get from authProvider
+        openedBy: currentUser?.fullName ?? 'Admin',
         openingBalance: result,
       );
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
+import '../../core/provider/auth_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
 import '../../services/staff_management_service_simple.dart';
 
@@ -516,7 +517,9 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       }
 
       if (widget.staff == null) {
+        final user = ref.read(authProvider);
         await _service.addNewStaff(
+          user,
           name: _nameController.text.trim(),
           // position is optional — default to empty string
           position: _positionController.text.trim(),
@@ -558,7 +561,9 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               : _notesController.text.trim(),
         );
       } else {
+        final user = ref.read(authProvider);
         await _service.updateStaffInfo(
+          user,
           staffId: widget.staff!.staffId,
           name: _nameController.text.trim(),
           // position is optional — keep existing value if field is empty

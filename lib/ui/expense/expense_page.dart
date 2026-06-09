@@ -93,6 +93,19 @@ class _ExpensePageState extends State<ExpensePage> {
   Future<void> _addExpense() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final isDayOpen = await widget.db.dayDao.isDayOpen();
+    if (!isDayOpen) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('يجب فتح يوم مالي أولاً'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       await widget.db.expenseDao.insertExpense(
@@ -373,15 +386,18 @@ class _ExpensePageState extends State<ExpensePage> {
             onPressed: () => Navigator.pop(context),
             child: Text(l10n.close),
           ),
-          TextButton(
-            onPressed: () {
-              // Delete Logic?
-              // Ideally check simple delete
-              Navigator.pop(context); // Close details
-              _deleteExpense(expense);
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(l10n.delete),
+          PermissionGuard(
+            permission: Permission.editSettings,
+            showUpgradePrompt: false,
+            fallback: const SizedBox.shrink(),
+            child: TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _deleteExpense(expense);
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text(l10n.delete),
+            ),
           ),
         ],
       ),

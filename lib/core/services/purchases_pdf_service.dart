@@ -1,8 +1,11 @@
+import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/settings_service.dart';
 
 class PurchasesPdfService {
   static pw.Font? _arabicFont;
@@ -17,6 +20,29 @@ class PurchasesPdfService {
 
   static Future<void> generatePurchasesPdf(List<Purchase> purchases) async {
     await _loadFonts();
+
+    final businessName = await SettingsService.getBusinessName();
+    final businessPhone = await SettingsService.getBusinessPhone();
+    final businessAddress = await SettingsService.getBusinessAddress();
+    final taxNumber = await SettingsService.getTaxNumber();
+    final logoPath = await SettingsService.getBusinessLogoPath();
+
+    pw.MemoryImage? logoImage;
+    if (logoPath != null && logoPath.isNotEmpty) {
+      try {
+        final file = File(logoPath);
+        if (await file.exists()) {
+          final logoData = await file.readAsBytes();
+          logoImage = pw.MemoryImage(logoData);
+        }
+      } catch (_) {}
+    }
+    if (logoImage == null) {
+      try {
+        final logoData = await rootBundle.load('assets/receipt/receipt_logo.png');
+        logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
+      } catch (_) {}
+    }
 
     final pdf = pw.Document();
 
@@ -37,10 +63,40 @@ class PurchasesPdfService {
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
+                    if (logoImage != null)
+                      pw.SizedBox(
+                        height: 60,
+                        child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+                      ),
+                    pw.Text(
+                      businessName,
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        font: _arabicFont,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    if (businessPhone.isNotEmpty)
+                      pw.Text(
+                        businessPhone,
+                        style: pw.TextStyle(fontSize: 11, font: _arabicFont),
+                      ),
+                    if (businessAddress.isNotEmpty)
+                      pw.Text(
+                        businessAddress,
+                        style: pw.TextStyle(fontSize: 11, font: _arabicFont),
+                      ),
+                    if (taxNumber.isNotEmpty)
+                      pw.Text(
+                        'الرقم الضريبي: $taxNumber',
+                        style: pw.TextStyle(fontSize: 11, font: _arabicFont),
+                      ),
+                    pw.SizedBox(height: 8),
                     pw.Text(
                       'تقرير المشتريات',
                       style: pw.TextStyle(
-                        fontSize: 24,
+                        fontSize: 20,
                         fontWeight: pw.FontWeight.bold,
                         font: _arabicFont,
                       ),

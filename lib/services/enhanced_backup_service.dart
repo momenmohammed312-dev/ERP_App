@@ -271,7 +271,7 @@ class EnhancedBackupService {
         try {
           final db = await DatabaseSingleton.getInstance();
           final coreService = core_backup.BackupService(db);
-          await coreService.restoreBackup(filename);
+          await coreService.restoreBackup(null, filename);
           debugPrint('✅ تمت الاستعادة بنجاح (Core BackupService)');
           return true;
         } catch (_) {

@@ -18,7 +18,17 @@ class BusinessDateService {
         openingBalance: openingBalance,
       );
 
-      // 2. Record opening balance in General Ledger
+      // 2. Also open a day record in the days table (used by all other pages)
+      try {
+        await db.dayDao.openDay(
+          openingBalance: openingBalance,
+          openedBy: openedBy,
+        );
+      } catch (_) {
+        // Day may already be open — that's fine
+      }
+
+      // 3. Record opening balance in General Ledger
       await db.ledgerDao.insertTransaction(
         LedgerTransactionsCompanion.insert(
           id: '${DateTime.now().millisecondsSinceEpoch}_session_open_${session.id}',
@@ -50,23 +60,20 @@ class BusinessDateService {
       if (session.status != 'open') throw Exception('Session is already closed');
 
       final now = DateTime.now();
-      
+
       // 2. Calculate Expected Balance
-      // Fetch all cash transactions since openedAt
       final transactions = await db.ledgerDao.getAllTransactionsByDateRange(
         session.openedAt,
         now,
       );
 
-      // Calculate Cash Income and Expenses
-      // Note: We only care about CASH method here for drawer balancing
       final cashTxs = transactions.where((t) => t.paymentMethod == 'cash' || t.entityType == 'Cash');
-      
+
       double income = 0;
       double expenses = 0;
 
       for (var tx in cashTxs) {
-        if (tx.origin == 'opening') continue; // Don't double count opening
+        if (tx.origin == 'opening') continue;
         income += tx.debit;
         expenses += tx.credit;
       }
@@ -90,7 +97,20 @@ class BusinessDateService {
         ),
       );
 
-      // 4. Record closing in Ledger
+      // 4. Also close the day in the days table
+      try {
+        final todayDay = await db.dayDao.getTodayDay();
+        if (todayDay != null) {
+          await db.dayDao.closeDay(
+            dayId: todayDay['id'] as int,
+            closingBalance: actualCash,
+            notes: notes,
+            closedBy: session.openedBy,
+          );
+        }
+      } catch (_) {}
+
+      // 5. Record closing in Ledger
       await db.ledgerDao.insertTransaction(
         LedgerTransactionsCompanion.insert(
           id: '${DateTime.now().millisecondsSinceEpoch}_session_close_$sessionId',
@@ -99,7 +119,7 @@ class BusinessDateService {
           date: now,
           description: 'إغلاق صندوق (جلسة #$sessionId) - عجز/زيادة: ${difference.toStringAsFixed(2)}',
           debit: const Value(0.0),
-          credit: Value(actualCash), // Moving cash out of "Active Drawer"
+          credit: Value(actualCash),
           origin: 'closing',
           paymentMethod: const Value('cash'),
         ),

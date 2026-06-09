@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
+import '../../core/provider/auth_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
 import '../../services/staff_management_service_simple.dart';
 import 'staff_form_page.dart';
 import 'staff_details_page.dart';
 import 'attendance_page.dart';
+import 'employee_dashboard_page.dart';
 
 class StaffListPage extends ConsumerStatefulWidget {
   const StaffListPage({super.key});
@@ -98,6 +100,18 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
         foregroundColor: textColor,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.dashboard),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const EmployeeDashboardPage(),
+                ),
+              );
+            },
+            tooltip: 'لوحة الموظفين',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadStaff,
@@ -482,7 +496,8 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
 
     if (confirmed == true) {
       try {
-        await _service.terminateStaff(staff.staffId);
+        final user = ref.read(authProvider);
+        await _service.terminateStaff(user, staff.staffId);
         _loadStaff();
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -499,7 +514,8 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
 
   void _activateStaff(Staff staff) async {
     try {
-      await _service.updateStaffInfo(staffId: staff.staffId, status: 'active');
+      final user = ref.read(authProvider);
+      await _service.updateStaffInfo(user, staffId: staff.staffId, status: 'active');
       _loadStaff();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

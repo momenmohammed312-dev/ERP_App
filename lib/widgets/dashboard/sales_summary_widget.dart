@@ -241,12 +241,12 @@ class _SalesSummaryWidgetState extends State<SalesSummaryWidget> {
           .customSelect(
             '''
         SELECT 
-          paymentMethod,
+          payment_method,
           COUNT(*) as invoice_count,
           COALESCE(SUM($totalColumn), 0) as total_amount
         FROM invoices 
         WHERE date >= ? AND status != 'deleted'
-        GROUP BY paymentMethod
+        GROUP BY payment_method
       ''',
             variables: [Variable.withDateTime(startOfMonth)],
           )
@@ -260,7 +260,7 @@ class _SalesSummaryWidgetState extends State<SalesSummaryWidget> {
       int cashInvoices = 0;
 
       for (final row in salesResult) {
-        final paymentMethod = row.readNullable<String>('paymentMethod') ?? '';
+        final paymentMethod = row.readNullable<String>('payment_method') ?? '';
         final amount = row.readNullable<double>('total_amount') ?? 0.0;
         final count = row.readNullable<int>('invoice_count') ?? 0;
 

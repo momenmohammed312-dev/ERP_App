@@ -93,7 +93,7 @@ class _SalesPurchaseComparisonCardState
               '''
           SELECT COALESCE(SUM($purchasesTotalColumn), 0) as total_purchases
           FROM purchases 
-          WHERE purchaseDate >= ? AND purchaseDate < ? AND isDeleted = 0
+          WHERE purchase_date >= ? AND purchase_date < ? AND is_deleted = 0
         ''',
               variables: [
                 drift.Variable.withDateTime(startOfDay),

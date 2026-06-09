@@ -23,14 +23,14 @@ class AnalyticsService {
           .customSelect(
             '''
         SELECT 
-          date(created_at) as sale_date,
+          date(date) as sale_date,
           COUNT(*) as invoice_count,
-          SUM(total) as total_sales,
-          AVG(total) as average_sale
+          SUM(total_amount) as total_sales,
+          AVG(total_amount) as average_sale
         FROM invoices 
-        WHERE created_at BETWEEN ? AND ?
+        WHERE date BETWEEN ? AND ?
         AND status = 'completed'
-        GROUP BY date(created_at)
+        GROUP BY date(date)
         ORDER BY sale_date DESC
         ''',
             variables: [
@@ -59,9 +59,9 @@ class AnalyticsService {
       final paymentData = await db
           .customSelect(
             '''
-        SELECT payment_method, COUNT(*) as count, SUM(total) as total
+        SELECT payment_method, COUNT(*) as count, SUM(total_amount) as total
         FROM invoices 
-        WHERE created_at BETWEEN ? AND ?
+        WHERE date BETWEEN ? AND ?
         AND status = 'completed'
         GROUP BY payment_method
         ''',
@@ -101,7 +101,7 @@ class AnalyticsService {
           p.id,
           p.name,
           COALESCE(SUM(ii.quantity), 0) as total_sold,
-          COALESCE(SUM(ii.total), 0) as revenue,
+          COALESCE(SUM(ii.price * ii.quantity), 0) as revenue,
           p.quantity as current_stock
         FROM products p
         LEFT JOIN invoice_items ii ON p.id = ii.product_id
@@ -143,9 +143,9 @@ class AnalyticsService {
         SELECT 
           c.id,
           c.name,
-          COALESCE(SUM(i.total), 0) as total_purchases,
+          COALESCE(SUM(i.total_amount), 0) as total_purchases,
           COUNT(i.id) as invoice_count,
-          MAX(i.created_at) as last_purchase
+          MAX(i.date) as last_purchase
         FROM customers c
         LEFT JOIN invoices i ON c.id = i.customer_id
         WHERE i.status = 'completed' OR i.id IS NULL
@@ -226,10 +226,10 @@ class AnalyticsService {
           .customSelect(
             '''
         SELECT 
-          SUM(total) as revenue,
-          SUM(CASE WHEN total < 0 THEN ABS(total) ELSE 0 END) as expenses
+          SUM(total_amount) as revenue,
+          SUM(CASE WHEN total_amount < 0 THEN ABS(total_amount) ELSE 0 END) as expenses
         FROM invoices 
-        WHERE created_at BETWEEN ? AND ?
+        WHERE date BETWEEN ? AND ?
         AND status = 'completed'
         ''',
             variables: [

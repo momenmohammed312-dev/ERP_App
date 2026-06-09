@@ -1,23 +1,26 @@
 import 'dart:async';
 import 'dart:developer';
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:drift/drift.dart' hide Column;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/ui/invoice/models/invoice_models.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/invoice_type_selection_modal.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/product_selection_modal.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/order_line_item.dart';
 import 'package:pos_offline_desktop/ui/invoice/models/product_entry.dart';
+import 'package:pos_offline_desktop/core/services/invoice_service.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
 import 'package:pos_offline_desktop/ui/invoice/widgets/day_closed_dialog.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/product_card.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/day_opening_page.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
 
 class EnhancedNewInvoicePage extends StatefulHookConsumerWidget {
   final AppDatabase db;
@@ -158,8 +161,18 @@ class _EnhancedNewInvoicePageState
       bool isOpen = await widget.db.dayDao.isDayOpen();
 
       if (!isOpen) {
-        await widget.db.dayDao.getOrCreateTodayDay(openingBalance: 0.0);
-        isOpen = true;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'يجب فتح اليوم أولاً من تبويب الكاشير',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+          Navigator.pop(context);
+        }
+        return;
       }
 
       // Load data
@@ -381,6 +394,24 @@ class _EnhancedNewInvoicePageState
     double discount,
     double tax,
   ) {
+    final needsPriceOverride = unitPrice != product.price;
+    if (needsPriceOverride) {
+      final currentUser = ref.read(authProvider);
+      if (currentUser == null || !currentUser.hasPermission(Permission.editSale)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'لا تملك صلاحية تعديل السعر. تم استخدام السعر الافتراضي.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        unitPrice = product.price;
+      }
+    }
+
     setState(() {
       final entry = ProductEntry(product: product)
         ..quantity = quantity
@@ -431,6 +462,129 @@ class _EnhancedNewInvoicePageState
         );
       }
     }
+  }
+
+  void _showAddExpenseDialog() {
+    final descCtrl = TextEditingController();
+    final amountCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    String category = 'other_expenses';
+    String paymentMethod = 'cash';
+    DateTime selectedDate = DateTime.now();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('مصروف جديد'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: descCtrl,
+                  decoration: const InputDecoration(labelText: 'البيان *', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'المبلغ *', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: category,
+                  decoration: const InputDecoration(labelText: 'التصنيف', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'rent', child: Text('إيجار')),
+                    DropdownMenuItem(value: 'electricity', child: Text('كهرباء')),
+                    DropdownMenuItem(value: 'water', child: Text('مياه')),
+                    DropdownMenuItem(value: 'internet', child: Text('نت')),
+                    DropdownMenuItem(value: 'salaries', child: Text('مرتبات')),
+                    DropdownMenuItem(value: 'maintenance', child: Text('صيانة')),
+                    DropdownMenuItem(value: 'marketing', child: Text('تسويق')),
+                    DropdownMenuItem(value: 'other_expenses', child: Text('أخرى')),
+                  ],
+                  onChanged: (v) => setDialogState(() => category = v ?? 'other_expenses'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: paymentMethod,
+                  decoration: const InputDecoration(labelText: 'طريقة الدفع', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'cash', child: Text('نقدي')),
+                    DropdownMenuItem(value: 'card', child: Text('بطاقة')),
+                    DropdownMenuItem(value: 'bank', child: Text('تحويل بنكي')),
+                  ],
+                  onChanged: (v) => setDialogState(() => paymentMethod = v ?? 'cash'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () async {
+                if (descCtrl.text.isEmpty || amountCtrl.text.isEmpty) return;
+                final amount = double.tryParse(amountCtrl.text) ?? 0;
+                if (amount <= 0) return;
+
+                try {
+                  final db = widget.db;
+                  final isOpen = await db.dayDao.isDayOpen();
+                  if (!isOpen) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('يجب فتح اليوم أولاً'), backgroundColor: Colors.red),
+                      );
+                    }
+                    return;
+                  }
+                  final now = DateTime.now();
+                  final expenseId = '${now.millisecondsSinceEpoch}_expense';
+                  await db.expenseDao.insertExpense(
+                    ExpensesCompanion.insert(
+                      id: expenseId,
+                      description: descCtrl.text,
+                      amount: amount,
+                      category: category,
+                      date: Value(now),
+                      paymentMethod: Value(paymentMethod),
+                    ),
+                  );
+                  await db.ledgerDao.insertTransaction(
+                    LedgerTransactionsCompanion.insert(
+                      id: '${now.millisecondsSinceEpoch}_ledger_expense',
+                      entityType: 'Expense',
+                      refId: 'general_expense',
+                      date: now,
+                      description: '$category: ${descCtrl.text}',
+                      debit: const Value(0.0),
+                      credit: Value(amount),
+                      origin: 'expense',
+                      paymentMethod: Value(paymentMethod),
+                    ),
+                  );
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('تم إضافة المصروف'), backgroundColor: Colors.green),
+                    );
+                  }
+                } catch (e) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _completeInvoice() async {
@@ -527,106 +681,67 @@ class _EnhancedNewInvoicePageState
       );
     }
 
-    // Insert invoice
-    final invoiceId = await db.invoiceDao.insertInvoice(
-      InvoicesCompanion(
-        invoiceNumber: Value(_invoiceNumber!),
-        customerName: Value(customerName),
-        customerContact: Value(customerContact),
-        customerAddress: Value(customerAddress),
-        customerId: Value(customerId),
-        paymentMethod: Value(paymentMethodStr),
-        totalAmount: Value(_grandTotal),
-        paidAmount: Value(_paidAmount),
-        status: Value(status),
-        date: Value(DateTime.now()),
-      ),
-    );
+    // Build invoice items for service
+    final items = _productEntries
+        .where((e) => e.product != null)
+        .map((e) {
+          int? ctn;
+          if (e.product!.cartonQuantity != null &&
+              e.product!.cartonQuantity! > 0) {
+            ctn = e.quantity ~/ e.product!.cartonQuantity!;
+          }
+          return InvoiceItemParams(
+            productId: e.product!.id,
+            quantity: e.quantity,
+            price: e.unitPrice,
+            ctn: ctn,
+            discount: e.discount,
+          );
+        }).toList();
 
-    // Insert invoice items and update stock
-    for (final entry in _productEntries) {
-      if (entry.product == null) continue;
-
-      // Check stock
-      final availableStock = entry.product!.quantity;
-      final totalQuantityNeeded = entry.quantity;
-
-      if (totalQuantityNeeded > availableStock) {
-        throw Exception('Insufficient stock for ${entry.product!.name}');
-      }
-
-      // Update product quantity
-      final newQuantity = availableStock - totalQuantityNeeded;
-      await db.productDao.updateProduct(
-        ProductsCompanion(
-          id: Value(entry.product!.id),
-          name: Value(entry.product!.name),
-          quantity: Value(newQuantity),
-          price: Value(entry.product!.price),
-          unit: Value(entry.product!.unit),
-          category: Value(entry.product!.category),
-          barcode: Value(entry.product!.barcode),
-          cartonQuantity: Value(entry.product!.cartonQuantity),
-          cartonPrice: Value(entry.product!.cartonPrice),
-          status: Value(entry.product!.status),
-        ),
-      );
-
-      // Calculate carton quantity (if product has carton info)
-      int? cartonQuantity;
-      if (entry.product!.cartonQuantity != null &&
-          entry.product!.cartonQuantity! > 0) {
-        cartonQuantity = entry.quantity ~/ entry.product!.cartonQuantity!;
-      }
-
-      // Insert invoice item
-      await db.invoiceDao.insertInvoiceItem(
-        InvoiceItemsCompanion(
-          invoiceId: Value(invoiceId),
-          productId: Value(entry.product!.id),
-          quantity: Value(entry.quantity),
-          price: Value(entry.unitPrice),
-          ctn: Value(cartonQuantity),
-        ),
-      );
-    }
-
-    // Create product summary for ledger description
     final productSummary = _productEntries
         .map((e) => e.product?.name ?? '')
         .where((n) => n.isNotEmpty)
         .join(', ');
     final ledgerDescription = 'بيع #$_invoiceNumber ($productSummary)';
 
-    // Get all items with products for printing
-    final itemsWithProducts = await Future.wait(
-      _productEntries.map((entry) async {
-        final product = entry.product?.id != null
-            ? await db.productDao.getProductById(entry.product!.id)
-            : null;
-        return (entry, product);
-      }),
+    final result = await InvoiceService(db).createInvoice(
+      customerId: customerId == 'cash' ? null : customerId,
+      customerName: customerName,
+      customerContact: customerContact,
+      customerAddress: customerAddress,
+      paymentMethod: paymentMethodStr,
+      totalAmount: _grandTotal,
+      paidAmount: _paidAmount,
+      status: status,
+      invoiceNumber: _invoiceNumber,
+      items: items,
+      ledgerDescription: ledgerDescription,
     );
 
-    final invoiceItems = itemsWithProducts.map((itemWithProduct) {
-      final item = itemWithProduct.$1;
-      final product = itemWithProduct.$2;
-      return ups.InvoiceItem(
-        id: item.product?.id ?? 0,
-        invoiceId: invoiceId, // Use the actual invoice ID from database
-        description: product?.name ?? 'Product ${item.product?.id}',
-        unit: item.unit,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: item.lineTotal,
-      );
-    }).toList();
+    final invoiceId = result.invoiceId;
+
+    // Build print data
+    final invoiceItems = _productEntries
+        .where((e) => e.product != null)
+        .map((e) => ups.InvoiceItem(
+              id: e.product!.id,
+              invoiceId: invoiceId,
+              description: e.product!.name,
+              unit: e.unit,
+              quantity: e.quantity,
+              unitPrice: e.unitPrice,
+              totalPrice: e.lineTotal,
+            ))
+        .toList();
 
     final storeInfo = ups.StoreInfo(
       storeName: await SettingsService.getBusinessName(),
       phone: await SettingsService.getBusinessPhone(),
       zipCode: '',
       state: await SettingsService.getBusinessAddress(),
+      taxNumber: await SettingsService.getTaxNumber(),
+      logoPath: await SettingsService.getBusinessLogoPath(),
     );
 
     final invoiceModel = ups.Invoice(
@@ -641,6 +756,7 @@ class _EnhancedNewInvoicePageState
       isCreditAccount: _invoiceType == InvoiceType.credit,
       previousBalance: previousBalance,
       totalAmount: _grandTotal,
+      paidAmount: _paidAmount,
     );
 
     final invoiceData = ups.InvoiceData(
@@ -649,10 +765,11 @@ class _EnhancedNewInvoicePageState
       storeInfo: storeInfo,
     );
 
-    // Print using new SOP 4.0 format
-    // Only pass paidAmount if customer has actually paid something
     final Map<String, dynamic>? additionalData = (_paidAmount > 0)
-        ? {'paidAmount': _paidAmount}
+        ? {
+            'paidAmount': _paidAmount,
+            'creditAmount': _grandTotal - _paidAmount,
+          }
         : null;
 
     await ups.UnifiedPrintService.printToThermalPrinter(
@@ -660,39 +777,6 @@ class _EnhancedNewInvoicePageState
       data: invoiceData,
       additionalData: additionalData,
     );
-
-    // Record ledger transactions AFTER printing (so previous balance is correct)
-    await db.ledgerDao.insertTransaction(
-      LedgerTransactionsCompanion.insert(
-        id: '${DateTime.now().millisecondsSinceEpoch}_sale',
-        entityType: 'Customer',
-        refId: customerId,
-        date: DateTime.now(),
-        description: ledgerDescription,
-        debit: Value(_grandTotal),
-        credit: const Value(0.0),
-        origin: 'sale',
-        paymentMethod: Value('credit'),
-        receiptNumber: Value(_invoiceNumber!),
-      ),
-    );
-
-    if (_paidAmount > 0) {
-      await db.ledgerDao.insertTransaction(
-        LedgerTransactionsCompanion.insert(
-          id: '${DateTime.now().millisecondsSinceEpoch}_payment',
-          entityType: 'Customer',
-          refId: customerId,
-          date: DateTime.now(),
-          description: 'دفع فاتورة #$_invoiceNumber',
-          debit: const Value(0.0),
-          credit: Value(_paidAmount),
-          origin: 'payment',
-          paymentMethod: Value('cash'),
-          receiptNumber: Value(_invoiceNumber!),
-        ),
-      );
-    }
   }
 
   @override
@@ -1114,6 +1198,22 @@ class _EnhancedNewInvoicePageState
                   ),
                 ),
                 const Gap(16),
+
+                // Quick expense button
+                SizedBox(
+                  width: double.infinity,
+                  height: 40,
+                  child: OutlinedButton.icon(
+                    onPressed: _showAddExpenseDialog,
+                    icon: const Icon(Icons.add_circle_outline, size: 18),
+                    label: const Text('إضافة مصروف جديد'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red[700],
+                      side: BorderSide(color: Colors.red.shade200),
+                    ),
+                  ),
+                ),
+                const Gap(12),
 
                 // Action buttons
                 Row(

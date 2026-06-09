@@ -51,15 +51,15 @@ class CustomerStatusFix {
             name TEXT NOT NULL,
             phone TEXT,
             address TEXT,
-            gstinNumber TEXT,
+            gstin_number TEXT,
             email TEXT,
-            openingBalance REAL DEFAULT 0.0,
-            totalDebt REAL DEFAULT 0.0,
-            totalPaid REAL DEFAULT 0.0,
-            createdAt INTEGER,
-            updatedAt INTEGER,
+            opening_balance REAL DEFAULT 0.0,
+            total_debt REAL DEFAULT 0.0,
+            total_paid REAL DEFAULT 0.0,
+            created_at INTEGER,
+            updated_at INTEGER,
             notes TEXT,
-            isActive INTEGER DEFAULT 1,
+            is_active INTEGER DEFAULT 1,
             status TEXT DEFAULT 'Active'
           )
         ''');
@@ -67,12 +67,12 @@ class CustomerStatusFix {
         // 4. Restore data (converting INTEGER status to TEXT)
         await db.customStatement('''
           INSERT INTO customers (
-            id, name, phone, address, gstinNumber, email, openingBalance,
-            totalDebt, totalPaid, createdAt, updatedAt, notes, isActive, status
+            id, name, phone, address, gstin_number, email, opening_balance,
+            total_debt, total_paid, created_at, updated_at, notes, is_active, status
           )
           SELECT 
-            id, name, phone, address, gstinNumber, email, openingBalance,
-            totalDebt, totalPaid, createdAt, updatedAt, notes, isActive,
+            id, name, phone, address, gstin_number, email, opening_balance,
+            total_debt, total_paid, created_at, updated_at, notes, is_active,
             CASE 
               WHEN status = 1 THEN 'Active'
               WHEN status = 0 THEN 'Inactive'
