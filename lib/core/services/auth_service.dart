@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/app_database.dart';
@@ -98,6 +99,19 @@ class AuthService {
         role = UserRole.viewer;
     }
 
+    List<Permission> customPerms = <Permission>[];
+    if (appUser.customPermissions != null && appUser.customPermissions!.isNotEmpty) {
+      try {
+        final jsonList = jsonDecode(appUser.customPermissions!) as List;
+        customPerms = jsonList
+            .map((e) => Permission.values.firstWhere(
+                  (p) => p.name == e,
+                  orElse: () => Permission.viewSales,
+                ))
+            .toList();
+      } catch (_) {}
+    }
+
     return User(
       id: appUser.id,
       username: appUser.username,
@@ -107,7 +121,7 @@ class AuthService {
       isActive: appUser.isActive,
       lastLogin: appUser.lastLogin,
       createdAt: appUser.createdAt,
-      customPermissions: [], // Map if stored in DB
+      customPermissions: customPerms,
     );
   }
 }

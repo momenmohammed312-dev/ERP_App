@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 
@@ -24,8 +25,8 @@ class BusinessDateService {
           openingBalance: openingBalance,
           openedBy: openedBy,
         );
-      } catch (_) {
-        // Day may already be open — that's fine
+      } catch (e) {
+        debugPrint('BusinessDateService.openSession: dayDao.openDay failed: $e');
       }
 
       // 3. Record opening balance in General Ledger
@@ -108,7 +109,9 @@ class BusinessDateService {
             closedBy: session.openedBy,
           );
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('BusinessDateService.closeSession: dayDao.closeDay failed: $e');
+      }
 
       // 5. Record closing in Ledger
       await db.ledgerDao.insertTransaction(

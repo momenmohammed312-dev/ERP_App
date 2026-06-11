@@ -16,8 +16,8 @@ class ExpensesReportTab extends StatefulWidget {
 }
 
 class _ExpensesReportTabState extends State<ExpensesReportTab> {
-  DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
-  DateTime _endDate = DateTime.now();
+  DateTime _startDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  DateTime _endDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
   List<Expense> _expenses = []; // Changed from LedgerTransaction to Expense
   bool _isLoading = false;
   final ExportService _exportService = ExportService();

@@ -25,8 +25,8 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
   List<CustomerWithBalance> _filteredCustomers = [];
   bool _isLoading = false;
   bool _showOnlyDues = false;
-  DateTime _reportStart = DateTime.now().subtract(const Duration(days: 30));
-  DateTime _reportEnd = DateTime.now();
+  DateTime _reportStart = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  DateTime _reportEnd = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
   final TextEditingController _searchController = TextEditingController();
   final ExportService _exportService = ExportService();
 
@@ -173,73 +173,91 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
       }
 
       final pdf = pw.Document();
+      final List<String> failedCustomers = [];
 
       for (final cwb in customersToExport) {
-        final transactions = await db.ledgerDao
-            .getTransactionsWithRunningBalance(
-              'Customer',
-              cwb.customer.id,
-              _reportStart,
-              _reportEnd,
-            );
+        try {
+          final transactions = await db.ledgerDao
+              .getTransactionsWithRunningBalance(
+                'Customer',
+                cwb.customer.id,
+                _reportStart,
+                _reportEnd,
+              );
 
-        final openingBalance = await db.ledgerDao.getRunningBalance(
-          'Customer',
-          cwb.customer.id,
-          upToDate: _reportStart.subtract(const Duration(days: 1)),
-        );
+          final openingBalance = await db.ledgerDao.getRunningBalance(
+            'Customer',
+            cwb.customer.id,
+            upToDate: _reportStart.subtract(const Duration(days: 1)),
+          );
 
-        final totalDebit = transactions.fold<double>(
-          0, (s, t) => s + t.transaction.debit);
-        final totalCredit = transactions.fold<double>(
-          0, (s, t) => s + t.transaction.credit);
+          final totalDebit = transactions.fold<double>(
+            0, (s, t) => s + t.transaction.debit);
+          final totalCredit = transactions.fold<double>(
+            0, (s, t) => s + t.transaction.credit);
 
-        pdf.addPage(
-          pw.MultiPage(
-            pageFormat: PdfPageFormat.a4,
-            margin: const pw.EdgeInsets.all(20),
-            build: (pw.Context ctx) => [
-              pw.Directionality(
-                textDirection: pw.TextDirection.rtl,
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                  children: [
-                    _buildPdfHeader(
-                      arabicFont, arabicBoldFont,
-                      cwb.customer.name, businessName, taxNumber, logoPath),
-                    pw.SizedBox(height: 8),
-                    _buildPdfPeriod(arabicFont, cwb.balance),
-                    pw.SizedBox(height: 8),
-                    _buildPdfSummaryCards(
-                      arabicFont, arabicBoldFont,
-                      openingBalance, totalDebit, totalCredit, cwb.balance),
-                    pw.SizedBox(height: 12),
-                    _buildPdfTransactionTable(
-                      transactions, arabicFont, arabicBoldFont, openingBalance),
-                    pw.SizedBox(height: 12),
-                    pw.Divider(color: PdfColors.grey300),
-                    pw.SizedBox(height: 4),
-                    pw.Text(
-                      'تم التوليد في: ${DateFormat('yyyy/MM/dd hh:mm a').format(DateTime.now())}',
-                      style: pw.TextStyle(
-                        fontSize: 8, color: PdfColors.grey600, font: arabicFont),
-                      textDirection: pw.TextDirection.rtl,
-                    ),
-                  ],
+          pdf.addPage(
+            pw.MultiPage(
+              pageFormat: PdfPageFormat.a4,
+              margin: const pw.EdgeInsets.all(20),
+              build: (pw.Context ctx) => [
+                pw.Directionality(
+                  textDirection: pw.TextDirection.rtl,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                    children: [
+                      _buildPdfHeader(
+                        arabicFont, arabicBoldFont,
+                        cwb.customer.name, businessName, taxNumber, logoPath),
+                      pw.SizedBox(height: 8),
+                      _buildPdfPeriod(arabicFont, cwb.balance),
+                      pw.SizedBox(height: 8),
+                      _buildPdfSummaryCards(
+                        arabicFont, arabicBoldFont,
+                        openingBalance, totalDebit, totalCredit, cwb.balance),
+                      pw.SizedBox(height: 12),
+                      _buildPdfTransactionTable(
+                        transactions, arabicFont, arabicBoldFont, openingBalance),
+                      pw.SizedBox(height: 12),
+                      pw.Divider(color: PdfColors.grey300),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        'تم التوليد في: ${DateFormat('yyyy/MM/dd hh:mm a').format(DateTime.now())}',
+                        style: pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey600, font: arabicFont),
+                        textDirection: pw.TextDirection.rtl,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+          );
+        } catch (e) {
+          failedCustomers.add(cwb.customer.name);
+          debugPrint('Error processing customer ${cwb.customer.name}: $e');
+        }
+      }
+
+      if (pdf.document.pdfPageList.pages.isNotEmpty) {
+        await Printing.layoutPdf(
+          onLayout: (PdfPageFormat format) => pdf.save(),
+          name: 'تقرير العملاء الكامل',
+          format: PdfPageFormat.a4,
+        );
+      }
+
+      if (failedCustomers.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تعذّر معالجة: ${failedCustomers.join(', ')}'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
 
-      await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) => pdf.save(),
-        name: 'تقرير العملاء الكامل',
-        format: PdfPageFormat.a4,
-      );
-
-      if (mounted) {
+      if (mounted && failedCustomers.isEmpty && pdf.document.pdfPageList.pages.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('تم طباعة التقرير الكامل بنجاح'),
@@ -618,9 +636,11 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
         upToDate: start.subtract(const Duration(days: 1)),
       );
 
-      final currentBalance = await widget.db.ledgerDao.getCustomerBalance(
+      final currentBalance = await widget.db.ledgerDao.getRunningBalance(
+        'Customer',
         customer.id,
-      ); // Total current balance (debt)
+        upToDate: end,
+      );
 
       // 4. Export
       await _exportService.exportCustomerStatement(
@@ -628,11 +648,7 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
         customerName: customer.name,
         transactions: mappedTransactions,
         openingBalance: openingBalance,
-        currentBalance: -currentBalance, // Flip sign effectively?
-        // Note: getCustomerBalance returns (Debit - Credit) usually, i.e. Debt is positive.
-        // If Debt is positive, customer expects to see positive "Due".
-        // The export service highlights positive balance as Red (Owed).
-        // So passing positive is correct.
+        currentBalance: currentBalance,
       );
     } catch (e) {
       if (mounted) {

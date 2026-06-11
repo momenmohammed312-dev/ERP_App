@@ -158,6 +158,34 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                 ),
               ],
             ),
+            if (payroll.status == 'calculated' || payroll.status == 'approved') ...[
+              const Divider(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (payroll.status == 'calculated')
+                    ElevatedButton.icon(
+                      onPressed: () => _approvePayroll(payroll),
+                      icon: const Icon(Icons.verified, size: 18),
+                      label: const Text('اعتماد'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  if (payroll.status == 'approved')
+                    ElevatedButton.icon(
+                      onPressed: () => _markPaid(payroll),
+                      icon: const Icon(Icons.payments, size: 18),
+                      label: const Text('صرف'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -203,6 +231,86 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
         return 'تم الصرف';
       default:
         return status;
+    }
+  }
+
+  Future<void> _approvePayroll(Payroll payroll) async {
+    final user = ref.read(authProvider);
+    if (user == null) return;
+    try {
+      await _dao.approvePayroll(payroll.id, user.fullName);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم اعتماد المرتب'), backgroundColor: Colors.blue),
+        );
+      }
+      _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _markPaid(Payroll payroll) async {
+    final methods = ['cash', 'bank_transfer', 'check'];
+    final selectedMethod = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('طريقة الصرف'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: methods.map((m) {
+            String label;
+            IconData icon;
+            switch (m) {
+              case 'cash':
+                label = 'نقداً';
+                icon = Icons.money;
+                break;
+              case 'bank_transfer':
+                label = 'تحويل بنكي';
+                icon = Icons.account_balance;
+                break;
+              case 'check':
+                label = 'شيك';
+                icon = Icons.receipt;
+                break;
+              default:
+                label = m;
+                icon = Icons.payment;
+            }
+            return ListTile(
+              leading: Icon(icon),
+              title: Text(label),
+              onTap: () => Navigator.pop(ctx, m),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+
+    if (selectedMethod == null) return;
+    try {
+      await _dao.markPayrollPaid(
+        payroll.id,
+        paymentDate: DateTime.now(),
+        paymentMethod: selectedMethod,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم صرف المرتب'), backgroundColor: Colors.green),
+        );
+      }
+      _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 

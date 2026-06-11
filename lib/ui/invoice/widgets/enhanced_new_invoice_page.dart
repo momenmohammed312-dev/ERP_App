@@ -441,14 +441,57 @@ class _EnhancedNewInvoicePageState
   }
 
   Future<void> _saveDraft() async {
+    if (_productEntries.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('يرجى إضافة منتج واحد على الأقل لحفظ المسودة'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
     try {
-      // Create a draft record in the database
-      // For now, just show success message
+      final db = widget.db;
+      final now = DateTime.now();
+      final draftNumber = _invoiceNumber ?? 'DRAFT_${now.millisecondsSinceEpoch}';
+      final customerName = _selectedCustomer?.name ?? 'عميل نقدي';
+
+      final invoiceId = await db.invoiceDao.insertInvoice(
+        InvoicesCompanion(
+          invoiceNumber: Value(draftNumber),
+          customerId: Value(_selectedCustomerId),
+          customerName: Value(customerName),
+          customerContact: Value(_selectedCustomer?.phone ?? ''),
+          customerAddress: Value(_selectedCustomer?.address ?? ''),
+          paymentMethod: Value(_invoiceType == InvoiceType.credit ? 'credit' : _paymentMethod.name),
+          totalAmount: Value(_grandTotal),
+          paidAmount: Value(_paidAmount),
+          date: Value(now),
+          status: const Value('draft'),
+        ),
+      );
+
+      for (final entry in _productEntries) {
+        if (entry.product == null) continue;
+        await db.invoiceDao.insertInvoiceItem(
+          InvoiceItemsCompanion(
+            invoiceId: Value(invoiceId),
+            productId: Value(entry.product!.id),
+            quantity: Value(entry.quantity),
+            price: Value(entry.unitPrice),
+            discount: Value(entry.discount),
+          ),
+        );
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('تم حفظ المسودة بنجاح'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: Colors.green,
           ),
         );
       }
@@ -457,7 +500,7 @@ class _EnhancedNewInvoicePageState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('خطأ في حفظ المسودة: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -493,7 +536,7 @@ class _EnhancedNewInvoicePageState
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: category,
+                  initialValue: category,
                   decoration: const InputDecoration(labelText: 'التصنيف', border: OutlineInputBorder()),
                   items: const [
                     DropdownMenuItem(value: 'rent', child: Text('إيجار')),
@@ -509,7 +552,7 @@ class _EnhancedNewInvoicePageState
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: paymentMethod,
+                  initialValue: paymentMethod,
                   decoration: const InputDecoration(labelText: 'طريقة الدفع', border: OutlineInputBorder()),
                   items: const [
                     DropdownMenuItem(value: 'cash', child: Text('نقدي')),

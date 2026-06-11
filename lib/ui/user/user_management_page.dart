@@ -149,7 +149,7 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
           const SizedBox(width: 12),
           Expanded(child: _buildStatCard('المستخدمون النشطون', '${_users.where((u) => u.isActive).length}', _accentGreen, Icons.person)),
           const SizedBox(width: 12),
-          Expanded(child: _buildStatCard('المديرون', '${_users.where((u) => u.role == 'admin').length}', _gold, Icons.admin_panel_settings)),
+          Expanded(child: _buildStatCard('المديرون', '${_users.where((u) => u.role == UserRole.admin.name).length}', _gold, Icons.admin_panel_settings)),
         ],
       ),
     );
@@ -206,7 +206,7 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
       orElse: () => UserRole.viewer,
     );
     final currentUser = ref.watch(authProvider);
-    final isCurrentUserAdmin = currentUser?.role == UserRole.admin;
+    final canManageUsers = currentUser?.hasPermission(Permission.manageUsers) ?? false;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -263,7 +263,7 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                if (isCurrentUserAdmin) ...[
+                if (canManageUsers) ...[
                   TextButton.icon(
                     onPressed: () => _toggleUserStatus(user),
                     icon: Icon(user.isActive ? Icons.block : Icons.check_circle, size: 16),
@@ -276,19 +276,20 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
                     icon: const Icon(Icons.edit, color: _gold),
                     tooltip: 'تعديل',
                   ),
-                  if (user.role != 'admin' && user.id != currentUser?.id)
+                  if (userRole != UserRole.admin && user.id != currentUser?.id)
                     IconButton(
                       onPressed: () => _deleteUser(user),
                       icon: const Icon(Icons.delete, color: Colors.red),
                       tooltip: 'حذف',
                     ),
                 ],
-                IconButton(
-                  onPressed: () => _showPermissionsDialog(user, userRole),
-                  icon: const Icon(Icons.tune, color: _accentBlue),
-                  tooltip: 'الصلاحيات',
-                ),
-                if (isCurrentUserAdmin && user.role != 'admin')
+                if (canManageUsers)
+                  IconButton(
+                    onPressed: () => _showPermissionsDialog(user, userRole),
+                    icon: const Icon(Icons.tune, color: _accentBlue),
+                    tooltip: 'الصلاحيات',
+                  ),
+                if (canManageUsers && userRole != UserRole.admin)
                   IconButton(
                     onPressed: () => _showResetPasswordDialog(user),
                     icon: const Icon(Icons.lock_reset, color: _goldLight),
@@ -671,6 +672,18 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
       case 'accountant': role = UserRole.accountant; break;
       default: role = UserRole.viewer;
     }
+    List<Permission> customPerms = <Permission>[];
+    if (appUser.customPermissions != null && appUser.customPermissions!.isNotEmpty) {
+      try {
+        final jsonList = jsonDecode(appUser.customPermissions!) as List;
+        customPerms = jsonList
+            .map((e) => Permission.values.firstWhere(
+                  (p) => p.name == e,
+                  orElse: () => Permission.viewSales,
+                ))
+            .toList();
+      } catch (_) {}
+    }
     return User(
       id: appUser.id,
       username: appUser.username,
@@ -680,7 +693,7 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
       isActive: appUser.isActive,
       lastLogin: appUser.lastLogin,
       createdAt: appUser.createdAt,
-      customPermissions: [],
+      customPermissions: customPerms,
     );
   }
 

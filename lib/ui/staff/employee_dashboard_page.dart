@@ -54,7 +54,7 @@ class _EmployeeDashboardPageState
       final todayStart = DateTime(today.year, today.month, today.day);
 
       final attendanceRows = await _db.customSelect('''
-        SELECT status, COUNT(*) as cnt FROM attendance
+        SELECT status, COUNT(*) as cnt FROM attendance_table
         WHERE date >= ? AND date < ?
         GROUP BY status
       ''', variables: [
@@ -473,7 +473,7 @@ class _SectionListSheetState extends State<_SectionListSheet> {
           SELECT v.id, v.staff_id, v.vacation_type, v.start_date, v.end_date,
                  v.total_days, v.status, s.name as staff_name
           FROM vacations v
-          LEFT JOIN staff s ON v.staff_id = s.staff_id
+          LEFT JOIN staff_table s ON v.staff_id = s.staff_id
           WHERE v.status = 'pending'
           ORDER BY v.created_at DESC
         ''').get();
@@ -488,7 +488,7 @@ class _SectionListSheetState extends State<_SectionListSheet> {
           SELECT a.id, a.staff_id, a.amount, a.status, a.request_date,
                  s.name as staff_name
           FROM staff_advances a
-          LEFT JOIN staff s ON a.staff_id = s.staff_id
+          LEFT JOIN staff_table s ON a.staff_id = s.staff_id
           WHERE a.status IN ('pending', 'approved')
           ORDER BY a.created_at DESC
         ''').get();

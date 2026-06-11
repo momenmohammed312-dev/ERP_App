@@ -9,6 +9,7 @@ class TransactionExpansionTile extends StatefulWidget {
   final bool isPurchase;
   final bool isSale;
   final AppDatabase db;
+  final VoidCallback? onTap;
 
   const TransactionExpansionTile({
     super.key,
@@ -17,6 +18,7 @@ class TransactionExpansionTile extends StatefulWidget {
     required this.isPurchase,
     required this.isSale,
     required this.db,
+    this.onTap,
   });
 
   @override
@@ -226,7 +228,9 @@ class TransactionExpansionTileState extends State<TransactionExpansionTile> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
+      child: InkWell(
+        onTap: widget.onTap,
+        child: ExpansionTile(
         leading: CircleAvatar(
           backgroundColor: isLiabilityIncrease
               ? Colors.red.withValues(alpha: 0.1)
@@ -306,6 +310,7 @@ class TransactionExpansionTileState extends State<TransactionExpansionTile> {
                 }
               },
         children: [_buildProductDetailsSection()],
+      ),
       ),
     );
   }

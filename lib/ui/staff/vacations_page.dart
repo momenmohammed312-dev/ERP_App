@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
+import '../../core/provider/auth_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
+import '../../core/models/user_model.dart';
 import 'package:intl/intl.dart';
 
 class VacationsPage extends ConsumerStatefulWidget {
@@ -88,7 +90,77 @@ class _VacationsPageState extends ConsumerState<VacationsPage> {
     );
   }
 
+  Future<void> _approveVacation(Vacation vacation) async {
+    final user = ref.read(authProvider);
+    if (user == null) return;
+    try {
+      await _dao.approveVacation(vacation.id, user.fullName);
+      await _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم قبول الإجازة'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _rejectVacation(Vacation vacation) async {
+    final reasonController = TextEditingController();
+    final user = ref.read(authProvider);
+    if (user == null) return;
+
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('رفض الإجازة'),
+        content: TextField(
+          controller: reasonController,
+          decoration: const InputDecoration(
+            labelText: 'سبب الرفض',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, reasonController.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('رفض'),
+          ),
+        ],
+      ),
+    );
+
+    if (reason != null && reason.isNotEmpty) {
+      try {
+        await _dao.rejectVacation(vacation.id, user.fullName, reason);
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم رفض الإجازة'), backgroundColor: Colors.orange),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+    reasonController.dispose();
+  }
+
   Widget _buildVacationCard(Vacation vacation) {
+    final user = ref.read(authProvider);
+    final canApprove = user != null && (user.hasPermission(Permission.manageAttendance));
     final statusColor = _getStatusColor(vacation.status);
 
     return Card(
@@ -152,6 +224,33 @@ class _VacationsPageState extends ConsumerState<VacationsPage> {
                   'السبب: ${vacation.reason}',
                   style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                 ),
+              ),
+            ],
+            if (vacation.status == 'pending' && canApprove) ...[
+              const Divider(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => _approveVacation(vacation),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text('قبول'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _rejectVacation(vacation),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text('رفض'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
               ),
             ],
           ],

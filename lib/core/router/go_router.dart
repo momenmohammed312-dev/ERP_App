@@ -43,8 +43,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Already logged in and navigating to /login → home
       if (isLoggedIn && location == '/login') return '/';
 
-      // Role guard: /admin requires admin role
-      if (isLoggedIn && location == '/admin' && user!.role != UserRole.admin) return '/';
+      // Permission guard: /admin requires manageUsers permission
+      if (isLoggedIn && location == '/admin' && !user.hasPermission(Permission.manageUsers)) return '/';
+
 
       return null;
     },

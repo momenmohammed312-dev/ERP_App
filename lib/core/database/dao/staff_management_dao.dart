@@ -40,10 +40,12 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
   Future<void> deleteStaff(String staffId) =>
       (delete(staffTable)..where((s) => s.staffId.equals(staffId))).go();
 
-  Future<int> getStaffCount() =>
-      (selectOnly(staffTable)..addColumns([staffTable.id.count()]))
-          .getSingle()
-          .then((r) => r.read(staffTable.id.count()) as int);
+  Future<int> getStaffCount() async {
+    final countExp = staffTable.id.count();
+    final result = await (selectOnly(staffTable)..addColumns([countExp]))
+        .getSingle();
+    return result.read(countExp) ?? 0;
+  }
 
   // WATCH STREAMS FOR REAL-TIME UPDATES
 
@@ -126,6 +128,33 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
   Future<void> addVacation(VacationsCompanion entry) =>
       into(vacations).insert(entry);
 
+  Future<void> approveVacation(int vacationId, String approvedBy) =>
+      (update(vacations)..where((v) => v.id.equals(vacationId))).write(
+        VacationsCompanion(
+          status: const Value('approved'),
+          approvedBy: Value(approvedBy),
+          approvedAt: Value(DateTime.now()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Future<void> rejectVacation(int vacationId, String approvedBy, String reason) =>
+      (update(vacations)..where((v) => v.id.equals(vacationId))).write(
+        VacationsCompanion(
+          status: const Value('rejected'),
+          approvedBy: Value(approvedBy),
+          approvedAt: Value(DateTime.now()),
+          rejectionReason: Value(reason),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Future<List<Vacation>> getPendingVacations() =>
+      (select(vacations)..where((v) => v.status.equals('pending'))).get();
+
+  Stream<List<Vacation>> watchPendingVacations() =>
+      (select(vacations)..where((v) => v.status.equals('pending'))).watch();
+
   // ADVANCE MANAGEMENT
 
   Future<List<StaffAdvance>> getAdvancesByStaff(String staffId) =>
@@ -141,6 +170,32 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
 
   Future<List<Payroll>> getPayrollByStaff(String staffId) =>
       (select(payrollTable)..where((p) => p.staffId.equals(staffId))).get();
+
+  Future<void> updatePayroll(Payroll entry) =>
+      update(payrollTable).replace(entry);
+
+  Future<void> approvePayroll(int payrollId, String approvedBy) =>
+      (update(payrollTable)..where((p) => p.id.equals(payrollId))).write(
+        PayrollTableCompanion(
+          status: const Value('approved'),
+          approvedBy: Value(approvedBy),
+          approvedAt: Value(DateTime.now()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Future<void> markPayrollPaid(int payrollId, {
+    required DateTime paymentDate,
+    required String paymentMethod,
+  }) =>
+      (update(payrollTable)..where((p) => p.id.equals(payrollId))).write(
+        PayrollTableCompanion(
+          status: const Value('paid'),
+          paymentDate: Value(paymentDate),
+          paymentMethod: Value(paymentMethod),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
   // PERFORMANCE MANAGEMENT
 

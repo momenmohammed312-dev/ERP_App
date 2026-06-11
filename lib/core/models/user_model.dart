@@ -85,6 +85,16 @@ enum Permission {
   restoreBackup,
   deleteBackup,
 
+  // الموظفين
+  viewEmployees,
+  createEmployee,
+  editEmployee,
+  deleteEmployee,
+  viewSalaries,
+  manageSalaries,
+  viewAttendance,
+  manageAttendance,
+
   // المالية
   openDay,
   closeDay,
@@ -366,15 +376,25 @@ class PermissionMatrix {
       Permission.viewFinancialReports,
       Permission.viewInventoryReports,
 
-      // الإعدادات
+      // الموظفين
+      Permission.viewEmployees,
+      Permission.createEmployee,
+      Permission.editEmployee,
+      Permission.deleteEmployee,
+      Permission.viewSalaries,
+      Permission.manageSalaries,
+      Permission.viewAttendance,
+      Permission.manageAttendance,
+
+    // الإعدادات
       Permission.viewSettings,
       Permission.editSettings,
 
-      // النسخ الاحتياطي
+    // النسخ الاحتياطي
       Permission.createBackup,
       Permission.restoreBackup,
 
-      // المالية
+    // المالية
       Permission.openDay,
       Permission.closeDay,
       Permission.viewCashDrawer,
@@ -539,6 +559,22 @@ class PermissionMatrix {
         return 'استعادة نسخة احتياطية';
       case Permission.deleteBackup:
         return 'حذف نسخة احتياطية';
+      case Permission.viewEmployees:
+        return 'عرض الموظفين';
+      case Permission.createEmployee:
+        return 'إنشاء موظف';
+      case Permission.editEmployee:
+        return 'تعديل موظف';
+      case Permission.deleteEmployee:
+        return 'حذف موظف';
+      case Permission.viewSalaries:
+        return 'عرض الرواتب';
+      case Permission.manageSalaries:
+        return 'إدارة الرواتب';
+      case Permission.viewAttendance:
+        return 'عرض الحضور';
+      case Permission.manageAttendance:
+        return 'إدارة الحضور';
       case Permission.openDay:
         return 'فتح يوم';
       case Permission.closeDay:

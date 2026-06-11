@@ -44,9 +44,86 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     }
   }
 
+  bool _isChecking = false;
+
+  Future<void> _checkIn() async {
+    setState(() => _isChecking = true);
+    try {
+      await _dao.checkIn(widget.staff.staffId);
+      await _loadAttendance();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم تسجيل الحضور'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isChecking = false);
+    }
+  }
+
+  Future<void> _checkOut() async {
+    setState(() => _isChecking = true);
+    try {
+      await _dao.checkOut(widget.staff.staffId);
+      await _loadAttendance();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم تسجيل الانصراف'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isChecking = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: Text('سجل الحضور: ${widget.staff.name}'),
+        actions: [
+          ElevatedButton.icon(
+            onPressed: _isChecking ? null : _checkIn,
+            icon: const Icon(Icons.login, size: 18),
+            label: const Text('تسجيل حضور'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: _isChecking ? null : _checkOut,
+            icon: const Icon(Icons.logout, size: 18),
+            label: const Text('تسجيل انصراف'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _attendanceList.isEmpty

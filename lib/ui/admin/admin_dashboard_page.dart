@@ -2,12 +2,16 @@
 // Admin Dashboard Web - POS SaaS Offline
 // ════════════════════════════════════════════════════════════════════════
 
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/ui/product/widgets/product_form.dart';
+import 'package:pos_offline_desktop/ui/customer/add_edit_customer_page.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart' as models;
 
 // ════════════════════════════════════════════════════════════════════════
@@ -394,15 +398,17 @@ class _OverviewPageContentState extends State<_OverviewPageContent> {
       // Create CSV content
       final csvContent = _generateCSV(data);
 
-      // Save to file (simplified - in real app you'd use file picker)
+      // Save to file
+      final dir = await getApplicationDocumentsDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'admin_report_$timestamp.csv';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsString(csvContent);
 
-      // Show success message
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('تم تصدير التقرير: $fileName')));
+        ).showSnackBar(SnackBar(content: Text('تم تصدير التقرير: ${file.path}')));
       }
     } catch (e) {
       if (mounted) {
@@ -1458,17 +1464,19 @@ class _InventoryPageContentState extends State<_InventoryPageContent> {
   }
 
   void _addNewProduct() {
-    // Navigate to product add/edit screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('إضافة منتج جديد - قيد التطوير')),
-    );
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ProductForm(db: widget.db),
+      ),
+    ).then((_) => setState(() {}));
   }
 
   void _editProduct(Product product) {
-    // Navigate to product edit screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تعديل المنتج: ${product.name} - قيد التطوير')),
-    );
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ProductForm(db: widget.db, product: product),
+      ),
+    ).then((_) => setState(() {}));
   }
 
   void _deleteProduct(Product product) {
@@ -1917,9 +1925,11 @@ class _CustomersPageContentState extends State<_CustomersPageContent> {
   }
 
   void _addNewCustomer() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('إضافة عميل جديد - قيد التطوير')),
-    );
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const AddEditCustomerPage(),
+      ),
+    ).then((_) => setState(() {}));
   }
 
   void _viewCustomerDetails(Customer customer) {
@@ -1950,9 +1960,11 @@ class _CustomersPageContentState extends State<_CustomersPageContent> {
   }
 
   void _editCustomer(Customer customer) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تعديل العميل: ${customer.name} - قيد التطوير')),
-    );
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AddEditCustomerPage(customer: customer),
+      ),
+    ).then((_) => setState(() {}));
   }
 
   void _deleteCustomer(Customer customer) {
@@ -2402,8 +2414,56 @@ class _UsersPageContentState extends State<_UsersPageContent> {
   }
 
   void _addNewUser() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('إضافة مستخدم جديد - قيد التطوير')),
+    final usernameCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
+    final fullNameCtrl = TextEditingController();
+    String selectedRole = 'cashier';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: const Text('إضافة مستخدم جديد'),
+          content: SizedBox(
+            width: 350,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(controller: usernameCtrl, decoration: const InputDecoration(labelText: 'اسم المستخدم', border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                  TextField(controller: fullNameCtrl, decoration: const InputDecoration(labelText: 'الاسم الكامل', border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                  TextField(controller: passwordCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'كلمة المرور', border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedRole,
+                    decoration: const InputDecoration(labelText: 'الدور', border: OutlineInputBorder()),
+                    items: ['admin', 'manager', 'cashier', 'accountant', 'viewer'].map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                    onChanged: (v) => setDlgState(() => selectedRole = v!),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () async {
+                if (usernameCtrl.text.isEmpty || passwordCtrl.text.isEmpty) return;
+                try {
+                  await widget.db.userDao.createUser(usernameCtrl.text.trim(), passwordCtrl.text, selectedRole, fullNameCtrl.text.trim());
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  setState(() {});
+                } catch (e) {
+                  if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+                }
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -2441,25 +2501,94 @@ class _UsersPageContentState extends State<_UsersPageContent> {
   }
 
   void _editUser(models.User user) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تعديل المستخدم: ${user.username} - قيد التطوير')),
+    final usernameCtrl = TextEditingController(text: user.username);
+    final fullNameCtrl = TextEditingController(text: user.fullName);
+    final passwordCtrl = TextEditingController();
+    String selectedRole = user.role.name;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: Text('تعديل المستخدم: ${user.username}'),
+          content: SizedBox(
+            width: 350,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(controller: usernameCtrl, decoration: const InputDecoration(labelText: 'اسم المستخدم', border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                  TextField(controller: fullNameCtrl, decoration: const InputDecoration(labelText: 'الاسم الكامل', border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                  TextField(controller: passwordCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'كلمة المرور (اتركه فارغًا إذا لم يتغير)', border: OutlineInputBorder())),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedRole,
+                    decoration: const InputDecoration(labelText: 'الدور', border: OutlineInputBorder()),
+                    items: ['admin', 'manager', 'cashier', 'accountant', 'viewer'].map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                    onChanged: (v) => setDlgState(() => selectedRole = v!),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () async {
+                if (usernameCtrl.text.isEmpty) return;
+                try {
+                  final existing = await widget.db.userDao.getUserById(user.id!);
+                  if (existing == null) {
+                    if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('المستخدم غير موجود')));
+                    return;
+                  }
+                  final updated = existing.copyWith(
+                    username: usernameCtrl.text.trim(),
+                    fullName: fullNameCtrl.text.trim().isEmpty ? existing.fullName : fullNameCtrl.text.trim(),
+                    role: selectedRole,
+                  );
+                  await widget.db.userDao.updateUser(updated);
+                  if (passwordCtrl.text.isNotEmpty) {
+                    await widget.db.userDao.changePassword(user.id!, passwordCtrl.text);
+                  }
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  setState(() {});
+                } catch (e) {
+                  if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+                }
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   void _toggleUserStatus(models.User user) async {
     try {
-      final updatedUser = user.copyWith(isActive: !user.isActive);
-      await widget.db.userDao.updateUser(updatedUser as AppUser);
+      final appUser = await widget.db.userDao.getUserById(user.id!);
+      if (appUser == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('المستخدم غير موجود'), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
+      await widget.db.userDao.toggleUserStatus(user.id!, !appUser.isActive);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'تم ${user.isActive ? 'تعطيل' : 'تفعيل'} المستخدم بنجاح',
+              'تم ${appUser.isActive ? 'تعطيل' : 'تفعيل'} المستخدم بنجاح',
             ),
           ),
         );
-        setState(() {}); // Refresh the list
+        setState(() {});
       }
     } catch (e) {
       if (mounted) {

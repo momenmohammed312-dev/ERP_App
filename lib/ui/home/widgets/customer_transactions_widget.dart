@@ -10,6 +10,7 @@ import 'package:pos_offline_desktop/l10n/l10n.dart';
 import 'customers_summary_widget.dart';
 import '../../customer/add_edit_customer_page.dart';
 import 'transaction_expansion_tile.dart';
+import 'transaction_detail_dialog.dart';
 
 class CustomerTransactionsWidget extends ConsumerStatefulWidget {
   final AppDatabase db;
@@ -227,6 +228,17 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
       });
       _loadRecentTransactions();
     }
+  }
+
+  void _showDetailDialog(BuildContext context, LedgerTransaction transaction) {
+    showDialog(
+      context: context,
+      builder: (ctx) => TransactionDetailDialog(
+        db: widget.db,
+        transaction: transaction,
+        entityType: 'Customer',
+      ),
+    );
   }
 
   void _showPaymentDialog(Customer customer) {
@@ -788,6 +800,8 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
                                   isPurchase: false,
                                   isSale: isSale,
                                   db: widget.db,
+                                  onTap: () => _showDetailDialog(
+                                    context, transaction),
                                 );
                               },
                             ),

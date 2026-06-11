@@ -281,6 +281,29 @@ class _DamagedItemsScreenState extends State<DamagedItemsScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(width: 4),
+                  Column(
+                    children: [
+                      SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.edit, size: 16, color: _gold),
+                          onPressed: () => _showEditDialog(context, item),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.delete, size: 16, color: Colors.red),
+                          onPressed: () => _showDeleteConfirm(context, item.id),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -296,11 +319,61 @@ class _DamagedItemsScreenState extends State<DamagedItemsScreen> {
       builder: (context) => _AddDamagedItemDialog(db: widget.db),
     );
   }
+
+  Future<void> _showEditDialog(BuildContext context, DamagedItem item) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => _AddDamagedItemDialog(
+        db: widget.db,
+        existingItem: item,
+      ),
+    );
+    if (result == true && mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _showDeleteConfirm(BuildContext context, int id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _bgCard,
+        title: const Text('تأكيد الحذف', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'هل تريد حذف هذا السجل؟',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء', style: TextStyle(color: _textMuted)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await widget.db.damagedItemsDao.deleteDamagedItem(id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم حذف السجل'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
 }
 
 class _AddDamagedItemDialog extends StatefulWidget {
   final AppDatabase db;
-  const _AddDamagedItemDialog({required this.db});
+  final DamagedItem? existingItem;
+  const _AddDamagedItemDialog({required this.db, this.existingItem});
 
   @override
   State<_AddDamagedItemDialog> createState() => _AddDamagedItemDialogState();
@@ -314,6 +387,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
   final _notesController = TextEditingController();
   List<Product> _products = [];
   bool _isLoading = true;
+  bool get _isEditing => widget.existingItem != null;
 
   @override
   void initState() {
@@ -328,6 +402,15 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
         setState(() {
           _products = products;
           _isLoading = false;
+          if (_isEditing) {
+            _reasonController.text = widget.existingItem!.reason;
+            _notesController.text = widget.existingItem!.notes ?? '';
+            _quantityController.text = widget.existingItem!.quantity.toString();
+            _selectedProduct = products.cast<Product?>().firstWhere(
+              (p) => p!.id == widget.existingItem!.productId,
+              orElse: () => null,
+            );
+          }
         });
       }
     } catch (e) {
@@ -350,7 +433,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
   void _save() async {
     if (_formKey.currentState!.validate() && _selectedProduct != null) {
       final qty = int.parse(_quantityController.text);
-      if (qty > _selectedProduct!.quantity) {
+      if (!_isEditing && qty > _selectedProduct!.quantity) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('الكمية الهالكة لا يمكن أن تتجاوز الكمية المتاحة.'),
@@ -364,35 +447,61 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
       final loss = cost * qty;
 
       try {
-        await widget.db.transaction(() async {
-          await widget.db.damagedItemsDao.insertDamagedItem(
-            DamagedItemsCompanion.insert(
-              productId: _selectedProduct!.id,
-              quantity: qty,
-              unitCost: cost,
-              totalLoss: loss,
-              reason: _reasonController.text.trim().isEmpty
+        if (_isEditing) {
+          await widget.db.damagedItemsDao.updateDamagedItem(
+            DamagedItemsCompanion(
+              id: drift.Value(widget.existingItem!.id),
+              productId: drift.Value(_selectedProduct!.id),
+              quantity: drift.Value(qty),
+              unitCost: drift.Value(cost),
+              totalLoss: drift.Value(loss),
+              reason: drift.Value(_reasonController.text.trim().isEmpty
                   ? 'تالف'
-                  : _reasonController.text.trim(),
-              damageDate: DateTime.now(),
+                  : _reasonController.text.trim()),
+              damageDate: drift.Value(DateTime.now()),
               notes: drift.Value(_notesController.text.trim()),
             ),
           );
+          if (mounted) {
+            Navigator.of(context).pop(true);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('تم تحديث الهالك بنجاح.'),
+                backgroundColor: _accentGreen,
+              ),
+            );
+          }
+        } else {
+          await widget.db.transaction(() async {
+            await widget.db.damagedItemsDao.insertDamagedItem(
+              DamagedItemsCompanion.insert(
+                productId: _selectedProduct!.id,
+                quantity: qty,
+                unitCost: cost,
+                totalLoss: loss,
+                reason: _reasonController.text.trim().isEmpty
+                    ? 'تالف'
+                    : _reasonController.text.trim(),
+                damageDate: DateTime.now(),
+                notes: drift.Value(_notesController.text.trim()),
+              ),
+            );
 
-          final newQty = _selectedProduct!.quantity - qty;
-          await widget.db.productDao.updateProduct(
-            _selectedProduct!.copyWith(quantity: newQty),
-          );
-        });
+            final newQty = _selectedProduct!.quantity - qty;
+            await widget.db.productDao.updateProduct(
+              _selectedProduct!.copyWith(quantity: newQty),
+            );
+          });
 
-        if (mounted) {
-          Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('تم تسجيل الهالك بنجاح.'),
-              backgroundColor: _accentGreen,
-            ),
-          );
+          if (mounted) {
+            Navigator.of(context).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('تم تسجيل الهالك بنجاح.'),
+                backgroundColor: _accentGreen,
+              ),
+            );
+          }
         }
       } catch (e) {
         if (mounted) {
@@ -425,11 +534,14 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
 
     return AlertDialog(
       backgroundColor: _bgCard,
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.delete_sweep, color: Colors.red),
-          SizedBox(width: 8),
-          Text('تسجيل منتج هالك/تالف', style: TextStyle(color: Colors.white)),
+          const Icon(Icons.delete_sweep, color: Colors.red),
+          const SizedBox(width: 8),
+          Text(
+            _isEditing ? 'تعديل سجل هالك/تالف' : 'تسجيل منتج هالك/تالف',
+            style: const TextStyle(color: Colors.white),
+          ),
         ],
       ),
       content: SizedBox(
@@ -542,7 +654,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
             foregroundColor: Colors.white,
           ),
           onPressed: _save,
-          child: const Text('حفظ وتسجيل التالف'),
+          child: Text(_isEditing ? 'تحديث' : 'حفظ وتسجيل التالف'),
         ),
       ],
     );

@@ -57,7 +57,11 @@ class _SupplierStatementScreenState extends ConsumerState<SupplierStatementScree
     setState(() => _isExporting = true);
     try {
       final db = ref.read(appDatabaseProvider);
-      final currentBalance = await db.ledgerDao.getSupplierBalance(widget.supplier.id);
+      final currentBalance = await db.ledgerDao.getRunningBalance(
+        'Supplier',
+        widget.supplier.id,
+        upToDate: _toDate,
+      );
       await SupplierStatementGenerator.generateStatement(
         db: db,
         supplierId: widget.supplier.id,

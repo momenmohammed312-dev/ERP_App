@@ -50,10 +50,13 @@ class InvoiceService {
     String? ledgerDescription,
     List<SplitPaymentEntry>? splitPayments,
   }) async {
+    final actualInvoiceNumber = invoiceNumber ?? 'INV${DateTime.now().millisecondsSinceEpoch}';
+    final txBase = DateTime.now().millisecondsSinceEpoch;
+
     return _db.transaction(() async {
       final invoiceId = await _db.invoiceDao.insertInvoice(
         InvoicesCompanion(
-          invoiceNumber: Value(invoiceNumber ?? 'INV${DateTime.now().millisecondsSinceEpoch}'),
+          invoiceNumber: Value(actualInvoiceNumber),
           customerName: Value(customerName),
           customerContact: Value(customerContact ?? ''),
           customerAddress: Value(customerAddress ?? ''),
@@ -113,22 +116,14 @@ class InvoiceService {
         }
       }
 
-      final productSummary = items.isNotEmpty
-          ? items.asMap().entries.map((e) {
-              final p = _db.productDao.getProductById(e.value.productId);
-              return 'Product ${e.value.productId}';
-            }).join(', ')
-          : '';
-
-      final desc = ledgerDescription ?? 'بيع #$invoiceNumber ($productSummary)';
-      final customerIdForLedger = customerId ?? 'walk-in';
+      final desc = ledgerDescription ?? 'بيع #$actualInvoiceNumber';
 
       if (customerId != null && customerId != 'cash' && customerId.isNotEmpty) {
         await _db.ledgerDao.insertTransaction(
           LedgerTransactionsCompanion.insert(
-            id: '${DateTime.now().millisecondsSinceEpoch}_sale',
+            id: '${txBase}_sale',
             entityType: 'Customer',
-            refId: customerIdForLedger,
+            refId: customerId,
             date: DateTime.now(),
             description: desc,
             debit: Value(totalAmount),
@@ -142,11 +137,11 @@ class InvoiceService {
         if (paidAmount > 0) {
           await _db.ledgerDao.insertTransaction(
             LedgerTransactionsCompanion.insert(
-              id: '${DateTime.now().millisecondsSinceEpoch}_pay',
+              id: '${txBase + 1}_pay',
               entityType: 'Customer',
-              refId: customerIdForLedger,
+              refId: customerId,
               date: DateTime.now(),
-              description: 'دفع #$invoiceNumber',
+              description: 'دفع #$actualInvoiceNumber',
               debit: const Value(0.0),
               credit: Value(paidAmount),
               origin: 'payment',
@@ -157,9 +152,12 @@ class InvoiceService {
         }
       }
 
-      final invoice = (await _db.invoiceDao.getInvoiceByNumber(
-        invoiceNumber ?? 'INV${DateTime.now().millisecondsSinceEpoch}',
-      ))!;
+      final invoice = await (_db.select(_db.invoices)
+          ..where((t) => t.id.equals(invoiceId)))
+          .getSingleOrNull();
+      if (invoice == null) {
+        throw Exception('فشل في حفظ الفاتورة رقم $actualInvoiceNumber');
+      }
 
       return CreateInvoiceResult(invoice: invoice, invoiceId: invoiceId);
     });

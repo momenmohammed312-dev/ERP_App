@@ -42,7 +42,7 @@ class StaffManagementService {
     String? emergencyPhone,
     String? notes,
   }) async {
-    PermissionValidator.requirePermission(user, Permission.editSettings, 'إضافة موظف');
+    PermissionValidator.requirePermission(user, Permission.createEmployee, 'إضافة موظف');
     final staffId = await generateStaffId();
 
     await _dao.addStaff(
@@ -92,7 +92,7 @@ class StaffManagementService {
     String? status,
     DateTime? contractEndDate,
   }) async {
-    PermissionValidator.requirePermission(user, Permission.editSettings, 'تعديل موظف');
+    PermissionValidator.requirePermission(user, Permission.editEmployee, 'تعديل موظف');
     final staff = await _dao.getStaffById(staffId);
     if (staff != null) {
       await _dao.updateStaff(
@@ -132,7 +132,7 @@ class StaffManagementService {
   }
 
   Future<void> terminateStaff(User? user, String staffId) async {
-    PermissionValidator.requirePermission(user, Permission.editSettings, 'إنهاء خدمة موظف');
+    PermissionValidator.requirePermission(user, Permission.editEmployee, 'إنهاء خدمة موظف');
     await updateStaffInfo(user, staffId: staffId, status: 'terminated');
   }
 
@@ -264,7 +264,7 @@ class StaffManagementService {
     required String reason,
     int? installmentMonths,
   }) async {
-    PermissionValidator.requirePermission(user, Permission.editSettings, 'طلب سلفة');
+    PermissionValidator.requirePermission(user, Permission.manageSalaries, 'طلب سلفة');
     await _dao.addAdvance(
       StaffAdvancesCompanion.insert(
         staffId: staffId,
@@ -285,7 +285,7 @@ class StaffManagementService {
   // PAYROLL MANAGEMENT
 
   Future<void> calculatePayroll(User? user, String staffId, String payrollPeriod) async {
-    PermissionValidator.requirePermission(user, Permission.editSettings, 'حساب الرواتب');
+    PermissionValidator.requirePermission(user, Permission.manageSalaries, 'حساب الرواتب');
     final staff = await _dao.getStaffById(staffId);
     if (staff == null) return;
 
@@ -371,7 +371,7 @@ class StaffManagementService {
   }
 
   Future<void> payAdvance(User? user, int advanceId, String paymentMethod) async {
-    PermissionValidator.requirePermission(user, Permission.editSettings, 'صرف سلفة');
+    PermissionValidator.requirePermission(user, Permission.manageSalaries, 'صرف سلفة');
     final db = _dao.attachedDatabase;
     final isDayOpen = await db.dayDao.isDayOpen();
     if (!isDayOpen) {
@@ -420,7 +420,7 @@ await db.expenseDao.insertExpense(
   }
 
   Future<void> payPayroll(User? user, int payrollId, String paymentMethod) async {
-    PermissionValidator.requirePermission(user, Permission.editSettings, 'صرف رواتب');
+    PermissionValidator.requirePermission(user, Permission.manageSalaries, 'صرف رواتب');
     final db = _dao.attachedDatabase;
     final isDayOpen = await db.dayDao.isDayOpen();
     if (!isDayOpen) {
@@ -522,7 +522,7 @@ await db.expenseDao.insertExpense(
     String? actionPlan,
     DateTime? nextReviewDate,
   }) async {
-    PermissionValidator.requirePermission(user, Permission.editSettings, 'تقييم أداء');
+    PermissionValidator.requirePermission(user, Permission.editEmployee, 'تقييم أداء');
     await _dao.addPerformanceReview(
       PerformanceReviewsCompanion.insert(
         staffId: staffId,

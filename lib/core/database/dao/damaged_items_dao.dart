@@ -14,6 +14,21 @@ class DamagedItemsDao extends DatabaseAccessor<AppDatabase>
   Future<int> insertDamagedItem(DamagedItemsCompanion item) =>
       into(damagedItems).insert(item);
 
+  /// تحديث سجل هالك موجود
+  Future<void> updateDamagedItem(DamagedItemsCompanion item) =>
+      (update(damagedItems)..where((t) => t.id.equals(item.id.value)))
+          .write(item);
+
+  /// حذف سجل هالك
+  Future<void> deleteDamagedItem(int id) =>
+      (delete(damagedItems)..where((t) => t.id.equals(id))).go();
+
+  /// إجمالي الكميات التالفة لمنتج معين
+  Future<int> getTotalQuantityByProduct(int productId) async {
+    final items = await getDamagedItemsByProduct(productId);
+    return items.fold<int>(0, (sum, i) => sum + i.quantity);
+  }
+
   /// الحصول على كل سجلات الهالك (مرتبة من الأحدث)
   Future<List<DamagedItem>> getAllDamagedItems() =>
       (select(damagedItems)

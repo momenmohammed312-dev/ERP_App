@@ -131,7 +131,7 @@ class UnifiedPrintService {
 
     final output = await getTemporaryDirectory();
     final file = File(
-      '${output.path}/${fileName ?? '${_getDocumentTitle(documentType)}_${DateTime.now().millisecondsSinceEpoch}'}.pdf}',
+      '${output.path}/${fileName ?? '${_getDocumentTitle(documentType)}_${DateTime.now().millisecondsSinceEpoch}.pdf'}',
     );
     await file.writeAsBytes(await pdf.save());
 

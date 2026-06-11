@@ -149,17 +149,20 @@ class SideBarMenu extends StatelessWidget {
           ),
         ),
 
-        // النسخ الاحتياطي - متاحة للجميع
-        _buildMenuItem(
-          context,
-          svgAssetPath: 'assets/svg/backup.svg',
-          title: 'النسخ الاحتياطي',
-          page: SideBarPage.backup,
+        // النسخ الاحتياطي - يتطلب صلاحية النسخ الاحتياطي
+        PermissionGuard(
+          permission: Permission.createBackup,
+          child: _buildMenuItem(
+            context,
+            svgAssetPath: 'assets/svg/backup.svg',
+            title: 'النسخ الاحتياطي',
+            page: SideBarPage.backup,
+          ),
         ),
 
-        // لوحة تحكم المدير - تتطلب صلاحية إدارية
+        // لوحة تحكم المدير - تتطلب صلاحية إدارة المستخدمين
         PermissionGuard(
-          permission: Permission.viewUsers,
+          permission: Permission.manageUsers,
           child: _buildMenuItem(
             context,
             svgAssetPath: 'assets/svg/admin_panel_settings.svg',
