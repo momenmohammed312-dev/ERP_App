@@ -1,324 +1,140 @@
-# 🏪 نظام نقاط البيع السحابي المتقدم (POS SaaS v2.0)
+# POS Offline Desktop — Flutter SaaS Point of Sale System
 
-**Developed by MO2**  
-**نسخة 2.0.0**  
-**Flutter 3.32.5 | Java 17 | Firebase**
+A full-featured, offline-first Point of Sale desktop application built with Flutter. Designed as a SaaS product for Egyptian small and medium businesses, with tiered subscription plans, cloud sync, and a separate web admin dashboard.
 
----
+## Overview
 
-## 📋 نظرة عامة
+Most POS systems require constant internet. This one doesn’t. Built for Windows desktop with full offline capability, automatic local backups, and optional cloud sync — so businesses never lose a sale due to connectivity.
 
-نظام نقاط البيع السحابي المتقدم هو منصة SaaS متكاملة لإدارة المبيعات، العملاء، الموردين، والمصروفات مع أمان عالي المستوى وإدارة تراخيص متقدمة. يتضمن التطبيق سطح مكتب احترافي ولوحة تحكم ويب للإدارة.
+## Key Features
 
----
+### Core POS
 
-## 💼 نموذج SaaS (برمجيات كخدمة)
+- Sales management with cash and credit payment options
+- Smart printing — thermal for cash sales, A4 for credit invoices
+- Daily cashier open/close with vault balance tracking
+- Full invoice history with reprint support
 
-### 📦 باقات الاشتراك
+### Customer & Supplier Management
 
-| الباقة | السعر (شهرياً) | المستخدمين | المميزات الرئيسية |
-|--------|-----------------|-------------|-------------------|
-| **أساسي** | 1,000 ج.م | 1 | مبيعات نقدية + مخزون + تقارير أساسية |
-| **قياسي** | 2,500 ج.م | 3 | + عملاء + موردين + مشتريات + تصدير |
-| **احترافي** | 5,000 ج.م | 5 | + إدارة موظفين + كاشير + محاسبة |
-| **مؤسسي** | 10,000 ج.م | 10 | جميع المميزات + دعم فني متميز |
+- Complete CRUD with balance tracking (color-coded: green/red)
+- Full transaction history per customer/supplier
+- Professional PDF account statements
 
-### 🎯 مميزات كل باقة
+### Inventory
 
-#### ✅ **الباقة الأساسية (1,000 ج.م/شهر)**
-- مبيعات نقدية فقط
-- إدارة المخزون الأساسية
-- تقارير بسيطة
-- نسخ احتياطي أساسي
-- مستخدم واحد
+- Product catalog with stock tracking
+- Purchase invoices from suppliers
+- Low stock alerts
 
-#### ✅ **الباقة القياسية (2,500 ج.م/شهر)**
-- جميع مميزات الباقة الأساسية +
-- مبيعات آجلة للعملاء
-- إدارة العملاء والموردين
-- فواتير المشتريات
-- تصدير التقارير (PDF/Excel)
-- نسخ احتياطي تلقائي
-- 3 مستخدمين
+### Reports & Export
 
-#### ✅ **الباقة الاحترافية (5,000 ج.م/شهر)**
-- جميع مميزات الباقة القياسية +
-- إدارة الموظفين والرواتب
-- نظام الكاشير المتقدم
-- تقارير محاسبية كاملة
-- لوحة تحكم الإدارة
-- دعم فني عالي
-- 5 مستخدمين
+- PDF and Excel export for all reports
+- Date-range filtering
+- Branded report formatting
 
-#### ✅ **الباقة المؤسسية (10,000 ج.م/شهر)**
-- جميع مميزات الباقة الاحترافية +
-- واجهة برمجة التطبيقات (API)
-- دعم فني متميز 24/7
-- تدريب مخصص
-- 10 مستخدمين
+### Security
 
----
+- SQLCipher 256-bit database encryption
+- Hardware device binding (prevents license sharing)
+- HMAC digital signature for license keys
+- Full audit trail logging
+- Anti-tamper protection (time/date manipulation detection)
 
-## 🚀 المميزات التقنية المتقدمة
+### SaaS License System
 
-### 🔐 أمان عالي المستوى
-- **تشفير قاعدة البيانات**: SQLCipher 256-bit
-- **ربط بالجهاز**: بصمة الأجهزة الفريدة
-- **منع التلاعب**: حماية من تغيير التاريخ والوقت
-- **توقيع رقمي**: HMAC للتراخيص
-- **تسجيل التدقيق**: تتبع كامل للأنشطة
-- **إدارة الجلسات**: التحكم في المستخدمين المتزامنين
+|Plan        |Price/Month|Users|
+|------------|-----------|-----|
+|Basic       |1,000 EGP  |1    |
+|Standard    |2,500 EGP  |3    |
+|Professional|5,000 EGP  |5    |
+|Enterprise  |10,000 EGP |10   |
 
-### ☁️ نظام النسخ الاحتياطي المتقدم
-- **نسخ محلي**: تلقائي كل 24 ساعة
-- **نسخ سحابي**: محاكاة للنسخ السحابي
-- **نسخ يدوي**: حسب الحاجة
-- **تشفير AES-256**: أمان عالي للبيانات
+Features unlock per plan — cashier and staff management require Professional+.
 
-### 🔄 نظام التحديث التلقائي
-- فحص تلقائي للتحديثات
-- تحميل وتثبيت تلقائي
-- إشعارات للمستخدم
+### Staff Management (Professional+)
 
-### 📊 التحليلات والتقارير
-- إحصائيات الأعمال المتقدمة
-- تقارير تفاعلية
-- تصدير بصيغ متعددة
+- Employee records and attendance tracking
+- Payroll and salary calculations
+- Leave and vacation management
 
----
+### Web Admin Dashboard
 
-## 💻 مميزات التطبيق سطح المكتب
+- Firebase-hosted web panel
+- Real-time sales analytics and charts
+- Inventory management
+- User and permission management
+- Full Arabic RTL interface
 
-### 💳 نظام الدفعات والطباعة
-- **طباعة ذكية**: النقدي يطبع حراري، الآجل يطبع A4
-- **طباعة تلقائية**: حسب طريقة الدفع
-- **إعادة الطباعة**: زر لإعادة طباعة أي فاتورة
-- **عملة مصرية**: جميع القيم بالجنيه المصري
+## Tech Stack
 
-### 🏪 صفحة الكاشير
-- **فتح اليوم**: مع إدخال رصيد الخزنة الافتتاحي
-- **إغلاق اليوم**: مع تفصيل الكاش والفيزا
-- **عرض المعاملات**: تلقائي في واجهة الكاشير
+|Layer           |Technology                                     |
+|----------------|-----------------------------------------------|
+|Framework       |Flutter 3.32.5 (Desktop + Web)                 |
+|Database        |SQLite via Drift ORM (encrypted with SQLCipher)|
+|State Management|Riverpod                                       |
+|Backend / Auth  |Firebase (Auth + Hosting + Firestore)          |
+|Routing         |GoRouter                                       |
+|Export          |PDF + Excel generation                         |
+|Localization    |Arabic RTL                                     |
 
-### 📊 التقارير والتصدير
-- **تصدير PDF/Excel**: لجميع التقارير والبيانات
-- **تنسيق احترافي**: جداول منظمة مع العلامة التجارية
-- **ربط بالمبيعات**: بيانات حقيقية من قاعدة البيانات
-- **تصفية بالتاريخ**: تقارير حسب نطاق زمني
+## Architecture
 
-### 👥 إدارة العملاء
-- **عرض الأرصدة**: رصيد كل عميل بالألوان (أخضر/أحمر)
-- **تاريخ المعاملات**: عرض كامل معاملات العميل
-- **تصدير كشف حساب**: PDF احترافي لكل عميل
-- **CRUD كامل**: إضافة، تعديل، حذف العملاء
+```
+lib/
+├── core/
+│   ├── database/       — Drift ORM, tables, DAOs, migrations
+│   ├── router/         — GoRouter configuration
+│   └── utils/          — Shared utilities
+├── services/
+│   ├── BackupService       — Local + cloud backup
+│   ├── LicenseManager      — License validation + hardware binding
+│   ├── UnifiedPrintService — Thermal + A4 printing
+│   └── ExportService       — PDF/Excel export
+└── ui/
+    ├── home/       — Dashboard
+    ├── sales/      — Sales & invoices
+    ├── customer/   — Customer management
+    ├── supplier/   — Supplier management
+    ├── products/   — Inventory
+    ├── reports/    — Analytics
+    ├── staff/      — Employee management
+    └── settings/   — System configuration
+```
 
-### 🏭 إدارة الموردين
-- **صفحة الموردين**: مشابهة للعملاء مع جميع المميزات
-- **تتبع الأرصدة**: عرض رصيد كل مورد بالألوان
-- **تاريخ المعاملات**: عرض كامل معاملات المورد
-- **إضافة مشتريات**: تسجيل مشتريات من الموردين
-- **سداد الديون**: تسديد ديون الموردين
-- **تصدير كشف حساب**: PDF احترافي لكل مورد
+Design patterns used: Repository (DAO), Service Layer, Provider (Riverpod), Widget Composition.
 
-### 💰 إدارة المصروفات
-- **إضافة مصروفات**: مع وصف ومبلغ وطريقة دفع
-- **تصدير تقارير**: PDF/Excel للمصروفات
-- **عرض الإجمالي**: مجموع المصروفات باللون الأحمر
-- **تصفية بالتاريخ**: تقارير حسب الفترة
+## Getting Started
 
-### 👷 إدارة الموظفين (باقة احترافية)
-- إدارة بيانات الموظفين
-- تتبع الحضور والانصراف
-- حساب الرواتب والأجور
-- إدارة الإجازات والعطلات
-- تقارير الأداء
+### Prerequisites
 
----
-
-## 🌐 لوحة التحكم الإدارية الويب
-
-### 🔐 المصادقة
-- تسجيل دخول آمن مع Firebase Auth
-- واجهة عربية بالكامل
-- حماية من الجلسات المنتهية
-
-### 📊 لوحة التحكم
-- **نظرة عامة**: إحصائيات مباشرة ورسوم بيانية
-- **التحليلات**: رسوم بيانية تفاعلية للمبيعات
-- **المخزون**: إدارة المنتجات والمخزون
-- **العملاء**: إدارة قاعدة بيانات العملاء
-- **المستخدمون**: إدارة صلاحيات المستخدمين
-
-### 🎨 التصميم
-- واجهة عربية RTL بالكامل
-- تصميم متجاوب للشاشات المختلفة
-- ألوان احترافية ومتجانسة
-- رسوم بيانية تفاعلية باستخدام fl_chart
-
-### 🚀 النشر
-- دعم Firebase Hosting
-- دعم GitHub Pages
-- استضافة محلية للتطوير
-
----
-
-## 🧪 نظام الاختبار والتطوير
-
-### 📁 ملفات الاختبار
-- **quick_test_license.dart**: منشئ تراخيص اختبار سريع
-- **test_data_generator.dart**: منشئ بيانات اختبار شامل
-- **quick_test_runner.dart**: مشغل اختبارات سريع
-
-### 🔧 خطوات الاستخدام للاختبار
-1. إنشاء تراخيص الاختبار
-2. إنشاء بيانات الاختبار
-3. تشغيل الاختبارات السريعة
-4. التحقق من صحة البيانات في التطبيق
-
-### 📊 بيانات الاختبار المتاحة
-- منتجات بأسماء عربية وإنجليزية
-- عملاء وموردين مع بيانات الاتصال
-- فواتير مبيعات ومشتريات
-- معاملات وأرصدة متنوعة
-
----
-
-## 🎛️ لوحة التحكم الرئيسية
-
-### القائمة الجانبية
-1. **الرئيسية** - لوحة التحكم مع إحصائيات سريعة
-2. **المنتجات** - إدارة المخزون والمنتجات
-3. **العملاء** - إدارة بيانات العملاء
-4. **الموردين** - إدارة بيانات الموردين (قياسي+)
-5. **الفواتير** - إدارة المبيعات والفواتير
-6. **المشتريات** - إدارة فواتير المشتريات (قياسي+)
-7. **المصروفات** - تتبع المصروفات والمدفوعات
-8. **الكاشير** - إدارة اليومية والخزنة (احترافي+)
-9. **الموظفين** - إدارة الموظفين والرواتب (احترافي+)
-10. **التقارير** - التقارير المتقدمة (قياسي+)
-
----
-
-## 📋 دليل الاستخدام خطوة بخطوة
-
-### 1. تفعيل الترخيص
-1. تشغيل التطبيق لأول مرة
-2. إدخال معرف الجهاز
-3. إدخال مفتاح الترخيص
-4. تفعيل المميزات حسب الباقة
-
-### 2. إدارة العملاء
-1. اذهب إلى "العملاء" من القائمة الجانبية
-2. اضغط على "إضافة عميل"
-3. أدخل البيانات: الاسم، الهاتف، العنوان، الرصيد الافتتاحي
-4. اضغط "حفظ"
-
-### 3. إدارة المبيعات
-1. اذهب إلى "الفواتير" من القائمة الجانبية
-2. اضغط "إضافة فاتورة"
-3. اختر العميل والمنتجات والكميات
-4. اختر طريقة الدفع
-5. اضغط "حفظ"
-
-### 4. لوحة التحكم الويب
-1. اذهب إلى رابط لوحة التحكم الويب
-2. سجل الدخول باستخدام البريد الإلكتروني وكلمة المرور
-3. تصفح الإحصائيات والتقارير
-
----
-
-## 🎨 واجهة المستخدم
-
-### الألوان المستخدمة
-- **الأخضر**: للمبالغ الموجبة (الأرباح، المدفوعات)
-- **الأحمر**: للمبالغ السالبة (الديون، المصروفات)
-- **الأزرق**: للعملاء
-- **البنفسجي**: للموردين
-- **البرتقالي**: للمبيعات
-- **الأزرق المائي**: للكاشير
-
-### الأيقونات الرئيسية
-- 🏠 الرئيسية
-- 📦 المنتجات
-- 👥 العملاء
-- 🏭 الموردين
-- 🧾 الفواتير
-- 💸 المصروفات
-- 💳 الكاشير
-- 🔄 تحديث
-- 📊 التقارير
-- 🖨️ الطباعة
-- 📥 التصدير
-
----
-
-## 🚀 التثبيت والتشغيل
-
-### متطلبات النظام
-- Windows 10/11
-- Flutter 3.0+
+- Flutter 3.0+ with Desktop support enabled
 - Java 17+
-- اتصال إنترنت للتفعيل
+- Windows 10/11
 
-### خطوات التثبيت
-1. تحميل الملف التنفيذي من الموقع
-2. تشغيل المثبت
-3. تفعيل الترخيص
-4. بدء الاستخدام
+### Run locally
 
-### التحديث التلقائي
-- فحص تلقائي للتحديثات
-- تحميل وتثبيت تلقائي
-- إشعار المستخدم بالتحديثات
+```bash
+git clone https://github.com/momenmohammed312-dev/pOS-Offline-DesktoP
+cd pOS-Offline-DesktoP
+flutter pub get
+flutter run -d windows
+```
 
----
+### Web admin dashboard
 
-## 🔧 إرشادات التطوير
+Live at: <https://posmo2-13dc1.web.app>
 
-### معايير الكود النظيف
-- استخدام التحقق من mounted بعد العمليات غير المتزامنة
-- تضمين super.key في مُنشئات الـ Widget
-- استخدام واجهات برمجة التطبيقات الحديثة
+```bash
+# Run locally
+flutter run -d chrome
+```
 
-### قائمة التحقق قبل الـ Commit
-- ✅ flutter analyze يظهر صفر تحذيرات/أخطاء
-- ✅ جميع العمليات غير المتزامنة تحتوي على تحقق من mounted
-- ✅ مُنشئات الـ Widget تحتوي على super.key
-- ✅ لا توجد واجهات برمجة تطبيقات قديمة مستخدمة
+## Screenshots
 
----
+> Coming soon
 
-## 📞 الدعم الفني
+## Author
 
-### طرق التواصل
-- البريد الإلكتروني: support@mo2-pos.com
-- الهاتف: +20 XXX XXX XXXX
-- الدردشة المباشرة: من خلال لوحة التحكم الويب
-
-### مستويات الدعم حسب الباقة
-- **أساسي**: دعم عبر البريد الإلكتروني
-- **قياسي**: دعم عبر الهاتف والبريد
-- **احترافي**: دعم فني متميز
-- **مؤسسي**: دعم 24/7 مع مدير حساب مخصص
-
----
-
-## 📄 معلومات الترخيص
-
-**Developed by MO2**  
-**نظام نقاط البيع السحابي v2.0.0**  
-**جميع الحقوق محفوظة © 2026**
-
----
-
-## 🔗 روابط سريعة
-
-- [دليل المستخدم الكامل](USER_GUIDE.md)
-- [إرشادات التطوير](DEVELOPMENT_GUIDELINES.md)
-- [حلول المشاكل الشائعة](POS_SYSTEM_SOLUTION.md)
-- [لوحة التحكم الويب](https://posmo2-13dc1.web.app)
-- [مستودع GitHub](https://github.com/momenmohammed312-dev/pOS-Offline-DesktoP)
-
----
-
-**🚀 نظام POS SaaS جاهز للاستخدام التجاري!**
+**Moamen Mohamed** — Flutter Developer  
+[GitHub](https://github.com/momenmohammed312-dev)
