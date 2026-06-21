@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:drift/drift.dart' as drift;
 import 'dart:convert';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/utils/logger.dart';
@@ -78,6 +79,8 @@ class _PurchaseByProductReportState
 
       // Get purchase data grouped by product - try both tables
       String query;
+      final start = _selectedDateRange!.start;
+      final end = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day, 23, 59, 59);
       try {
         // First try with standard purchase_items table
         query = '''
@@ -91,11 +94,17 @@ class _PurchaseByProductReportState
           FROM products p
           LEFT JOIN purchase_items pi ON p.id = CAST(pi.product_id AS INTEGER)
           WHERE p.status = 'Active'
+            AND pi.created_at >= ? AND pi.created_at <= ?
           GROUP BY p.id, p.name, p.barcode, p.unit
           HAVING COALESCE(SUM(pi.quantity), 0) > 0
           ORDER BY total_quantity DESC
         ''';
-        final result = await db.customSelect(query, variables: []).get();
+        final startMicro = start.microsecondsSinceEpoch;
+        final endMicro = end.microsecondsSinceEpoch;
+        final result = await db.customSelect(query, variables: [
+          drift.Variable.withInt(startMicro),
+          drift.Variable.withInt(endMicro),
+        ]).get();
 
         final productData = result
             .map(
@@ -146,11 +155,17 @@ class _PurchaseByProductReportState
             FROM products p
             LEFT JOIN enhanced_purchase_items epi ON p.id = epi.product_id
             WHERE p.status = 'Active'
+              AND epi.created_at >= ? AND epi.created_at <= ?
             GROUP BY p.id, p.name, p.barcode, p.unit
             HAVING COALESCE(SUM(epi.quantity), 0) > 0
             ORDER BY total_quantity DESC
           ''';
-          final result = await db.customSelect(query, variables: []).get();
+          final startMicro = start.microsecondsSinceEpoch;
+          final endMicro = end.microsecondsSinceEpoch;
+          final result = await db.customSelect(query, variables: [
+            drift.Variable.withInt(startMicro),
+            drift.Variable.withInt(endMicro),
+          ]).get();
 
           final productData = result
               .map(

@@ -43,6 +43,8 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
       final Map<String, List<dynamic>> invoicesByDate = {};
       for (final inv in allInvoices) {
         final dateStr = DateFormat('yyyy-MM-dd').format(inv.date);
+        // تجاهل الفواتير بتاريخ غير صالح (قبل 2000)
+        if (inv.date.year < 2000) continue;
         invoicesByDate.putIfAbsent(dateStr, () => []).add(inv);
       }
 
@@ -75,6 +77,8 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
       for (final row in daysRows) {
         final data = row.data;
         final dayDate = parseDate(data['date']);
+        // تجاهل الأيام بتاريخ غير صالح (قبل 2000)
+        if (dayDate.year < 2000) continue;
         final dateStr = DateFormat('yyyy-MM-dd').format(dayDate);
         daysByDate[dateStr] = data;
       }
@@ -97,32 +101,40 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
       for (final row in expensesRows) {
         final data = row.data;
         final date = parseDate(data['date']);
+        // تجاهل المصروفات بتاريخ غير صالح (قبل 2000)
+        if (date.year < 2000) continue;
         final dateStr = DateFormat('yyyy-MM-dd').format(date);
         final amount = (data['amount'] as num).toDouble();
         expensesByDate[dateStr] = (expensesByDate[dateStr] ?? 0.0) + amount;
       }
 
-      // Load sales returns
-      final returnsRows = await db
-          .customSelect(
-            '''
-        SELECT * FROM sales_returns 
-        WHERE return_date >= ? AND return_date <= ?
-        ''',
-            variables: [
-              drift.Variable.withDateTime(DateTime(_startDate!.year, _startDate!.month, _startDate!.day)),
-              drift.Variable.withDateTime(DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59)),
-            ],
-          )
-          .get();
+      // Load sales returns (wrapped in try-catch since table may not exist yet)
+      Map<String, double> returnsByDate = {};
+      try {
+        final returnsRows = await db
+            .customSelect(
+              '''
+          SELECT * FROM sales_returns 
+          WHERE return_date >= ? AND return_date <= ?
+          ''',
+              variables: [
+                drift.Variable.withDateTime(DateTime(_startDate!.year, _startDate!.month, _startDate!.day)),
+                drift.Variable.withDateTime(DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59)),
+              ],
+            )
+            .get();
 
-      final Map<String, double> returnsByDate = {};
-      for (final row in returnsRows) {
-        final data = row.data;
-        final date = parseDate(data['return_date']);
-        final dateStr = DateFormat('yyyy-MM-dd').format(date);
-        final amount = (data['total_amount'] as num).toDouble();
-        returnsByDate[dateStr] = (returnsByDate[dateStr] ?? 0.0) + amount;
+        for (final row in returnsRows) {
+          final data = row.data;
+          final date = parseDate(data['return_date']);
+          // تجاهل المرتجعات بتاريخ غير صالح (قبل 2000)
+          if (date.year < 2000) continue;
+          final dateStr = DateFormat('yyyy-MM-dd').format(date);
+          final amount = (data['total_amount'] as num).toDouble();
+          returnsByDate[dateStr] = (returnsByDate[dateStr] ?? 0.0) + amount;
+        }
+      } catch (e) {
+        AppLogger.e('Failed to load sales returns', e);
       }
 
       final result = <Map<String, dynamic>>[];
@@ -133,6 +145,15 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         ...expensesByDate.keys,
         ...returnsByDate.keys,
       };
+      // فلتر التواريخ غير الصالحة (قبل 2000-01-01)
+      allDatesSet.removeWhere((dateStr) {
+        try {
+          final date = DateTime.parse(dateStr);
+          return date.year < 2000;
+        } catch (_) {
+          return true;
+        }
+      });
       final allDates = allDatesSet.toList()..sort((a, b) => b.compareTo(a));
 
       for (final dateStr in allDates) {
@@ -172,28 +193,53 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
               (dayData['opening_balance'] as num?)?.toDouble() ?? 0.0;
           closingBalance = (dayData['closing_balance'] as num?)?.toDouble();
 
+          // عرض وقت الفتح: أولاً من created_at، ولو null نستخدم date field
           if (dayData['created_at'] != null) {
             try {
-              openTime = DateFormat(
-                'HH:mm',
-              ).format(parseDate(dayData['created_at']));
-            } catch (_) {}
+              final parsedCreated = parseDate(dayData['created_at']);
+              if (parsedCreated.year >= 2000) {
+                openTime = DateFormat('HH:mm').format(parsedCreated);
+              }
+            } catch (e) {
+              AppLogger.e('Error parsing created_at', e);
+            }
           }
+          if (openTime == '-' && dayData['date'] != null) {
+            try {
+              final parsedDate = parseDate(dayData['date']);
+              if (parsedDate.year >= 2000) {
+                openTime = DateFormat('HH:mm').format(parsedDate);
+              }
+            } catch (e) {
+              AppLogger.e('Error parsing date as fallback for open time', e);
+            }
+          }
+
+          // عرض وقت الإغلاق
           if (dayData['closed_at'] != null) {
             try {
-              closeTime = DateFormat(
-                'HH:mm',
-              ).format(parseDate(dayData['closed_at']));
-            } catch (_) {}
+              final parsedClosed = parseDate(dayData['closed_at']);
+              if (parsedClosed.year >= 2000) {
+                closeTime = DateFormat('HH:mm').format(parsedClosed);
+              }
+            } catch (e) {
+              AppLogger.e('Error parsing closed_at', e);
+            }
           }
         }
 
+        // FIX: use is_open from database instead of inferring from closingBalance
+        final bool hasDayRecord = dayData != null;
+        final bool dayIsOpen = hasDayRecord
+            ? (dayData['is_open'] == true || dayData['is_open'] == 1)
+            : false;
+
         // FIX: only calculate surplus/deficit when day is closed
-        final surplusDeficit = closingBalance != null
+        final surplusDeficit = (hasDayRecord && !dayIsOpen && closingBalance != null)
             ? closingBalance -
                   openingBalance -
-                  cash + dailyExpenses + dailyReturns // deficit vs cash collected minus expenses and returns
-            : null; // null = day still open
+                  cash + dailyExpenses + dailyReturns
+            : null;
 
         result.add({
           'date': dateStr,
@@ -201,7 +247,8 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
           'closeTime': closeTime,
           'openingBalance': openingBalance,
           'closingBalance': closingBalance ?? 0.0,
-          'isOpen': closingBalance == null,
+          'hasDayRecord': hasDayRecord,
+          'isOpen': dayIsOpen,
           'totalSales': totalSales,
           'cash': cash,
           'credit': credit,
@@ -282,7 +329,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
     if (picked != null) {
       setState(() {
         _startDate = picked.start;
-        _endDate = picked.end;
+        _endDate = DateTime(picked.end.year, picked.end.month, picked.end.day, 23, 59, 59);
       });
       _loadData();
     }
@@ -508,6 +555,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                 final expenses = (d['expenses'] as num).toDouble();
                                 final returns = (d['returns'] as num).toDouble();
                                 final isOpen = d['isOpen'] as bool? ?? false;
+                                final hasDayRecord = d['hasDayRecord'] as bool? ?? false;
                                 return DataRow(
                                   onSelectChanged: (_) => _showDetailsDialog(d),
                                   cells: [
@@ -546,7 +594,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                       ),
                                     ),
                                     DataCell(
-                                      isOpen
+                                      !hasDayRecord || isOpen
                                           ? Text(
                                               '-',
                                               style: TextStyle(

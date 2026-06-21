@@ -358,14 +358,13 @@ class _DamagedItemsScreenState extends State<DamagedItemsScreen> {
     );
     if (confirm == true) {
       await widget.db.damagedItemsDao.deleteDamagedItem(id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم حذف السجل'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم حذف السجل'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 }
@@ -432,7 +431,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
 
   void _save() async {
     if (_formKey.currentState!.validate() && _selectedProduct != null) {
-      final qty = int.parse(_quantityController.text);
+      final qty = int.tryParse(_quantityController.text) ?? 0;
       if (!_isEditing && qty > _selectedProduct!.quantity) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

@@ -94,12 +94,8 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         ORDER BY report_date
       ''',
             variables: [
-              drift.Variable.withString(
-                _selectedDateRange!.start.toIso8601String(),
-              ),
-              drift.Variable.withString(
-                _selectedDateRange!.end.toIso8601String(),
-              ),
+              drift.Variable.withDateTime(_selectedDateRange!.start),
+              drift.Variable.withDateTime(_selectedDateRange!.end),
             ],
           )
           .get();
@@ -120,12 +116,8 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         ORDER BY report_date
       ''',
             variables: [
-              drift.Variable.withString(
-                _selectedDateRange!.start.toIso8601String(),
-              ),
-              drift.Variable.withString(
-                _selectedDateRange!.end.toIso8601String(),
-              ),
+              drift.Variable.withDateTime(_selectedDateRange!.start),
+              drift.Variable.withDateTime(_selectedDateRange!.end),
             ],
           )
           .get();
@@ -144,12 +136,8 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         ORDER BY report_date
       ''',
             variables: [
-              drift.Variable.withString(
-                _selectedDateRange!.start.toIso8601String(),
-              ),
-              drift.Variable.withString(
-                _selectedDateRange!.end.toIso8601String(),
-              ),
+              drift.Variable.withDateTime(_selectedDateRange!.start),
+              drift.Variable.withDateTime(_selectedDateRange!.end),
             ],
           )
           .get();
@@ -162,12 +150,12 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         final date = row.readNullable<String>('report_date') ?? 'unknown';
         combinedData[date] = {
           'date': date,
-          'sales_count': row.readNullable<num>('invoice_count')?.toInt() ?? 0,
+          'sales_count': row.readNullable<int>('invoice_count') ?? 0,
           'total_sales':
-              row.readNullable<num>('total_sales')?.toDouble() ?? 0.0,
-          'cash_sales': row.readNullable<num>('cash_sales')?.toDouble() ?? 0.0,
+              row.readNullable<double>('total_sales') ?? 0.0,
+          'cash_sales': row.readNullable<double>('cash_sales') ?? 0.0,
           'credit_sales':
-              row.readNullable<num>('credit_sales')?.toDouble() ?? 0.0,
+              row.readNullable<double>('credit_sales') ?? 0.0,
           'purchase_count': 0,
           'total_purchases': 0.0,
           'cash_purchases': 0.0,
@@ -183,13 +171,13 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         if (combinedData.containsKey(date)) {
           final data = combinedData[date]!;
           data['purchase_count'] =
-              row.readNullable<num>('purchase_count')?.toInt() ?? 0;
+              row.readNullable<int>('purchase_count') ?? 0;
           data['total_purchases'] =
-              row.readNullable<num>('total_purchases')?.toDouble() ?? 0.0;
+              row.readNullable<double>('total_purchases') ?? 0.0;
           data['cash_purchases'] =
-              row.readNullable<num>('cash_purchases')?.toDouble() ?? 0.0;
+              row.readNullable<double>('cash_purchases') ?? 0.0;
           data['credit_purchases'] =
-              row.readNullable<num>('credit_purchases')?.toDouble() ?? 0.0;
+              row.readNullable<double>('credit_purchases') ?? 0.0;
         } else {
           combinedData[date] = {
             'date': date,
@@ -198,13 +186,13 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
             'cash_sales': 0.0,
             'credit_sales': 0.0,
             'purchase_count':
-                row.readNullable<num>('purchase_count')?.toInt() ?? 0,
+                row.readNullable<int>('purchase_count') ?? 0,
             'total_purchases':
-                row.readNullable<num>('total_purchases')?.toDouble() ?? 0.0,
+                row.readNullable<double>('total_purchases') ?? 0.0,
             'cash_purchases':
-                row.readNullable<num>('cash_purchases')?.toDouble() ?? 0.0,
+                row.readNullable<double>('cash_purchases') ?? 0.0,
             'credit_purchases':
-                row.readNullable<num>('credit_purchases')?.toDouble() ?? 0.0,
+                row.readNullable<double>('credit_purchases') ?? 0.0,
             'expense_count': 0,
             'total_expenses': 0.0,
             'gross_profit': 0.0,
@@ -219,9 +207,9 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         if (combinedData.containsKey(date)) {
           final data = combinedData[date]!;
           data['expense_count'] =
-              row.readNullable<num>('expense_count')?.toInt() ?? 0;
+              row.readNullable<int>('expense_count') ?? 0;
           data['total_expenses'] =
-              row.readNullable<num>('total_expenses')?.toDouble() ?? 0.0;
+              row.readNullable<double>('total_expenses') ?? 0.0;
         } else {
           combinedData[date] = {
             'date': date,
@@ -234,9 +222,9 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
             'cash_purchases': 0.0,
             'credit_purchases': 0.0,
             'expense_count':
-                row.readNullable<num>('expense_count')?.toInt() ?? 0,
+                row.readNullable<int>('expense_count') ?? 0,
             'total_expenses':
-                row.readNullable<num>('total_expenses')?.toDouble() ?? 0.0,
+                row.readNullable<double>('total_expenses') ?? 0.0,
             'gross_profit': 0.0,
             'profit_margin': 0.0,
           };

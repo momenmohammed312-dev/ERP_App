@@ -14,6 +14,7 @@ import 'package:pos_offline_desktop/ui/setup/first_run_setup_screen.dart';
 import 'package:pos_offline_desktop/screens/splash_screen.dart';
 import 'package:pos_offline_desktop/ui/product/damaged_items_screen.dart';
 import 'package:pos_offline_desktop/screens/reports/returns_report_screen.dart';
+import 'package:pos_offline_desktop/ui/about/about_screen.dart';
 
 final firstRunCompleteProvider = FutureProvider<bool>((ref) async {
   return SettingsService.isFirstRunComplete();
@@ -94,6 +95,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/returns-report',
         builder: (context, state) => ReturnsReportScreen(database: db),
+      ),
+      GoRoute(
+        path: '/about',
+        builder: (context, state) => const AboutScreen(),
       ),
     ],
   );

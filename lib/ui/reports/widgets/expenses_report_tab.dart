@@ -17,7 +17,7 @@ class ExpensesReportTab extends StatefulWidget {
 
 class _ExpensesReportTabState extends State<ExpensesReportTab> {
   DateTime _startDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-  DateTime _endDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  DateTime _endDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59);
   List<Expense> _expenses = []; // Changed from LedgerTransaction to Expense
   bool _isLoading = false;
   final ExportService _exportService = ExportService();
@@ -71,7 +71,7 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
     if (picked != null) {
       setState(() {
         _startDate = picked.start;
-        _endDate = picked.end;
+        _endDate = DateTime(picked.end.year, picked.end.month, picked.end.day, 23, 59, 59);
       });
       _loadData();
     }
@@ -82,7 +82,7 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
       final data = _expenses.map((e) {
         return {
           'id': e.id,
-          'description': e.notes ?? '',
+          'description': e.description,
           'date': DateFormat('yyyy/MM/dd HH:mm').format(e.date),
           'amount': e.amount.toStringAsFixed(2),
           'paymentMethod': 'Cash',
@@ -114,7 +114,7 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
       final data = _expenses.map((e) {
         return {
           context.l10n.date: DateFormat('yyyy/MM/dd').format(e.date),
-          context.l10n.description: e.notes ?? '',
+          context.l10n.description: e.description,
           context.l10n.amount: e.amount,
           context.l10n.payment_method_short: 'Cash',
         };
@@ -309,7 +309,7 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
                                       ).format(e.date),
                                     ),
                                   ),
-                                  DataCell(Text(e.notes ?? '-')),
+                                  DataCell(Text(e.description)),
                                   DataCell(
                                     Text(
                                       '${e.amount.toStringAsFixed(2)} ${context.l10n.currency_symbol}',

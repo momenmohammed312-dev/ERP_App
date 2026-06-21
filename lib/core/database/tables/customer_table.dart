@@ -1,14 +1,14 @@
 import 'package:drift/drift.dart';
 
 enum CustomerStatus {
-  inactive(0),
-  active(1);
+  inactive('Inactive'),
+  active('Active');
 
-  final int value;
+  final String value;
   const CustomerStatus(this.value);
 
-  static CustomerStatus fromInt(int? val) {
-    if (val == 0) return CustomerStatus.inactive;
+  static CustomerStatus fromString(String? val) {
+    if (val == 'Inactive') return CustomerStatus.inactive;
     return CustomerStatus.active;
   }
 }
@@ -37,9 +37,9 @@ class Customers extends Table {
   BoolColumn get isActive => boolean().withDefault(
     const Constant(true),
   )(); // ignore: non_constant_identifier_names
-  IntColumn get status => integer().nullable().withDefault(
-    const Constant(1),
-  )(); // INTEGER for Enum indices (Active = 1, Inactive = 0)
+  TextColumn get status => text().nullable().withDefault(
+    const Constant('Active'),
+  )();
 
   @override
   Set<Column> get primaryKey => {id};

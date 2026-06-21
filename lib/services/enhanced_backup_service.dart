@@ -12,7 +12,7 @@ import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:intl/intl.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:pos_offline_desktop/core/database/database_singleton.dart';
+import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/utils/app_utils.dart';
 import 'package:pos_offline_desktop/core/services/backup_service.dart'
     as core_backup;
@@ -110,6 +110,11 @@ class EnhancedBackupService {
       EnhancedBackupService._internal();
   factory EnhancedBackupService() => _instance;
   EnhancedBackupService._internal();
+
+  AppDatabase? _db;
+  void init(AppDatabase db) {
+    _db = db;
+  }
 
   // ════════════════════════════════════════════════════════════════════
   // إنشاء نسخة احتياطية
@@ -269,7 +274,10 @@ class EnhancedBackupService {
         // Fallback: some backups are created by core BackupService and contain
         // encrypted ZIP with backup_data.json (table-dump) using a different key.
         try {
-          final db = await DatabaseSingleton.getInstance();
+          final db = _db;
+          if (db == null) {
+            throw Exception('Database connection not initialized in EnhancedBackupService');
+          }
           final coreService = core_backup.BackupService(db);
           await coreService.restoreBackup(null, filename);
           debugPrint('✅ تمت الاستعادة بنجاح (Core BackupService)');
@@ -694,7 +702,9 @@ class EnhancedBackupService {
             final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
             if (_isZipBytes(decrypted)) return decrypted;
           }
-        } catch (_) {}
+        } catch (e) {
+          print('Decryption attempt failed with stored IV: $e');
+        }
       }
 
       // Try with fixed zero IV (Legacy/User format)
@@ -714,7 +724,9 @@ class EnhancedBackupService {
           final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
           if (_isZipBytes(decrypted)) return decrypted;
         }
-      } catch (_) {}
+      } catch (e) {
+        print('Decryption attempt failed with zero IV: $e');
+      }
     }
 
     return rawBytes;

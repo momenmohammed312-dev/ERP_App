@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/drift.dart' as drift;
 import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
@@ -232,16 +233,222 @@ class _PerformancePageState extends ConsumerState<PerformancePage> {
     );
   }
 
-  void _addNewReview() {
-    showDialog(
+  Future<void> _addNewReview() async {
+    final formKey = GlobalKey<FormState>();
+    final periodCtrl = TextEditingController(
+      text: DateFormat('yyyy-MM').format(DateTime.now()),
+    );
+    final strengthsCtrl = TextEditingController();
+    final weaknessesCtrl = TextEditingController();
+    final goalsCtrl = TextEditingController();
+    final recommendationsCtrl = TextEditingController();
+    double workQuality = 3.0, productivity = 3.0, teamwork = 3.0;
+    double punctuality = 3.0, initiative = 3.0;
+
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('إضافة تقييم جديد'),
-        content: const Text('هذه الميزة ستمكن من تقييم الموظف في عدة معايير.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إغلاق'),
+      builder: (ctx) {
+        double wq = workQuality, prod = productivity, team = teamwork;
+        double punct = punctuality, init = initiative;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('إضافة تقييم جديد'),
+            content: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: periodCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'فترة التقييم',
+                        hintText: 'مثال: 2024-Q1',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'الحقل مطلوب' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildRatingSlider('جودة العمل', wq, (v) {
+                      setDialogState(() => wq = v);
+                    }),
+                    _buildRatingSlider('الإنتاجية', prod, (v) {
+                      setDialogState(() => prod = v);
+                    }),
+                    _buildRatingSlider('العمل الجماعي', team, (v) {
+                      setDialogState(() => team = v);
+                    }),
+                    _buildRatingSlider('الانتظام', punct, (v) {
+                      setDialogState(() => punct = v);
+                    }),
+                    _buildRatingSlider('المبادرة', init, (v) {
+                      setDialogState(() => init = v);
+                    }),
+                    const SizedBox(height: 8),
+                    Text(
+                      'المتوسط: ${((wq + prod + team + punct + init) / 5).toStringAsFixed(1)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Colors.purple,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: strengthsCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'نقاط القوة',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: weaknessesCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'نقاط التحسين',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: goalsCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'الأهداف القادمة',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: recommendationsCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'التوصيات',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 2,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (formKey.currentState!.validate()) {
+                    final avg = (wq + prod + team + punct + init) / 5;
+                    Navigator.pop(ctx, {
+                      'period': periodCtrl.text.trim(),
+                      'workQuality': wq,
+                      'productivity': prod,
+                      'teamwork': team,
+                      'punctuality': punct,
+                      'initiative': init,
+                      'overall': double.parse(avg.toStringAsFixed(1)),
+                      'strengths': strengthsCtrl.text.trim(),
+                      'weaknesses': weaknessesCtrl.text.trim(),
+                      'goals': goalsCtrl.text.trim(),
+                      'recommendations': recommendationsCtrl.text.trim(),
+                    });
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('حفظ التقييم'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (result != null) {
+      try {
+        await _dao.addPerformanceReview(
+          PerformanceReviewsCompanion.insert(
+            staffId: widget.staff.staffId,
+            reviewPeriod: result['period'] as String,
+            reviewDate: DateTime.now(),
+            reviewerId: 'admin',
+            overallRating: result['overall'] as double,
+            workQualityRating: result['workQuality'] as double,
+            productivityRating: result['productivity'] as double,
+            teamworkRating: result['teamwork'] as double,
+            punctualityRating: result['punctuality'] as double,
+            initiativeRating: result['initiative'] as double,
+            strengths: (result['strengths'] as String).isNotEmpty
+                ? drift.Value(result['strengths'] as String)
+                : const drift.Value.absent(),
+            weaknesses: (result['weaknesses'] as String).isNotEmpty
+                ? drift.Value(result['weaknesses'] as String)
+                : const drift.Value.absent(),
+            goals: (result['goals'] as String).isNotEmpty
+                ? drift.Value(result['goals'] as String)
+                : const drift.Value.absent(),
+            recommendations: (result['recommendations'] as String).isNotEmpty
+                ? drift.Value(result['recommendations'] as String)
+                : const drift.Value.absent(),
+            status: 'submitted',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('تم إضافة التقييم بنجاح'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+    periodCtrl.dispose();
+    strengthsCtrl.dispose();
+    weaknessesCtrl.dispose();
+    goalsCtrl.dispose();
+    recommendationsCtrl.dispose();
+  }
+
+  Widget _buildRatingSlider(String label, double value, ValueChanged<double> onChanged) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 13)),
+              Text(
+                value.toStringAsFixed(1),
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.purple),
+              ),
+            ],
+          ),
+          Slider(
+            value: value,
+            min: 1.0,
+            max: 5.0,
+            divisions: 8,
+            activeColor: Colors.purple,
+            onChanged: onChanged,
           ),
         ],
       ),

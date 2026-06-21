@@ -284,7 +284,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       width: 64,
                       height: 64,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 48),
+                      errorBuilder: (_, _, _) => const Icon(Icons.broken_image, size: 48),
                     ),
                   ),
                   Positioned(

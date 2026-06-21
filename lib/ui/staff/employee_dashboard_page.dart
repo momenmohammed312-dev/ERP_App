@@ -94,7 +94,8 @@ class _EmployeeDashboardPageState
         WHERE status IN ('pending', 'approved')
       ''').get();
       if (advanceRows.isNotEmpty) {
-        _pendingAdvancesTotal = advanceRows.first.read<num>('total').toDouble();
+        final rawTotal = advanceRows.first.data['total'];
+        _pendingAdvancesTotal = rawTotal is num ? rawTotal.toDouble() : 0.0;
       }
 
       if (mounted) setState(() => _isLoading = false);

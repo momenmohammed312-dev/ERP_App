@@ -530,7 +530,9 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
                               DateTime? date;
                               try {
                                 date = parseDate(p['created_at']);
-                              } catch (_) {}
+                              } catch (e) {
+                                print('Error parsing date: $e');
+                              }
                               return DataRow(
                                 cells: [
                                   DataCell(

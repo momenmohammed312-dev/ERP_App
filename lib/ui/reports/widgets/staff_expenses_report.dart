@@ -14,7 +14,7 @@ class StaffExpensesReport extends StatefulWidget {
 class _StaffExpensesReportState extends State<StaffExpensesReport> {
   bool _isLoading = false;
   List<StaffAdvance> _advances = [];
-  List<Expense> _salaryExpenses = [];
+  List<_SalaryEntry> _salaryEntries = [];
   Map<String, String> _staffMap = {};
   String? _errorMessage;
 
@@ -32,16 +32,54 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
     try {
       final advances = await widget.db.select(widget.db.staffAdvances).get();
       final staffList = await widget.db.select(widget.db.staffTable).get();
+
       final salaryExpenses = await (widget.db.select(widget.db.expenses)
         ..where((t) => t.category.equals('salaries'))
       ).get();
-      salaryExpenses.sort((a, b) => b.date.compareTo(a.date));
+
+      final paidPayrolls = await (widget.db.select(widget.db.payrollTable)
+        ..where((t) => t.status.equals('paid'))
+      ).get();
+
       final staffMap = <String, String>{
         for (final s in staffList) s.staffId: s.name,
       };
+
+      final entries = <_SalaryEntry>[];
+
+      for (final exp in salaryExpenses) {
+        entries.add(_SalaryEntry(
+          staffId: _extractStaffIdFromDesc(exp.description, staffMap),
+          staffName: _extractStaffNameFromDesc(exp.description, staffMap),
+          amount: exp.amount,
+          date: exp.date,
+          period: '',
+          source: 'expense',
+        ));
+      }
+
+      for (final p in paidPayrolls) {
+        final alreadyExists = entries.any((e) =>
+            e.source == 'expense' &&
+            (e.amount - p.netSalary).abs() < 0.01 &&
+            e.date.difference(p.paymentDate ?? p.updatedAt).inMinutes.abs() < 2);
+        if (!alreadyExists) {
+          entries.add(_SalaryEntry(
+            staffId: p.staffId,
+            staffName: staffMap[p.staffId] ?? 'غير معروف',
+            amount: p.netSalary,
+            date: p.paymentDate ?? p.updatedAt,
+            period: p.payrollPeriod,
+            source: 'payroll',
+          ));
+        }
+      }
+
+      entries.sort((a, b) => b.date.compareTo(a.date));
+
       setState(() {
         _advances = advances;
-        _salaryExpenses = salaryExpenses;
+        _salaryEntries = entries;
         _staffMap = staffMap;
         _isLoading = false;
       });
@@ -53,8 +91,32 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
     }
   }
 
-  double get _totalAdvances => _advances.fold(0.0, (sum, a) => sum + a.amount);
-  double get _totalSalaries => _salaryExpenses.fold(0.0, (sum, e) => sum + e.amount);
+  String _extractStaffIdFromDesc(String desc, Map<String, String> staffMap) {
+    for (final entry in staffMap.entries) {
+      if (desc.contains(entry.value) || desc.contains(entry.key)) {
+        return entry.key;
+      }
+    }
+    return '';
+  }
+
+  String _extractStaffNameFromDesc(String desc, Map<String, String> staffMap) {
+    for (final entry in staffMap.entries) {
+      if (desc.contains(entry.value)) {
+        return entry.value;
+      }
+      if (desc.contains(entry.key)) {
+        return entry.value;
+      }
+    }
+    return desc;
+  }
+
+  double get _totalAdvances => _advances
+      .where((a) => a.status == 'paid')
+      .fold(0.0, (sum, a) => sum + a.amount);
+  double get _totalSalaries =>
+      _salaryEntries.fold(0.0, (sum, e) => sum + e.amount);
 
   @override
   Widget build(BuildContext context) {
@@ -106,7 +168,6 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
             )
           : Column(
               children: [
-                // Summary cards
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -245,7 +306,7 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                                     ),
                                   ),
                                   Text(
-                                    '${_salaryExpenses.length}',
+                                    '${_salaryEntries.length}',
                                     style: TextStyle(
                                       color: textColor,
                                       fontSize: 20,
@@ -262,11 +323,11 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                   ),
                 ),
 
-                // Tab bar for switching between advances and salaries
                 DefaultTabController(
                   length: 2,
-                  child: Column(
-                    children: [
+                  child: Expanded(
+                    child: Column(
+                      children: [
                       TabBar(
                         labelColor: Colors.orange,
                         unselectedLabelColor: textColor.withValues(alpha: 0.5),
@@ -276,11 +337,9 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                           Tab(text: 'المرتبات', icon: Icon(Icons.receipt_long, size: 18)),
                         ],
                       ),
-                      SizedBox(
-                        height: MediaQuery.of(context).size.height * 0.5,
+                      Expanded(
                         child: TabBarView(
                           children: [
-                            // Advances tab
                             _advances.isEmpty
                                 ? Center(
                                     child: Column(
@@ -350,8 +409,7 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                                     },
                                   ),
 
-                            // Salaries tab
-                            _salaryExpenses.isEmpty
+                            _salaryEntries.isEmpty
                                 ? Center(
                                     child: Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
@@ -364,9 +422,9 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                                   )
                                 : ListView.builder(
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    itemCount: _salaryExpenses.length,
+                                    itemCount: _salaryEntries.length,
                                     itemBuilder: (context, index) {
-                                      final exp = _salaryExpenses[index];
+                                      final entry = _salaryEntries[index];
                                       return Card(
                                         color: cardBg,
                                         margin: const EdgeInsets.only(bottom: 8),
@@ -375,11 +433,21 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                           leading: CircleAvatar(
                                             backgroundColor: Colors.orange.withValues(alpha: 0.2),
-                                            child: const Icon(Icons.person, color: Colors.orange, size: 20),
+                                            child: Text(
+                                              entry.staffName.isNotEmpty ? entry.staffName[0] : '?',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                                            ),
                                           ),
-                                          title: Text(exp.description, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14)),
-                                          subtitle: Text(DateFormat('yyyy/MM/dd').format(exp.date), style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 12)),
-                                          trailing: Text('${exp.amount.toStringAsFixed(2)} ج.م', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 15)),
+                                          title: Text(entry.staffName, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14)),
+                                          subtitle: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(DateFormat('yyyy/MM/dd').format(entry.date), style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 12)),
+                                              if (entry.period.isNotEmpty)
+                                                Text('الفترة: ${entry.period}', style: TextStyle(color: textColor.withValues(alpha: 0.4), fontSize: 11)),
+                                            ],
+                                          ),
+                                          trailing: Text('${entry.amount.toStringAsFixed(2)} ج.م', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 15)),
                                         ),
                                       );
                                     },
@@ -390,8 +458,27 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                     ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
     );
   }
+}
+
+class _SalaryEntry {
+  final String staffId;
+  final String staffName;
+  final double amount;
+  final DateTime date;
+  final String period;
+  final String source;
+
+  _SalaryEntry({
+    required this.staffId,
+    required this.staffName,
+    required this.amount,
+    required this.date,
+    required this.period,
+    required this.source,
+  });
 }

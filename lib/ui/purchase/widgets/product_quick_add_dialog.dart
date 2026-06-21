@@ -231,7 +231,7 @@ class _ProductQuickAddDialogState extends State<ProductQuickAddDialog> {
       final productDao = ProductDao(widget.database);
 
       // Parse values
-      final price = double.parse(_priceController.text);
+      final price = double.tryParse(_priceController.text) ?? 0.0;
       final cartonQty = int.tryParse(_cartonQuantityController.text) ?? 0;
       final cartonPrice = double.tryParse(_cartonPriceController.text) ?? 0.0;
 

@@ -12,7 +12,7 @@ import 'package:pos_offline_desktop/ui/home/widgets/suppliers_widget.dart';
 import 'package:pos_offline_desktop/ui/reports/reports_page.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/enhanced_new_invoice_page.dart';
 import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
-import 'package:pos_offline_desktop/ui/staff/staff_list_page.dart';
+import 'package:pos_offline_desktop/ui/staff/employee_dashboard_page.dart';
 import 'package:pos_offline_desktop/ui/setting/settings.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
@@ -216,10 +216,10 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
       CustomerTransactionsWidget(db: widget.db),
       // Index 3: Suppliers
       SuppliersWidget(db: widget.db),
-      // Index 4: Staff
+      // Index 4: Staff — Dashboard first
       FeatureGuard(
         featureName: 'staff_management',
-        child: const StaffListPage(),
+        child: const EmployeeDashboardPage(),
       ),
       // Index 5: Cash
       const CashierPage(),
@@ -307,13 +307,16 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                       tooltip: 'الإعدادات',
                     ),
                     const Gap(4),
-                    IconButton(
-                      icon: const Icon(Icons.logout),
+                    TextButton.icon(
+                      icon: const Icon(Icons.logout, color: Colors.redAccent),
+                      label: const Text(
+                        'تسجيل خروج',
+                        style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                      ),
                       onPressed: () {
                         ref.read(authProvider.notifier).logout();
                         context.go('/login');
                       },
-                      tooltip: 'تسجيل خروج',
                     ),
                   ],
                 ),

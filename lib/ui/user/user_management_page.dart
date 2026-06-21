@@ -360,6 +360,9 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
 
   Widget _buildPermissionsPreview(AppUser user, UserRole role) {
     final customPerms = _parseCustomPermissions(user.customPermissions);
+    final rolePerms = PermissionMatrix.getPermissionsForRole(role);
+    final allPerms = {...rolePerms, ...customPerms};
+
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -370,20 +373,34 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('الصلاحيات المخصصة:', style: TextStyle(fontSize: 12, color: _textMuted, fontWeight: FontWeight.bold)),
+          Row(
+            children: [
+              const Text('الصلاحيات:', style: TextStyle(fontSize: 12, color: _textMuted, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _accentBlue.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('${allPerms.length} صلاحية', style: TextStyle(fontSize: 10, color: _accentBlue)),
+              ),
+            ],
+          ),
           const SizedBox(height: 6),
           Wrap(
-            spacing: 6,
+            spacing: 4,
             runSpacing: 4,
-            children: customPerms.entries.take(4).map((e) {
-              final color = e.value ? _accentGreen : Colors.red;
+            children: _getPermissionCategories().entries.take(6).map((entry) {
+              final count = entry.value.where((p) => allPerms.contains(p)).length;
+              if (count == 0) return const SizedBox.shrink();
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
+                  color: _accentGreen.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: Text(_getCustomPermLabel(e.key), style: TextStyle(fontSize: 10, color: color)),
+                child: Text('${entry.key} ($count)', style: const TextStyle(fontSize: 10, color: _accentGreen)),
               );
             }).toList(),
           ),
@@ -392,30 +409,41 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
     );
   }
 
-  String _getCustomPermLabel(String key) {
-    switch (key) {
-      case 'can_delete_invoice': return 'حذف فاتورة';
-      case 'can_apply_discount': return 'خصم';
-      case 'can_edit_price': return 'تعديل السعر';
-      case 'can_view_reports': return 'تقارير';
-      case 'can_process_returns': return 'مرتجعات';
-      case 'can_add_spoilage': return 'هالك';
-      default: return key;
-    }
-  }
-
-  Map<String, bool> _parseCustomPermissions(String? json) {
-    if (json == null || json.isEmpty) return {};
+  /// Parse custom_permissions JSON - handles both old Map format and new array format
+  List<Permission> _parseCustomPermissions(String? json) {
+    if (json == null || json.isEmpty) return [];
     try {
-      final map = jsonDecode(json) as Map<String, dynamic>;
-      return map.map((k, v) => MapEntry(k, v as bool));
-    } catch (_) {
-      return {};
-    }
+      final decoded = jsonDecode(json);
+      if (decoded is List) {
+        return decoded
+            .map((e) => Permission.values.firstWhere(
+                  (p) => p.name == e,
+                  orElse: () => Permission.viewSales,
+                ))
+            .toList();
+      }
+      if (decoded is Map) {
+        return [];
+      }
+    } catch (_) {}
+    return [];
   }
 
-  String _encodeCustomPermissions(Map<String, bool> perms) {
-    return jsonEncode(perms);
+  Map<String, List<Permission>> _getPermissionCategories() {
+    return {
+      'المبيعات': [Permission.viewSales, Permission.createSale, Permission.editSale, Permission.deleteSale, Permission.refundSale],
+      'المنتجات': [Permission.viewProducts, Permission.createProduct, Permission.editProduct, Permission.deleteProduct, Permission.adjustStock],
+      'العملاء': [Permission.viewCustomers, Permission.createCustomer, Permission.editCustomer, Permission.deleteCustomer, Permission.viewCustomerBalance],
+      'الموردين': [Permission.viewSuppliers, Permission.createSupplier, Permission.editSupplier, Permission.deleteSupplier, Permission.viewSupplierBalance],
+      'المشتريات': [Permission.viewPurchases, Permission.createPurchase, Permission.editPurchase, Permission.deletePurchase, Permission.approvePurchase],
+      'المخزون': [Permission.viewInventory, Permission.adjustInventory, Permission.transferInventory, Permission.conductStockTake],
+      'التقارير': [Permission.viewReports, Permission.exportReports, Permission.viewFinancialReports, Permission.viewInventoryReports],
+      'المستخدمين': [Permission.viewUsers, Permission.createUser, Permission.editUser, Permission.deleteUser, Permission.assignRoles, Permission.manageUsers, Permission.lockUser, Permission.unlockUser],
+      'الإعدادات': [Permission.viewSettings, Permission.editSettings, Permission.manageLicense, Permission.viewAuditLog],
+      'النسخ الاحتياطي': [Permission.createBackup, Permission.restoreBackup, Permission.deleteBackup],
+      'الموظفين': [Permission.viewEmployees, Permission.createEmployee, Permission.editEmployee, Permission.deleteEmployee, Permission.viewSalaries, Permission.manageSalaries, Permission.viewAttendance, Permission.manageAttendance],
+      'المالية': [Permission.openDay, Permission.closeDay, Permission.viewCashDrawer, Permission.adjustCashDrawer],
+    };
   }
 
   Future<void> _showPermissionsDialog(AppUser user, UserRole role) async {
@@ -424,8 +452,10 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
     if (!isAuthed || !mounted) return;
 
     if (!mounted) return;
-    final customPerms = _parseCustomPermissions(user.customPermissions);
-    final editable = Map<String, bool>.from(customPerms);
+    final existingCustomPerms = _parseCustomPermissions(user.customPermissions);
+    final roleDefaultPerms = PermissionMatrix.getPermissionsForRole(role);
+    final selectedPerms = Set<Permission>.from(existingCustomPerms);
+    final categories = _getPermissionCategories();
 
     final result = await showDialog<bool>(
       context: context,
@@ -438,28 +468,57 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
               children: [
                 const Icon(Icons.tune, color: _gold),
                 const SizedBox(width: 8),
-                Text('الصلاحيات المخصصة - ${user.fullName}', style: const TextStyle(color: Colors.white, fontSize: 16)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('صلاحيات ${user.fullName}', style: const TextStyle(color: Colors.white, fontSize: 16)),
+                      Text('الدور: ${PermissionMatrix.getRoleDisplayName(role)}', style: TextStyle(color: _textMuted, fontSize: 12)),
+                    ],
+                  ),
+                ),
               ],
             ),
             content: SizedBox(
-              width: 400,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('صلاحيات إضافية خارج الدور الافتراضي:', style: TextStyle(color: _textMuted, fontSize: 13)),
-                    const SizedBox(height: 12),
-                    ...editable.keys.map((key) => CheckboxListTile(
-                      title: Text(_getCustomPermLabel(key), style: const TextStyle(color: Colors.white, fontSize: 14)),
-                      value: editable[key],
-                      activeColor: _gold,
-                      checkColor: _bgDark,
-                      dense: true,
-                      onChanged: (v) => setDialogState(() => editable[key] = v ?? false),
-                    )),
-                  ],
-                ),
+              width: 550,
+              height: MediaQuery.of(context).size.height * 0.6,
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _accentBlue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _accentBlue.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: _accentBlue, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'الصلاحيات المخصصة تُضاف لصلاحيات الدور الافتراضي. Admin له كل الصلاحيات تلقائياً.',
+                            style: TextStyle(color: _accentBlue, fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView(
+                      children: categories.entries.map((entry) {
+                        return _buildPermissionCategorySection(
+                          entry.key,
+                          entry.value,
+                          selectedPerms,
+                          roleDefaultPerms,
+                          setDialogState,
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
               ),
             ),
             actions: [
@@ -471,7 +530,7 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
                 style: ElevatedButton.styleFrom(backgroundColor: _gold, foregroundColor: _bgDark),
                 onPressed: () async {
                   try {
-                    final encoded = _encodeCustomPermissions(editable);
+                    final encoded = PermissionMatrix.permissionsToJson(selectedPerms.toList());
                     final existing = await _userDao.getUserById(user.id);
                     if (existing != null) {
                       await _userDao.updateUser(existing.copyWith(
@@ -497,6 +556,100 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
       _loadUsers();
       _showSuccess('تم تحديث الصلاحيات');
     }
+  }
+
+  Widget _buildPermissionCategorySection(
+    String categoryName,
+    List<Permission> permissions,
+    Set<Permission> selectedPerms,
+    List<Permission> roleDefaultPerms,
+    StateSetter setDialogState,
+  ) {
+    final allInCategory = permissions.map((p) => roleDefaultPerms.contains(p) || selectedPerms.contains(p)).toList();
+    final allEnabled = allInCategory.every((e) => e);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+            ),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: allEnabled,
+                  activeColor: _gold,
+                  checkColor: _bgDark,
+                  onChanged: (v) {
+                    setDialogState(() {
+                      for (final p in permissions) {
+                        if (roleDefaultPerms.contains(p)) continue;
+                        if (v == true) {
+                          selectedPerms.add(p);
+                        } else {
+                          selectedPerms.remove(p);
+                        }
+                      }
+                    });
+                  },
+                ),
+                Text(categoryName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
+            ),
+          ),
+          ...permissions.map((perm) {
+            final isDefault = roleDefaultPerms.contains(perm);
+            final isSelected = selectedPerms.contains(perm);
+            final displayName = PermissionMatrix.getPermissionDisplayName(perm);
+
+            return CheckboxListTile(
+              title: Row(
+                children: [
+                  Text(displayName, style: TextStyle(
+                    color: isDefault ? _textMuted : Colors.white,
+                    fontSize: 13,
+                  )),
+                  if (isDefault) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: _accentGreen.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text('افتراضي', style: TextStyle(fontSize: 9, color: _accentGreen)),
+                    ),
+                  ],
+                ],
+              ),
+              value: isDefault || isSelected,
+              activeColor: _gold,
+              checkColor: _bgDark,
+              dense: true,
+              onChanged: isDefault ? null : (v) {
+                setDialogState(() {
+                  if (v == true) {
+                    selectedPerms.add(perm);
+                  } else {
+                    selectedPerms.remove(perm);
+                  }
+                });
+              },
+            );
+          }),
+        ],
+      ),
+    );
   }
 
   Future<void> _showResetPasswordDialog(AppUser user) async {

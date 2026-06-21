@@ -294,11 +294,10 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
 
     if (selectedMethod == null) return;
     try {
-      await _dao.markPayrollPaid(
-        payroll.id,
-        paymentDate: DateTime.now(),
-        paymentMethod: selectedMethod,
-      );
+      final db = ref.read(appDatabaseProvider);
+      final service = StaffManagementService(StaffManagementDao(db));
+      final user = ref.read(authProvider);
+      await service.payPayroll(user, payroll.id, selectedMethod);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم صرف المرتب'), backgroundColor: Colors.green),
@@ -315,8 +314,8 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
   }
 
   void _calculatePayroll() {
-    final periodOptions = ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'];
-    final selectedPeriod = periodOptions[DateTime.now().month - 1];
+    final now = DateTime.now();
+    final selectedPeriod = '${now.year}-${now.month.toString().padLeft(2, '0')}';
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -335,13 +334,13 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                 final service = StaffManagementService(StaffManagementDao(db));
                 final user = ref.read(authProvider);
                 await service.calculatePayroll(user, widget.staff.staffId, selectedPeriod);
-                if (!mounted) return;
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('تم احتساب المرتب بنجاح'), backgroundColor: Colors.green),
                 );
                 _loadData();
               } catch (e) {
-                if (!mounted) return;
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
                 );

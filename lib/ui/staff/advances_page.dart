@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/drift.dart' as drift;
 import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
 import '../../core/utils/currency_helper.dart';
+import '../../core/provider/auth_provider.dart';
+import '../../services/staff_management_service.dart';
 import 'package:intl/intl.dart';
 
 class AdvancesPage extends ConsumerStatefulWidget {
@@ -176,6 +179,23 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                 ),
               ),
             ],
+            if (advance.status == 'approved') ...[
+              const Divider(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => _payAdvance(advance),
+                    icon: const Icon(Icons.payments, size: 18),
+                    label: const Text('صرف السلفة'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -222,21 +242,216 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
     }
   }
 
-  void _requestAdvance() {
-    showDialog(
+  Future<void> _requestAdvance() async {
+    final formKey = GlobalKey<FormState>();
+    final amountCtrl = TextEditingController();
+    final reasonCtrl = TextEditingController();
+    int? installmentMonths;
+    final installmentCtrl = TextEditingController();
+
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('طلب سلفة جديد'),
-        content: const Text(
-          'هذه الميزة ستمكن من تحديد المبلغ وعدد الأقساط والسبب.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إغلاق'),
+      builder: (ctx) {
+        int? instMonths = installmentMonths;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('طلب سلفة جديد'),
+            content: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: amountCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'المبلغ',
+                        prefixText: 'ج.م ',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'المبلغ مطلوب';
+                        }
+                        final amt = double.tryParse(v.trim());
+                        if (amt == null || amt <= 0) {
+                          return 'أدخل مبلغ صحيح';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: reasonCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'السبب',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 2,
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'السبب مطلوب' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: installmentCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'عدد الأقساط (اختياري)',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (v) {
+                        final parsed = int.tryParse(v.trim());
+                        setDialogState(() => instMonths = parsed);
+                      },
+                    ),
+                    if (instMonths != null && instMonths! > 0) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'القسط الشهري: ${((double.tryParse(amountCtrl.text.trim()) ?? 0) / instMonths!).toStringAsFixed(2)} ج.م',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (formKey.currentState!.validate()) {
+                    final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+                    final inst = int.tryParse(installmentCtrl.text.trim());
+                    Navigator.pop(ctx, {
+                      'amount': amount,
+                      'reason': reasonCtrl.text.trim(),
+                      'installments': inst,
+                    });
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('إرسال الطلب'),
+              ),
+            ],
           ),
-        ],
+        );
+      },
+    );
+
+    if (result != null) {
+      try {
+        final amount = result['amount'] as double;
+        final reason = result['reason'] as String;
+        final inst = result['installments'] as int?;
+
+        await _dao.addAdvance(
+          StaffAdvancesCompanion.insert(
+            staffId: widget.staff.staffId,
+            amount: amount,
+            reason: reason.isNotEmpty
+                ? drift.Value(reason)
+                : const drift.Value.absent(),
+            requestDate: DateTime.now(),
+            status: 'pending',
+            installmentMonths: inst != null && inst > 0
+                ? drift.Value(inst)
+                : const drift.Value.absent(),
+            monthlyDeduction: inst != null && inst > 0
+                ? drift.Value(amount / inst)
+                : const drift.Value.absent(),
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('تم إرسال طلب السلفة'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+    amountCtrl.dispose();
+    reasonCtrl.dispose();
+    installmentCtrl.dispose();
+  }
+
+  Future<void> _payAdvance(StaffAdvance advance) async {
+    final methods = ['cash', 'bank_transfer', 'check'];
+    final selectedMethod = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('طريقة صرف السلفة'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: methods.map((m) {
+            String label;
+            IconData icon;
+            switch (m) {
+              case 'cash':
+                label = 'نقداً';
+                icon = Icons.money;
+                break;
+              case 'bank_transfer':
+                label = 'تحويل بنكي';
+                icon = Icons.account_balance;
+                break;
+              case 'check':
+                label = 'شيك';
+                icon = Icons.receipt;
+                break;
+              default:
+                label = m;
+                icon = Icons.payment;
+            }
+            return ListTile(
+              leading: Icon(icon),
+              title: Text(label),
+              onTap: () => Navigator.pop(ctx, m),
+            );
+          }).toList(),
+        ),
       ),
     );
+
+    if (selectedMethod == null) return;
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final service = StaffManagementService(StaffManagementDao(db));
+      final user = ref.read(authProvider);
+      await service.payAdvance(user, advance.id, selectedMethod);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم صرف السلفة'), backgroundColor: Colors.green),
+        );
+      }
+      _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }

@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -8,15 +7,13 @@ import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/ledger_dao.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
+import 'package:pos_offline_desktop/core/utils/pdf_bidi_helper.dart';
 
-/// Supplier Statement Generator (PDF)
-/// مولد كشف حساب المورد - نسخة PDF محسنة
 class SupplierStatementGenerator {
-
   static Future<Map<String, pw.Font?>> _loadFonts() async {
     pw.Font? arabicFont;
     pw.Font? arabicBoldFont;
-    pw.Font? latinFont;
+    final latinFont = pw.Font.helvetica();
 
     try {
       final regularFontData = await rootBundle.load(
@@ -25,9 +22,7 @@ class SupplierStatementGenerator {
       if (regularFontData.lengthInBytes > 100) {
         arabicFont = pw.Font.ttf(regularFontData);
       }
-    } catch (e) {
-      debugPrint('Failed to load Arabic regular font: $e');
-    }
+    } catch (_) {}
 
     try {
       final boldFontData = await rootBundle.load(
@@ -36,11 +31,8 @@ class SupplierStatementGenerator {
       if (boldFontData.lengthInBytes > 100) {
         arabicBoldFont = pw.Font.ttf(boldFontData);
       }
-    } catch (e) {
-      debugPrint('Failed to load Arabic bold font: $e');
-    }
+    } catch (_) {}
 
-    latinFont = pw.Font.helvetica();
     arabicFont ??= latinFont;
     arabicBoldFont ??= latinFont;
 
@@ -50,6 +42,49 @@ class SupplierStatementGenerator {
       'latin': latinFont,
     };
   }
+
+  /// Apply Bidi reordering for correct Arabic rendering in PDF.
+  static String _b(String text) => PdfBidiHelper.reorder(text);
+
+  /// Extract purchase ID from ledger description.
+  static String? _extractPurchaseId(String description) {
+    final match = RegExp(r'PUR-\d+').firstMatch(description);
+    return match?.group(0);
+  }
+
+  /// Pre-fetch purchase items for all purchase (credit) transactions.
+  static Future<Map<String, List<_PurchaseItemInfo>>> _fetchPurchaseItems(
+    AppDatabase db,
+    List<LedgerTransactionWithBalance> transactions,
+  ) async {
+    final result = <String, List<_PurchaseItemInfo>>{};
+    for (final txw in transactions) {
+      final tx = txw.transaction;
+      if (tx.credit <= 0) continue;
+      final purchaseId = _extractPurchaseId(tx.description);
+      if (purchaseId == null) continue;
+      if (result.containsKey(purchaseId)) continue;
+
+      try {
+        final items = await db.purchaseDao.getItemsWithProductsByPurchase(purchaseId);
+        result[purchaseId] = items.map((pair) {
+          final item = pair.$1;
+          final product = pair.$2;
+          return _PurchaseItemInfo(
+            productName: product?.name ?? 'منتج',
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            discount: item.discount,
+          );
+        }).toList();
+      } catch (_) {
+        result[purchaseId] = [];
+      }
+    }
+    return result;
+  }
+
+  // ─── DETAILED STATEMENT ───────────────────────────────────────────
 
   static Future<void> generateStatement({
     required AppDatabase db,
@@ -63,10 +98,77 @@ class SupplierStatementGenerator {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
 
-    // Fetch business info from SettingsService
+    final transactions = await db.ledgerDao.getTransactionsWithRunningBalance(
+      'Supplier',
+      supplierId,
+      fromDate,
+      toDate,
+    );
+
+    final purchaseItems = await _fetchPurchaseItems(db, transactions);
+
     final businessName = await SettingsService.getBusinessName();
     final taxNumber = await SettingsService.getTaxNumber();
     final logoPath = await SettingsService.getBusinessLogoPath();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        header: (pw.Context context) => _buildHeader(
+          fonts,
+          title: _b('كشف حساب مورد (مفصل)'),
+          partyLabel: _b('اسم المورد'),
+          partyName: _b(supplierName),
+          fromDate: fromDate,
+          toDate: toDate,
+          openingBalance: openingBalance,
+          currentBalance: currentBalance,
+          businessName: _b(businessName),
+          taxNumber: taxNumber,
+          logoPath: logoPath,
+        ),
+        footer: (pw.Context context) => _buildFooter(fonts, context),
+        build: (pw.Context context) => [
+          _buildFinancialSummary(
+            fonts,
+            openingBalance: openingBalance,
+            currentBalance: currentBalance,
+            totalCredit: transactions.fold<double>(
+              0,
+              (s, t) => s + t.transaction.credit,
+            ),
+            totalDebit: transactions.fold<double>(
+              0,
+              (s, t) => s + t.transaction.debit,
+            ),
+          ),
+          pw.SizedBox(height: 12),
+          _buildDetailedTable(transactions, fonts, openingBalance, purchaseItems),
+        ],
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) => pdf.save(),
+      name: _b('كشف حساب مورد مفصل - $supplierName'),
+      format: PdfPageFormat.a4,
+    );
+  }
+
+  // ─── SUMMARY STATEMENT ────────────────────────────────────────────
+
+  static Future<void> generateSummaryStatement({
+    required AppDatabase db,
+    required String supplierId,
+    required String supplierName,
+    required DateTime fromDate,
+    required DateTime toDate,
+    required double openingBalance,
+    required double currentBalance,
+  }) async {
+    final fonts = await _loadFonts();
+    final pdf = pw.Document();
 
     final transactions = await db.ledgerDao.getTransactionsWithRunningBalance(
       'Supplier',
@@ -75,247 +177,175 @@ class SupplierStatementGenerator {
       toDate,
     );
 
+    final businessName = await SettingsService.getBusinessName();
+    final taxNumber = await SettingsService.getTaxNumber();
+    final logoPath = await SettingsService.getBusinessLogoPath();
+
+    final totalCredit =
+        transactions.fold<double>(0, (s, t) => s + t.transaction.credit);
+    final totalDebit =
+        transactions.fold<double>(0, (s, t) => s + t.transaction.debit);
+
+    final monthlyData = _aggregateByMonth(transactions);
+
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(20),
-        build: (pw.Context context) {
-          return pw.Directionality(
-            textDirection: pw.TextDirection.rtl,
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-              children: [
-                _buildHeaderSection(
-                  fonts,
-                  supplierName,
-                  openingBalance,
-                  currentBalance,
-                  fromDate,
-                  toDate,
-                  businessName: businessName,
-                  taxNumber: taxNumber,
-                  logoPath: logoPath,
-                ),
-                pw.SizedBox(height: 16),
-                _buildFinancialSummary(
-                  fonts,
-                  openingBalance,
-                  currentBalance,
-                  transactions,
-                ),
-                pw.SizedBox(height: 16),
-                _buildMainTransactionTable(transactions, fonts, openingBalance),
-                pw.SizedBox(height: 16),
-                _buildFooterSection(fonts, context),
-              ],
-            ),
-          );
-        },
+        header: (pw.Context context) => _buildHeader(
+          fonts,
+          title: _b('كشف حساب مورد (مختصر)'),
+          partyLabel: _b('اسم المورد'),
+          partyName: _b(supplierName),
+          fromDate: fromDate,
+          toDate: toDate,
+          openingBalance: openingBalance,
+          currentBalance: currentBalance,
+          businessName: _b(businessName),
+          taxNumber: taxNumber,
+          logoPath: logoPath,
+        ),
+        footer: (pw.Context context) => _buildFooter(fonts, context),
+        build: (pw.Context context) => [
+          _buildFinancialSummary(
+            fonts,
+            openingBalance: openingBalance,
+            currentBalance: currentBalance,
+            totalCredit: totalCredit,
+            totalDebit: totalDebit,
+          ),
+          pw.SizedBox(height: 12),
+          _buildSummaryTable(monthlyData, fonts, openingBalance),
+        ],
       ),
     );
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) => pdf.save(),
-      name: 'كشف حساب مورد - $supplierName',
+      name: _b('كشف حساب مورد مختصر - $supplierName'),
       format: PdfPageFormat.a4,
     );
   }
 
-  static pw.Widget _buildHeaderSection(
-    Map<String, pw.Font?> fonts,
-    String supplierName,
-    double openingBalance,
-    double currentBalance,
-    DateTime fromDate,
-    DateTime toDate, {
+  // ─── SHARED: Header ──────────────────────────────────────────────
+
+  static pw.Widget _buildHeader(
+    Map<String, pw.Font?> fonts, {
+    required String title,
+    required String partyLabel,
+    required String partyName,
+    required DateTime fromDate,
+    required DateTime toDate,
+    required double openingBalance,
+    required double currentBalance,
     String businessName = '',
     String taxNumber = '',
     String? logoPath,
   }) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(16),
+      padding: const pw.EdgeInsets.all(12),
       decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey400),
-        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+        border: pw.Border.all(color: PdfColors.black, width: 1),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
-          // Company Logo
           if (logoPath != null && logoPath.isNotEmpty)
             pw.Padding(
-              padding: const pw.EdgeInsets.only(bottom: 8),
+              padding: const pw.EdgeInsets.only(bottom: 6),
               child: _buildLogo(logoPath),
             ),
           pw.Text(
-            businessName.isNotEmpty ? businessName : 'كشف حساب',
+            businessName.isNotEmpty ? businessName : title,
             style: pw.TextStyle(
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: pw.FontWeight.bold,
-              color: PdfColors.blue800,
               font: fonts['arabicBold'],
             ),
           ),
           if (taxNumber.isNotEmpty)
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(top: 4),
-              child: pw.Text(
-                'الرقم الضريبي: $taxNumber',
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  color: PdfColors.grey700,
-                  font: fonts['arabic'],
-                ),
-                textDirection: pw.TextDirection.rtl,
+            pw.Text(
+              _b('الرقم الضريبي: $taxNumber'),
+              style: pw.TextStyle(
+                fontSize: 9,
+                font: fonts['arabic'],
               ),
             ),
-          pw.SizedBox(height: 12),
-          pw.Container(
-            width: double.infinity,
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.end,
-              children: [
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text(
-                      'اسم المورد: $supplierName',
-                      style: pw.TextStyle(
-                        fontSize: 14,
-                        fontWeight: pw.FontWeight.bold,
-                        font: fonts['arabicBold'],
-                      ),
-                    ),
-                    pw.Text(
-                      'كشف حساب مورد',
-                      style: pw.TextStyle(
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                        font: fonts['arabicBold'],
-                      ),
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 8),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text(
-                      'الرصيد النهائي: ${formatCurrency(currentBalance)}',
-                      style: pw.TextStyle(
-                        fontSize: 14,
-                        fontWeight: pw.FontWeight.bold,
-                        color: currentBalance > 0
-                            ? PdfColors.green
-                            : PdfColors.red,
-                        font: fonts['arabicBold'],
-                      ),
-                    ),
-                    pw.Text(
-                      'الرصيد الافتتاحي: ${formatCurrency(openingBalance)}',
-                      style: pw.TextStyle(fontSize: 12, font: fonts['arabic']),
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 8),
-                pw.Center(
-                  child: pw.Text(
-                    'الفترة: من ${DateFormat('yyyy/MM/dd').format(fromDate)} إلى ${DateFormat('yyyy/MM/dd').format(toDate)}',
-                    style: pw.TextStyle(fontSize: 12, font: fonts['arabic']),
-                  ),
-                ),
-              ],
+          pw.SizedBox(height: 8),
+          pw.Text(
+            title,
+            style: pw.TextStyle(
+              fontSize: 14,
+              fontWeight: pw.FontWeight.bold,
+              font: fonts['arabicBold'],
             ),
+          ),
+          pw.SizedBox(height: 6),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                '$partyLabel: $partyName',
+                style: pw.TextStyle(
+                  fontSize: 11,
+                  fontWeight: pw.FontWeight.bold,
+                  font: fonts['arabicBold'],
+                ),
+              ),
+              pw.Text(
+                _b(
+                  'الفترة: ${DateFormat('yyyy/MM/dd').format(fromDate)} - ${DateFormat('yyyy/MM/dd').format(toDate)}',
+                ),
+                style: pw.TextStyle(fontSize: 10, font: fonts['arabic']),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
+  // ─── SHARED: Financial Summary ───────────────────────────────────
+
   static pw.Widget _buildFinancialSummary(
-    Map<String, pw.Font?> fonts,
-    double openingBalance,
-    double currentBalance,
-    List<LedgerTransactionWithBalance> transactions,
-  ) {
-    double totalPaid = 0.0; // Debit for supplier
-    double totalPurchased = 0.0; // Credit for supplier
-
-    for (final tx in transactions) {
-      totalPaid += tx.transaction.debit;
-      totalPurchased += tx.transaction.credit;
-    }
-
+    Map<String, pw.Font?> fonts, {
+    required double openingBalance,
+    required double currentBalance,
+    required double totalCredit,
+    required double totalDebit,
+  }) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(16),
+      padding: const pw.EdgeInsets.all(10),
       decoration: pw.BoxDecoration(
-        color: PdfColors.grey100,
-        border: pw.Border.all(color: PdfColors.grey400),
-        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+        border: pw.Border.all(color: PdfColors.black, width: 1),
       ),
       child: pw.Table(
         columnWidths: {
           0: const pw.FlexColumnWidth(2),
           1: const pw.FlexColumnWidth(1),
         },
-        border: pw.TableBorder.all(color: PdfColors.grey300),
+        border: pw.TableBorder.all(color: PdfColors.black, width: 0.5),
         children: [
+          _summaryRow(_b('الرصيد الافتتاحي'), _fmt(openingBalance), fonts),
+          _summaryRow(
+            _b('إجمالي المشتريات (دائن)'),
+            _fmt(totalCredit),
+            fonts,
+          ),
+          _summaryRow(
+            _b('إجمالي المدفوعات (مدين)'),
+            _fmt(totalDebit),
+            fonts,
+          ),
           pw.TableRow(
             decoration: const pw.BoxDecoration(color: PdfColors.grey200),
             children: [
-              _buildTableCell(
-                'الرصيد الافتتاحي',
+              _cell(_b('الرصيد الحالي'), fonts['arabicBold'], bold: true),
+              _cell(
+                _fmt(currentBalance),
                 fonts['arabicBold'],
-                isHeader: true,
-              ),
-              _buildTableCell(
-                formatCurrency(openingBalance),
-                fonts['arabic'],
-                isHeader: true,
-              ),
-            ],
-          ),
-          pw.TableRow(
-            children: [
-              _buildTableCell(
-                'إجمالي المَدين (مدفوعاتنا)',
-                fonts['arabicBold'],
-                isHeader: true,
-              ),
-              _buildTableCell(
-                formatCurrency(totalPaid),
-                fonts['arabic'],
-                isHeader: true,
-              ),
-            ],
-          ),
-          pw.TableRow(
-            children: [
-              _buildTableCell(
-                'إجمالي الدائن (مشترياتنا)',
-                fonts['arabicBold'],
-                isHeader: true,
-              ),
-              _buildTableCell(
-                formatCurrency(totalPurchased),
-                fonts['arabic'],
-                isHeader: true,
-              ),
-            ],
-          ),
-          pw.TableRow(
-            decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            children: [
-              _buildTableCell(
-                'الرصيد الحالي',
-                fonts['arabicBold'],
-                isHeader: true,
-              ),
-              _buildTableCell(
-                formatCurrency(currentBalance),
-                fonts['arabicBold'],
-                isHeader: true,
-                color: currentBalance > 0 ? PdfColors.green : PdfColors.red,
+                bold: true,
+                color: currentBalance > 0 ? PdfColors.red : PdfColors.green,
               ),
             ],
           ),
@@ -324,118 +354,300 @@ class SupplierStatementGenerator {
     );
   }
 
-  static pw.Widget _buildMainTransactionTable(
+  static pw.TableRow _summaryRow(
+    String label,
+    String value,
+    Map<String, pw.Font?> fonts,
+  ) {
+    return pw.TableRow(
+      children: [
+        _cell(label, fonts['arabicBold'], bold: true),
+        _cell(value, fonts['arabic']),
+      ],
+    );
+  }
+
+  // ─── DETAILED TABLE ──────────────────────────────────────────────
+
+  static pw.Widget _buildDetailedTable(
     List<LedgerTransactionWithBalance> transactions,
+    Map<String, pw.Font?> fonts,
+    double openingBalance,
+    Map<String, List<_PurchaseItemInfo>> purchaseItems,
+  ) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.black, width: 1),
+      columnWidths: {
+        0: const pw.FlexColumnWidth(0.5),
+        1: const pw.FlexColumnWidth(1.0),
+        2: const pw.FlexColumnWidth(2.5),
+        3: const pw.FlexColumnWidth(1.0),
+        4: const pw.FlexColumnWidth(1.0),
+        5: const pw.FlexColumnWidth(1.0),
+      },
+      children: [
+        _tableHeaderRow(fonts),
+        _openingRow(openingBalance, fonts),
+        ...transactions.asMap().entries.expand((e) {
+          final i = e.key;
+          final txw = e.value;
+          final tx = txw.transaction;
+          final rows = <pw.TableRow>[];
+
+          // Main row
+          final isPurchase = tx.credit > 0;
+          rows.add(pw.TableRow(
+            children: [
+              _cell('${i + 1}', fonts['arabic'], centered: true),
+              _cell(
+                DateFormat('dd/MM/yyyy').format(tx.date),
+                fonts['arabic'],
+                centered: true,
+              ),
+              _cell(_b(tx.description), fonts['arabic']),
+              _cell(
+                tx.debit > 0 ? _fmt(tx.debit) : '',
+                fonts['arabic'],
+                alignRight: true,
+              ),
+              _cell(
+                tx.credit > 0 ? _fmt(tx.credit) : '',
+                fonts['arabic'],
+                alignRight: true,
+              ),
+              _cell(
+                _fmt(txw.runningBalance),
+                fonts['arabicBold'],
+                bold: true,
+                alignRight: true,
+              ),
+            ],
+          ));
+
+          // Sub-rows for purchase items
+          if (isPurchase) {
+            final purchaseId = _extractPurchaseId(tx.description);
+            if (purchaseId != null && purchaseItems.containsKey(purchaseId)) {
+              final items = purchaseItems[purchaseId]!;
+              for (final item in items) {
+                final lineTotal = (item.quantity * item.unitPrice) - item.discount;
+                final itemDesc = item.discount > 0
+                    ? '${item.productName}  (${item.quantity} × ${_fmt(item.unitPrice)}) - ${_fmt(item.discount)}'
+                    : '${item.productName}  (${item.quantity} × ${_fmt(item.unitPrice)}) = ${_fmt(lineTotal)}';
+                rows.add(pw.TableRow(
+                  children: [
+                    _cell('', fonts['arabic']),
+                    _cell('', fonts['arabic']),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.only(right: 12),
+                      child: pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 3,
+                        ),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.grey100,
+                          border: pw.Border.all(
+                            color: PdfColors.grey300,
+                            width: 0.5,
+                          ),
+                          borderRadius: const pw.BorderRadius.all(
+                            pw.Radius.circular(3),
+                          ),
+                        ),
+                        child: pw.Text(
+                          _b(itemDesc),
+                          style: pw.TextStyle(
+                            fontSize: 7,
+                            font: fonts['arabic'],
+                          ),
+                        ),
+                      ),
+                    ),
+                    _cell('', fonts['arabic']),
+                    _cell('', fonts['arabic']),
+                    _cell('', fonts['arabic']),
+                  ],
+                ));
+              }
+            }
+          }
+          return rows;
+        }),
+        _totalRow(transactions, fonts),
+      ],
+    );
+  }
+
+  // ─── SUMMARY TABLE ───────────────────────────────────────────────
+
+  static pw.Widget _buildSummaryTable(
+    List<_MonthData> months,
     Map<String, pw.Font?> fonts,
     double openingBalance,
   ) {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.black, width: 1),
       columnWidths: {
-        0: const pw.FlexColumnWidth(0.6), // م
-        1: const pw.FlexColumnWidth(1.2), // التاريخ
-        2: const pw.FlexColumnWidth(2.5), // البيان
-        3: const pw.FlexColumnWidth(1.2), // مَدين
-        4: const pw.FlexColumnWidth(1.2), // دائن
-        5: const pw.FlexColumnWidth(1.2), // الرصيد
+        0: const pw.FlexColumnWidth(1.5),
+        1: const pw.FlexColumnWidth(1.2),
+        2: const pw.FlexColumnWidth(1.2),
+        3: const pw.FlexColumnWidth(1.2),
       },
       children: [
         pw.TableRow(
-          decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+          decoration: const pw.BoxDecoration(color: PdfColors.grey200),
           children: [
-            _buildHeaderCell('م', fonts['arabicBold']),
-            _buildHeaderCell('التاريخ', fonts['arabicBold']),
-            _buildHeaderCell('البيان', fonts['arabicBold']),
-            _buildHeaderCell('مَدين (-)', fonts['arabicBold']),
-            _buildHeaderCell('دائن (+)', fonts['arabicBold']),
-            _buildHeaderCell('الرصيد', fonts['arabicBold']),
+            _cell(
+              _b('الشهر'),
+              fonts['arabicBold'],
+              bold: true,
+              centered: true,
+            ),
+            _cell(
+              _b('المشتريات'),
+              fonts['arabicBold'],
+              bold: true,
+              centered: true,
+            ),
+            _cell(
+              _b('المدفوعات'),
+              fonts['arabicBold'],
+              bold: true,
+              centered: true,
+            ),
+            _cell(
+              _b('الرصيد'),
+              fonts['arabicBold'],
+              bold: true,
+              centered: true,
+            ),
           ],
         ),
         pw.TableRow(
-          decoration: const pw.BoxDecoration(color: PdfColors.blue50),
           children: [
-            _buildTableCell('', fonts['arabic']),
-            _buildTableCell(
-              DateFormat('yyyy/MM/dd').format(DateTime.now()),
-              fonts['arabic'],
-            ), // Placeholder date
-            _buildTableCell(
-              'رصيد افتتاحي / سابق',
+            _cell(_b('رصيد سابق'), fonts['arabicBold'], bold: true),
+            _cell('', fonts['arabic']),
+            _cell('', fonts['arabic']),
+            _cell(
+              _fmt(openingBalance),
               fonts['arabicBold'],
-              isBold: true,
-            ),
-            _buildTableCell(
-              openingBalance < 0 ? formatCurrency(openingBalance.abs()) : '',
-              fonts['arabic'],
-            ),
-            _buildTableCell(
-              openingBalance > 0 ? formatCurrency(openingBalance) : '',
-              fonts['arabic'],
-            ),
-            _buildTableCell(
-              formatCurrency(openingBalance),
-              fonts['arabicBold'],
-              isBold: true,
+              bold: true,
+              alignRight: true,
             ),
           ],
         ),
-        ...transactions.asMap().entries.map((entry) {
-          final index = entry.key;
-          final tx = entry.value;
+        ...months.map((m) {
           return pw.TableRow(
             children: [
-              _buildTableCell(
-                '${index + 1}',
-                fonts['arabic'],
-                isCentered: true,
-              ),
-              _buildTableCell(
-                DateFormat('yyyy/MM/dd').format(tx.transaction.date),
-                fonts['arabic'],
-                isCentered: true,
-              ),
-              _buildTableCell(tx.transaction.description, fonts['arabic']),
-              _buildTableCell(
-                tx.transaction.debit > 0
-                    ? formatCurrency(tx.transaction.debit)
-                    : '',
-                fonts['arabic'],
-              ),
-              _buildTableCell(
-                tx.transaction.credit > 0
-                    ? formatCurrency(tx.transaction.credit)
-                    : '',
-                fonts['arabic'],
-              ),
-              _buildTableCell(
-                formatCurrency(tx.runningBalance),
+              _cell(_b(m.label), fonts['arabic'], centered: true),
+              _cell(_fmt(m.totalCredit), fonts['arabic'], alignRight: true),
+              _cell(_fmt(m.totalDebit), fonts['arabic'], alignRight: true),
+              _cell(
+                _fmt(m.balance),
                 fonts['arabicBold'],
-                isBold: true,
+                bold: true,
+                alignRight: true,
               ),
             ],
           );
         }),
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+          children: [
+            _cell(
+              _b('الإجمالي'),
+              fonts['arabicBold'],
+              bold: true,
+              centered: true,
+            ),
+            _cell(
+              _fmt(months.fold<double>(0, (s, m) => s + m.totalCredit)),
+              fonts['arabicBold'],
+              bold: true,
+              alignRight: true,
+            ),
+            _cell(
+              _fmt(months.fold<double>(0, (s, m) => s + m.totalDebit)),
+              fonts['arabicBold'],
+              bold: true,
+              alignRight: true,
+            ),
+            _cell(
+              _fmt(months.isNotEmpty ? months.last.balance : openingBalance),
+              fonts['arabicBold'],
+              bold: true,
+              alignRight: true,
+            ),
+          ],
+        ),
       ],
     );
   }
 
-  static pw.Widget _buildFooterSection(
+  // ─── SHARED: Footer ──────────────────────────────────────────────
+
+  static pw.Widget _buildFooter(
     Map<String, pw.Font?> fonts,
     pw.Context context,
   ) {
     return pw.Column(
       children: [
-        pw.Divider(color: PdfColors.grey300),
+        pw.SizedBox(height: 20),
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
-              'Developed by MO2',
+              _b(
+                'تم الإصدار: ${DateFormat('yyyy/MM/dd hh:mm a').format(DateTime.now())}',
+              ),
               style: pw.TextStyle(fontSize: 8, font: fonts['arabic']),
             ),
             pw.Text(
-              'صفحة ${context.pageNumber} من ${context.pagesCount}',
+              _b('صفحة ${context.pageNumber} من ${context.pagesCount}'),
               style: pw.TextStyle(fontSize: 8, font: fonts['arabic']),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 16),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Container(
+                  width: 120,
+                  height: 1,
+                  color: PdfColors.black,
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  _b('توقيع المورد'),
+                  style: pw.TextStyle(
+                    fontSize: 9,
+                    font: fonts['arabicBold'],
+                  ),
+                ),
+              ],
+            ),
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Container(
+                  width: 120,
+                  height: 1,
+                  color: PdfColors.black,
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  _b('ختم الشركة'),
+                  style: pw.TextStyle(
+                    fontSize: 9,
+                    font: fonts['arabicBold'],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -443,40 +655,117 @@ class SupplierStatementGenerator {
     );
   }
 
-  static pw.Widget _buildHeaderCell(String text, pw.Font? font) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(8),
-      alignment: pw.Alignment.center,
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(
-          fontSize: 10,
-          fontWeight: pw.FontWeight.bold,
-          font: font,
-          color: PdfColors.white,
+  // ─── SHARED: Table Helpers ───────────────────────────────────────
+
+  static pw.TableRow _tableHeaderRow(Map<String, pw.Font?> fonts) {
+    return pw.TableRow(
+      decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+      children: [
+        _cell(_b('م'), fonts['arabicBold'], bold: true, centered: true),
+        _cell(_b('التاريخ'), fonts['arabicBold'], bold: true, centered: true),
+        _cell(_b('البيان'), fonts['arabicBold'], bold: true, centered: true),
+        _cell(
+          _b('مدين (-)'),
+          fonts['arabicBold'],
+          bold: true,
+          centered: true,
         ),
-      ),
+        _cell(
+          _b('دائن (+)'),
+          fonts['arabicBold'],
+          bold: true,
+          centered: true,
+        ),
+        _cell(_b('الرصيد'), fonts['arabicBold'], bold: true, centered: true),
+      ],
     );
   }
 
-  static pw.Widget _buildTableCell(
+  static pw.TableRow _openingRow(
+    double openingBalance,
+    Map<String, pw.Font?> fonts,
+  ) {
+    return pw.TableRow(
+      children: [
+        _cell('', fonts['arabic']),
+        _cell(_b('رصيد سابق'), fonts['arabicBold'], bold: true),
+        _cell('', fonts['arabic']),
+        _cell(
+          openingBalance < 0 ? _fmt(openingBalance.abs()) : '',
+          fonts['arabic'],
+          alignRight: true,
+        ),
+        _cell(
+          openingBalance > 0 ? _fmt(openingBalance) : '',
+          fonts['arabic'],
+          alignRight: true,
+        ),
+        _cell(
+          _fmt(openingBalance),
+          fonts['arabicBold'],
+          bold: true,
+          alignRight: true,
+        ),
+      ],
+    );
+  }
+
+  static pw.TableRow _totalRow(
+    List<LedgerTransactionWithBalance> transactions,
+    Map<String, pw.Font?> fonts,
+  ) {
+    final totalDebit =
+        transactions.fold<double>(0, (s, t) => s + t.transaction.debit);
+    final totalCredit =
+        transactions.fold<double>(0, (s, t) => s + t.transaction.credit);
+    return pw.TableRow(
+      decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+      children: [
+        _cell('', fonts['arabic']),
+        _cell(
+          _b('الإجمالي'),
+          fonts['arabicBold'],
+          bold: true,
+          centered: true,
+        ),
+        _cell('', fonts['arabic']),
+        _cell(
+          _fmt(totalDebit),
+          fonts['arabicBold'],
+          bold: true,
+          alignRight: true,
+        ),
+        _cell(
+          _fmt(totalCredit),
+          fonts['arabicBold'],
+          bold: true,
+          alignRight: true,
+        ),
+        _cell('', fonts['arabicBold']),
+      ],
+    );
+  }
+
+  static pw.Widget _cell(
     String text,
     pw.Font? font, {
-    bool isHeader = false,
-    bool isBold = false,
-    bool isCentered = false,
+    bool bold = false,
+    bool centered = false,
+    bool alignRight = false,
     PdfColor? color,
   }) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(6),
-      alignment: isCentered ? pw.Alignment.center : pw.Alignment.centerRight,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      alignment: centered
+          ? pw.Alignment.center
+          : (alignRight
+              ? pw.Alignment.centerRight
+              : pw.Alignment.centerRight),
       child: pw.Text(
         text,
         style: pw.TextStyle(
           fontSize: 9,
-          fontWeight: isHeader || isBold
-              ? pw.FontWeight.bold
-              : pw.FontWeight.normal,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
           color: color ?? PdfColors.black,
           font: font,
         ),
@@ -484,20 +773,89 @@ class SupplierStatementGenerator {
     );
   }
 
+  // ─── Logo ────────────────────────────────────────────────────────
+
   static pw.Widget _buildLogo(String logoPath) {
     try {
       final file = File(logoPath);
       if (file.existsSync()) {
         final bytes = file.readAsBytesSync();
-        return pw.Image(pw.MemoryImage(bytes), height: 60);
+        return pw.Image(pw.MemoryImage(bytes), height: 50);
       }
-    } catch (e) {
-      debugPrint('Logo load failed: $e');
-    }
+    } catch (_) {}
     return pw.SizedBox.shrink();
   }
 
-  static String formatCurrency(double amount) {
-    return '${amount.toStringAsFixed(2)} ج.م';
+  // ─── Helpers ─────────────────────────────────────────────────────
+
+  static String _fmt(double amount) => amount.toStringAsFixed(2);
+
+  static List<_MonthData> _aggregateByMonth(
+    List<LedgerTransactionWithBalance> transactions,
+  ) {
+    final map = <String, _MonthData>{};
+    for (final txw in transactions) {
+      final key = DateFormat('yyyy-MM').format(txw.transaction.date);
+      map.putIfAbsent(
+        key,
+        () => _MonthData(
+          label: _arabicMonth(txw.transaction.date),
+          totalDebit: 0,
+          totalCredit: 0,
+          balance: 0,
+        ),
+      );
+      final m = map[key]!;
+      m.totalDebit += txw.transaction.debit;
+      m.totalCredit += txw.transaction.credit;
+      m.balance = txw.runningBalance;
+    }
+    return map.values.toList();
   }
+
+  static String _arabicMonth(DateTime date) {
+    const months = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر',
+    ];
+    return '${months[date.month - 1]} ${date.year}';
+  }
+}
+
+class _MonthData {
+  String label;
+  double totalDebit;
+  double totalCredit;
+  double balance;
+
+  _MonthData({
+    required this.label,
+    required this.totalDebit,
+    required this.totalCredit,
+    required this.balance,
+  });
+}
+
+class _PurchaseItemInfo {
+  final String productName;
+  final int quantity;
+  final double unitPrice;
+  final double discount;
+
+  _PurchaseItemInfo({
+    required this.productName,
+    required this.quantity,
+    required this.unitPrice,
+    required this.discount,
+  });
 }

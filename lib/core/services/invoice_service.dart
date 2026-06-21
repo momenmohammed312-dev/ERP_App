@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:drift/drift.dart';
 import '../database/app_database.dart';
 
@@ -51,7 +52,7 @@ class InvoiceService {
     List<SplitPaymentEntry>? splitPayments,
   }) async {
     final actualInvoiceNumber = invoiceNumber ?? 'INV${DateTime.now().millisecondsSinceEpoch}';
-    final txBase = DateTime.now().millisecondsSinceEpoch;
+    final rand = Random.secure();
 
     return _db.transaction(() async {
       final invoiceId = await _db.invoiceDao.insertInvoice(
@@ -75,11 +76,16 @@ class InvoiceService {
       for (final item in items) {
         final product = await _db.productDao.getProductById(item.productId);
 
+        if (product == null) {
+          throw Exception('المنتج غير موجود (ID: ${item.productId})');
+        }
+
+        final newQty = product.quantity - item.quantity;
         await _db.productDao.updateProduct(
           ProductsCompanion(
-            id: Value(product!.id),
+            id: Value(product.id),
             name: Value(product.name),
-            quantity: Value(product.quantity - item.quantity),
+            quantity: Value(newQty < 0 ? 0 : newQty),
             price: Value(product.price),
             unit: Value(product.unit),
             category: Value(product.category),
@@ -119,9 +125,10 @@ class InvoiceService {
       final desc = ledgerDescription ?? 'بيع #$actualInvoiceNumber';
 
       if (customerId != null && customerId != 'cash' && customerId.isNotEmpty) {
+        final ledgerIdSale = '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_sale';
         await _db.ledgerDao.insertTransaction(
           LedgerTransactionsCompanion.insert(
-            id: '${txBase}_sale',
+            id: ledgerIdSale,
             entityType: 'Customer',
             refId: customerId,
             date: DateTime.now(),
@@ -135,9 +142,10 @@ class InvoiceService {
         );
 
         if (paidAmount > 0) {
+          final ledgerIdPay = '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_pay';
           await _db.ledgerDao.insertTransaction(
             LedgerTransactionsCompanion.insert(
-              id: '${txBase + 1}_pay',
+              id: ledgerIdPay,
               entityType: 'Customer',
               refId: customerId,
               date: DateTime.now(),

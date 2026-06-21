@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
 import 'package:pos_offline_desktop/ui/pages/sidebar_page.dart';
 import 'package:pos_offline_desktop/widgets/permission_guard.dart';
@@ -169,6 +170,21 @@ class SideBarMenu extends StatelessWidget {
             title: 'لوحة التحكم',
             page: SideBarPage.admin,
           ),
+        ),
+
+        // عن التطبيق
+        ListTile(
+          leading: const Icon(Icons.info_outline, color: Colors.white54),
+          title: const Text(
+            'عن التطبيق',
+            style: TextStyle(color: Colors.white70),
+          ),
+          onTap: () {
+            if (Navigator.canPop(context)) {
+              Navigator.of(context).pop();
+            }
+            context.push('/about');
+          },
         ),
       ],
     );

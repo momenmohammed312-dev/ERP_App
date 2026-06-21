@@ -43,13 +43,34 @@ void ensureKeyLen(Uint8List key) {
 }
 
 /// تحويل DateTime آمن من SQLite (int/String/DateTime)
+/// يرفض تواريخ قبل سنة 2000 (مثل 1970-01-01) لأنها بيانات غير صالحة
 DateTime parseDate(dynamic raw, {DateTime? fallback}) {
+  final defaultDate = fallback ?? DateTime.now();
   if (raw is int) {
-    // FIX: Drift stores DateTimeColumn as microsecondsSinceEpoch, not milliseconds
-    // Using milliseconds caused dates like 1970-01-21 to appear for recent timestamps
-    return DateTime.fromMicrosecondsSinceEpoch(raw);
+    if (raw == 0) return defaultDate;
+    final dt = DateTime.fromMicrosecondsSinceEpoch(raw);
+    if (dt.year < 2000) return defaultDate;
+    return dt;
   }
-  if (raw is String) return DateTime.parse(raw);
-  if (raw is DateTime) return raw;
-  return fallback ?? DateTime.now();
+  if (raw is double) {
+    if (raw == 0) return defaultDate;
+    final dt = DateTime.fromMicrosecondsSinceEpoch(raw.toInt());
+    if (dt.year < 2000) return defaultDate;
+    return dt;
+  }
+  if (raw is String) {
+    if (raw.isEmpty) return defaultDate;
+    try {
+      final dt = DateTime.parse(raw);
+      if (dt.year < 2000) return defaultDate;
+      return dt;
+    } catch (_) {
+      return defaultDate;
+    }
+  }
+  if (raw is DateTime) {
+    if (raw.year < 2000) return defaultDate;
+    return raw;
+  }
+  return defaultDate;
 }

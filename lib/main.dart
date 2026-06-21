@@ -55,6 +55,7 @@ void main() async {
   // Start background services with shared database
   UserSessionService.startSessionCleanup();
   IntegrityChecker.startPeriodicCheck(db);
+  EnhancedBackupService().init(db);
   EnhancedAutoBackupService.start();
 
   // Initialize notification service

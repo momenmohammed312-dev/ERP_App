@@ -159,7 +159,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
             '''
         SELECT SUM(amount) as total_expenses
         FROM expenses 
-        WHERE created_at >= ? AND created_at <= ?
+        WHERE date >= ? AND date <= ?
       ''',
             variables: [
               drift.Variable.withDateTime(startOfDay),

@@ -792,21 +792,21 @@ class _ExpensePageState extends State<ExpensePage> {
 
   Color _getCategoryColor(String category) {
     switch (category) {
-      case 'إيجار':
+      case 'rent':
         return Colors.red;
-      case 'كهرباء':
+      case 'electricity':
         return Colors.orange;
-      case 'مياه':
+      case 'water':
         return Colors.blue;
-      case 'إنترنت':
+      case 'internet':
         return Colors.purple;
-      case 'رواتب':
+      case 'salaries':
         return Colors.green;
-      case 'صيانة':
+      case 'maintenance':
         return Colors.brown;
-      case 'تسويق':
+      case 'marketing':
         return Colors.teal;
-      case 'مصاريف أخرى':
+      case 'other_expenses':
         return Colors.grey;
       default:
         return Colors.indigo;
@@ -815,21 +815,21 @@ class _ExpensePageState extends State<ExpensePage> {
 
   IconData _getCategoryIcon(String category) {
     switch (category) {
-      case 'إيجار':
+      case 'rent':
         return Icons.home;
-      case 'كهرباء':
+      case 'electricity':
         return Icons.local_gas_station;
-      case 'مياه':
+      case 'water':
         return Icons.water_drop;
-      case 'إنترنت':
+      case 'internet':
         return Icons.wifi;
-      case 'رواتب':
+      case 'salaries':
         return Icons.attach_money;
-      case 'صيانة':
+      case 'maintenance':
         return Icons.build;
-      case 'تسويق':
+      case 'marketing':
         return Icons.handshake;
-      case 'مصاريف أخرى':
+      case 'other_expenses':
         return Icons.more_horiz;
       default:
         return Icons.category;

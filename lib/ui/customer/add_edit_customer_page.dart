@@ -324,7 +324,7 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
           notes: Value(_notesController.text.trim().isEmpty ? null : _notesController.text.trim()),
           openingBalance: Value(openingBalance),
           isActive: const Value(true),
-          status: const Value(1),
+          status: const Value('Active'),
           createdAt: Value(DateTime.now()),
         );
 

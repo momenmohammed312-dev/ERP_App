@@ -109,7 +109,9 @@ class AuthService {
                   orElse: () => Permission.viewSales,
                 ))
             .toList();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Error parsing custom permissions: $e');
+      }
     }
 
     return User(

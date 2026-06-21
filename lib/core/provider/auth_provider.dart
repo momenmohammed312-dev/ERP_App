@@ -21,24 +21,17 @@ class AuthNotifier extends StateNotifier<User?> {
   }
 
   Future<void> _loadUser() async {
+    state = null;
     try {
-      // Restore session from secure storage (only if user previously logged in explicitly)
-      final userJson = await _storage.read(key: _userKey);
-      if (userJson != null) {
-        state = User.fromJson(jsonDecode(userJson));
-        return;
-      }
-      // No stored session → stay null → router redirects to /login
-      state = null;
+      await _storage.delete(key: _userKey);
+      await _storage.delete(key: _userIdKey);
     } catch (e) {
-      state = null;
+      print('Error clearing storage: $e');
     }
   }
 
   Future<void> login(User user) async {
     state = user;
-    await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
-    await _storage.write(key: _userIdKey, value: user.id.toString());
   }
 
   Future<void> logout() async {

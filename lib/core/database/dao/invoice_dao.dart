@@ -92,7 +92,7 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
     ])..where(invoiceItems.invoiceId.equals(invoiceId));
 
     return query.map((row) {
-      return (row.readTable(invoiceItems), row.readTableOrNull(productsTable) as Product?);
+      return (row.readTable(invoiceItems), row.readTableOrNull(productsTable));
     }).get();
   }
 
@@ -112,6 +112,7 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
   Future<List<Invoice>> getInvoicesByDateRange(DateTime start, DateTime end) {
     return (select(invoices)
           ..where((t) => t.date.isBetweenValues(start, end))
+          ..where((t) => t.status.equals('voided').not())
           ..orderBy([
             (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
           ]))
@@ -125,6 +126,7 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
   ) {
     return (select(invoices)
           ..where((t) => t.date.isBetweenValues(start, end))
+          ..where((t) => t.status.equals('voided').not())
           ..where((t) => t.paymentMethod.isIn(types) | t.paymentMethod.isNull())
           ..orderBy([
             (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),

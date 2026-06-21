@@ -100,6 +100,10 @@ class AppTheme {
           borderSide: const BorderSide(color: Colors.white, width: 2),
         ),
       ),
+      listTileTheme: const ListTileThemeData(
+        selectedColor: Color(0xFFC9A84C),
+        style: ListTileStyle.list,
+      ),
       dataTableTheme: DataTableThemeData(
         headingRowColor: WidgetStateProperty.all(const Color(0xFF21262D)),
         dataRowColor: WidgetStateProperty.all(const Color(0xFF161B22)),

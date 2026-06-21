@@ -292,7 +292,7 @@ class _ConsolidatedAccountsScreenState
                       updatedAt: null,
                       notes: null,
                       isActive: true,
-                      status: 1,
+                      status: 'Active',
                     ),
                   ),
                 ),

@@ -270,7 +270,7 @@ class DebugPage extends ConsumerWidget {
             phone: drift.Value('0100000000$i'),
             address: drift.Value('عنوان تجريبي $i'),
             // email: drift.Value('customer$i@example.com'), // Removed: Pending build_runner update
-            status: const drift.Value(1),
+            status: const drift.Value('Active'),
             createdAt: drift.Value(DateTime.now()),
             id: drift.Value('cust_demo_$i'),
           ),

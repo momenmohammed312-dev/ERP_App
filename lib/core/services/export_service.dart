@@ -79,7 +79,9 @@ class ExportService {
         'assets/fonts/NotoNaskhArabic-Regular.ttf',
       );
       if (fontData.lengthInBytes > 0) arabicFont = pw.Font.ttf(fontData);
-    } catch (_) {}
+    } catch (e) {
+      print('Error loading Arabic font: $e');
+    }
 
     final latinFont = pw.Font.courier();
     final themeData = pw.ThemeData.withFont(

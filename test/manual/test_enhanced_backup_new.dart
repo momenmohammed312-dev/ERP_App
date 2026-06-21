@@ -23,6 +23,7 @@ void main() async {
     // Test 1: Create Manual Backup
     print('📦 اختبار 1: إنشاء نسخة احتياطية يدوية');
     final manualBackup = await backupService.createBackup(
+      null,
       type: 'manual',
       description: 'نسخة اختبار يدوية',
       createdBy: 1,

@@ -2,7 +2,9 @@ import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
+import 'package:drift/drift.dart' as drift;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/dao/sales_returns_dao.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
@@ -122,7 +124,7 @@ class _SalesReportTabState extends State<SalesReportTab> {
     if (picked != null) {
       setState(() {
         _startDate = picked.start;
-        _endDate = picked.end;
+        _endDate = DateTime(picked.end.year, picked.end.month, picked.end.day, 23, 59, 59);
       });
       _loadData();
     }
@@ -338,8 +340,49 @@ class _SalesReportTabState extends State<SalesReportTab> {
       );
     } catch (e) {
       if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('خطأ في الطباعة: $e')));
+      }
+    }
+  }
+
+  Future<void> _showReturnDialog(Invoice invoice) async {
+    try {
+      final itemsWithProducts = await widget.db.invoiceDao
+          .getItemsWithProductsByInvoice(invoice.id);
+
+      if (itemsWithProducts.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('لا توجد منتجات في هذه الفاتورة')),
+          );
+        }
+        return;
+      }
+
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => _ReturnDialog(
+          invoice: invoice,
+          db: widget.db,
+          itemsWithProducts: itemsWithProducts,
+        ),
+      );
+
+      if (result == true && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.error_exporting_with_error(e))),
+          const SnackBar(
+            content: Text('تم تسجيل المرتجع بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        setState(() {});
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في معالجة المرتجع: $e')),
         );
       }
     }
@@ -521,6 +564,7 @@ class _SalesReportTabState extends State<SalesReportTab> {
                           invoice: invoice,
                           db: widget.db,
                           onPrint: () => _printIndividualInvoice(invoice),
+                          onReturn: () => _showReturnDialog(invoice),
                         );
                       },
                     ),
@@ -536,11 +580,13 @@ class _InvoiceExpansionTile extends StatefulWidget {
   final Invoice invoice;
   final AppDatabase db;
   final VoidCallback onPrint;
+  final VoidCallback onReturn;
 
   const _InvoiceExpansionTile({
     required this.invoice,
     required this.db,
     required this.onPrint,
+    required this.onReturn,
   });
 
   @override
@@ -639,6 +685,11 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
               icon: const Icon(Icons.print, size: 20, color: Colors.orange),
               onPressed: widget.onPrint,
               tooltip: 'طباعة الفاتورة',
+            ),
+            IconButton(
+              icon: const Icon(Icons.undo, size: 20, color: Colors.redAccent),
+              onPressed: widget.onReturn,
+              tooltip: 'مرتجع',
             ),
           ],
         ),
@@ -788,5 +839,207 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
         ],
       ),
     );
+  }
+}
+
+class _ReturnDialog extends StatefulWidget {
+  final Invoice invoice;
+  final AppDatabase db;
+  final List<(InvoiceItem, Product?)> itemsWithProducts;
+
+  const _ReturnDialog({
+    required this.invoice,
+    required this.db,
+    required this.itemsWithProducts,
+  });
+
+  @override
+  State<_ReturnDialog> createState() => _ReturnDialogState();
+}
+
+class _ReturnDialogState extends State<_ReturnDialog> {
+  late Map<int, int> _returnQty;
+  String _reason = 'تالف';
+  bool _processing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _returnQty = {
+      for (final entry in widget.itemsWithProducts)
+        entry.$1.productId: 0,
+    };
+  }
+
+  double get _totalReturn {
+    double total = 0;
+    for (final entry in widget.itemsWithProducts) {
+      final item = entry.$1;
+      final qty = _returnQty[item.productId] ?? 0;
+      if (qty > 0) {
+        total += qty * (item.quantity > 0 ? item.price / item.quantity : 0);
+      }
+    }
+    return total;
+  }
+
+  bool get _hasItems => _returnQty.values.any((q) => q > 0);
+
+  Future<void> _processReturn() async {
+    if (!_hasItems) return;
+    setState(() => _processing = true);
+
+    try {
+      final returnItems = <SalesReturnItemsCompanion>[];
+      for (final entry in widget.itemsWithProducts) {
+        final item = entry.$1;
+        final product = entry.$2;
+        final qty = _returnQty[item.productId] ?? 0;
+        if (qty <= 0) continue;
+        returnItems.add(
+          SalesReturnItemsCompanion.insert(
+            returnId: 0,
+            productId: item.productId,
+            productName: product?.name ?? 'منتج ${item.productId}',
+            quantity: qty,
+            unitPrice: item.quantity > 0 ? item.price / item.quantity : 0,
+            totalPrice: qty * (item.quantity > 0 ? item.price / item.quantity : 0),
+          ),
+        );
+      }
+
+      final returnDao = SalesReturnsDao(widget.db);
+      final returnCompanion = SalesReturnsCompanion.insert(
+        returnNumber: 'RTR-${widget.invoice.invoiceNumber ?? widget.invoice.id}-${DateTime.now().millisecondsSinceEpoch}',
+        originalInvoiceId: widget.invoice.id,
+        customerId: (widget.invoice.customerId?.isNotEmpty == true) ? drift.Value(widget.invoice.customerId!) : const drift.Value.absent(),
+        customerName: widget.invoice.customerName ?? 'عميل غير محدد',
+        returnDate: DateTime.now(),
+        totalAmount: _totalReturn,
+        returnReason: _reason,
+        notes: const drift.Value.absent(),
+        status: const drift.Value('completed'),
+        processedBy: const drift.Value.absent(),
+      );
+
+      await returnDao.processReturn(
+        returnCompanion: returnCompanion,
+        items: returnItems,
+      );
+
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      setState(() => _processing = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+        title: const Text('مرتجع فاتورة'),
+        content: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('الفاتورة: ${widget.invoice.invoiceNumber ?? widget.invoice.id}'),
+              const SizedBox(height: 8),
+              Text('العميل: ${widget.invoice.customerName ?? 'غير محدد'}'),
+              const SizedBox(height: 16),
+              const Text('اختر الكميات المرتجعة:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: widget.itemsWithProducts.map((entry) {
+                      final item = entry.$1;
+                      final product = entry.$2;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(product?.name ?? 'منتج ${item.productId}'),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 80,
+                              child: TextField(
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  hintText: 'الكمية (${item.quantity})',
+                                  isDense: true,
+                                  border: const OutlineInputBorder(),
+                                ),
+                                onChanged: (v) {
+                                  final qty = int.tryParse(v) ?? 0;
+                                  setState(() {
+                                    _returnQty[item.productId] = qty.clamp(0, item.quantity);
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              if (_hasItems) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'إجمالي المرتجع: ${_totalReturn.toStringAsFixed(2)} ج.م',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.red,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _reason,
+                decoration: const InputDecoration(
+                  labelText: 'سبب المرتجع',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'تالف', child: Text('تالف')),
+                  DropdownMenuItem(value: 'خطأ في الفاتورة', child: Text('خطأ في الفاتورة')),
+                  DropdownMenuItem(value: 'استبدال', child: Text('استبدال')),
+                  DropdownMenuItem(value: 'أخرى', child: Text('أخرى')),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _reason = v);
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _processing ? null : () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: _hasItems && !_processing ? _processReturn : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: _processing
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text('تأكيد المرتجع'),
+          ),
+        ],
+      );
   }
 }

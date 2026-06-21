@@ -41,77 +41,37 @@ class PermissionGuard extends ConsumerWidget {
 
   Widget _buildUpgradePrompt(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: const Color(0xFF161B22),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!),
+        border: Border.all(color: const Color(0xFF30363D)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.lock, size: 48, color: Colors.grey[600]),
+          Icon(Icons.lock_outline, size: 48, color: Colors.grey[600]),
+          const SizedBox(height: 12),
+          Text(
+            'غير مصرح',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[300],
+            ),
+          ),
           const SizedBox(height: 8),
           Text(
-            'صلاحية غير متوفرة',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[700],
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'هذه الميزة تتطلب صلاحية ${_getPermissionDisplayName()}',
-            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            'لا تملك صلاحية الوصول لهذه الميزة.\n'
+            'تواصل مع مدير النظام.',
+            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: () => _showUpgradeDialog(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('ترقية الحساب'),
-          ),
         ],
       ),
     );
   }
 
-  String _getPermissionDisplayName() {
-    return PermissionMatrix.getPermissionDisplayName(permission);
-  }
-
-  void _showUpgradeDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('ترقية الحساب'),
-        content: const Text(
-          'للوصول إلى هذه الميزة، يرجى ترقية حسابك إلى باقة أعلى. تواصل مع مدير النظام للمزيد من المعلومات.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('إغلاق'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('يرجى التواصل مع مدير النظام لترقية الحساب'),
-                ),
-              );
-            },
-            child: const Text('ترقية الآن'),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// ويدجت لحماية القائمة بناءً على الصلاحيات

@@ -32,6 +32,7 @@ dependencies:
 
   pdf: ^3.11.3
   printing: ^5.14.2
+  bidi: ^2.0.13
   share_plus: ^7.2.1
 
   desktop_window: ^0.4.2

@@ -862,13 +862,13 @@ class $CustomersTable extends Customers
   );
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
-  late final GeneratedColumn<int> status = GeneratedColumn<int>(
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
     'status',
     aliasedName,
     true,
-    type: DriftSqlType.int,
+    type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant(1),
+    defaultValue: const Constant('Active'),
   );
   @override
   List<GeneratedColumn> get $columns => [
@@ -1052,7 +1052,7 @@ class $CustomersTable extends Customers
         data['${effectivePrefix}is_active'],
       )!,
       status: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.string,
         data['${effectivePrefix}status'],
       ),
     );
@@ -1078,7 +1078,7 @@ class Customer extends DataClass implements Insertable<Customer> {
   final DateTime? updatedAt;
   final String? notes;
   final bool isActive;
-  final int? status;
+  final String? status;
   const Customer({
     required this.id,
     required this.name,
@@ -1126,7 +1126,7 @@ class Customer extends DataClass implements Insertable<Customer> {
     }
     map['is_active'] = Variable<bool>(isActive);
     if (!nullToAbsent || status != null) {
-      map['status'] = Variable<int>(status);
+      map['status'] = Variable<String>(status);
     }
     return map;
   }
@@ -1185,7 +1185,7 @@ class Customer extends DataClass implements Insertable<Customer> {
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       notes: serializer.fromJson<String?>(json['notes']),
       isActive: serializer.fromJson<bool>(json['isActive']),
-      status: serializer.fromJson<int?>(json['status']),
+      status: serializer.fromJson<String?>(json['status']),
     );
   }
   @override
@@ -1205,7 +1205,7 @@ class Customer extends DataClass implements Insertable<Customer> {
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'notes': serializer.toJson<String?>(notes),
       'isActive': serializer.toJson<bool>(isActive),
-      'status': serializer.toJson<int?>(status),
+      'status': serializer.toJson<String?>(status),
     };
   }
 
@@ -1223,7 +1223,7 @@ class Customer extends DataClass implements Insertable<Customer> {
     Value<DateTime?> updatedAt = const Value.absent(),
     Value<String?> notes = const Value.absent(),
     bool? isActive,
-    Value<int?> status = const Value.absent(),
+    Value<String?> status = const Value.absent(),
   }) => Customer(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -1335,7 +1335,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
   final Value<DateTime?> updatedAt;
   final Value<String?> notes;
   final Value<bool> isActive;
-  final Value<int?> status;
+  final Value<String?> status;
   final Value<int> rowid;
   const CustomersCompanion({
     this.id = const Value.absent(),
@@ -1386,7 +1386,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     Expression<DateTime>? updatedAt,
     Expression<String>? notes,
     Expression<bool>? isActive,
-    Expression<int>? status,
+    Expression<String>? status,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1422,7 +1422,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
     Value<DateTime?>? updatedAt,
     Value<String?>? notes,
     Value<bool>? isActive,
-    Value<int?>? status,
+    Value<String?>? status,
     Value<int>? rowid,
   }) {
     return CustomersCompanion(
@@ -1487,7 +1487,7 @@ class CustomersCompanion extends UpdateCompanion<Customer> {
       map['is_active'] = Variable<bool>(isActive.value);
     }
     if (status.present) {
-      map['status'] = Variable<int>(status.value);
+      map['status'] = Variable<String>(status.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -35732,7 +35732,7 @@ typedef $$CustomersTableCreateCompanionBuilder =
       Value<DateTime?> updatedAt,
       Value<String?> notes,
       Value<bool> isActive,
-      Value<int?> status,
+      Value<String?> status,
       Value<int> rowid,
     });
 typedef $$CustomersTableUpdateCompanionBuilder =
@@ -35750,7 +35750,7 @@ typedef $$CustomersTableUpdateCompanionBuilder =
       Value<DateTime?> updatedAt,
       Value<String?> notes,
       Value<bool> isActive,
-      Value<int?> status,
+      Value<String?> status,
       Value<int> rowid,
     });
 
@@ -35828,7 +35828,7 @@ class $$CustomersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get status => $composableBuilder(
+  ColumnFilters<String> get status => $composableBuilder(
     column: $table.status,
     builder: (column) => ColumnFilters(column),
   );
@@ -35908,7 +35908,7 @@ class $$CustomersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get status => $composableBuilder(
+  ColumnOrderings<String> get status => $composableBuilder(
     column: $table.status,
     builder: (column) => ColumnOrderings(column),
   );
@@ -35966,7 +35966,7 @@ class $$CustomersTableAnnotationComposer
   GeneratedColumn<bool> get isActive =>
       $composableBuilder(column: $table.isActive, builder: (column) => column);
 
-  GeneratedColumn<int> get status =>
+  GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
 }
 
@@ -36011,7 +36011,7 @@ class $$CustomersTableTableManager
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
-                Value<int?> status = const Value.absent(),
+                Value<String?> status = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CustomersCompanion(
                 id: id,
@@ -36045,7 +36045,7 @@ class $$CustomersTableTableManager
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
-                Value<int?> status = const Value.absent(),
+                Value<String?> status = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CustomersCompanion.insert(
                 id: id,

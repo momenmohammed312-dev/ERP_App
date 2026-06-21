@@ -43,7 +43,7 @@ class _ProductFormState extends State<ProductForm> {
       text: widget.product?.quantity.toString() ?? '',
     );
     minStockCtrl = TextEditingController(
-      text: widget.product?.minStockLevel?.toString() ?? '0',
+      text: widget.product?.minStockLevel.toString() ?? '0',
     );
     barcodeCtrl = TextEditingController(text: widget.product?.barcode ?? '');
     categoryCtrl = TextEditingController(text: widget.product?.category ?? '');
@@ -75,8 +75,8 @@ class _ProductFormState extends State<ProductForm> {
   Future<void> _saveProduct() async {
     if (_formKey.currentState!.validate()) {
       try {
-        final newPrice = double.parse(priceCtrl.text);
-        final newQuantity = int.parse(quantityCtrl.text);
+        final newPrice = double.tryParse(priceCtrl.text) ?? 0;
+        final newQuantity = int.tryParse(quantityCtrl.text) ?? 0;
         final newMinStock = int.tryParse(minStockCtrl.text) ?? 0;
         final newCostPrice = double.tryParse(costPriceCtrl.text);
         final newBarcode = barcodeCtrl.text.trim().isEmpty ? null : barcodeCtrl.text.trim();
@@ -100,6 +100,7 @@ class _ProductFormState extends State<ProductForm> {
 
         // Warning for cost price
         if (newCostPrice != null && newCostPrice > newPrice) {
+          if (!mounted) return;
           final confirm = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(

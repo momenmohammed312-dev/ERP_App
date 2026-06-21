@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/drift.dart' as drift;
 import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/provider/auth_provider.dart';
@@ -310,23 +311,204 @@ class _VacationsPageState extends ConsumerState<VacationsPage> {
     }
   }
 
-  void _requestVacation() {
-    // Show request vacation dialog (implementation omitted for brevity, but needed for full flow)
-    // For now, we'll just show a snackbar or a simple dialog
-    showDialog(
+  Future<void> _requestVacation() async {
+    final formKey = GlobalKey<FormState>();
+    String vacationType = 'annual';
+    DateTime startDate = DateTime.now();
+    DateTime endDate = DateTime.now();
+    final reasonCtrl = TextEditingController();
+    final contactCtrl = TextEditingController();
+    final handoverCtrl = TextEditingController();
+
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('طلب إجازة جديد'),
-        content: const Text(
-          'هذه الميزة ستمكن من اختيار التواريخ والنوع والسبب.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إغلاق'),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        String selType = vacationType;
+        DateTime sDate = startDate;
+        DateTime eDate = endDate;
+        final types = ['annual', 'sick', 'unpaid', 'emergency'];
+        final typeLabels = ['سنوية', 'مرضية', 'بدون مرتب', 'عارضة'];
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('طلب إجازة جديد'),
+            content: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: selType,
+                      decoration: const InputDecoration(
+                        labelText: 'نوع الإجازة',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: List.generate(types.length, (i) {
+                        return DropdownMenuItem(
+                          value: types[i],
+                          child: Text(typeLabels[i]),
+                        );
+                      }),
+                      onChanged: (v) {
+                        if (v != null) setDialogState(() => selType = v);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                      ListTile(
+                        title: const Text('تاريخ البداية'),
+                        subtitle: Text(
+                          DateFormat('yyyy/MM/dd - EEEE', 'ar').format(sDate),
+                        ),
+                        trailing: const Icon(Icons.calendar_today),
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: sDate,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2030),
+                          );
+                          if (picked != null) {
+                            setDialogState(() {
+                              sDate = picked;
+                              if (eDate.isBefore(sDate)) eDate = sDate;
+                            });
+                          }
+                        },
+                      ),
+                      const Divider(),
+                      ListTile(
+                        title: const Text('تاريخ النهاية'),
+                        subtitle: Text(
+                          DateFormat('yyyy/MM/dd - EEEE', 'ar').format(eDate),
+                        ),
+                        trailing: const Icon(Icons.calendar_today),
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: eDate,
+                            firstDate: sDate,
+                            lastDate: DateTime(2030),
+                          );
+                          if (picked != null) {
+                            setDialogState(() => eDate = picked);
+                          }
+                        },
+                      ),
+                      const Divider(),
+                      Text(
+                        'المدة: ${eDate.difference(sDate).inDays + 1} يوم',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: reasonCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'السبب',
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 2,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'السبب مطلوب' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: contactCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'للتوثيل أثناء الإجازة (اختياري)',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: handoverCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'تسليم العمل لـ (اختياري)',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('إلغاء'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (formKey.currentState!.validate()) {
+                      Navigator.pop(ctx, {
+                        'type': selType,
+                        'start': sDate,
+                        'end': eDate,
+                        'reason': reasonCtrl.text.trim(),
+                        'contact': contactCtrl.text.trim(),
+                        'handover': handoverCtrl.text.trim(),
+                      });
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('إرسال الطلب'),
+                ),
+              ],
+            ),
+        );
+      },
     );
+
+    if (result != null) {
+      try {
+        await _dao.addVacation(
+          VacationsCompanion.insert(
+            staffId: widget.staff.staffId,
+            vacationType: result['type'] as String,
+            startDate: result['start'] as DateTime,
+            endDate: result['end'] as DateTime,
+            totalDays:
+                (result['end'] as DateTime)
+                    .difference(result['start'] as DateTime)
+                    .inDays + 1,
+            reason: (result['reason'] as String).isNotEmpty
+                ? drift.Value(result['reason'] as String)
+                : const drift.Value.absent(),
+            contactDuringVacation: (result['contact'] as String).isNotEmpty
+                ? drift.Value(result['contact'] as String)
+                : const drift.Value.absent(),
+            handoverTo: (result['handover'] as String).isNotEmpty
+                ? drift.Value(result['handover'] as String)
+                : const drift.Value.absent(),
+            status: 'pending',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('تم إرسال طلب الإجازة'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+    reasonCtrl.dispose();
+    contactCtrl.dispose();
+    handoverCtrl.dispose();
   }
 }

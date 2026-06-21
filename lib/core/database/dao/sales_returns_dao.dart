@@ -69,7 +69,7 @@ class SalesReturnsDao extends DatabaseAccessor<AppDatabase>
     return getTotalReturnsByDateRange(start, end);
   }
 
-  /// معالجة مرتجع كامل مع تحديث المخزون في معاملة واحدة
+  /// معالجة مرتجع كامل مع تحديث المخزون وقيود اليومية في معاملة واحدة
   Future<int> processReturn({
     required SalesReturnsCompanion returnCompanion,
     required List<SalesReturnItemsCompanion> items,
@@ -88,6 +88,33 @@ class SalesReturnsDao extends DatabaseAccessor<AppDatabase>
             product.copyWith(quantity: product.quantity + item.quantity.value),
           );
         }
+      }
+
+      // Create ledger reversal entry for customer invoices
+      final invoiceId = returnCompanion.originalInvoiceId.value;
+      final invoice = await (db.select(db.invoices)
+        ..where((t) => t.id.equals(invoiceId))
+      ).getSingleOrNull();
+      if (invoice != null &&
+          invoice.customerId != null &&
+          invoice.customerId != 'cash' &&
+          invoice.customerId!.isNotEmpty) {
+        final now = DateTime.now();
+        final returnAmount = returnCompanion.totalAmount.value;
+        await db.ledgerDao.insertTransaction(
+          LedgerTransactionsCompanion.insert(
+            id: '${now.millisecondsSinceEpoch}_ret_$returnId',
+            entityType: 'Customer',
+            refId: invoice.customerId!,
+            date: now,
+            description: 'مرتجع فاتورة #${invoice.invoiceNumber ?? invoice.id}',
+            debit: const Value(0.0),
+            credit: Value(returnAmount),
+            origin: 'reversal',
+            paymentMethod: const Value.absent(),
+            receiptNumber: Value('RET$returnId'),
+          ),
+        );
       }
     });
     return returnId;

@@ -32,7 +32,9 @@ Future<bool> showAdminPasswordGate(BuildContext context, AppDatabase db) async {
           ElevatedButton(
             onPressed: () async {
               final ok = await db.userDao.authenticate('admin', controller.text);
-              Navigator.pop(ctx, ok != null);
+              if (ctx.mounted) {
+                Navigator.pop(ctx, ok != null);
+              }
             },
             child: const Text('تأكيد'),
           ),

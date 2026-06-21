@@ -51,6 +51,7 @@ import 'package:pos_offline_desktop/core/database/tables/notifications_table.dar
 import 'package:pos_offline_desktop/core/database/tables/invoice_payments_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/damaged_items_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/sales_returns_table.dart';
+import 'customer_status_fix.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
 // import 'package:pos_offline_desktop/core/database/amount_types_fix.dart';
 
@@ -218,6 +219,109 @@ class AppDatabase extends _$AppDatabase {
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
       await _ensureMigrationLogTable();
+      await CustomerStatusFix.fixCustomerStatusColumn(this);
+
+      // Safety check to prevent SQL logic error on missing cash_sessions
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS cash_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opened_by TEXT,
+            opened_at INTEGER NOT NULL,
+            closed_at INTEGER,
+            status TEXT NOT NULL DEFAULT 'closed',
+            opening_balance REAL NOT NULL DEFAULT 0.0,
+            closing_balance REAL,
+            closing_cash REAL,
+            difference REAL,
+            total_sales REAL NOT NULL DEFAULT 0.0,
+            total_expenses REAL NOT NULL DEFAULT 0.0,
+            notes TEXT
+          )
+        ''');
+      } catch (e) {
+        log('Error creating cash_sessions table: $e');
+      }
+
+      // Safety check to prevent SQL logic error on missing damaged_items
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS damaged_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            quantity INTEGER NOT NULL,
+            unit_cost REAL NOT NULL,
+            total_loss REAL NOT NULL,
+            reason TEXT NOT NULL,
+            damage_date INTEGER NOT NULL,
+            notes TEXT,
+            recorded_by TEXT,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+          )
+        ''');
+      } catch (e) {
+        log('Error creating damaged_items table: $e');
+      }
+
+      // Safety check to prevent SQL logic error on missing sales_returns tables
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS sales_returns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            return_number TEXT NOT NULL,
+            original_invoice_id INTEGER REFERENCES invoices(id),
+            customer_id TEXT,
+            customer_name TEXT NOT NULL,
+            return_date INTEGER NOT NULL,
+            total_amount REAL NOT NULL,
+            return_reason TEXT NOT NULL,
+            notes TEXT,
+            status TEXT NOT NULL DEFAULT 'completed',
+            processed_by TEXT,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+          )
+        ''');
+      } catch (e) {
+        log('Error creating sales_returns table: $e');
+      }
+
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS sales_return_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            return_id INTEGER NOT NULL REFERENCES sales_returns(id) ON DELETE CASCADE,
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            product_name TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            unit_price REAL NOT NULL,
+            total_price REAL NOT NULL
+          )
+        ''');
+      } catch (e) {
+        log('Error creating sales_return_items table: $e');
+      }
+
+      // Safety check for app_notifications table
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS app_notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_id TEXT,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            send_at INTEGER NOT NULL,
+            sent INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+      } catch (e) {
+        log('Error creating app_notifications table: $e');
+      }
+
+      // Safety check for critical columns on existing tables
+      await _ensureCriticalColumnsInBeforeOpen();
+
+      // Safety check for staff-related tables (missing in some DBs)
+      await _ensureStaffTablesSafetyCheck();
     },
   );
 
@@ -720,6 +824,11 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'invoices', 'column': 'status',       'type': 'TEXT DEFAULT "pending"'},
       {'table': 'customers','column': 'status',       'type': 'TEXT DEFAULT "Active"'},
       {'table': 'customers','column': 'created_at',   'type': 'INTEGER'},
+      {'table': 'products', 'column': 'cost_price',   'type': 'REAL'},
+      {'table': 'products', 'column': 'min_stock_level', 'type': 'INTEGER DEFAULT 0'},
+      {'table': 'invoice_items', 'column': 'discount', 'type': 'REAL DEFAULT 0'},
+      {'table': 'invoice_items', 'column': 'commission', 'type': 'REAL DEFAULT 0'},
+      {'table': 'invoice_items', 'column': 'unit_cost_at_time', 'type': 'REAL'},
     ];
 
     for (final check in columnChecks) {
@@ -730,6 +839,233 @@ class AppDatabase extends _$AppDatabase {
         log('Ensured column ${check['column']} in ${check['table']}');
       } catch (e) {
         // Ignore — column already exists
+      }
+    }
+  }
+
+  Future<void> _ensureCriticalColumnsInBeforeOpen() async {
+    final columnChecks = [
+      {'table': 'products', 'column': 'cost_price', 'type': 'REAL'},
+      {'table': 'products', 'column': 'min_stock_level', 'type': 'INTEGER DEFAULT 0'},
+      {'table': 'invoices', 'column': 'customer_id', 'type': 'TEXT'},
+      {'table': 'invoices', 'column': 'total_amount', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'invoices', 'column': 'paid_amount', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'invoices', 'column': 'status', 'type': 'TEXT DEFAULT "pending"'},
+      {'table': 'customers', 'column': 'status', 'type': 'TEXT DEFAULT "Active"'},
+      {'table': 'customers', 'column': 'created_at', 'type': 'INTEGER'},
+      {'table': 'invoice_items', 'column': 'discount', 'type': 'REAL DEFAULT 0'},
+      {'table': 'invoice_items', 'column': 'commission', 'type': 'REAL DEFAULT 0'},
+      {'table': 'invoice_items', 'column': 'unit_cost_at_time', 'type': 'REAL'},
+    ];
+    for (final check in columnChecks) {
+      try {
+        await customStatement(
+          'ALTER TABLE ${check['table']} ADD COLUMN ${check['column']} ${check['type']}',
+        );
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _ensureStaffTablesSafetyCheck() async {
+    final tables = {
+      'staff_table': '''
+        CREATE TABLE IF NOT EXISTS staff_table (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          staff_id TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          national_id TEXT,
+          phone TEXT,
+          email TEXT,
+          address TEXT,
+          position TEXT NOT NULL,
+          department TEXT,
+          employment_type TEXT NOT NULL,
+          basic_salary REAL NOT NULL,
+          hourly_rate REAL,
+          hire_date INTEGER NOT NULL,
+          contract_end_date INTEGER,
+          status TEXT NOT NULL,
+          bank_name TEXT,
+          bank_account TEXT,
+          emergency_contact TEXT,
+          emergency_phone TEXT,
+          notes TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))
+        )
+      ''',
+      'attendance_table': '''
+        CREATE TABLE IF NOT EXISTS attendance_table (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          staff_id TEXT NOT NULL,
+          date INTEGER NOT NULL,
+          check_in_time INTEGER,
+          check_out_time INTEGER,
+          check_in_location TEXT,
+          check_out_location TEXT,
+          working_hours REAL,
+          status TEXT NOT NULL,
+          leave_type TEXT,
+          notes TEXT,
+          overtime_hours REAL NOT NULL DEFAULT 0,
+          approved_by TEXT,
+          approved_at INTEGER,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''',
+      'vacations': '''
+        CREATE TABLE IF NOT EXISTS vacations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          staff_id TEXT NOT NULL,
+          vacation_type TEXT NOT NULL,
+          start_date INTEGER NOT NULL,
+          end_date INTEGER NOT NULL,
+          total_days INTEGER NOT NULL,
+          reason TEXT,
+          status TEXT NOT NULL,
+          approved_by TEXT,
+          approved_at INTEGER,
+          rejection_reason TEXT,
+          contact_during_vacation TEXT,
+          handover_to TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''',
+      'staff_advances': '''
+        CREATE TABLE IF NOT EXISTS staff_advances (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          staff_id TEXT NOT NULL,
+          amount REAL NOT NULL,
+          reason TEXT,
+          request_date INTEGER NOT NULL,
+          payment_date INTEGER,
+          status TEXT NOT NULL,
+          approved_by TEXT,
+          approved_at INTEGER,
+          rejection_reason TEXT,
+          payment_method TEXT,
+          transaction_reference TEXT,
+          installment_months INTEGER,
+          monthly_deduction REAL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''',
+      'payroll_table': '''
+        CREATE TABLE IF NOT EXISTS payroll_table (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          staff_id TEXT NOT NULL,
+          payroll_period TEXT NOT NULL,
+          period_start INTEGER NOT NULL,
+          period_end INTEGER NOT NULL,
+          basic_salary REAL NOT NULL,
+          overtime_hours REAL NOT NULL DEFAULT 0,
+          overtime_rate REAL,
+          overtime_pay REAL NOT NULL DEFAULT 0,
+          allowances REAL NOT NULL DEFAULT 0,
+          deductions REAL NOT NULL DEFAULT 0,
+          advances REAL NOT NULL DEFAULT 0,
+          taxes REAL NOT NULL DEFAULT 0,
+          insurance REAL NOT NULL DEFAULT 0,
+          other_deductions REAL NOT NULL DEFAULT 0,
+          net_salary REAL NOT NULL,
+          working_days INTEGER NOT NULL DEFAULT 0,
+          present_days INTEGER NOT NULL DEFAULT 0,
+          absent_days INTEGER NOT NULL DEFAULT 0,
+          leave_days INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL,
+          payment_date INTEGER,
+          payment_method TEXT,
+          transaction_reference TEXT,
+          approved_by TEXT,
+          approved_at INTEGER,
+          notes TEXT,
+          bonus REAL NOT NULL DEFAULT 0.0,
+          commission REAL NOT NULL DEFAULT 0.0,
+          incentives REAL NOT NULL DEFAULT 0.0,
+          rewards_total REAL NOT NULL DEFAULT 0.0,
+          penalties_total REAL NOT NULL DEFAULT 0.0,
+          expense_ref_id TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''',
+      'rewards_penalties': '''
+        CREATE TABLE IF NOT EXISTS rewards_penalties (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          staff_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          category TEXT NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          amount REAL,
+          incident_date INTEGER NOT NULL,
+          issued_by TEXT NOT NULL,
+          status TEXT NOT NULL,
+          effective_date INTEGER NOT NULL,
+          expiry_date INTEGER,
+          evidence TEXT,
+          notes TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''',
+      'performance_reviews': '''
+        CREATE TABLE IF NOT EXISTS performance_reviews (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          staff_id TEXT NOT NULL,
+          review_period TEXT NOT NULL,
+          review_date INTEGER NOT NULL,
+          reviewer_id TEXT NOT NULL,
+          overall_rating REAL NOT NULL,
+          work_quality_rating REAL NOT NULL,
+          productivity_rating REAL NOT NULL,
+          teamwork_rating REAL NOT NULL,
+          punctuality_rating REAL NOT NULL,
+          initiative_rating REAL NOT NULL,
+          strengths TEXT,
+          weaknesses TEXT,
+          goals TEXT,
+          recommendations TEXT,
+          employee_comments TEXT,
+          status TEXT NOT NULL,
+          acknowledged_at INTEGER,
+          next_review_date INTEGER,
+          action_plan TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''',
+      'staff_documents': '''
+        CREATE TABLE IF NOT EXISTS staff_documents (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          staff_id TEXT NOT NULL,
+          document_type TEXT NOT NULL,
+          document_name TEXT NOT NULL,
+          file_path TEXT NOT NULL,
+          file_name TEXT NOT NULL,
+          file_type TEXT NOT NULL,
+          file_size INTEGER NOT NULL,
+          issue_date INTEGER,
+          expiry_date INTEGER,
+          issuing_authority TEXT,
+          document_number TEXT,
+          status TEXT NOT NULL,
+          notes TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''',
+    };
+
+    for (final entry in tables.entries) {
+      try {
+        await customStatement(entry.value);
+      } catch (e) {
+        log('Staff table safety check (${entry.key}): $e');
       }
     }
   }

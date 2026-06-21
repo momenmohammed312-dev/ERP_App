@@ -518,7 +518,7 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
                         address: addressController.text.isNotEmpty
                             ? Value(addressController.text)
                             : const Value.absent(),
-                        status: const Value(1),
+                        status: const Value('Active'),
                         createdAt:
                             const Value.absent(), // Prevent createdAt update
                       ),

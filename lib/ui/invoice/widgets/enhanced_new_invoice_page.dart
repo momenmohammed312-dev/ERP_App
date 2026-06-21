@@ -325,7 +325,7 @@ class _EnhancedNewInvoicePageState
             updatedAt: null,
             notes: null,
             isActive: true,
-            status: 1,
+            status: 'Active',
           ),
         );
 
@@ -610,13 +610,18 @@ class _EnhancedNewInvoicePageState
                   );
                   if (ctx.mounted) {
                     Navigator.pop(ctx);
+                  }
+                  if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('تم إضافة المصروف'), backgroundColor: Colors.green),
                     );
                   }
                 } catch (e) {
                   if (ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
+                    Navigator.pop(ctx);
+                  }
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
                     );
                   }
