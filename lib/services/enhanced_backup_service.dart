@@ -138,6 +138,23 @@ class EnhancedBackupService {
         await backupDirectory.create(recursive: true);
       }
 
+      // تنظيف مجلدات مؤقتة من عمليات فاشلة سابقة
+      try {
+        await for (final entity in backupDirectory.list()) {
+          if (entity is Directory) {
+            final dirName = path.basename(entity.path);
+            if (dirName.startsWith('temp_')) {
+              await entity.delete(recursive: true);
+            }
+          } else if (entity is File) {
+            final fileName = path.basename(entity.path);
+            if (fileName.startsWith('temp_') && fileName.endsWith('.zip')) {
+              await entity.delete();
+            }
+          }
+        }
+      } catch (_) {}
+
       // 2. توليد اسم الملف
       final timestamp = DateTime.now();
       final filename = 'backup_${_formatTimestamp(timestamp)}$_backupExtension';
@@ -151,8 +168,9 @@ class EnhancedBackupService {
         throw Exception('قاعدة البيانات غير موجودة: $dbPath');
       }
 
-      // 4. إنشاء مجلد مؤقت
-      final tempDir = Directory(path.join(backupDirectory.path, 'temp'));
+      // 4. إنشاء مجلد مؤقت فريد لكل عملية
+      final backupId = timestamp.millisecondsSinceEpoch.toString();
+      final tempDir = Directory(path.join(backupDirectory.path, 'temp_$backupId'));
       if (await tempDir.exists()) {
         await tempDir.delete(recursive: true);
       }
@@ -182,7 +200,7 @@ class EnhancedBackupService {
       // 8. ضغط الملفات
       debugPrint('📦 ضغط الملفات...');
       final encoder = ZipFileEncoder();
-      final tempZipPath = path.join(backupDirectory.path, 'temp_backup.zip');
+      final tempZipPath = path.join(backupDirectory.path, 'temp_$backupId.zip');
       encoder.create(tempZipPath);
       await encoder.addDirectory(tempDir);
       encoder.close();
@@ -205,8 +223,16 @@ class EnhancedBackupService {
       await File(backupPath).writeAsBytes(finalBytes);
 
       // 12. تنظيف الملفات المؤقتة
-      await tempDir.delete(recursive: true);
-      await zipFile.delete();
+      try {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      } catch (_) {}
+      try {
+        if (await zipFile.exists()) {
+          await zipFile.delete();
+        }
+      } catch (_) {}
 
       // 13. الحصول على حجم الملف النهائي
       final backupFile = File(backupPath);
