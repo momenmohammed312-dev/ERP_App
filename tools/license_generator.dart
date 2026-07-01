@@ -16,6 +16,81 @@ const Map<String, Map<String, dynamic>> licenseDurations = {
   'lifetime': {'name': 'مدى الحياة', 'days': 36500, 'price_multiplier': 20.0},
 };
 
+const Map<String, Map<String, dynamic>> licenseTypes = {
+  '1': {
+    'name': 'basic',
+    'users': 1,
+    'features': ['pos', 'inventory', 'customers', 'reports'],
+  },
+  '2': {
+    'name': 'standard',
+    'users': 3,
+    'features': ['pos', 'inventory', 'customers', 'suppliers', 'reports'],
+  },
+  '3': {
+    'name': 'professional',
+    'users': 5,
+    'features': [
+      'pos',
+      'inventory',
+      'customers',
+      'suppliers',
+      'reports',
+      'accounting',
+      'users',
+    ],
+  },
+  '4': {
+    'name': 'enterprise',
+    'users': 10,
+    'features': [
+      'pos',
+      'inventory',
+      'customers',
+      'suppliers',
+      'reports',
+      'accounting',
+      'users',
+      'backup',
+      'export',
+    ],
+  },
+  '5': {
+    'name': 'enterprise',
+    'users': 999,
+    'features': [
+      'pos',
+      'inventory',
+      'customers',
+      'suppliers',
+      'reports',
+      'accounting',
+      'users',
+      'backup',
+      'export',
+      'admin',
+    ],
+    'lifetime': true,
+  },
+  '6': {
+    'name': 'trial',
+    'users': 1,
+    'features': [
+      'pos',
+      'inventory',
+      'customers',
+      'suppliers',
+      'reports',
+      'accounting',
+      'users',
+      'backup',
+      'export',
+      'admin',
+    ],
+    'trial': true,
+  },
+};
+
 String _encrypt(String plainText) {
   final keyBytes = md5.convert(utf8.encode(secretKey)).bytes;
   final key = encrypt_pkg.Key(Uint8List.fromList(keyBytes));
@@ -33,17 +108,18 @@ String _generateSignature(String data) {
   return digest.toString();
 }
 
-void main() async {
+void main(List<String> args) async {
+  // Support non-interactive mode: --trial
+  final isAutoTrial = args.contains('--trial');
+
   print('=================================');
   print('   LICENSE KEY GENERATOR');
   print('=================================\n');
 
-  // Get device fingerprint
-  stdout.write('Enter customer\'s Device ID: ');
-  final deviceFingerprint = stdin.readLineSync()?.trim() ?? '';
-  if (deviceFingerprint.isEmpty) {
-    print('ERROR: Device ID is required!');
-    exit(1);
+  if (isAutoTrial) {
+    print('⚡ Auto-generating TRIAL license...\n');
+    _generateAndPrint(type: '6');
+    return;
   }
 
   // Select license type
@@ -53,105 +129,75 @@ void main() async {
   print('3. Professional (5 users)');
   print('4. Enterprise (10 users)');
   print('5. Administrator (lifetime, unlimited users)');
-  stdout.write('\nSelect type (1-5): ');
+  print('6. TRIAL (10 days, UNBOUND, all features)');
+  stdout.write('\nSelect type (1-6): ');
   final typeChoice = stdin.readLineSync()?.trim() ?? '1';
 
-  final licenseTypes = {
-    '1': {
-      'name': 'basic',
-      'users': 1,
-      'features': ['pos', 'inventory', 'customers', 'reports'],
-    },
-    '2': {
-      'name': 'standard',
-      'users': 3,
-      'features': ['pos', 'inventory', 'customers', 'suppliers', 'reports'],
-    },
-    '3': {
-      'name': 'professional',
-      'users': 5,
-      'features': [
-        'pos',
-        'inventory',
-        'customers',
-        'suppliers',
-        'reports',
-        'accounting',
-        'users',
-      ],
-    },
-    '4': {
-      'name': 'enterprise',
-      'users': 10,
-      'features': [
-        'pos',
-        'inventory',
-        'customers',
-        'suppliers',
-        'reports',
-        'accounting',
-        'users',
-        'backup',
-        'export',
-      ],
-    },
-    '5': {
-      'name': 'enterprise',
-      'users': 999,
-      'features': [
-        'pos',
-        'inventory',
-        'customers',
-        'suppliers',
-        'reports',
-        'accounting',
-        'users',
-        'backup',
-        'export',
-        'admin',
-      ],
-      'lifetime': true,
-    },
-  };
-
   final selectedType = licenseTypes[typeChoice] ?? licenseTypes['1']!;
+  final isTrial = selectedType.containsKey('trial') && selectedType['trial'] == true;
 
-  // Select duration
-  print('\nLicense Duration:');
-  print('1. Monthly (30 days)');
-  print('2. Yearly (365 days) - BEST VALUE (2 months free!)');
-  print('3. Lifetime (100 years)');
-
-  if (selectedType.containsKey('lifetime') &&
-      selectedType['lifetime'] == true) {
-    print('4. Administrator (lifetime - already selected)');
-  }
-
-  stdout.write('\nSelect duration (1-3): ');
-  final durationChoice = stdin.readLineSync()?.trim() ?? '2';
-
+  // For trial, auto-set device to UNBOUND and duration to 10 days
+  final deviceFingerprint = isTrial ? 'UNBOUND' : _readDeviceId();
   int days;
   String durationName;
   double priceMultiplier;
 
-  if (selectedType.containsKey('lifetime') &&
-      selectedType['lifetime'] == true) {
-    days = 36500; // 100 years
-    durationName = 'مدى الحياة';
-    priceMultiplier = 0; // Free for admin
-    print('\nAdministrator license - LIFETIME duration');
+  if (isTrial) {
+    days = 10;
+    durationName = '10 أيام';
+    priceMultiplier = 0;
+    print('\nTrial license — Device: UNBOUND, Duration: 10 days');
   } else {
-    final selectedDuration =
-        licenseDurations[durationChoice] ?? licenseDurations['yearly']!;
-    days = selectedDuration['days'];
-    durationName = selectedDuration['name'];
-    priceMultiplier = selectedDuration['price_multiplier'];
-    print('\nDuration: $durationName ($days days)');
+    // Get device fingerprint
+    stdout.write('Enter customer\'s Device ID: ');
+    final input = stdin.readLineSync()?.trim() ?? '';
+    if (input.isEmpty) {
+      print('ERROR: Device ID is required!');
+      exit(1);
+    }
+
+    // Select duration
+    print('\nLicense Duration:');
+    print('1. Monthly (30 days)');
+    print('2. Yearly (365 days) - BEST VALUE (2 months free!)');
+    print('3. Lifetime (100 years)');
+
+    if (selectedType.containsKey('lifetime') &&
+        selectedType['lifetime'] == true) {
+      print('4. Administrator (lifetime - already selected)');
+    }
+
+    stdout.write('\nSelect duration (1-3): ');
+    final durationChoice = stdin.readLineSync()?.trim() ?? '2';
+
+    if (selectedType.containsKey('lifetime') &&
+        selectedType['lifetime'] == true) {
+      days = 36500;
+      durationName = 'مدى الحياة';
+      priceMultiplier = 0;
+      print('\nAdministrator license - LIFETIME duration');
+    } else {
+      final selectedDuration =
+          licenseDurations[durationChoice] ?? licenseDurations['yearly']!;
+      days = selectedDuration['days'];
+      durationName = selectedDuration['name'];
+      priceMultiplier = selectedDuration['price_multiplier'];
+      print('\nDuration: $durationName ($days days)');
+    }
   }
 
   // Generate license
   final now = DateTime.now();
   final expiryDate = now.add(Duration(days: days));
+  String companyName;
+  if (isTrial) {
+    companyName = 'Trial User';
+  } else if (selectedType.containsKey('lifetime') && selectedType['lifetime'] == true) {
+    companyName = 'Administrator';
+  } else {
+    companyName = 'Generated License';
+  }
+
   final licenseData = {
     'device': deviceFingerprint,
     'type': selectedType['name'],
@@ -159,10 +205,7 @@ void main() async {
     'expiry': expiryDate.toIso8601String(),
     'features': selectedType['features'],
     'max_users': selectedType['users'],
-    'company_name':
-        selectedType.containsKey('lifetime') && selectedType['lifetime'] == true
-        ? 'Administrator'
-        : 'Generated License',
+    'company_name': companyName,
     'contact_email': 'support@company.com',
     'version': '1.0',
   };
@@ -179,7 +222,10 @@ void main() async {
   print('Type: ${selectedType['name']}');
   print('Duration: $durationName');
   print('Max Users: ${selectedType['users']}');
-  if (days >= 36500) {
+  if (isTrial) {
+    print('Device: UNBOUND (any device)');
+    print('Expires: ${expiryDate.toIso8601String().split('T')[0]}');
+  } else if (days >= 36500) {
     print('Expires: Never (lifetime license)');
   } else {
     print('Expires: ${expiryDate.toIso8601String().split('T')[0]}');
@@ -202,7 +248,7 @@ Generated: ${DateTime.now()}
 Device ID: $deviceFingerprint
 Type: ${selectedType['name']}
 Max Users: ${selectedType['users']}
-${selectedType.containsKey('lifetime') && selectedType['lifetime'] == true ? 'Duration: LIFETIME\nExpires: Never (lifetime license)' : 'Duration: $days days\nExpires: ${expiryDate.toIso8601String().split('T')[0]}'}
+${isTrial ? 'Duration: 10 days (TRIAL)\nDevice: UNBOUND' : days >= 36500 ? 'Duration: LIFETIME\nExpires: Never (lifetime license)' : 'Duration: $days days\nExpires: ${expiryDate.toIso8601String().split('T')[0]}'}
 Features: ${(selectedType['features'] as List).join(", ")}
 
 LICENSE KEY:
@@ -210,4 +256,78 @@ $licenseKey
 ''');
 
   print('\nLicense saved to: $filename\n');
+}
+
+String _readDeviceId() {
+  stdout.write('Enter customer\'s Device ID: ');
+  return stdin.readLineSync()?.trim() ?? '';
+}
+
+void _generateAndPrint({required String type}) {
+  final selectedType = licenseTypes[type]!;
+  const isTrial = true;
+
+  const deviceFingerprint = 'UNBOUND';
+  const days = 10;
+  const durationName = '10 أيام';
+
+  final now = DateTime.now();
+  final expiryDate = now.add(const Duration(days: days));
+  const companyName = 'Trial User';
+
+  final licenseData = {
+    'device': deviceFingerprint,
+    'type': 'trial',
+    'issue_date': now.toIso8601String(),
+    'expiry': expiryDate.toIso8601String(),
+    'features': selectedType['features'],
+    'max_users': selectedType['users'],
+    'company_name': companyName,
+    'contact_email': 'support@company.com',
+    'version': '1.0',
+  };
+
+  final jsonString = jsonEncode(licenseData);
+  final encryptedData = _encrypt(jsonString);
+  final signature = _generateSignature(encryptedData);
+  final licenseKey = '$encryptedData.$signature';
+
+  print('\n${'=' * 60}');
+  print('TRIAL LICENSE GENERATED');
+  print('=' * 60);
+  print('Type: trial');
+  print('Duration: $durationName');
+  print('Device: UNBOUND (any device)');
+  print('Max Users: ${selectedType['users']}');
+  print('Expires: ${expiryDate.toIso8601String().split('T')[0]}');
+  print('Features: ${(selectedType['features'] as List).join(", ")}');
+  print('=' * 60);
+  print('\nTRIAL LICENSE KEY:');
+  print(licenseKey);
+  print('=' * 60);
+
+  // Save to file
+  final timestamp = DateTime.now().millisecondsSinceEpoch;
+  final filename = 'license_trial_$timestamp.txt';
+  final file = File('licenses/$filename');
+  file.createSync(recursive: true);
+  file.writeAsStringSync('''
+TRIAL LICENSE
+=============
+Generated: ${DateTime.now()}
+Device ID: UNBOUND
+Type: trial
+Max Users: ${selectedType['users']}
+Duration: 10 days (TRIAL)
+Device: UNBOUND (any device)
+Expires: ${expiryDate.toIso8601String().split('T')[0]}
+Features: ${(selectedType['features'] as List).join(", ")}
+
+TRIAL LICENSE KEY:
+$licenseKey
+''');
+
+  print('\nLicense saved to: $filename\n');
+  print('\n⚠️  IMPORTANT: Set this in lib/config/license_config.dart as trialLicenseKey');
+  print('   Or pass via: --dart-define=TRIAL_LICENSE_KEY="$licenseKey"\n');
 }

@@ -103,6 +103,7 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
 
     return (select(invoices)
           ..where((t) => t.date.isBetweenValues(start, end))
+          ..where((t) => t.status.equals('voided').not())
           ..orderBy([
             (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
           ]))

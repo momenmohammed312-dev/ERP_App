@@ -7,8 +7,12 @@ import 'package:flutter/foundation.dart';
 import '../core/utils/logger.dart';
 
 class UpdateService {
-  static const String updateCheckUrl =
-      'https://api.mo2-systems.com/pos/updates/latest.json';
+  /// Customize this to your GitHub repo before building for production:
+  /// https://raw.githubusercontent.com/{owner}/{repo}/main/docs/latest.json
+  static const String updateCheckUrl = String.fromEnvironment(
+    'UPDATE_CHECK_URL',
+    defaultValue: 'https://api.mo2-systems.com/pos/updates/latest.json',
+  );
   final Dio _dio = Dio();
 
   /// Check if update is available

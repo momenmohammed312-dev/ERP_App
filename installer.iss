@@ -5,7 +5,7 @@
 #define MyAppVersion "2.1.0"
 #define MyAppPublisher "MO2 Systems"
 #define MyAppURL "https://mo2-systems.com"
-#define MyAppExeName "pos_system.exe"
+#define MyAppExeName "pos_offline_desktop.exe"
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application.

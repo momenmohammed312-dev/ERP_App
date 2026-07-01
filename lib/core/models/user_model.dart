@@ -94,6 +94,9 @@ enum Permission {
   manageSalaries,
   viewAttendance,
   manageAttendance,
+  manageAttendanceDevices,
+  manageBiometricEnrollment,
+  reviewUnmatchedAttendance,
 
   // المالية
   openDay,
@@ -385,6 +388,9 @@ class PermissionMatrix {
       Permission.manageSalaries,
       Permission.viewAttendance,
       Permission.manageAttendance,
+      Permission.manageAttendanceDevices,
+      Permission.manageBiometricEnrollment,
+      Permission.reviewUnmatchedAttendance,
 
     // الإعدادات
       Permission.viewSettings,
@@ -575,6 +581,12 @@ class PermissionMatrix {
         return 'عرض الحضور';
       case Permission.manageAttendance:
         return 'إدارة الحضور';
+      case Permission.manageAttendanceDevices:
+        return 'إدارة أجهزة الحضور';
+      case Permission.manageBiometricEnrollment:
+        return 'إدارة التسجيل البيومتري';
+      case Permission.reviewUnmatchedAttendance:
+        return 'مراجعة الحضور غير المطابق';
       case Permission.openDay:
         return 'فتح يوم';
       case Permission.closeDay:

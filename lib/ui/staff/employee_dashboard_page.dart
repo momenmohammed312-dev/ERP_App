@@ -6,6 +6,8 @@ import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
 import 'staff_list_page.dart';
 import 'staff_form_page.dart';
+import 'device_management_page.dart';
+import 'unmatched_attendance_page.dart';
 
 class EmployeeDashboardPage extends ConsumerStatefulWidget {
   const EmployeeDashboardPage({super.key});
@@ -376,6 +378,38 @@ class _EmployeeDashboardPageState
                   Icons.money_off,
                   Colors.redAccent,
                   () => _showSectionList('سلف معلقة', 'advances'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionBtn(
+                  'أجهزة الحضور',
+                  Icons.device_hub,
+                  Colors.blue,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DeviceManagementPage(),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildActionBtn(
+                  'حركات معلقة',
+                  Icons.warning_amber_rounded,
+                  Colors.orangeAccent,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const UnmatchedAttendancePage(),
+                    ),
+                  ),
                 ),
               ),
             ],

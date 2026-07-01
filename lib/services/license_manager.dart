@@ -9,7 +9,8 @@ import '../core/utils/logger.dart';
 import 'package:pos_offline_desktop/config/license_config.dart';
 
 enum LicenseType {
-  trial, // تجريبي - 7 أيام - مستخدم واحد
+  free, // مجاني — كل المميزات بدون تفعيل
+  trial, // تجريبي - 10 أيام - مستخدم واحد
   basic, // أساسي - مستخدم واحد
   standard, // قياسي - 3 مستخدمين
   professional, // احترافي - 5 مستخدمين
@@ -289,6 +290,7 @@ class LicenseManager {
   // ════════════════════════════════════════════════════════════════════
 
   Future<bool> isLicenseActive() async {
+    if (LicenseConfig.isFreeVersion) return true;
     final license = await getCurrentLicense();
     if (license == null) return false;
     return license.isValid;
@@ -307,6 +309,19 @@ class LicenseManager {
   }
 
   Future<License?> getCurrentLicense() async {
+    if (LicenseConfig.isFreeVersion) {
+      return License(
+        licenseKey: 'FREE_VERSION',
+        deviceFingerprint: 'free',
+        type: LicenseType.free,
+        issueDate: DateTime(2020, 1, 1),
+        expiryDate: DateTime(2100, 1, 1),
+        features: List<String>.from(LicenseConfig.availableFeatures),
+        maxUsers: 999,
+        companyName: 'Free Version',
+        contactEmail: '',
+      );
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final licenseJson = prefs.getString(_storageKey);
@@ -326,6 +341,7 @@ class LicenseManager {
   // ════════════════════════════════════════════════════════════════════
 
   Future<bool> hasFeature(String featureName) async {
+    if (LicenseConfig.isFreeVersion) return true;
     final license = await getCurrentLicense();
     if (license == null || !license.isValid) return false;
     return license.features.contains(featureName);
@@ -336,9 +352,30 @@ class LicenseManager {
   // ════════════════════════════════════════════════════════════════════
 
   Future<bool> canAddUser(int currentUserCount) async {
+    if (LicenseConfig.isFreeVersion) return true;
     final license = await getCurrentLicense();
     if (license == null || !license.isValid) return false;
     return currentUserCount < license.maxUsers;
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // تفعيل النسخة التجريبية (10 أيام)
+  // ════════════════════════════════════════════════════════════════════
+
+  Future<LicenseValidationResult> activateTrial() async {
+    try {
+      final key = generateLicenseKey(
+        deviceFingerprint: 'UNBOUND',
+        type: LicenseType.trial,
+        validityDays: 10,
+        features: List<String>.from(LicenseConfig.availableFeatures),
+        companyName: 'Trial',
+        contactEmail: '',
+      );
+      return await validateLicense(key);
+    } catch (e) {
+      return LicenseValidationResult.invalid('فشل تفعيل النسخة التجريبية: $e');
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -391,6 +428,7 @@ class LicenseManager {
 
   int _getMaxUsersForType(LicenseType type) {
     switch (type) {
+      case LicenseType.free:
       case LicenseType.trial:
       case LicenseType.basic:
         return 1;

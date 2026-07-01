@@ -84,6 +84,14 @@ class AttendanceTable extends Table {
 
   TextColumn get notes => text().nullable()(); // Attendance notes
 
+  TextColumn get source => text().nullable()(); // 'manual' | 'device' | 'import' | 'admin_override'
+
+  IntColumn get sourceDeviceId => integer().nullable()(); // references BiometricDevices.id, null if manual
+
+  IntColumn get rawEventId => integer().nullable()(); // references AttendanceRawEvents.id, null if manual
+
+  TextColumn get overrideReason => text().nullable()(); // required when source = 'admin_override'
+
   RealColumn get overtimeHours =>
       real().withDefault(const Constant(0))(); // Overtime hours
 

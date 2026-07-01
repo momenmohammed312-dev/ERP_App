@@ -51,6 +51,8 @@ import 'package:pos_offline_desktop/core/database/tables/notifications_table.dar
 import 'package:pos_offline_desktop/core/database/tables/invoice_payments_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/damaged_items_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/sales_returns_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/attendance_device_tables.dart';
+import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart';
 import 'customer_status_fix.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
 // import 'package:pos_offline_desktop/core/database/amount_types_fix.dart';
@@ -105,6 +107,10 @@ part 'app_database.g.dart';
     DamagedItems,
     SalesReturns,
     SalesReturnItems,
+    BiometricDevices,
+    StaffBiometricMappings,
+    AttendanceRawEvents,
+    AttendanceSyncLogs,
   ],
   daos: [
     ProductDao,
@@ -128,6 +134,7 @@ part 'app_database.g.dart';
     InvoicePaymentsDao,
     DamagedItemsDao,
     SalesReturnsDao,
+    AttendanceDeviceDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -138,7 +145,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 46;
+  int get schemaVersion => 47;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -198,6 +205,11 @@ class AppDatabase extends _$AppDatabase {
       // 4h. Schema v46 — ensure cash_sessions + damaged_items tables exist
       if (from < 46) {
         await _runV46Migrations(m);
+      }
+
+      // 4i. Schema v47 — attendance device integration
+      if (from < 47) {
+        await _runV47Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -315,6 +327,123 @@ class AppDatabase extends _$AppDatabase {
         ''');
       } catch (e) {
         log('Error creating app_notifications table: $e');
+      }
+
+      // Safety check for biometric attendance tables
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS biometric_devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_code TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            vendor TEXT,
+            model TEXT,
+            connection_type TEXT NOT NULL,
+            ip_address TEXT,
+            port INTEGER,
+            serial_number TEXT,
+            location TEXT,
+            auth_token TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            last_sync_at INTEGER,
+            last_sync_status TEXT,
+            last_sync_error TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          )
+        ''');
+      } catch (e) {
+        log('Error creating biometric_devices table: $e');
+      }
+
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS staff_biometric_mappings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            staff_id TEXT NOT NULL,
+            device_id INTEGER NOT NULL REFERENCES biometric_devices(id),
+            external_user_id TEXT NOT NULL,
+            card_number TEXT,
+            finger_index INTEGER,
+            template_ref TEXT,
+            enrollment_status TEXT NOT NULL,
+            is_primary INTEGER NOT NULL DEFAULT 0,
+            enrolled_at INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          )
+        ''');
+      } catch (e) {
+        log('Error creating staff_biometric_mappings table: $e');
+      }
+
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS attendance_raw_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id INTEGER NOT NULL REFERENCES biometric_devices(id),
+            external_user_id TEXT NOT NULL,
+            event_time INTEGER NOT NULL,
+            event_type TEXT,
+            raw_payload TEXT,
+            sync_batch_id TEXT,
+            dedup_hash TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL,
+            matched_staff_id TEXT,
+            resulting_attendance_id INTEGER,
+            error_message TEXT,
+            created_at INTEGER NOT NULL,
+            processed_at INTEGER
+          )
+        ''');
+      } catch (e) {
+        log('Error creating attendance_raw_events table: $e');
+      }
+
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS attendance_sync_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id INTEGER NOT NULL,
+            sync_batch_id TEXT NOT NULL,
+            started_at INTEGER NOT NULL,
+            finished_at INTEGER,
+            status TEXT NOT NULL,
+            events_fetched INTEGER NOT NULL DEFAULT 0,
+            events_matched INTEGER NOT NULL DEFAULT 0,
+            events_unmatched INTEGER NOT NULL DEFAULT 0,
+            events_duplicate INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT,
+            triggered_by TEXT
+          )
+        ''');
+      } catch (e) {
+        log('Error creating attendance_sync_logs table: $e');
+      }
+
+      // Performance indexes for attendance_raw_events
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_raw_events_status ON attendance_raw_events(status)',
+        );
+      } catch (e) {
+        log('Error creating idx_raw_events_status: $e');
+      }
+
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_raw_events_device_status ON attendance_raw_events(device_id, status)',
+        );
+      } catch (e) {
+        log('Error creating idx_raw_events_device_status: $e');
+      }
+
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_sync_logs_device ON attendance_sync_logs(device_id)',
+        );
+      } catch (e) {
+        log('Error creating idx_sync_logs_device: $e');
       }
 
       // Safety check for critical columns on existing tables
@@ -726,6 +855,89 @@ class AppDatabase extends _$AppDatabase {
     await _logMigrationStep(46, 'ensure_missing_tables', 'completed');
   }
 
+  Future<void> _runV47Migrations(Migrator m) async {
+    await _logMigrationStep(47, 'attendance_devices_integration', 'started');
+
+    try {
+      try {
+        await m.createTable(biometricDevices);
+        log('v47: Created biometric_devices table');
+      } catch (e) {
+        log('v47 warning biometric_devices: $e');
+      }
+
+      try {
+        await m.createTable(staffBiometricMappings);
+        log('v47: Created staff_biometric_mappings table');
+      } catch (e) {
+        log('v47 warning staff_biometric_mappings: $e');
+      }
+
+      try {
+        await m.createTable(attendanceRawEvents);
+        log('v47: Created attendance_raw_events table');
+      } catch (e) {
+        log('v47 warning attendance_raw_events: $e');
+      }
+
+      try {
+        await m.createTable(attendanceSyncLogs);
+        log('v47: Created attendance_sync_logs table');
+      } catch (e) {
+        log('v47 warning attendance_sync_logs: $e');
+      }
+
+      final attendanceColumns = [
+        attendanceTable.source,
+        attendanceTable.sourceDeviceId,
+        attendanceTable.rawEventId,
+        attendanceTable.overrideReason,
+      ];
+
+      for (final col in attendanceColumns) {
+        try {
+          await m.addColumn(attendanceTable, col);
+          log('v47: Added column ${col.name} to attendance_table');
+        } catch (e) {
+          log('v47 warning attendance_table column ${col.name}: $e');
+        }
+      }
+
+      // Add performance indexes for attendance_raw_events
+      try {
+        await m.database.customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_raw_events_status ON attendance_raw_events(status)',
+        );
+        log('v47: Created index idx_raw_events_status');
+      } catch (e) {
+        log('v47 warning idx_raw_events_status: $e');
+      }
+
+      try {
+        await m.database.customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_raw_events_device_status ON attendance_raw_events(device_id, status)',
+        );
+        log('v47: Created index idx_raw_events_device_status');
+      } catch (e) {
+        log('v47 warning idx_raw_events_device_status: $e');
+      }
+
+      try {
+        await m.database.customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_sync_logs_device ON attendance_sync_logs(device_id)',
+        );
+        log('v47: Created index idx_sync_logs_device');
+      } catch (e) {
+        log('v47 warning idx_sync_logs_device: $e');
+      }
+
+      await _logMigrationStep(47, 'attendance_devices_integration', 'completed');
+    } catch (e) {
+      await _logMigrationStep(47, 'attendance_devices_integration', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
   Future<void> _fixPurchaseAmountTypes() async {
     try {
       log(' Fixing amount types in purchases table...');
@@ -829,6 +1041,10 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'invoice_items', 'column': 'discount', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'commission', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'unit_cost_at_time', 'type': 'REAL'},
+      {'table': 'attendance_table', 'column': 'source', 'type': 'TEXT'},
+      {'table': 'attendance_table', 'column': 'source_device_id', 'type': 'INTEGER'},
+      {'table': 'attendance_table', 'column': 'raw_event_id', 'type': 'INTEGER'},
+      {'table': 'attendance_table', 'column': 'override_reason', 'type': 'TEXT'},
     ];
 
     for (final check in columnChecks) {
@@ -856,6 +1072,10 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'invoice_items', 'column': 'discount', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'commission', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'unit_cost_at_time', 'type': 'REAL'},
+      {'table': 'attendance_table', 'column': 'source', 'type': 'TEXT'},
+      {'table': 'attendance_table', 'column': 'source_device_id', 'type': 'INTEGER'},
+      {'table': 'attendance_table', 'column': 'raw_event_id', 'type': 'INTEGER'},
+      {'table': 'attendance_table', 'column': 'override_reason', 'type': 'TEXT'},
     ];
     for (final check in columnChecks) {
       try {

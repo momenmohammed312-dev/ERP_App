@@ -78,25 +78,71 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
   Future<void> addAttendance(AttendanceTableCompanion entry) =>
       into(attendanceTable).insert(entry);
 
+  /// Returns the auto-generated ID after inserting an attendance record
+  Future<int> addAttendanceReturningId(AttendanceTableCompanion entry) =>
+      into(attendanceTable).insert(entry);
+
+  Future<Attendance?> getAttendanceById(int id) =>
+      (select(attendanceTable)..where((a) => a.id.equals(id)))
+          .getSingleOrNull();
+
   Future<void> updateAttendance(Attendance entry) =>
       update(attendanceTable).replace(entry);
 
-  Future<void> checkIn(String staffId, {String? location}) async {
+  Future<void> checkIn(
+    String staffId, {
+    String? location,
+    String source = 'manual',
+    int? sourceDeviceId,
+    int? rawEventId,
+  }) async {
     final now = DateTime.now();
-    await addAttendance(
-      AttendanceTableCompanion.insert(
-        staffId: staffId,
-        date: DateTime(now.year, now.month, now.day),
-        status: 'present',
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+
+    // Check if a record already exists for today
+    final existing = await (select(attendanceTable)
+          ..where((a) => a.staffId.equals(staffId))
+          ..where((a) => a.date.isBetweenValues(today, tomorrow)))
+        .get();
+
+    if (existing.isNotEmpty) {
+      // Update existing record with check-in time
+      final record = existing.first;
+      await updateAttendance(record.copyWith(
         checkInTime: Value(now),
         checkInLocation: Value(location),
-        createdAt: now,
+        source: Value(source),
+        sourceDeviceId: Value(sourceDeviceId),
+        rawEventId: Value(rawEventId),
         updatedAt: now,
-      ),
-    );
+      ));
+    } else {
+      await addAttendance(
+        AttendanceTableCompanion.insert(
+          staffId: staffId,
+          date: today,
+          status: 'present',
+          checkInTime: Value(now),
+          checkInLocation: Value(location),
+          source: Value(source),
+          sourceDeviceId: Value(sourceDeviceId),
+          rawEventId: Value(rawEventId),
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+    }
   }
 
-  Future<void> checkOut(String staffId, {String? location}) async {
+  /// Returns true if checkout was successful, false if no attendance record exists for today
+  Future<bool> checkOut(
+    String staffId, {
+    String? location,
+    String source = 'manual',
+    int? sourceDeviceId,
+    int? rawEventId,
+  }) async {
     final now = DateTime.now();
     // Find today's attendance record
     final today = DateTime(now.year, now.month, now.day);
@@ -108,16 +154,19 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
               ..where((a) => a.date.isBetweenValues(today, tomorrow)))
             .get();
 
-    if (attendanceRecords.isNotEmpty) {
-      final record = attendanceRecords.first;
-      await updateAttendance(
-        record.copyWith(
-          checkOutTime: Value(now),
-          checkOutLocation: Value(location),
-          updatedAt: now,
-        ),
-      );
+    if (attendanceRecords.isEmpty) {
+      return false;
     }
+
+    final record = attendanceRecords.first;
+    await updateAttendance(
+      record.copyWith(
+        checkOutTime: Value(now),
+        checkOutLocation: Value(location),
+        updatedAt: now,
+      ),
+    );
+    return true;
   }
 
   // VACATION MANAGEMENT

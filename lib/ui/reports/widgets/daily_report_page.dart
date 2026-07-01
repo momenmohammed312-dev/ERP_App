@@ -108,6 +108,37 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         expensesByDate[dateStr] = (expensesByDate[dateStr] ?? 0.0) + amount;
       }
 
+      // Load purchases
+      Map<String, double> purchasesByDate = {};
+      try {
+        final purchasesRows = await db
+            .customSelect(
+              '''
+          SELECT DATE(purchase_date) as p_date, SUM(total_amount) as total_purchases
+          FROM purchases
+          WHERE purchase_date >= ? AND purchase_date <= ? AND is_deleted = 0
+          GROUP BY DATE(purchase_date)
+          ''',
+              variables: [
+                drift.Variable.withDateTime(DateTime(_startDate!.year, _startDate!.month, _startDate!.day)),
+                drift.Variable.withDateTime(DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59)),
+              ],
+            )
+            .get();
+
+        for (final row in purchasesRows) {
+          final data = row.data;
+          final dateStr = data['p_date'].toString();
+          if (dateStr.isEmpty) continue;
+          final parsed = DateTime.tryParse(dateStr);
+          if (parsed == null || parsed.year < 2000) continue;
+          final amount = (data['total_purchases'] as num?)?.toDouble() ?? 0.0;
+          purchasesByDate[dateStr] = (purchasesByDate[dateStr] ?? 0.0) + amount;
+        }
+      } catch (e) {
+        AppLogger.e('Failed to load purchases', e);
+      }
+
       // Load sales returns (wrapped in try-catch since table may not exist yet)
       Map<String, double> returnsByDate = {};
       try {
@@ -143,6 +174,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         ...invoicesByDate.keys,
         ...daysByDate.keys,
         ...expensesByDate.keys,
+        ...purchasesByDate.keys,
         ...returnsByDate.keys,
       };
       // فلتر التواريخ غير الصالحة (قبل 2000-01-01)
@@ -160,6 +192,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         final dayInvoices = invoicesByDate[dateStr] ?? [];
         final dayData = daysByDate[dateStr];
         final dailyExpenses = expensesByDate[dateStr] ?? 0.0;
+        final dailyPurchases = purchasesByDate[dateStr] ?? 0.0;
         final dailyReturns = returnsByDate[dateStr] ?? 0.0;
 
         double totalSales = 0.0;
@@ -238,7 +271,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         final surplusDeficit = (hasDayRecord && !dayIsOpen && closingBalance != null)
             ? closingBalance -
                   openingBalance -
-                  cash + dailyExpenses + dailyReturns
+                  cash + dailyExpenses + dailyPurchases + dailyReturns
             : null;
 
         result.add({
@@ -253,6 +286,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
           'cash': cash,
           'credit': credit,
           'expenses': dailyExpenses,
+          'purchases': dailyPurchases,
           'returns': dailyReturns,
           'surplusDeficit': surplusDeficit ?? 0.0,
           'surplusKnown': surplusDeficit != null,
@@ -287,10 +321,12 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                 _buildDetailRow('المبيعات النقدية', '${data['cash']} ج.م', Colors.green),
                 _buildDetailRow('المبيعات الآجلة', '${data['credit']} ج.م', Colors.purple),
                 const Divider(),
+                _buildDetailRow('المشتريات', '${(data['purchases'] as num?)?.toStringAsFixed(2) ?? '0.00'} ج.م', Colors.orange),
                 _buildDetailRow('المصروفات', '${data['expenses']} ج.م', Colors.red),
                 _buildDetailRow('المرتجعات', '${data['returns']} ج.م', Colors.redAccent),
                 const Divider(),
-                _buildDetailRow('صافي الكاش المتوقع', '${(data['cash'] - data['expenses'] - data['returns']).toStringAsFixed(2)} ج.م', Colors.teal),
+                _buildDetailRow('صافي الربح', '${((data['totalSales'] as num).toDouble() - (data['returns'] as num).toDouble() - ((data['purchases'] as num?)?.toDouble() ?? 0.0) - (data['expenses'] as num).toDouble()).toStringAsFixed(2)} ج.م', Colors.blue),
+                _buildDetailRow('صافي الكاش المتوقع', '${(data['cash'] as num).toDouble() - (data['expenses'] as num).toDouble() - ((data['purchases'] as num?)?.toDouble() ?? 0.0) - (data['returns'] as num).toDouble()} ج.م', Colors.teal),
                 if (data['surplusKnown'] == true) ...[
                   _buildDetailRow('العجز / الزيادة', '${data['surplusDeficit']} ج.م', 
                     (data['surplusDeficit'] as num) >= 0 ? Colors.green : Colors.red),
@@ -366,8 +402,12 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
       0.0,
       (sum, d) => sum + ((d['expenses'] as num?)?.toDouble() ?? 0.0),
     );
+    final totalPurchases = _dailyData.fold<double>(
+      0.0,
+      (sum, d) => sum + ((d['purchases'] as num?)?.toDouble() ?? 0.0),
+    );
     final netSales = totalSales - totalReturns;
-    final netProfit = netSales - totalExpenses;
+    final netProfit = netSales - totalPurchases - totalExpenses;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -447,7 +487,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                     ],
                   ),
                   const Gap(12),
-                  // Second row: Returns, Net Sales, Expenses, Net Profit
+                  // Second row: Returns, Net Sales, Purchases, Net Profit
                   Row(
                     children: [
                       Expanded(
@@ -474,12 +514,12 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                       const Gap(12),
                       Expanded(
                         child: _buildSummaryCard(
-                          'إجمالي المصروفات',
-                          totalExpenses.toStringAsFixed(2),
-                          Colors.red,
+                          'إجمالي المشتريات',
+                          totalPurchases.toStringAsFixed(2),
+                          Colors.orange,
                           cardBg,
                           textColor,
-                          onTap: () => _showDrillDown(context, 'expenses', totalExpenses),
+                          onTap: () => _showDrillDown(context, 'purchases', totalPurchases),
                         ),
                       ),
                       const Gap(12),
@@ -491,6 +531,22 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                           cardBg,
                           textColor,
                           onTap: () => _showDrillDown(context, 'netProfit', netProfit),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Gap(12),
+                  // Third row: Expenses (full width)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildSummaryCard(
+                          'إجمالي المصروفات',
+                          totalExpenses.toStringAsFixed(2),
+                          Colors.red,
+                          cardBg,
+                          textColor,
+                          onTap: () => _showDrillDown(context, 'expenses', totalExpenses),
                         ),
                       ),
                     ],
@@ -541,6 +597,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                 DataColumn(label: Text('إجمالي المبيعات')),
                                 DataColumn(label: Text('كاش')),
                                 DataColumn(label: Text('آجل')),
+                                DataColumn(label: Text('المشتريات')),
                                 DataColumn(label: Text('المصروفات')),
                                 DataColumn(label: Text('المرتجعات')),
                                 DataColumn(label: Text('عجز/زيادة')),
@@ -632,6 +689,15 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                           fontWeight: credit > 0
                                               ? FontWeight.bold
                                               : FontWeight.normal,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        (d['purchases'] as num?)?.toStringAsFixed(2) ?? '0.00',
+                                        style: const TextStyle(
+                                          color: Colors.orange,
+                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
                                     ),
@@ -931,12 +997,14 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         for (final d in _dailyData) {
           final sales = (d['totalSales'] as num).toDouble();
           final returns = (d['returns'] as num).toDouble();
+          final purchases = (d['purchases'] as num?)?.toDouble() ?? 0.0;
           final expenses = (d['expenses'] as num).toDouble();
-          final netProfit = sales - returns - expenses;
+          final netProfit = sales - returns - purchases - expenses;
           items.add({
             'date': d['date'],
             'netSales': (sales - returns).toStringAsFixed(2),
             'expenses': expenses.toStringAsFixed(2),
+            'purchases': purchases.toStringAsFixed(2),
             'net': double.parse(netProfit.toStringAsFixed(2)),
           });
         }

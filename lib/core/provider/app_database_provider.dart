@@ -7,6 +7,8 @@ import '../database/app_database.dart';
 import '../services/business_date_service.dart';
 import '../services/invoice_service.dart';
 import '../../services/staff_management_service.dart';
+import '../database/dao/attendance_device_dao.dart';
+import '../../services/attendance/attendance_sync_service.dart';
 
 // ════════════════════════════════════════════════════════════════════════════
 // Singleton provider for AppDatabase
@@ -38,6 +40,17 @@ final staffManagementServiceProvider = Provider<StaffManagementService>((ref) {
 final invoiceServiceProvider = Provider<InvoiceService>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return InvoiceService(db);
+});
+
+final attendanceDeviceDaoProvider = Provider<AttendanceDeviceDao>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return db.attendanceDeviceDao;
+});
+
+final attendanceSyncServiceProvider = Provider<AttendanceSyncService>((ref) {
+  final deviceDao = ref.watch(attendanceDeviceDaoProvider);
+  final db = ref.watch(appDatabaseProvider);
+  return AttendanceSyncService(deviceDao, db.staffManagementDao);
 });
 
 QueryExecutor _openConnection() {

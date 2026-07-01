@@ -1,0 +1,44 @@
+{
+  "version": "2.1.0",
+  "build_number": 2,
+  "release_date": "2026-07-01",
+  "is_critical": false,
+  "min_supported_version": "2.0.0",
+  "changelog": {
+    "ar": [
+      "🎉 إطلاق الإصدار المجاني (Free Version)",
+      "✅ تجربة مجانية لمدة 10 أيام مع كل المميزات",
+      "📊 تحسين مؤشرات الأداء المالي في لوحة التحكم",
+      "💰 إصلاح COGS (تكلفة البضاعة المباعة) في الفواتير",
+      "📈 توحيد صيغة صافي الربح في جميع التقارير",
+      "👥 إضافة شاشة إدارة الموظفين والحضور",
+      "🔄 تحسين النسخ الاحتياطي التلقائي",
+      "🔧 إصلاح مشاكل وأخطاء متعددة"
+    ]
+  },
+  "features": [
+    "cash_sales",
+    "credit_sales",
+    "customers",
+    "suppliers",
+    "purchases",
+    "inventory",
+    "reports",
+    "advanced_reports",
+    "backup",
+    "auto_backup",
+    "staff_management",
+    "attendance",
+    "payroll",
+    "admin_dashboard",
+    "api_access"
+  ],
+  "downloads": {
+    "windows": {
+      "url": "https://github.com/momenmohammed312-dev/pOS-Offline-DesktoP/releases/download/v2.1.0/POS_System_v2.1_Setup.exe",
+      "size": 0,
+      "checksum": ""
+    }
+  },
+  "release_notes_url": ""
+}

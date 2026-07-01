@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظام نقاط البيع الاحترافي | Professional POS System</title>
+  <meta name="description" content="نظام نقاط بيع وإدارة متكامل للشركات الصغيرة والمتوسطة في مصر. يعمل بدون إنترنت، يدعم الفواتير، المخزون، العملاء، الموردين، والمزيد.">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans Arabic', sans-serif;
+      background: #0D1117;
+      color: #E6EDF3;
+      line-height: 1.6;
+    }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+    /* Header */
+    header {
+      padding: 20px 0;
+      border-bottom: 1px solid #30363D;
+    }
+    header .container {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 20px; font-weight: 700; color: #C9A84C;
+    }
+    .logo-icon {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, #1E2A3A, #0D1117);
+      border: 2px solid #C9A84C; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+    .lang-switch { color: #7D8590; font-size: 14px; cursor: pointer; }
+    .lang-switch:hover { color: #C9A84C; }
+
+    /* Hero */
+    .hero {
+      padding: 80px 0 60px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -200px; right: -200px;
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(201,168,76,0.06), transparent);
+      border-radius: 50%;
+    }
+    .hero h1 {
+      font-size: 42px; font-weight: 900;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #E6EDF3, #C9A84C);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 18px; color: #7D8590;
+      max-width: 600px; margin: 0 auto 32px;
+    }
+    .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 32px;
+      border-radius: 8px;
+      font-size: 16px; font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: #C9A84C; color: #0D1117;
+    }
+    .btn-primary:hover { background: #D4B85A; transform: translateY(-1px); }
+    .btn-secondary {
+      border: 1px solid #30363D; color: #E6EDF3;
+    }
+    .btn-secondary:hover { border-color: #C9A84C; color: #C9A84C; }
+    .btn-trial {
+      background: rgba(201,168,76,0.1);
+      border: 1px solid #C9A84C; color: #C9A84C;
+    }
+    .btn-trial:hover { background: rgba(201,168,76,0.2); }
+
+    .trial-key-box {
+      margin-top: 24px;
+      padding: 16px 24px;
+      background: rgba(201,168,76,0.05);
+      border: 1px dashed #30363D;
+      border-radius: 8px;
+      display: inline-flex; align-items: center; gap: 12px;
+      font-size: 14px;
+    }
+    .trial-key-box code {
+      background: #161B22;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #C9A84C;
+      user-select: all;
+    }
+
+    /* Features */
+    .features-section { padding: 60px 0; }
+    .features-section h2 {
+      text-align: center; font-size: 28px; font-weight: 700;
+      margin-bottom: 40px; color: #C9A84C;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .feature-card {
+      background: #161B22;
+      border: 1px solid #30363D;
+      border-radius: 12px;
+      padding: 24px;
+      transition: border-color 0.2s;
+    }
+    .feature-card:hover { border-color: #C9A84C; }
+    .feature-icon { font-size: 28px; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .feature-card p { font-size: 14px; color: #7D8590; }
+
+    /* Screenshot */
+    .screenshot-section { padding: 40px 0 60px; text-align: center; }
+    .screenshot-section h2 {
+      font-size: 28px; font-weight: 700;
+      margin-bottom: 24px; color: #C9A84C;
+    }
+    .screenshot-placeholder {
+      max-width: 800px; margin: 0 auto;
+      background: #161B22;
+      border: 1px solid #30363D;
+      border-radius: 12px;
+      padding: 80px 24px;
+      color: #7D8590;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid #30363D;
+      padding: 32px 0;
+      text-align: center;
+      color: #7D8590;
+      font-size: 14px;
+    }
+    footer a { color: #C9A84C; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 28px; }
+      .hero p { font-size: 16px; }
+      .btn { padding: 12px 20px; font-size: 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="logo">
+      <div class="logo-icon">🛒</div>
+      <span>POS System</span>
+    </div>
+    <div>
+      <span class="lang-switch" onclick="toggleLang()">English</span>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <h1>نظام نقاط البيع وإدارة الشركات</h1>
+    <p>برنامج محاسبي وإداري متكامل للشركات الصغيرة والمتوسطة في مصر. يعمل بدون إنترنت، ويدعم كل ما تحتاجه لإدارة مبيعاتك ومخزونك وعملائك.</p>
+    <div class="hero-buttons">
+      <a href="#" class="btn btn-primary">📥 تحميل آخر إصدار</a>
+      <a href="#" class="btn btn-trial">🎯 تجربة مجانية 10 أيام</a>
+    </div>
+    <div class="trial-key-box">
+      <span>كود التفعيل التجريبي:</span>
+      <code>TRIAL10-XXXX-XXXX-XXXX</code>
+      <span style="font-size:12px;color:#7D8590;">(ظلل وانسخ)</span>
+    </div>
+  </div>
+</section>
+
+<section class="features-section">
+  <div class="container">
+    <h2>المميزات الأساسية</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">💰</div>
+        <h3>فواتير نقدية وآجلة</h3>
+        <p>إصدار فواتير البيع والشراء مع دعم الدفع النقدي والآجل والمقسم.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📦</div>
+        <h3>إدارة المخزون</h3>
+        <p>متابعة المخزون مع إشعارات عند انخفاض الكمية، وإدارة المنتجات.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">👥</div>
+        <h3>العملاء والموردين</h3>
+        <p>قاعدة بيانات للعملاء والموردين مع سجل المعاملات والمبالغ المستحقة.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>التقارير المتقدمة</h3>
+        <p>تقارير مبيعات، مشتريات، أرباح، ومؤشرات أداء مالية شاملة.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">👨‍💼</div>
+        <h3>إدارة الموظفين</h3>
+        <p>إدارة الموظفين، الحضور والانصراف، والمرتبات بشكل متكامل.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔐</div>
+        <h3>نسخ احتياطي تلقائي</h3>
+        <p>نسخ احتياطي تلقائي للبيانات مع إمكانية الاستعادة بضغطة زر.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screenshot-section">
+  <div class="container">
+    <h2>لقطة من البرنامج</h2>
+    <div class="screenshot-placeholder">
+      <p style="font-size:48px;margin-bottom:16px;">🖥️</p>
+      <p>صورة توضيحية للواجهة الرئيسية</p>
+      <p style="font-size:12px;margin-top:8px;">(سيتم إضافة الصورة قريباً)</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>نظام نقاط البيع الاحترافي — Professional POS System</p>
+    <p style="margin-top:8px;">
+      <a href="mailto:support@mo2-systems.com">support@mo2-systems.com</a>
+       · 
+      <a href="#">+20 100 000 0000</a>
+    </p>
+    <p style="margin-top:16px;font-size:12px;">
+      الإصدار 2.1.0 — تم التطوير بواسطة MO2 Systems
+    </p>
+  </div>
+</footer>
+
+<script>
+function toggleLang() {
+  const isArabic = document.documentElement.lang === 'ar';
+  document.documentElement.lang = isArabic ? 'en' : 'ar';
+  document.documentElement.dir = isArabic ? 'ltr' : 'rtl';
+  document.querySelector('.lang-switch').textContent = isArabic ? 'العربية' : 'English';
+}
+</script>
+</body>
+</html>

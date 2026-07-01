@@ -23,7 +23,8 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
   double _totalSales = 0.0;
   double _totalPurchases = 0.0;
   double _totalExpenses = 0.0;
-  double _grossProfit = 0.0;
+  double _totalSalaries = 0.0;
+  double _netProfit = 0.0;
   double _profitMargin = 0.0;
 
   @override
@@ -122,14 +123,16 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
           )
           .get();
 
-      // Get expenses data
+      // Get expenses data (with salary breakout)
       final expensesResult = await db
           .customSelect(
             '''
         SELECT 
           DATE(date) as report_date,
           COUNT(*) as expense_count,
-          SUM(amount) as total_expenses
+          SUM(amount) as total_expenses,
+          SUM(CASE WHEN category = 'salaries' THEN amount ELSE 0 END) as salaries_expenses,
+          SUM(CASE WHEN category != 'salaries' OR category IS NULL THEN amount ELSE 0 END) as other_expenses
         FROM expenses 
         WHERE date >= ? AND date <= ?
         GROUP BY DATE(date)
@@ -160,7 +163,7 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
           'total_purchases': 0.0,
           'cash_purchases': 0.0,
           'credit_purchases': 0.0,
-          'gross_profit': 0.0,
+          'net_profit': 0.0,
           'profit_margin': 0.0,
         };
       }
@@ -195,7 +198,7 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
                 row.readNullable<double>('credit_purchases') ?? 0.0,
             'expense_count': 0,
             'total_expenses': 0.0,
-            'gross_profit': 0.0,
+            'net_profit': 0.0,
             'profit_margin': 0.0,
           };
         }
@@ -225,7 +228,11 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
                 row.readNullable<int>('expense_count') ?? 0,
             'total_expenses':
                 row.readNullable<double>('total_expenses') ?? 0.0,
-            'gross_profit': 0.0,
+            'salaries_expenses':
+                row.readNullable<double>('salaries_expenses') ?? 0.0,
+            'other_expenses':
+                row.readNullable<double>('other_expenses') ?? 0.0,
+            'net_profit': 0.0,
             'profit_margin': 0.0,
           };
         }
@@ -236,12 +243,12 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         final totalSales = data['total_sales'] as double;
         final totalPurchases = data['total_purchases'] as double;
         final totalExpenses = data['total_expenses'] as double;
-        final grossProfit = totalSales - totalPurchases - totalExpenses;
+        final netProfit = totalSales - totalPurchases - totalExpenses;
         final profitMargin = totalSales > 0
-            ? (grossProfit / totalSales) * 100
+            ? (netProfit / totalSales) * 100
             : 0.0;
 
-        data['gross_profit'] = grossProfit;
+        data['net_profit'] = netProfit;
         data['profit_margin'] = profitMargin;
 
         return data;
@@ -267,9 +274,13 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         0.0,
         (sum, item) => sum + (item['total_expenses'] as double),
       );
-      final grossProfit = totalSales - totalPurchases - totalExpenses;
+      final totalSalaries = comparisonData.fold<double>(
+        0.0,
+        (sum, item) => sum + (item['salaries_expenses'] as double? ?? 0.0),
+      );
+      final netProfit = totalSales - totalPurchases - totalExpenses;
       final profitMargin = totalSales > 0
-          ? (grossProfit / totalSales) * 100
+          ? (netProfit / totalSales) * 100
           : 0.0;
 
       setState(() {
@@ -277,7 +288,8 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         _totalSales = totalSales;
         _totalPurchases = totalPurchases;
         _totalExpenses = totalExpenses;
-        _grossProfit = grossProfit;
+        _totalSalaries = totalSalaries;
+        _netProfit = netProfit;
         _profitMargin = profitMargin;
         _isLoading = false;
       });
@@ -447,23 +459,24 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
 
       // Add header
       csvData.add(
-        'التاريخ,إجمالي المبيعات,إجمالي المشتريات,إجمالي المصروفات,صافي الربح,نسبة الربح',
+        'التاريخ,إجمالي المبيعات,إجمالي المشتريات,المرتبات,إجمالي المصروفات,صافي الربح,نسبة الربح',
       );
 
       // Add data rows
       for (final item in _comparisonData) {
         final profitMargin = item['total_sales'] > 0
-            ? ((item['gross_profit'] as double) / item['total_sales'] * 100)
+            ? ((item['net_profit'] as double) / item['total_sales'] * 100)
             : 0.0;
+        final salaries = (item['salaries_expenses'] as double? ?? 0.0);
         csvData.add(
-          '${item['date']},${item['total_sales']},${item['total_purchases']},${item['total_expenses']},${item['gross_profit']},${profitMargin.toStringAsFixed(2)}%',
+          '${item['date']},${item['total_sales']},${item['total_purchases']},$salaries,${item['total_expenses']},${item['net_profit']},${profitMargin.toStringAsFixed(2)}%',
         );
       }
 
       // Add summary
       csvData.add('');
       csvData.add(
-        'الإجمالي,$_totalSales,$_totalPurchases,$_totalExpenses,$_grossProfit,$_profitMargin%',
+        'الإجمالي,$_totalSales,$_totalPurchases,$_totalSalaries,$_totalExpenses,$_netProfit,$_profitMargin%',
       );
 
       // Create download
@@ -626,10 +639,19 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _buildSummaryCard(
+                    'المرتبات',
+                    '${_totalSalaries.toStringAsFixed(2)} ج.م',
+                    Colors.purple,
+                    Icons.people,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildSummaryCard(
                     'صافي الربح',
-                    '${_grossProfit.toStringAsFixed(2)} ج.م',
-                    _grossProfit >= 0 ? Colors.blue : Colors.red,
-                    _grossProfit >= 0 ? Icons.attach_money : Icons.money_off,
+                    '${_netProfit.toStringAsFixed(2)} ج.م',
+                    _netProfit >= 0 ? Colors.blue : Colors.red,
+                    _netProfit >= 0 ? Icons.attach_money : Icons.money_off,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -708,13 +730,14 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
                           DataColumn(label: Text('التاريخ'), numeric: false),
                           DataColumn(label: Text('المبيعات'), numeric: true),
                           DataColumn(label: Text('المشتريات'), numeric: true),
+                          DataColumn(label: Text('المرتبات'), numeric: true),
                           DataColumn(label: Text('المصروفات'), numeric: true),
                           DataColumn(label: Text('صافي الربح'), numeric: true),
                           DataColumn(label: Text('نسبة الربح'), numeric: true),
                           DataColumn(label: Text('الهامش'), numeric: false),
                         ],
                         rows: _comparisonData.map((data) {
-                          final grossProfit = data['gross_profit'] as double;
+                          final netProfit = data['net_profit'] as double;
                           final profitMargin = data['profit_margin'] as double;
 
                           return DataRow(
@@ -747,6 +770,15 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
                               ),
                               DataCell(
                                 Text(
+                                  '${(data['salaries_expenses'] as double? ?? 0.0).toStringAsFixed(2)} ج.م',
+                                  style: const TextStyle(
+                                    color: Colors.purple,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
                                   '${(data['total_expenses'] as double).toStringAsFixed(2)} ج.م',
                                   style: const TextStyle(
                                     color: Colors.redAccent,
@@ -756,9 +788,9 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
                               ),
                               DataCell(
                                 Text(
-                                  '${grossProfit.toStringAsFixed(2)} ج.م',
+                                  '${netProfit.toStringAsFixed(2)} ج.م',
                                   style: TextStyle(
-                                    color: grossProfit >= 0
+                                    color: netProfit >= 0
                                         ? Colors.blue
                                         : Colors.red,
                                     fontWeight: FontWeight.bold,

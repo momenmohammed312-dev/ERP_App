@@ -18742,6 +18742,48 @@ class $AttendanceTableTable extends AttendanceTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sourceDeviceIdMeta = const VerificationMeta(
+    'sourceDeviceId',
+  );
+  @override
+  late final GeneratedColumn<int> sourceDeviceId = GeneratedColumn<int>(
+    'source_device_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _rawEventIdMeta = const VerificationMeta(
+    'rawEventId',
+  );
+  @override
+  late final GeneratedColumn<int> rawEventId = GeneratedColumn<int>(
+    'raw_event_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _overrideReasonMeta = const VerificationMeta(
+    'overrideReason',
+  );
+  @override
+  late final GeneratedColumn<String> overrideReason = GeneratedColumn<String>(
+    'override_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _overtimeHoursMeta = const VerificationMeta(
     'overtimeHours',
   );
@@ -18811,6 +18853,10 @@ class $AttendanceTableTable extends AttendanceTable
     status,
     leaveType,
     notes,
+    source,
+    sourceDeviceId,
+    rawEventId,
+    overrideReason,
     overtimeHours,
     approvedBy,
     approvedAt,
@@ -18913,6 +18959,39 @@ class $AttendanceTableTable extends AttendanceTable
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
       );
     }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    }
+    if (data.containsKey('source_device_id')) {
+      context.handle(
+        _sourceDeviceIdMeta,
+        sourceDeviceId.isAcceptableOrUnknown(
+          data['source_device_id']!,
+          _sourceDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('raw_event_id')) {
+      context.handle(
+        _rawEventIdMeta,
+        rawEventId.isAcceptableOrUnknown(
+          data['raw_event_id']!,
+          _rawEventIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('override_reason')) {
+      context.handle(
+        _overrideReasonMeta,
+        overrideReason.isAcceptableOrUnknown(
+          data['override_reason']!,
+          _overrideReasonMeta,
+        ),
+      );
+    }
     if (data.containsKey('overtime_hours')) {
       context.handle(
         _overtimeHoursMeta,
@@ -19003,6 +19082,22 @@ class $AttendanceTableTable extends AttendanceTable
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       ),
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
+      ),
+      sourceDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}source_device_id'],
+      ),
+      rawEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}raw_event_id'],
+      ),
+      overrideReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}override_reason'],
+      ),
       overtimeHours: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}overtime_hours'],
@@ -19044,6 +19139,10 @@ class Attendance extends DataClass implements Insertable<Attendance> {
   final String status;
   final String? leaveType;
   final String? notes;
+  final String? source;
+  final int? sourceDeviceId;
+  final int? rawEventId;
+  final String? overrideReason;
   final double overtimeHours;
   final String? approvedBy;
   final DateTime? approvedAt;
@@ -19061,6 +19160,10 @@ class Attendance extends DataClass implements Insertable<Attendance> {
     required this.status,
     this.leaveType,
     this.notes,
+    this.source,
+    this.sourceDeviceId,
+    this.rawEventId,
+    this.overrideReason,
     required this.overtimeHours,
     this.approvedBy,
     this.approvedAt,
@@ -19094,6 +19197,18 @@ class Attendance extends DataClass implements Insertable<Attendance> {
     }
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
+    }
+    if (!nullToAbsent || source != null) {
+      map['source'] = Variable<String>(source);
+    }
+    if (!nullToAbsent || sourceDeviceId != null) {
+      map['source_device_id'] = Variable<int>(sourceDeviceId);
+    }
+    if (!nullToAbsent || rawEventId != null) {
+      map['raw_event_id'] = Variable<int>(rawEventId);
+    }
+    if (!nullToAbsent || overrideReason != null) {
+      map['override_reason'] = Variable<String>(overrideReason);
     }
     map['overtime_hours'] = Variable<double>(overtimeHours);
     if (!nullToAbsent || approvedBy != null) {
@@ -19134,6 +19249,18 @@ class Attendance extends DataClass implements Insertable<Attendance> {
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
+      source: source == null && nullToAbsent
+          ? const Value.absent()
+          : Value(source),
+      sourceDeviceId: sourceDeviceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceDeviceId),
+      rawEventId: rawEventId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rawEventId),
+      overrideReason: overrideReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(overrideReason),
       overtimeHours: Value(overtimeHours),
       approvedBy: approvedBy == null && nullToAbsent
           ? const Value.absent()
@@ -19163,6 +19290,10 @@ class Attendance extends DataClass implements Insertable<Attendance> {
       status: serializer.fromJson<String>(json['status']),
       leaveType: serializer.fromJson<String?>(json['leaveType']),
       notes: serializer.fromJson<String?>(json['notes']),
+      source: serializer.fromJson<String?>(json['source']),
+      sourceDeviceId: serializer.fromJson<int?>(json['sourceDeviceId']),
+      rawEventId: serializer.fromJson<int?>(json['rawEventId']),
+      overrideReason: serializer.fromJson<String?>(json['overrideReason']),
       overtimeHours: serializer.fromJson<double>(json['overtimeHours']),
       approvedBy: serializer.fromJson<String?>(json['approvedBy']),
       approvedAt: serializer.fromJson<DateTime?>(json['approvedAt']),
@@ -19185,6 +19316,10 @@ class Attendance extends DataClass implements Insertable<Attendance> {
       'status': serializer.toJson<String>(status),
       'leaveType': serializer.toJson<String?>(leaveType),
       'notes': serializer.toJson<String?>(notes),
+      'source': serializer.toJson<String?>(source),
+      'sourceDeviceId': serializer.toJson<int?>(sourceDeviceId),
+      'rawEventId': serializer.toJson<int?>(rawEventId),
+      'overrideReason': serializer.toJson<String?>(overrideReason),
       'overtimeHours': serializer.toJson<double>(overtimeHours),
       'approvedBy': serializer.toJson<String?>(approvedBy),
       'approvedAt': serializer.toJson<DateTime?>(approvedAt),
@@ -19205,6 +19340,10 @@ class Attendance extends DataClass implements Insertable<Attendance> {
     String? status,
     Value<String?> leaveType = const Value.absent(),
     Value<String?> notes = const Value.absent(),
+    Value<String?> source = const Value.absent(),
+    Value<int?> sourceDeviceId = const Value.absent(),
+    Value<int?> rawEventId = const Value.absent(),
+    Value<String?> overrideReason = const Value.absent(),
     double? overtimeHours,
     Value<String?> approvedBy = const Value.absent(),
     Value<DateTime?> approvedAt = const Value.absent(),
@@ -19226,6 +19365,14 @@ class Attendance extends DataClass implements Insertable<Attendance> {
     status: status ?? this.status,
     leaveType: leaveType.present ? leaveType.value : this.leaveType,
     notes: notes.present ? notes.value : this.notes,
+    source: source.present ? source.value : this.source,
+    sourceDeviceId: sourceDeviceId.present
+        ? sourceDeviceId.value
+        : this.sourceDeviceId,
+    rawEventId: rawEventId.present ? rawEventId.value : this.rawEventId,
+    overrideReason: overrideReason.present
+        ? overrideReason.value
+        : this.overrideReason,
     overtimeHours: overtimeHours ?? this.overtimeHours,
     approvedBy: approvedBy.present ? approvedBy.value : this.approvedBy,
     approvedAt: approvedAt.present ? approvedAt.value : this.approvedAt,
@@ -19255,6 +19402,16 @@ class Attendance extends DataClass implements Insertable<Attendance> {
       status: data.status.present ? data.status.value : this.status,
       leaveType: data.leaveType.present ? data.leaveType.value : this.leaveType,
       notes: data.notes.present ? data.notes.value : this.notes,
+      source: data.source.present ? data.source.value : this.source,
+      sourceDeviceId: data.sourceDeviceId.present
+          ? data.sourceDeviceId.value
+          : this.sourceDeviceId,
+      rawEventId: data.rawEventId.present
+          ? data.rawEventId.value
+          : this.rawEventId,
+      overrideReason: data.overrideReason.present
+          ? data.overrideReason.value
+          : this.overrideReason,
       overtimeHours: data.overtimeHours.present
           ? data.overtimeHours.value
           : this.overtimeHours,
@@ -19283,6 +19440,10 @@ class Attendance extends DataClass implements Insertable<Attendance> {
           ..write('status: $status, ')
           ..write('leaveType: $leaveType, ')
           ..write('notes: $notes, ')
+          ..write('source: $source, ')
+          ..write('sourceDeviceId: $sourceDeviceId, ')
+          ..write('rawEventId: $rawEventId, ')
+          ..write('overrideReason: $overrideReason, ')
           ..write('overtimeHours: $overtimeHours, ')
           ..write('approvedBy: $approvedBy, ')
           ..write('approvedAt: $approvedAt, ')
@@ -19305,6 +19466,10 @@ class Attendance extends DataClass implements Insertable<Attendance> {
     status,
     leaveType,
     notes,
+    source,
+    sourceDeviceId,
+    rawEventId,
+    overrideReason,
     overtimeHours,
     approvedBy,
     approvedAt,
@@ -19326,6 +19491,10 @@ class Attendance extends DataClass implements Insertable<Attendance> {
           other.status == this.status &&
           other.leaveType == this.leaveType &&
           other.notes == this.notes &&
+          other.source == this.source &&
+          other.sourceDeviceId == this.sourceDeviceId &&
+          other.rawEventId == this.rawEventId &&
+          other.overrideReason == this.overrideReason &&
           other.overtimeHours == this.overtimeHours &&
           other.approvedBy == this.approvedBy &&
           other.approvedAt == this.approvedAt &&
@@ -19345,6 +19514,10 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
   final Value<String> status;
   final Value<String?> leaveType;
   final Value<String?> notes;
+  final Value<String?> source;
+  final Value<int?> sourceDeviceId;
+  final Value<int?> rawEventId;
+  final Value<String?> overrideReason;
   final Value<double> overtimeHours;
   final Value<String?> approvedBy;
   final Value<DateTime?> approvedAt;
@@ -19362,6 +19535,10 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     this.status = const Value.absent(),
     this.leaveType = const Value.absent(),
     this.notes = const Value.absent(),
+    this.source = const Value.absent(),
+    this.sourceDeviceId = const Value.absent(),
+    this.rawEventId = const Value.absent(),
+    this.overrideReason = const Value.absent(),
     this.overtimeHours = const Value.absent(),
     this.approvedBy = const Value.absent(),
     this.approvedAt = const Value.absent(),
@@ -19380,6 +19557,10 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     required String status,
     this.leaveType = const Value.absent(),
     this.notes = const Value.absent(),
+    this.source = const Value.absent(),
+    this.sourceDeviceId = const Value.absent(),
+    this.rawEventId = const Value.absent(),
+    this.overrideReason = const Value.absent(),
     this.overtimeHours = const Value.absent(),
     this.approvedBy = const Value.absent(),
     this.approvedAt = const Value.absent(),
@@ -19402,6 +19583,10 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     Expression<String>? status,
     Expression<String>? leaveType,
     Expression<String>? notes,
+    Expression<String>? source,
+    Expression<int>? sourceDeviceId,
+    Expression<int>? rawEventId,
+    Expression<String>? overrideReason,
     Expression<double>? overtimeHours,
     Expression<String>? approvedBy,
     Expression<DateTime>? approvedAt,
@@ -19420,6 +19605,10 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
       if (status != null) 'status': status,
       if (leaveType != null) 'leave_type': leaveType,
       if (notes != null) 'notes': notes,
+      if (source != null) 'source': source,
+      if (sourceDeviceId != null) 'source_device_id': sourceDeviceId,
+      if (rawEventId != null) 'raw_event_id': rawEventId,
+      if (overrideReason != null) 'override_reason': overrideReason,
       if (overtimeHours != null) 'overtime_hours': overtimeHours,
       if (approvedBy != null) 'approved_by': approvedBy,
       if (approvedAt != null) 'approved_at': approvedAt,
@@ -19440,6 +19629,10 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     Value<String>? status,
     Value<String?>? leaveType,
     Value<String?>? notes,
+    Value<String?>? source,
+    Value<int?>? sourceDeviceId,
+    Value<int?>? rawEventId,
+    Value<String?>? overrideReason,
     Value<double>? overtimeHours,
     Value<String?>? approvedBy,
     Value<DateTime?>? approvedAt,
@@ -19458,6 +19651,10 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
       status: status ?? this.status,
       leaveType: leaveType ?? this.leaveType,
       notes: notes ?? this.notes,
+      source: source ?? this.source,
+      sourceDeviceId: sourceDeviceId ?? this.sourceDeviceId,
+      rawEventId: rawEventId ?? this.rawEventId,
+      overrideReason: overrideReason ?? this.overrideReason,
       overtimeHours: overtimeHours ?? this.overtimeHours,
       approvedBy: approvedBy ?? this.approvedBy,
       approvedAt: approvedAt ?? this.approvedAt,
@@ -19502,6 +19699,18 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (sourceDeviceId.present) {
+      map['source_device_id'] = Variable<int>(sourceDeviceId.value);
+    }
+    if (rawEventId.present) {
+      map['raw_event_id'] = Variable<int>(rawEventId.value);
+    }
+    if (overrideReason.present) {
+      map['override_reason'] = Variable<String>(overrideReason.value);
+    }
     if (overtimeHours.present) {
       map['overtime_hours'] = Variable<double>(overtimeHours.value);
     }
@@ -19534,6 +19743,10 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
           ..write('status: $status, ')
           ..write('leaveType: $leaveType, ')
           ..write('notes: $notes, ')
+          ..write('source: $source, ')
+          ..write('sourceDeviceId: $sourceDeviceId, ')
+          ..write('rawEventId: $rawEventId, ')
+          ..write('overrideReason: $overrideReason, ')
           ..write('overtimeHours: $overtimeHours, ')
           ..write('approvedBy: $approvedBy, ')
           ..write('approvedAt: $approvedAt, ')
@@ -34424,6 +34637,3263 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
   }
 }
 
+class $BiometricDevicesTable extends BiometricDevices
+    with TableInfo<$BiometricDevicesTable, BiometricDevice> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BiometricDevicesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _deviceCodeMeta = const VerificationMeta(
+    'deviceCode',
+  );
+  @override
+  late final GeneratedColumn<String> deviceCode = GeneratedColumn<String>(
+    'device_code',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _vendorMeta = const VerificationMeta('vendor');
+  @override
+  late final GeneratedColumn<String> vendor = GeneratedColumn<String>(
+    'vendor',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _modelMeta = const VerificationMeta('model');
+  @override
+  late final GeneratedColumn<String> model = GeneratedColumn<String>(
+    'model',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _connectionTypeMeta = const VerificationMeta(
+    'connectionType',
+  );
+  @override
+  late final GeneratedColumn<String> connectionType = GeneratedColumn<String>(
+    'connection_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ipAddressMeta = const VerificationMeta(
+    'ipAddress',
+  );
+  @override
+  late final GeneratedColumn<String> ipAddress = GeneratedColumn<String>(
+    'ip_address',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _portMeta = const VerificationMeta('port');
+  @override
+  late final GeneratedColumn<int> port = GeneratedColumn<int>(
+    'port',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _serialNumberMeta = const VerificationMeta(
+    'serialNumber',
+  );
+  @override
+  late final GeneratedColumn<String> serialNumber = GeneratedColumn<String>(
+    'serial_number',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _locationMeta = const VerificationMeta(
+    'location',
+  );
+  @override
+  late final GeneratedColumn<String> location = GeneratedColumn<String>(
+    'location',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _authTokenMeta = const VerificationMeta(
+    'authToken',
+  );
+  @override
+  late final GeneratedColumn<String> authToken = GeneratedColumn<String>(
+    'auth_token',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _lastSyncAtMeta = const VerificationMeta(
+    'lastSyncAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastSyncAt = GeneratedColumn<DateTime>(
+    'last_sync_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSyncStatusMeta = const VerificationMeta(
+    'lastSyncStatus',
+  );
+  @override
+  late final GeneratedColumn<String> lastSyncStatus = GeneratedColumn<String>(
+    'last_sync_status',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSyncErrorMeta = const VerificationMeta(
+    'lastSyncError',
+  );
+  @override
+  late final GeneratedColumn<String> lastSyncError = GeneratedColumn<String>(
+    'last_sync_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    deviceCode,
+    name,
+    vendor,
+    model,
+    connectionType,
+    ipAddress,
+    port,
+    serialNumber,
+    location,
+    authToken,
+    isActive,
+    lastSyncAt,
+    lastSyncStatus,
+    lastSyncError,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'biometric_devices';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BiometricDevice> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('device_code')) {
+      context.handle(
+        _deviceCodeMeta,
+        deviceCode.isAcceptableOrUnknown(data['device_code']!, _deviceCodeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceCodeMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('vendor')) {
+      context.handle(
+        _vendorMeta,
+        vendor.isAcceptableOrUnknown(data['vendor']!, _vendorMeta),
+      );
+    }
+    if (data.containsKey('model')) {
+      context.handle(
+        _modelMeta,
+        model.isAcceptableOrUnknown(data['model']!, _modelMeta),
+      );
+    }
+    if (data.containsKey('connection_type')) {
+      context.handle(
+        _connectionTypeMeta,
+        connectionType.isAcceptableOrUnknown(
+          data['connection_type']!,
+          _connectionTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_connectionTypeMeta);
+    }
+    if (data.containsKey('ip_address')) {
+      context.handle(
+        _ipAddressMeta,
+        ipAddress.isAcceptableOrUnknown(data['ip_address']!, _ipAddressMeta),
+      );
+    }
+    if (data.containsKey('port')) {
+      context.handle(
+        _portMeta,
+        port.isAcceptableOrUnknown(data['port']!, _portMeta),
+      );
+    }
+    if (data.containsKey('serial_number')) {
+      context.handle(
+        _serialNumberMeta,
+        serialNumber.isAcceptableOrUnknown(
+          data['serial_number']!,
+          _serialNumberMeta,
+        ),
+      );
+    }
+    if (data.containsKey('location')) {
+      context.handle(
+        _locationMeta,
+        location.isAcceptableOrUnknown(data['location']!, _locationMeta),
+      );
+    }
+    if (data.containsKey('auth_token')) {
+      context.handle(
+        _authTokenMeta,
+        authToken.isAcceptableOrUnknown(data['auth_token']!, _authTokenMeta),
+      );
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    if (data.containsKey('last_sync_at')) {
+      context.handle(
+        _lastSyncAtMeta,
+        lastSyncAt.isAcceptableOrUnknown(
+          data['last_sync_at']!,
+          _lastSyncAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_sync_status')) {
+      context.handle(
+        _lastSyncStatusMeta,
+        lastSyncStatus.isAcceptableOrUnknown(
+          data['last_sync_status']!,
+          _lastSyncStatusMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_sync_error')) {
+      context.handle(
+        _lastSyncErrorMeta,
+        lastSyncError.isAcceptableOrUnknown(
+          data['last_sync_error']!,
+          _lastSyncErrorMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BiometricDevice map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BiometricDevice(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      deviceCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_code'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      vendor: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}vendor'],
+      ),
+      model: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}model'],
+      ),
+      connectionType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}connection_type'],
+      )!,
+      ipAddress: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ip_address'],
+      ),
+      port: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}port'],
+      ),
+      serialNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}serial_number'],
+      ),
+      location: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}location'],
+      ),
+      authToken: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}auth_token'],
+      ),
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+      lastSyncAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_sync_at'],
+      ),
+      lastSyncStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_sync_status'],
+      ),
+      lastSyncError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_sync_error'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $BiometricDevicesTable createAlias(String alias) {
+    return $BiometricDevicesTable(attachedDatabase, alias);
+  }
+}
+
+class BiometricDevice extends DataClass implements Insertable<BiometricDevice> {
+  final int id;
+  final String deviceCode;
+  final String name;
+  final String? vendor;
+  final String? model;
+  final String connectionType;
+  final String? ipAddress;
+  final int? port;
+  final String? serialNumber;
+  final String? location;
+  final String? authToken;
+  final bool isActive;
+  final DateTime? lastSyncAt;
+  final String? lastSyncStatus;
+  final String? lastSyncError;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const BiometricDevice({
+    required this.id,
+    required this.deviceCode,
+    required this.name,
+    this.vendor,
+    this.model,
+    required this.connectionType,
+    this.ipAddress,
+    this.port,
+    this.serialNumber,
+    this.location,
+    this.authToken,
+    required this.isActive,
+    this.lastSyncAt,
+    this.lastSyncStatus,
+    this.lastSyncError,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['device_code'] = Variable<String>(deviceCode);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || vendor != null) {
+      map['vendor'] = Variable<String>(vendor);
+    }
+    if (!nullToAbsent || model != null) {
+      map['model'] = Variable<String>(model);
+    }
+    map['connection_type'] = Variable<String>(connectionType);
+    if (!nullToAbsent || ipAddress != null) {
+      map['ip_address'] = Variable<String>(ipAddress);
+    }
+    if (!nullToAbsent || port != null) {
+      map['port'] = Variable<int>(port);
+    }
+    if (!nullToAbsent || serialNumber != null) {
+      map['serial_number'] = Variable<String>(serialNumber);
+    }
+    if (!nullToAbsent || location != null) {
+      map['location'] = Variable<String>(location);
+    }
+    if (!nullToAbsent || authToken != null) {
+      map['auth_token'] = Variable<String>(authToken);
+    }
+    map['is_active'] = Variable<bool>(isActive);
+    if (!nullToAbsent || lastSyncAt != null) {
+      map['last_sync_at'] = Variable<DateTime>(lastSyncAt);
+    }
+    if (!nullToAbsent || lastSyncStatus != null) {
+      map['last_sync_status'] = Variable<String>(lastSyncStatus);
+    }
+    if (!nullToAbsent || lastSyncError != null) {
+      map['last_sync_error'] = Variable<String>(lastSyncError);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  BiometricDevicesCompanion toCompanion(bool nullToAbsent) {
+    return BiometricDevicesCompanion(
+      id: Value(id),
+      deviceCode: Value(deviceCode),
+      name: Value(name),
+      vendor: vendor == null && nullToAbsent
+          ? const Value.absent()
+          : Value(vendor),
+      model: model == null && nullToAbsent
+          ? const Value.absent()
+          : Value(model),
+      connectionType: Value(connectionType),
+      ipAddress: ipAddress == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ipAddress),
+      port: port == null && nullToAbsent ? const Value.absent() : Value(port),
+      serialNumber: serialNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serialNumber),
+      location: location == null && nullToAbsent
+          ? const Value.absent()
+          : Value(location),
+      authToken: authToken == null && nullToAbsent
+          ? const Value.absent()
+          : Value(authToken),
+      isActive: Value(isActive),
+      lastSyncAt: lastSyncAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncAt),
+      lastSyncStatus: lastSyncStatus == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncStatus),
+      lastSyncError: lastSyncError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncError),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory BiometricDevice.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BiometricDevice(
+      id: serializer.fromJson<int>(json['id']),
+      deviceCode: serializer.fromJson<String>(json['deviceCode']),
+      name: serializer.fromJson<String>(json['name']),
+      vendor: serializer.fromJson<String?>(json['vendor']),
+      model: serializer.fromJson<String?>(json['model']),
+      connectionType: serializer.fromJson<String>(json['connectionType']),
+      ipAddress: serializer.fromJson<String?>(json['ipAddress']),
+      port: serializer.fromJson<int?>(json['port']),
+      serialNumber: serializer.fromJson<String?>(json['serialNumber']),
+      location: serializer.fromJson<String?>(json['location']),
+      authToken: serializer.fromJson<String?>(json['authToken']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+      lastSyncAt: serializer.fromJson<DateTime?>(json['lastSyncAt']),
+      lastSyncStatus: serializer.fromJson<String?>(json['lastSyncStatus']),
+      lastSyncError: serializer.fromJson<String?>(json['lastSyncError']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'deviceCode': serializer.toJson<String>(deviceCode),
+      'name': serializer.toJson<String>(name),
+      'vendor': serializer.toJson<String?>(vendor),
+      'model': serializer.toJson<String?>(model),
+      'connectionType': serializer.toJson<String>(connectionType),
+      'ipAddress': serializer.toJson<String?>(ipAddress),
+      'port': serializer.toJson<int?>(port),
+      'serialNumber': serializer.toJson<String?>(serialNumber),
+      'location': serializer.toJson<String?>(location),
+      'authToken': serializer.toJson<String?>(authToken),
+      'isActive': serializer.toJson<bool>(isActive),
+      'lastSyncAt': serializer.toJson<DateTime?>(lastSyncAt),
+      'lastSyncStatus': serializer.toJson<String?>(lastSyncStatus),
+      'lastSyncError': serializer.toJson<String?>(lastSyncError),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  BiometricDevice copyWith({
+    int? id,
+    String? deviceCode,
+    String? name,
+    Value<String?> vendor = const Value.absent(),
+    Value<String?> model = const Value.absent(),
+    String? connectionType,
+    Value<String?> ipAddress = const Value.absent(),
+    Value<int?> port = const Value.absent(),
+    Value<String?> serialNumber = const Value.absent(),
+    Value<String?> location = const Value.absent(),
+    Value<String?> authToken = const Value.absent(),
+    bool? isActive,
+    Value<DateTime?> lastSyncAt = const Value.absent(),
+    Value<String?> lastSyncStatus = const Value.absent(),
+    Value<String?> lastSyncError = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => BiometricDevice(
+    id: id ?? this.id,
+    deviceCode: deviceCode ?? this.deviceCode,
+    name: name ?? this.name,
+    vendor: vendor.present ? vendor.value : this.vendor,
+    model: model.present ? model.value : this.model,
+    connectionType: connectionType ?? this.connectionType,
+    ipAddress: ipAddress.present ? ipAddress.value : this.ipAddress,
+    port: port.present ? port.value : this.port,
+    serialNumber: serialNumber.present ? serialNumber.value : this.serialNumber,
+    location: location.present ? location.value : this.location,
+    authToken: authToken.present ? authToken.value : this.authToken,
+    isActive: isActive ?? this.isActive,
+    lastSyncAt: lastSyncAt.present ? lastSyncAt.value : this.lastSyncAt,
+    lastSyncStatus: lastSyncStatus.present
+        ? lastSyncStatus.value
+        : this.lastSyncStatus,
+    lastSyncError: lastSyncError.present
+        ? lastSyncError.value
+        : this.lastSyncError,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  BiometricDevice copyWithCompanion(BiometricDevicesCompanion data) {
+    return BiometricDevice(
+      id: data.id.present ? data.id.value : this.id,
+      deviceCode: data.deviceCode.present
+          ? data.deviceCode.value
+          : this.deviceCode,
+      name: data.name.present ? data.name.value : this.name,
+      vendor: data.vendor.present ? data.vendor.value : this.vendor,
+      model: data.model.present ? data.model.value : this.model,
+      connectionType: data.connectionType.present
+          ? data.connectionType.value
+          : this.connectionType,
+      ipAddress: data.ipAddress.present ? data.ipAddress.value : this.ipAddress,
+      port: data.port.present ? data.port.value : this.port,
+      serialNumber: data.serialNumber.present
+          ? data.serialNumber.value
+          : this.serialNumber,
+      location: data.location.present ? data.location.value : this.location,
+      authToken: data.authToken.present ? data.authToken.value : this.authToken,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      lastSyncAt: data.lastSyncAt.present
+          ? data.lastSyncAt.value
+          : this.lastSyncAt,
+      lastSyncStatus: data.lastSyncStatus.present
+          ? data.lastSyncStatus.value
+          : this.lastSyncStatus,
+      lastSyncError: data.lastSyncError.present
+          ? data.lastSyncError.value
+          : this.lastSyncError,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BiometricDevice(')
+          ..write('id: $id, ')
+          ..write('deviceCode: $deviceCode, ')
+          ..write('name: $name, ')
+          ..write('vendor: $vendor, ')
+          ..write('model: $model, ')
+          ..write('connectionType: $connectionType, ')
+          ..write('ipAddress: $ipAddress, ')
+          ..write('port: $port, ')
+          ..write('serialNumber: $serialNumber, ')
+          ..write('location: $location, ')
+          ..write('authToken: $authToken, ')
+          ..write('isActive: $isActive, ')
+          ..write('lastSyncAt: $lastSyncAt, ')
+          ..write('lastSyncStatus: $lastSyncStatus, ')
+          ..write('lastSyncError: $lastSyncError, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    deviceCode,
+    name,
+    vendor,
+    model,
+    connectionType,
+    ipAddress,
+    port,
+    serialNumber,
+    location,
+    authToken,
+    isActive,
+    lastSyncAt,
+    lastSyncStatus,
+    lastSyncError,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BiometricDevice &&
+          other.id == this.id &&
+          other.deviceCode == this.deviceCode &&
+          other.name == this.name &&
+          other.vendor == this.vendor &&
+          other.model == this.model &&
+          other.connectionType == this.connectionType &&
+          other.ipAddress == this.ipAddress &&
+          other.port == this.port &&
+          other.serialNumber == this.serialNumber &&
+          other.location == this.location &&
+          other.authToken == this.authToken &&
+          other.isActive == this.isActive &&
+          other.lastSyncAt == this.lastSyncAt &&
+          other.lastSyncStatus == this.lastSyncStatus &&
+          other.lastSyncError == this.lastSyncError &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class BiometricDevicesCompanion extends UpdateCompanion<BiometricDevice> {
+  final Value<int> id;
+  final Value<String> deviceCode;
+  final Value<String> name;
+  final Value<String?> vendor;
+  final Value<String?> model;
+  final Value<String> connectionType;
+  final Value<String?> ipAddress;
+  final Value<int?> port;
+  final Value<String?> serialNumber;
+  final Value<String?> location;
+  final Value<String?> authToken;
+  final Value<bool> isActive;
+  final Value<DateTime?> lastSyncAt;
+  final Value<String?> lastSyncStatus;
+  final Value<String?> lastSyncError;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const BiometricDevicesCompanion({
+    this.id = const Value.absent(),
+    this.deviceCode = const Value.absent(),
+    this.name = const Value.absent(),
+    this.vendor = const Value.absent(),
+    this.model = const Value.absent(),
+    this.connectionType = const Value.absent(),
+    this.ipAddress = const Value.absent(),
+    this.port = const Value.absent(),
+    this.serialNumber = const Value.absent(),
+    this.location = const Value.absent(),
+    this.authToken = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.lastSyncAt = const Value.absent(),
+    this.lastSyncStatus = const Value.absent(),
+    this.lastSyncError = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  BiometricDevicesCompanion.insert({
+    this.id = const Value.absent(),
+    required String deviceCode,
+    required String name,
+    this.vendor = const Value.absent(),
+    this.model = const Value.absent(),
+    required String connectionType,
+    this.ipAddress = const Value.absent(),
+    this.port = const Value.absent(),
+    this.serialNumber = const Value.absent(),
+    this.location = const Value.absent(),
+    this.authToken = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.lastSyncAt = const Value.absent(),
+    this.lastSyncStatus = const Value.absent(),
+    this.lastSyncError = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+  }) : deviceCode = Value(deviceCode),
+       name = Value(name),
+       connectionType = Value(connectionType),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<BiometricDevice> custom({
+    Expression<int>? id,
+    Expression<String>? deviceCode,
+    Expression<String>? name,
+    Expression<String>? vendor,
+    Expression<String>? model,
+    Expression<String>? connectionType,
+    Expression<String>? ipAddress,
+    Expression<int>? port,
+    Expression<String>? serialNumber,
+    Expression<String>? location,
+    Expression<String>? authToken,
+    Expression<bool>? isActive,
+    Expression<DateTime>? lastSyncAt,
+    Expression<String>? lastSyncStatus,
+    Expression<String>? lastSyncError,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (deviceCode != null) 'device_code': deviceCode,
+      if (name != null) 'name': name,
+      if (vendor != null) 'vendor': vendor,
+      if (model != null) 'model': model,
+      if (connectionType != null) 'connection_type': connectionType,
+      if (ipAddress != null) 'ip_address': ipAddress,
+      if (port != null) 'port': port,
+      if (serialNumber != null) 'serial_number': serialNumber,
+      if (location != null) 'location': location,
+      if (authToken != null) 'auth_token': authToken,
+      if (isActive != null) 'is_active': isActive,
+      if (lastSyncAt != null) 'last_sync_at': lastSyncAt,
+      if (lastSyncStatus != null) 'last_sync_status': lastSyncStatus,
+      if (lastSyncError != null) 'last_sync_error': lastSyncError,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  BiometricDevicesCompanion copyWith({
+    Value<int>? id,
+    Value<String>? deviceCode,
+    Value<String>? name,
+    Value<String?>? vendor,
+    Value<String?>? model,
+    Value<String>? connectionType,
+    Value<String?>? ipAddress,
+    Value<int?>? port,
+    Value<String?>? serialNumber,
+    Value<String?>? location,
+    Value<String?>? authToken,
+    Value<bool>? isActive,
+    Value<DateTime?>? lastSyncAt,
+    Value<String?>? lastSyncStatus,
+    Value<String?>? lastSyncError,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return BiometricDevicesCompanion(
+      id: id ?? this.id,
+      deviceCode: deviceCode ?? this.deviceCode,
+      name: name ?? this.name,
+      vendor: vendor ?? this.vendor,
+      model: model ?? this.model,
+      connectionType: connectionType ?? this.connectionType,
+      ipAddress: ipAddress ?? this.ipAddress,
+      port: port ?? this.port,
+      serialNumber: serialNumber ?? this.serialNumber,
+      location: location ?? this.location,
+      authToken: authToken ?? this.authToken,
+      isActive: isActive ?? this.isActive,
+      lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+      lastSyncStatus: lastSyncStatus ?? this.lastSyncStatus,
+      lastSyncError: lastSyncError ?? this.lastSyncError,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (deviceCode.present) {
+      map['device_code'] = Variable<String>(deviceCode.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (vendor.present) {
+      map['vendor'] = Variable<String>(vendor.value);
+    }
+    if (model.present) {
+      map['model'] = Variable<String>(model.value);
+    }
+    if (connectionType.present) {
+      map['connection_type'] = Variable<String>(connectionType.value);
+    }
+    if (ipAddress.present) {
+      map['ip_address'] = Variable<String>(ipAddress.value);
+    }
+    if (port.present) {
+      map['port'] = Variable<int>(port.value);
+    }
+    if (serialNumber.present) {
+      map['serial_number'] = Variable<String>(serialNumber.value);
+    }
+    if (location.present) {
+      map['location'] = Variable<String>(location.value);
+    }
+    if (authToken.present) {
+      map['auth_token'] = Variable<String>(authToken.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (lastSyncAt.present) {
+      map['last_sync_at'] = Variable<DateTime>(lastSyncAt.value);
+    }
+    if (lastSyncStatus.present) {
+      map['last_sync_status'] = Variable<String>(lastSyncStatus.value);
+    }
+    if (lastSyncError.present) {
+      map['last_sync_error'] = Variable<String>(lastSyncError.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BiometricDevicesCompanion(')
+          ..write('id: $id, ')
+          ..write('deviceCode: $deviceCode, ')
+          ..write('name: $name, ')
+          ..write('vendor: $vendor, ')
+          ..write('model: $model, ')
+          ..write('connectionType: $connectionType, ')
+          ..write('ipAddress: $ipAddress, ')
+          ..write('port: $port, ')
+          ..write('serialNumber: $serialNumber, ')
+          ..write('location: $location, ')
+          ..write('authToken: $authToken, ')
+          ..write('isActive: $isActive, ')
+          ..write('lastSyncAt: $lastSyncAt, ')
+          ..write('lastSyncStatus: $lastSyncStatus, ')
+          ..write('lastSyncError: $lastSyncError, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $StaffBiometricMappingsTable extends StaffBiometricMappings
+    with TableInfo<$StaffBiometricMappingsTable, StaffBiometricMapping> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StaffBiometricMappingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _staffIdMeta = const VerificationMeta(
+    'staffId',
+  );
+  @override
+  late final GeneratedColumn<String> staffId = GeneratedColumn<String>(
+    'staff_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<int> deviceId = GeneratedColumn<int>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _externalUserIdMeta = const VerificationMeta(
+    'externalUserId',
+  );
+  @override
+  late final GeneratedColumn<String> externalUserId = GeneratedColumn<String>(
+    'external_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _cardNumberMeta = const VerificationMeta(
+    'cardNumber',
+  );
+  @override
+  late final GeneratedColumn<String> cardNumber = GeneratedColumn<String>(
+    'card_number',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _fingerIndexMeta = const VerificationMeta(
+    'fingerIndex',
+  );
+  @override
+  late final GeneratedColumn<int> fingerIndex = GeneratedColumn<int>(
+    'finger_index',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _templateRefMeta = const VerificationMeta(
+    'templateRef',
+  );
+  @override
+  late final GeneratedColumn<String> templateRef = GeneratedColumn<String>(
+    'template_ref',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _enrollmentStatusMeta = const VerificationMeta(
+    'enrollmentStatus',
+  );
+  @override
+  late final GeneratedColumn<String> enrollmentStatus = GeneratedColumn<String>(
+    'enrollment_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isPrimaryMeta = const VerificationMeta(
+    'isPrimary',
+  );
+  @override
+  late final GeneratedColumn<bool> isPrimary = GeneratedColumn<bool>(
+    'is_primary',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_primary" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _enrolledAtMeta = const VerificationMeta(
+    'enrolledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> enrolledAt = GeneratedColumn<DateTime>(
+    'enrolled_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    staffId,
+    deviceId,
+    externalUserId,
+    cardNumber,
+    fingerIndex,
+    templateRef,
+    enrollmentStatus,
+    isPrimary,
+    enrolledAt,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'staff_biometric_mappings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StaffBiometricMapping> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('staff_id')) {
+      context.handle(
+        _staffIdMeta,
+        staffId.isAcceptableOrUnknown(data['staff_id']!, _staffIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_staffIdMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('external_user_id')) {
+      context.handle(
+        _externalUserIdMeta,
+        externalUserId.isAcceptableOrUnknown(
+          data['external_user_id']!,
+          _externalUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_externalUserIdMeta);
+    }
+    if (data.containsKey('card_number')) {
+      context.handle(
+        _cardNumberMeta,
+        cardNumber.isAcceptableOrUnknown(data['card_number']!, _cardNumberMeta),
+      );
+    }
+    if (data.containsKey('finger_index')) {
+      context.handle(
+        _fingerIndexMeta,
+        fingerIndex.isAcceptableOrUnknown(
+          data['finger_index']!,
+          _fingerIndexMeta,
+        ),
+      );
+    }
+    if (data.containsKey('template_ref')) {
+      context.handle(
+        _templateRefMeta,
+        templateRef.isAcceptableOrUnknown(
+          data['template_ref']!,
+          _templateRefMeta,
+        ),
+      );
+    }
+    if (data.containsKey('enrollment_status')) {
+      context.handle(
+        _enrollmentStatusMeta,
+        enrollmentStatus.isAcceptableOrUnknown(
+          data['enrollment_status']!,
+          _enrollmentStatusMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_enrollmentStatusMeta);
+    }
+    if (data.containsKey('is_primary')) {
+      context.handle(
+        _isPrimaryMeta,
+        isPrimary.isAcceptableOrUnknown(data['is_primary']!, _isPrimaryMeta),
+      );
+    }
+    if (data.containsKey('enrolled_at')) {
+      context.handle(
+        _enrolledAtMeta,
+        enrolledAt.isAcceptableOrUnknown(data['enrolled_at']!, _enrolledAtMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  StaffBiometricMapping map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StaffBiometricMapping(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      staffId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}staff_id'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}device_id'],
+      )!,
+      externalUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_user_id'],
+      )!,
+      cardNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}card_number'],
+      ),
+      fingerIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}finger_index'],
+      ),
+      templateRef: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}template_ref'],
+      ),
+      enrollmentStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}enrollment_status'],
+      )!,
+      isPrimary: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_primary'],
+      )!,
+      enrolledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}enrolled_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $StaffBiometricMappingsTable createAlias(String alias) {
+    return $StaffBiometricMappingsTable(attachedDatabase, alias);
+  }
+}
+
+class StaffBiometricMapping extends DataClass
+    implements Insertable<StaffBiometricMapping> {
+  final int id;
+  final String staffId;
+  final int deviceId;
+  final String externalUserId;
+  final String? cardNumber;
+  final int? fingerIndex;
+  final String? templateRef;
+  final String enrollmentStatus;
+  final bool isPrimary;
+  final DateTime? enrolledAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const StaffBiometricMapping({
+    required this.id,
+    required this.staffId,
+    required this.deviceId,
+    required this.externalUserId,
+    this.cardNumber,
+    this.fingerIndex,
+    this.templateRef,
+    required this.enrollmentStatus,
+    required this.isPrimary,
+    this.enrolledAt,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['staff_id'] = Variable<String>(staffId);
+    map['device_id'] = Variable<int>(deviceId);
+    map['external_user_id'] = Variable<String>(externalUserId);
+    if (!nullToAbsent || cardNumber != null) {
+      map['card_number'] = Variable<String>(cardNumber);
+    }
+    if (!nullToAbsent || fingerIndex != null) {
+      map['finger_index'] = Variable<int>(fingerIndex);
+    }
+    if (!nullToAbsent || templateRef != null) {
+      map['template_ref'] = Variable<String>(templateRef);
+    }
+    map['enrollment_status'] = Variable<String>(enrollmentStatus);
+    map['is_primary'] = Variable<bool>(isPrimary);
+    if (!nullToAbsent || enrolledAt != null) {
+      map['enrolled_at'] = Variable<DateTime>(enrolledAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  StaffBiometricMappingsCompanion toCompanion(bool nullToAbsent) {
+    return StaffBiometricMappingsCompanion(
+      id: Value(id),
+      staffId: Value(staffId),
+      deviceId: Value(deviceId),
+      externalUserId: Value(externalUserId),
+      cardNumber: cardNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cardNumber),
+      fingerIndex: fingerIndex == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fingerIndex),
+      templateRef: templateRef == null && nullToAbsent
+          ? const Value.absent()
+          : Value(templateRef),
+      enrollmentStatus: Value(enrollmentStatus),
+      isPrimary: Value(isPrimary),
+      enrolledAt: enrolledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(enrolledAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory StaffBiometricMapping.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StaffBiometricMapping(
+      id: serializer.fromJson<int>(json['id']),
+      staffId: serializer.fromJson<String>(json['staffId']),
+      deviceId: serializer.fromJson<int>(json['deviceId']),
+      externalUserId: serializer.fromJson<String>(json['externalUserId']),
+      cardNumber: serializer.fromJson<String?>(json['cardNumber']),
+      fingerIndex: serializer.fromJson<int?>(json['fingerIndex']),
+      templateRef: serializer.fromJson<String?>(json['templateRef']),
+      enrollmentStatus: serializer.fromJson<String>(json['enrollmentStatus']),
+      isPrimary: serializer.fromJson<bool>(json['isPrimary']),
+      enrolledAt: serializer.fromJson<DateTime?>(json['enrolledAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'staffId': serializer.toJson<String>(staffId),
+      'deviceId': serializer.toJson<int>(deviceId),
+      'externalUserId': serializer.toJson<String>(externalUserId),
+      'cardNumber': serializer.toJson<String?>(cardNumber),
+      'fingerIndex': serializer.toJson<int?>(fingerIndex),
+      'templateRef': serializer.toJson<String?>(templateRef),
+      'enrollmentStatus': serializer.toJson<String>(enrollmentStatus),
+      'isPrimary': serializer.toJson<bool>(isPrimary),
+      'enrolledAt': serializer.toJson<DateTime?>(enrolledAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  StaffBiometricMapping copyWith({
+    int? id,
+    String? staffId,
+    int? deviceId,
+    String? externalUserId,
+    Value<String?> cardNumber = const Value.absent(),
+    Value<int?> fingerIndex = const Value.absent(),
+    Value<String?> templateRef = const Value.absent(),
+    String? enrollmentStatus,
+    bool? isPrimary,
+    Value<DateTime?> enrolledAt = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => StaffBiometricMapping(
+    id: id ?? this.id,
+    staffId: staffId ?? this.staffId,
+    deviceId: deviceId ?? this.deviceId,
+    externalUserId: externalUserId ?? this.externalUserId,
+    cardNumber: cardNumber.present ? cardNumber.value : this.cardNumber,
+    fingerIndex: fingerIndex.present ? fingerIndex.value : this.fingerIndex,
+    templateRef: templateRef.present ? templateRef.value : this.templateRef,
+    enrollmentStatus: enrollmentStatus ?? this.enrollmentStatus,
+    isPrimary: isPrimary ?? this.isPrimary,
+    enrolledAt: enrolledAt.present ? enrolledAt.value : this.enrolledAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  StaffBiometricMapping copyWithCompanion(
+    StaffBiometricMappingsCompanion data,
+  ) {
+    return StaffBiometricMapping(
+      id: data.id.present ? data.id.value : this.id,
+      staffId: data.staffId.present ? data.staffId.value : this.staffId,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      externalUserId: data.externalUserId.present
+          ? data.externalUserId.value
+          : this.externalUserId,
+      cardNumber: data.cardNumber.present
+          ? data.cardNumber.value
+          : this.cardNumber,
+      fingerIndex: data.fingerIndex.present
+          ? data.fingerIndex.value
+          : this.fingerIndex,
+      templateRef: data.templateRef.present
+          ? data.templateRef.value
+          : this.templateRef,
+      enrollmentStatus: data.enrollmentStatus.present
+          ? data.enrollmentStatus.value
+          : this.enrollmentStatus,
+      isPrimary: data.isPrimary.present ? data.isPrimary.value : this.isPrimary,
+      enrolledAt: data.enrolledAt.present
+          ? data.enrolledAt.value
+          : this.enrolledAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StaffBiometricMapping(')
+          ..write('id: $id, ')
+          ..write('staffId: $staffId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('externalUserId: $externalUserId, ')
+          ..write('cardNumber: $cardNumber, ')
+          ..write('fingerIndex: $fingerIndex, ')
+          ..write('templateRef: $templateRef, ')
+          ..write('enrollmentStatus: $enrollmentStatus, ')
+          ..write('isPrimary: $isPrimary, ')
+          ..write('enrolledAt: $enrolledAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    staffId,
+    deviceId,
+    externalUserId,
+    cardNumber,
+    fingerIndex,
+    templateRef,
+    enrollmentStatus,
+    isPrimary,
+    enrolledAt,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StaffBiometricMapping &&
+          other.id == this.id &&
+          other.staffId == this.staffId &&
+          other.deviceId == this.deviceId &&
+          other.externalUserId == this.externalUserId &&
+          other.cardNumber == this.cardNumber &&
+          other.fingerIndex == this.fingerIndex &&
+          other.templateRef == this.templateRef &&
+          other.enrollmentStatus == this.enrollmentStatus &&
+          other.isPrimary == this.isPrimary &&
+          other.enrolledAt == this.enrolledAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class StaffBiometricMappingsCompanion
+    extends UpdateCompanion<StaffBiometricMapping> {
+  final Value<int> id;
+  final Value<String> staffId;
+  final Value<int> deviceId;
+  final Value<String> externalUserId;
+  final Value<String?> cardNumber;
+  final Value<int?> fingerIndex;
+  final Value<String?> templateRef;
+  final Value<String> enrollmentStatus;
+  final Value<bool> isPrimary;
+  final Value<DateTime?> enrolledAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const StaffBiometricMappingsCompanion({
+    this.id = const Value.absent(),
+    this.staffId = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.externalUserId = const Value.absent(),
+    this.cardNumber = const Value.absent(),
+    this.fingerIndex = const Value.absent(),
+    this.templateRef = const Value.absent(),
+    this.enrollmentStatus = const Value.absent(),
+    this.isPrimary = const Value.absent(),
+    this.enrolledAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  StaffBiometricMappingsCompanion.insert({
+    this.id = const Value.absent(),
+    required String staffId,
+    required int deviceId,
+    required String externalUserId,
+    this.cardNumber = const Value.absent(),
+    this.fingerIndex = const Value.absent(),
+    this.templateRef = const Value.absent(),
+    required String enrollmentStatus,
+    this.isPrimary = const Value.absent(),
+    this.enrolledAt = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+  }) : staffId = Value(staffId),
+       deviceId = Value(deviceId),
+       externalUserId = Value(externalUserId),
+       enrollmentStatus = Value(enrollmentStatus),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<StaffBiometricMapping> custom({
+    Expression<int>? id,
+    Expression<String>? staffId,
+    Expression<int>? deviceId,
+    Expression<String>? externalUserId,
+    Expression<String>? cardNumber,
+    Expression<int>? fingerIndex,
+    Expression<String>? templateRef,
+    Expression<String>? enrollmentStatus,
+    Expression<bool>? isPrimary,
+    Expression<DateTime>? enrolledAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (staffId != null) 'staff_id': staffId,
+      if (deviceId != null) 'device_id': deviceId,
+      if (externalUserId != null) 'external_user_id': externalUserId,
+      if (cardNumber != null) 'card_number': cardNumber,
+      if (fingerIndex != null) 'finger_index': fingerIndex,
+      if (templateRef != null) 'template_ref': templateRef,
+      if (enrollmentStatus != null) 'enrollment_status': enrollmentStatus,
+      if (isPrimary != null) 'is_primary': isPrimary,
+      if (enrolledAt != null) 'enrolled_at': enrolledAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  StaffBiometricMappingsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? staffId,
+    Value<int>? deviceId,
+    Value<String>? externalUserId,
+    Value<String?>? cardNumber,
+    Value<int?>? fingerIndex,
+    Value<String?>? templateRef,
+    Value<String>? enrollmentStatus,
+    Value<bool>? isPrimary,
+    Value<DateTime?>? enrolledAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return StaffBiometricMappingsCompanion(
+      id: id ?? this.id,
+      staffId: staffId ?? this.staffId,
+      deviceId: deviceId ?? this.deviceId,
+      externalUserId: externalUserId ?? this.externalUserId,
+      cardNumber: cardNumber ?? this.cardNumber,
+      fingerIndex: fingerIndex ?? this.fingerIndex,
+      templateRef: templateRef ?? this.templateRef,
+      enrollmentStatus: enrollmentStatus ?? this.enrollmentStatus,
+      isPrimary: isPrimary ?? this.isPrimary,
+      enrolledAt: enrolledAt ?? this.enrolledAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (staffId.present) {
+      map['staff_id'] = Variable<String>(staffId.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<int>(deviceId.value);
+    }
+    if (externalUserId.present) {
+      map['external_user_id'] = Variable<String>(externalUserId.value);
+    }
+    if (cardNumber.present) {
+      map['card_number'] = Variable<String>(cardNumber.value);
+    }
+    if (fingerIndex.present) {
+      map['finger_index'] = Variable<int>(fingerIndex.value);
+    }
+    if (templateRef.present) {
+      map['template_ref'] = Variable<String>(templateRef.value);
+    }
+    if (enrollmentStatus.present) {
+      map['enrollment_status'] = Variable<String>(enrollmentStatus.value);
+    }
+    if (isPrimary.present) {
+      map['is_primary'] = Variable<bool>(isPrimary.value);
+    }
+    if (enrolledAt.present) {
+      map['enrolled_at'] = Variable<DateTime>(enrolledAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StaffBiometricMappingsCompanion(')
+          ..write('id: $id, ')
+          ..write('staffId: $staffId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('externalUserId: $externalUserId, ')
+          ..write('cardNumber: $cardNumber, ')
+          ..write('fingerIndex: $fingerIndex, ')
+          ..write('templateRef: $templateRef, ')
+          ..write('enrollmentStatus: $enrollmentStatus, ')
+          ..write('isPrimary: $isPrimary, ')
+          ..write('enrolledAt: $enrolledAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AttendanceRawEventsTable extends AttendanceRawEvents
+    with TableInfo<$AttendanceRawEventsTable, AttendanceRawEvent> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AttendanceRawEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<int> deviceId = GeneratedColumn<int>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _externalUserIdMeta = const VerificationMeta(
+    'externalUserId',
+  );
+  @override
+  late final GeneratedColumn<String> externalUserId = GeneratedColumn<String>(
+    'external_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventTimeMeta = const VerificationMeta(
+    'eventTime',
+  );
+  @override
+  late final GeneratedColumn<DateTime> eventTime = GeneratedColumn<DateTime>(
+    'event_time',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventTypeMeta = const VerificationMeta(
+    'eventType',
+  );
+  @override
+  late final GeneratedColumn<String> eventType = GeneratedColumn<String>(
+    'event_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _rawPayloadMeta = const VerificationMeta(
+    'rawPayload',
+  );
+  @override
+  late final GeneratedColumn<String> rawPayload = GeneratedColumn<String>(
+    'raw_payload',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _syncBatchIdMeta = const VerificationMeta(
+    'syncBatchId',
+  );
+  @override
+  late final GeneratedColumn<String> syncBatchId = GeneratedColumn<String>(
+    'sync_batch_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _dedupHashMeta = const VerificationMeta(
+    'dedupHash',
+  );
+  @override
+  late final GeneratedColumn<String> dedupHash = GeneratedColumn<String>(
+    'dedup_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _matchedStaffIdMeta = const VerificationMeta(
+    'matchedStaffId',
+  );
+  @override
+  late final GeneratedColumn<String> matchedStaffId = GeneratedColumn<String>(
+    'matched_staff_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _resultingAttendanceIdMeta =
+      const VerificationMeta('resultingAttendanceId');
+  @override
+  late final GeneratedColumn<int> resultingAttendanceId = GeneratedColumn<int>(
+    'resulting_attendance_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _errorMessageMeta = const VerificationMeta(
+    'errorMessage',
+  );
+  @override
+  late final GeneratedColumn<String> errorMessage = GeneratedColumn<String>(
+    'error_message',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _processedAtMeta = const VerificationMeta(
+    'processedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> processedAt = GeneratedColumn<DateTime>(
+    'processed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    deviceId,
+    externalUserId,
+    eventTime,
+    eventType,
+    rawPayload,
+    syncBatchId,
+    dedupHash,
+    status,
+    matchedStaffId,
+    resultingAttendanceId,
+    errorMessage,
+    createdAt,
+    processedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'attendance_raw_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AttendanceRawEvent> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('external_user_id')) {
+      context.handle(
+        _externalUserIdMeta,
+        externalUserId.isAcceptableOrUnknown(
+          data['external_user_id']!,
+          _externalUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_externalUserIdMeta);
+    }
+    if (data.containsKey('event_time')) {
+      context.handle(
+        _eventTimeMeta,
+        eventTime.isAcceptableOrUnknown(data['event_time']!, _eventTimeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventTimeMeta);
+    }
+    if (data.containsKey('event_type')) {
+      context.handle(
+        _eventTypeMeta,
+        eventType.isAcceptableOrUnknown(data['event_type']!, _eventTypeMeta),
+      );
+    }
+    if (data.containsKey('raw_payload')) {
+      context.handle(
+        _rawPayloadMeta,
+        rawPayload.isAcceptableOrUnknown(data['raw_payload']!, _rawPayloadMeta),
+      );
+    }
+    if (data.containsKey('sync_batch_id')) {
+      context.handle(
+        _syncBatchIdMeta,
+        syncBatchId.isAcceptableOrUnknown(
+          data['sync_batch_id']!,
+          _syncBatchIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dedup_hash')) {
+      context.handle(
+        _dedupHashMeta,
+        dedupHash.isAcceptableOrUnknown(data['dedup_hash']!, _dedupHashMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dedupHashMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('matched_staff_id')) {
+      context.handle(
+        _matchedStaffIdMeta,
+        matchedStaffId.isAcceptableOrUnknown(
+          data['matched_staff_id']!,
+          _matchedStaffIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('resulting_attendance_id')) {
+      context.handle(
+        _resultingAttendanceIdMeta,
+        resultingAttendanceId.isAcceptableOrUnknown(
+          data['resulting_attendance_id']!,
+          _resultingAttendanceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('error_message')) {
+      context.handle(
+        _errorMessageMeta,
+        errorMessage.isAcceptableOrUnknown(
+          data['error_message']!,
+          _errorMessageMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('processed_at')) {
+      context.handle(
+        _processedAtMeta,
+        processedAt.isAcceptableOrUnknown(
+          data['processed_at']!,
+          _processedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AttendanceRawEvent map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AttendanceRawEvent(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}device_id'],
+      )!,
+      externalUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_user_id'],
+      )!,
+      eventTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}event_time'],
+      )!,
+      eventType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_type'],
+      ),
+      rawPayload: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}raw_payload'],
+      ),
+      syncBatchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_batch_id'],
+      ),
+      dedupHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dedup_hash'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      matchedStaffId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}matched_staff_id'],
+      ),
+      resultingAttendanceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}resulting_attendance_id'],
+      ),
+      errorMessage: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error_message'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      processedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}processed_at'],
+      ),
+    );
+  }
+
+  @override
+  $AttendanceRawEventsTable createAlias(String alias) {
+    return $AttendanceRawEventsTable(attachedDatabase, alias);
+  }
+}
+
+class AttendanceRawEvent extends DataClass
+    implements Insertable<AttendanceRawEvent> {
+  final int id;
+  final int deviceId;
+  final String externalUserId;
+  final DateTime eventTime;
+  final String? eventType;
+  final String? rawPayload;
+  final String? syncBatchId;
+  final String dedupHash;
+  final String status;
+  final String? matchedStaffId;
+  final int? resultingAttendanceId;
+  final String? errorMessage;
+  final DateTime createdAt;
+  final DateTime? processedAt;
+  const AttendanceRawEvent({
+    required this.id,
+    required this.deviceId,
+    required this.externalUserId,
+    required this.eventTime,
+    this.eventType,
+    this.rawPayload,
+    this.syncBatchId,
+    required this.dedupHash,
+    required this.status,
+    this.matchedStaffId,
+    this.resultingAttendanceId,
+    this.errorMessage,
+    required this.createdAt,
+    this.processedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['device_id'] = Variable<int>(deviceId);
+    map['external_user_id'] = Variable<String>(externalUserId);
+    map['event_time'] = Variable<DateTime>(eventTime);
+    if (!nullToAbsent || eventType != null) {
+      map['event_type'] = Variable<String>(eventType);
+    }
+    if (!nullToAbsent || rawPayload != null) {
+      map['raw_payload'] = Variable<String>(rawPayload);
+    }
+    if (!nullToAbsent || syncBatchId != null) {
+      map['sync_batch_id'] = Variable<String>(syncBatchId);
+    }
+    map['dedup_hash'] = Variable<String>(dedupHash);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || matchedStaffId != null) {
+      map['matched_staff_id'] = Variable<String>(matchedStaffId);
+    }
+    if (!nullToAbsent || resultingAttendanceId != null) {
+      map['resulting_attendance_id'] = Variable<int>(resultingAttendanceId);
+    }
+    if (!nullToAbsent || errorMessage != null) {
+      map['error_message'] = Variable<String>(errorMessage);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || processedAt != null) {
+      map['processed_at'] = Variable<DateTime>(processedAt);
+    }
+    return map;
+  }
+
+  AttendanceRawEventsCompanion toCompanion(bool nullToAbsent) {
+    return AttendanceRawEventsCompanion(
+      id: Value(id),
+      deviceId: Value(deviceId),
+      externalUserId: Value(externalUserId),
+      eventTime: Value(eventTime),
+      eventType: eventType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(eventType),
+      rawPayload: rawPayload == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rawPayload),
+      syncBatchId: syncBatchId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncBatchId),
+      dedupHash: Value(dedupHash),
+      status: Value(status),
+      matchedStaffId: matchedStaffId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(matchedStaffId),
+      resultingAttendanceId: resultingAttendanceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(resultingAttendanceId),
+      errorMessage: errorMessage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorMessage),
+      createdAt: Value(createdAt),
+      processedAt: processedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(processedAt),
+    );
+  }
+
+  factory AttendanceRawEvent.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AttendanceRawEvent(
+      id: serializer.fromJson<int>(json['id']),
+      deviceId: serializer.fromJson<int>(json['deviceId']),
+      externalUserId: serializer.fromJson<String>(json['externalUserId']),
+      eventTime: serializer.fromJson<DateTime>(json['eventTime']),
+      eventType: serializer.fromJson<String?>(json['eventType']),
+      rawPayload: serializer.fromJson<String?>(json['rawPayload']),
+      syncBatchId: serializer.fromJson<String?>(json['syncBatchId']),
+      dedupHash: serializer.fromJson<String>(json['dedupHash']),
+      status: serializer.fromJson<String>(json['status']),
+      matchedStaffId: serializer.fromJson<String?>(json['matchedStaffId']),
+      resultingAttendanceId: serializer.fromJson<int?>(
+        json['resultingAttendanceId'],
+      ),
+      errorMessage: serializer.fromJson<String?>(json['errorMessage']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      processedAt: serializer.fromJson<DateTime?>(json['processedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'deviceId': serializer.toJson<int>(deviceId),
+      'externalUserId': serializer.toJson<String>(externalUserId),
+      'eventTime': serializer.toJson<DateTime>(eventTime),
+      'eventType': serializer.toJson<String?>(eventType),
+      'rawPayload': serializer.toJson<String?>(rawPayload),
+      'syncBatchId': serializer.toJson<String?>(syncBatchId),
+      'dedupHash': serializer.toJson<String>(dedupHash),
+      'status': serializer.toJson<String>(status),
+      'matchedStaffId': serializer.toJson<String?>(matchedStaffId),
+      'resultingAttendanceId': serializer.toJson<int?>(resultingAttendanceId),
+      'errorMessage': serializer.toJson<String?>(errorMessage),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'processedAt': serializer.toJson<DateTime?>(processedAt),
+    };
+  }
+
+  AttendanceRawEvent copyWith({
+    int? id,
+    int? deviceId,
+    String? externalUserId,
+    DateTime? eventTime,
+    Value<String?> eventType = const Value.absent(),
+    Value<String?> rawPayload = const Value.absent(),
+    Value<String?> syncBatchId = const Value.absent(),
+    String? dedupHash,
+    String? status,
+    Value<String?> matchedStaffId = const Value.absent(),
+    Value<int?> resultingAttendanceId = const Value.absent(),
+    Value<String?> errorMessage = const Value.absent(),
+    DateTime? createdAt,
+    Value<DateTime?> processedAt = const Value.absent(),
+  }) => AttendanceRawEvent(
+    id: id ?? this.id,
+    deviceId: deviceId ?? this.deviceId,
+    externalUserId: externalUserId ?? this.externalUserId,
+    eventTime: eventTime ?? this.eventTime,
+    eventType: eventType.present ? eventType.value : this.eventType,
+    rawPayload: rawPayload.present ? rawPayload.value : this.rawPayload,
+    syncBatchId: syncBatchId.present ? syncBatchId.value : this.syncBatchId,
+    dedupHash: dedupHash ?? this.dedupHash,
+    status: status ?? this.status,
+    matchedStaffId: matchedStaffId.present
+        ? matchedStaffId.value
+        : this.matchedStaffId,
+    resultingAttendanceId: resultingAttendanceId.present
+        ? resultingAttendanceId.value
+        : this.resultingAttendanceId,
+    errorMessage: errorMessage.present ? errorMessage.value : this.errorMessage,
+    createdAt: createdAt ?? this.createdAt,
+    processedAt: processedAt.present ? processedAt.value : this.processedAt,
+  );
+  AttendanceRawEvent copyWithCompanion(AttendanceRawEventsCompanion data) {
+    return AttendanceRawEvent(
+      id: data.id.present ? data.id.value : this.id,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      externalUserId: data.externalUserId.present
+          ? data.externalUserId.value
+          : this.externalUserId,
+      eventTime: data.eventTime.present ? data.eventTime.value : this.eventTime,
+      eventType: data.eventType.present ? data.eventType.value : this.eventType,
+      rawPayload: data.rawPayload.present
+          ? data.rawPayload.value
+          : this.rawPayload,
+      syncBatchId: data.syncBatchId.present
+          ? data.syncBatchId.value
+          : this.syncBatchId,
+      dedupHash: data.dedupHash.present ? data.dedupHash.value : this.dedupHash,
+      status: data.status.present ? data.status.value : this.status,
+      matchedStaffId: data.matchedStaffId.present
+          ? data.matchedStaffId.value
+          : this.matchedStaffId,
+      resultingAttendanceId: data.resultingAttendanceId.present
+          ? data.resultingAttendanceId.value
+          : this.resultingAttendanceId,
+      errorMessage: data.errorMessage.present
+          ? data.errorMessage.value
+          : this.errorMessage,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      processedAt: data.processedAt.present
+          ? data.processedAt.value
+          : this.processedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttendanceRawEvent(')
+          ..write('id: $id, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('externalUserId: $externalUserId, ')
+          ..write('eventTime: $eventTime, ')
+          ..write('eventType: $eventType, ')
+          ..write('rawPayload: $rawPayload, ')
+          ..write('syncBatchId: $syncBatchId, ')
+          ..write('dedupHash: $dedupHash, ')
+          ..write('status: $status, ')
+          ..write('matchedStaffId: $matchedStaffId, ')
+          ..write('resultingAttendanceId: $resultingAttendanceId, ')
+          ..write('errorMessage: $errorMessage, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('processedAt: $processedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    deviceId,
+    externalUserId,
+    eventTime,
+    eventType,
+    rawPayload,
+    syncBatchId,
+    dedupHash,
+    status,
+    matchedStaffId,
+    resultingAttendanceId,
+    errorMessage,
+    createdAt,
+    processedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AttendanceRawEvent &&
+          other.id == this.id &&
+          other.deviceId == this.deviceId &&
+          other.externalUserId == this.externalUserId &&
+          other.eventTime == this.eventTime &&
+          other.eventType == this.eventType &&
+          other.rawPayload == this.rawPayload &&
+          other.syncBatchId == this.syncBatchId &&
+          other.dedupHash == this.dedupHash &&
+          other.status == this.status &&
+          other.matchedStaffId == this.matchedStaffId &&
+          other.resultingAttendanceId == this.resultingAttendanceId &&
+          other.errorMessage == this.errorMessage &&
+          other.createdAt == this.createdAt &&
+          other.processedAt == this.processedAt);
+}
+
+class AttendanceRawEventsCompanion extends UpdateCompanion<AttendanceRawEvent> {
+  final Value<int> id;
+  final Value<int> deviceId;
+  final Value<String> externalUserId;
+  final Value<DateTime> eventTime;
+  final Value<String?> eventType;
+  final Value<String?> rawPayload;
+  final Value<String?> syncBatchId;
+  final Value<String> dedupHash;
+  final Value<String> status;
+  final Value<String?> matchedStaffId;
+  final Value<int?> resultingAttendanceId;
+  final Value<String?> errorMessage;
+  final Value<DateTime> createdAt;
+  final Value<DateTime?> processedAt;
+  const AttendanceRawEventsCompanion({
+    this.id = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.externalUserId = const Value.absent(),
+    this.eventTime = const Value.absent(),
+    this.eventType = const Value.absent(),
+    this.rawPayload = const Value.absent(),
+    this.syncBatchId = const Value.absent(),
+    this.dedupHash = const Value.absent(),
+    this.status = const Value.absent(),
+    this.matchedStaffId = const Value.absent(),
+    this.resultingAttendanceId = const Value.absent(),
+    this.errorMessage = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.processedAt = const Value.absent(),
+  });
+  AttendanceRawEventsCompanion.insert({
+    this.id = const Value.absent(),
+    required int deviceId,
+    required String externalUserId,
+    required DateTime eventTime,
+    this.eventType = const Value.absent(),
+    this.rawPayload = const Value.absent(),
+    this.syncBatchId = const Value.absent(),
+    required String dedupHash,
+    required String status,
+    this.matchedStaffId = const Value.absent(),
+    this.resultingAttendanceId = const Value.absent(),
+    this.errorMessage = const Value.absent(),
+    required DateTime createdAt,
+    this.processedAt = const Value.absent(),
+  }) : deviceId = Value(deviceId),
+       externalUserId = Value(externalUserId),
+       eventTime = Value(eventTime),
+       dedupHash = Value(dedupHash),
+       status = Value(status),
+       createdAt = Value(createdAt);
+  static Insertable<AttendanceRawEvent> custom({
+    Expression<int>? id,
+    Expression<int>? deviceId,
+    Expression<String>? externalUserId,
+    Expression<DateTime>? eventTime,
+    Expression<String>? eventType,
+    Expression<String>? rawPayload,
+    Expression<String>? syncBatchId,
+    Expression<String>? dedupHash,
+    Expression<String>? status,
+    Expression<String>? matchedStaffId,
+    Expression<int>? resultingAttendanceId,
+    Expression<String>? errorMessage,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? processedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (deviceId != null) 'device_id': deviceId,
+      if (externalUserId != null) 'external_user_id': externalUserId,
+      if (eventTime != null) 'event_time': eventTime,
+      if (eventType != null) 'event_type': eventType,
+      if (rawPayload != null) 'raw_payload': rawPayload,
+      if (syncBatchId != null) 'sync_batch_id': syncBatchId,
+      if (dedupHash != null) 'dedup_hash': dedupHash,
+      if (status != null) 'status': status,
+      if (matchedStaffId != null) 'matched_staff_id': matchedStaffId,
+      if (resultingAttendanceId != null)
+        'resulting_attendance_id': resultingAttendanceId,
+      if (errorMessage != null) 'error_message': errorMessage,
+      if (createdAt != null) 'created_at': createdAt,
+      if (processedAt != null) 'processed_at': processedAt,
+    });
+  }
+
+  AttendanceRawEventsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? deviceId,
+    Value<String>? externalUserId,
+    Value<DateTime>? eventTime,
+    Value<String?>? eventType,
+    Value<String?>? rawPayload,
+    Value<String?>? syncBatchId,
+    Value<String>? dedupHash,
+    Value<String>? status,
+    Value<String?>? matchedStaffId,
+    Value<int?>? resultingAttendanceId,
+    Value<String?>? errorMessage,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? processedAt,
+  }) {
+    return AttendanceRawEventsCompanion(
+      id: id ?? this.id,
+      deviceId: deviceId ?? this.deviceId,
+      externalUserId: externalUserId ?? this.externalUserId,
+      eventTime: eventTime ?? this.eventTime,
+      eventType: eventType ?? this.eventType,
+      rawPayload: rawPayload ?? this.rawPayload,
+      syncBatchId: syncBatchId ?? this.syncBatchId,
+      dedupHash: dedupHash ?? this.dedupHash,
+      status: status ?? this.status,
+      matchedStaffId: matchedStaffId ?? this.matchedStaffId,
+      resultingAttendanceId:
+          resultingAttendanceId ?? this.resultingAttendanceId,
+      errorMessage: errorMessage ?? this.errorMessage,
+      createdAt: createdAt ?? this.createdAt,
+      processedAt: processedAt ?? this.processedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<int>(deviceId.value);
+    }
+    if (externalUserId.present) {
+      map['external_user_id'] = Variable<String>(externalUserId.value);
+    }
+    if (eventTime.present) {
+      map['event_time'] = Variable<DateTime>(eventTime.value);
+    }
+    if (eventType.present) {
+      map['event_type'] = Variable<String>(eventType.value);
+    }
+    if (rawPayload.present) {
+      map['raw_payload'] = Variable<String>(rawPayload.value);
+    }
+    if (syncBatchId.present) {
+      map['sync_batch_id'] = Variable<String>(syncBatchId.value);
+    }
+    if (dedupHash.present) {
+      map['dedup_hash'] = Variable<String>(dedupHash.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (matchedStaffId.present) {
+      map['matched_staff_id'] = Variable<String>(matchedStaffId.value);
+    }
+    if (resultingAttendanceId.present) {
+      map['resulting_attendance_id'] = Variable<int>(
+        resultingAttendanceId.value,
+      );
+    }
+    if (errorMessage.present) {
+      map['error_message'] = Variable<String>(errorMessage.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (processedAt.present) {
+      map['processed_at'] = Variable<DateTime>(processedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttendanceRawEventsCompanion(')
+          ..write('id: $id, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('externalUserId: $externalUserId, ')
+          ..write('eventTime: $eventTime, ')
+          ..write('eventType: $eventType, ')
+          ..write('rawPayload: $rawPayload, ')
+          ..write('syncBatchId: $syncBatchId, ')
+          ..write('dedupHash: $dedupHash, ')
+          ..write('status: $status, ')
+          ..write('matchedStaffId: $matchedStaffId, ')
+          ..write('resultingAttendanceId: $resultingAttendanceId, ')
+          ..write('errorMessage: $errorMessage, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('processedAt: $processedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AttendanceSyncLogsTable extends AttendanceSyncLogs
+    with TableInfo<$AttendanceSyncLogsTable, AttendanceSyncLog> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AttendanceSyncLogsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<int> deviceId = GeneratedColumn<int>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _syncBatchIdMeta = const VerificationMeta(
+    'syncBatchId',
+  );
+  @override
+  late final GeneratedColumn<String> syncBatchId = GeneratedColumn<String>(
+    'sync_batch_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _startedAtMeta = const VerificationMeta(
+    'startedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+    'started_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _finishedAtMeta = const VerificationMeta(
+    'finishedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> finishedAt = GeneratedColumn<DateTime>(
+    'finished_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventsFetchedMeta = const VerificationMeta(
+    'eventsFetched',
+  );
+  @override
+  late final GeneratedColumn<int> eventsFetched = GeneratedColumn<int>(
+    'events_fetched',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _eventsMatchedMeta = const VerificationMeta(
+    'eventsMatched',
+  );
+  @override
+  late final GeneratedColumn<int> eventsMatched = GeneratedColumn<int>(
+    'events_matched',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _eventsUnmatchedMeta = const VerificationMeta(
+    'eventsUnmatched',
+  );
+  @override
+  late final GeneratedColumn<int> eventsUnmatched = GeneratedColumn<int>(
+    'events_unmatched',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _eventsDuplicateMeta = const VerificationMeta(
+    'eventsDuplicate',
+  );
+  @override
+  late final GeneratedColumn<int> eventsDuplicate = GeneratedColumn<int>(
+    'events_duplicate',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _errorMessageMeta = const VerificationMeta(
+    'errorMessage',
+  );
+  @override
+  late final GeneratedColumn<String> errorMessage = GeneratedColumn<String>(
+    'error_message',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _triggeredByMeta = const VerificationMeta(
+    'triggeredBy',
+  );
+  @override
+  late final GeneratedColumn<String> triggeredBy = GeneratedColumn<String>(
+    'triggered_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    deviceId,
+    syncBatchId,
+    startedAt,
+    finishedAt,
+    status,
+    eventsFetched,
+    eventsMatched,
+    eventsUnmatched,
+    eventsDuplicate,
+    errorMessage,
+    triggeredBy,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'attendance_sync_logs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AttendanceSyncLog> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('sync_batch_id')) {
+      context.handle(
+        _syncBatchIdMeta,
+        syncBatchId.isAcceptableOrUnknown(
+          data['sync_batch_id']!,
+          _syncBatchIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_syncBatchIdMeta);
+    }
+    if (data.containsKey('started_at')) {
+      context.handle(
+        _startedAtMeta,
+        startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_startedAtMeta);
+    }
+    if (data.containsKey('finished_at')) {
+      context.handle(
+        _finishedAtMeta,
+        finishedAt.isAcceptableOrUnknown(data['finished_at']!, _finishedAtMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('events_fetched')) {
+      context.handle(
+        _eventsFetchedMeta,
+        eventsFetched.isAcceptableOrUnknown(
+          data['events_fetched']!,
+          _eventsFetchedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('events_matched')) {
+      context.handle(
+        _eventsMatchedMeta,
+        eventsMatched.isAcceptableOrUnknown(
+          data['events_matched']!,
+          _eventsMatchedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('events_unmatched')) {
+      context.handle(
+        _eventsUnmatchedMeta,
+        eventsUnmatched.isAcceptableOrUnknown(
+          data['events_unmatched']!,
+          _eventsUnmatchedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('events_duplicate')) {
+      context.handle(
+        _eventsDuplicateMeta,
+        eventsDuplicate.isAcceptableOrUnknown(
+          data['events_duplicate']!,
+          _eventsDuplicateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('error_message')) {
+      context.handle(
+        _errorMessageMeta,
+        errorMessage.isAcceptableOrUnknown(
+          data['error_message']!,
+          _errorMessageMeta,
+        ),
+      );
+    }
+    if (data.containsKey('triggered_by')) {
+      context.handle(
+        _triggeredByMeta,
+        triggeredBy.isAcceptableOrUnknown(
+          data['triggered_by']!,
+          _triggeredByMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AttendanceSyncLog map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AttendanceSyncLog(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}device_id'],
+      )!,
+      syncBatchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_batch_id'],
+      )!,
+      startedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}started_at'],
+      )!,
+      finishedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}finished_at'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      eventsFetched: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}events_fetched'],
+      )!,
+      eventsMatched: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}events_matched'],
+      )!,
+      eventsUnmatched: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}events_unmatched'],
+      )!,
+      eventsDuplicate: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}events_duplicate'],
+      )!,
+      errorMessage: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error_message'],
+      ),
+      triggeredBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}triggered_by'],
+      ),
+    );
+  }
+
+  @override
+  $AttendanceSyncLogsTable createAlias(String alias) {
+    return $AttendanceSyncLogsTable(attachedDatabase, alias);
+  }
+}
+
+class AttendanceSyncLog extends DataClass
+    implements Insertable<AttendanceSyncLog> {
+  final int id;
+  final int deviceId;
+  final String syncBatchId;
+  final DateTime startedAt;
+  final DateTime? finishedAt;
+  final String status;
+  final int eventsFetched;
+  final int eventsMatched;
+  final int eventsUnmatched;
+  final int eventsDuplicate;
+  final String? errorMessage;
+  final String? triggeredBy;
+  const AttendanceSyncLog({
+    required this.id,
+    required this.deviceId,
+    required this.syncBatchId,
+    required this.startedAt,
+    this.finishedAt,
+    required this.status,
+    required this.eventsFetched,
+    required this.eventsMatched,
+    required this.eventsUnmatched,
+    required this.eventsDuplicate,
+    this.errorMessage,
+    this.triggeredBy,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['device_id'] = Variable<int>(deviceId);
+    map['sync_batch_id'] = Variable<String>(syncBatchId);
+    map['started_at'] = Variable<DateTime>(startedAt);
+    if (!nullToAbsent || finishedAt != null) {
+      map['finished_at'] = Variable<DateTime>(finishedAt);
+    }
+    map['status'] = Variable<String>(status);
+    map['events_fetched'] = Variable<int>(eventsFetched);
+    map['events_matched'] = Variable<int>(eventsMatched);
+    map['events_unmatched'] = Variable<int>(eventsUnmatched);
+    map['events_duplicate'] = Variable<int>(eventsDuplicate);
+    if (!nullToAbsent || errorMessage != null) {
+      map['error_message'] = Variable<String>(errorMessage);
+    }
+    if (!nullToAbsent || triggeredBy != null) {
+      map['triggered_by'] = Variable<String>(triggeredBy);
+    }
+    return map;
+  }
+
+  AttendanceSyncLogsCompanion toCompanion(bool nullToAbsent) {
+    return AttendanceSyncLogsCompanion(
+      id: Value(id),
+      deviceId: Value(deviceId),
+      syncBatchId: Value(syncBatchId),
+      startedAt: Value(startedAt),
+      finishedAt: finishedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(finishedAt),
+      status: Value(status),
+      eventsFetched: Value(eventsFetched),
+      eventsMatched: Value(eventsMatched),
+      eventsUnmatched: Value(eventsUnmatched),
+      eventsDuplicate: Value(eventsDuplicate),
+      errorMessage: errorMessage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorMessage),
+      triggeredBy: triggeredBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(triggeredBy),
+    );
+  }
+
+  factory AttendanceSyncLog.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AttendanceSyncLog(
+      id: serializer.fromJson<int>(json['id']),
+      deviceId: serializer.fromJson<int>(json['deviceId']),
+      syncBatchId: serializer.fromJson<String>(json['syncBatchId']),
+      startedAt: serializer.fromJson<DateTime>(json['startedAt']),
+      finishedAt: serializer.fromJson<DateTime?>(json['finishedAt']),
+      status: serializer.fromJson<String>(json['status']),
+      eventsFetched: serializer.fromJson<int>(json['eventsFetched']),
+      eventsMatched: serializer.fromJson<int>(json['eventsMatched']),
+      eventsUnmatched: serializer.fromJson<int>(json['eventsUnmatched']),
+      eventsDuplicate: serializer.fromJson<int>(json['eventsDuplicate']),
+      errorMessage: serializer.fromJson<String?>(json['errorMessage']),
+      triggeredBy: serializer.fromJson<String?>(json['triggeredBy']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'deviceId': serializer.toJson<int>(deviceId),
+      'syncBatchId': serializer.toJson<String>(syncBatchId),
+      'startedAt': serializer.toJson<DateTime>(startedAt),
+      'finishedAt': serializer.toJson<DateTime?>(finishedAt),
+      'status': serializer.toJson<String>(status),
+      'eventsFetched': serializer.toJson<int>(eventsFetched),
+      'eventsMatched': serializer.toJson<int>(eventsMatched),
+      'eventsUnmatched': serializer.toJson<int>(eventsUnmatched),
+      'eventsDuplicate': serializer.toJson<int>(eventsDuplicate),
+      'errorMessage': serializer.toJson<String?>(errorMessage),
+      'triggeredBy': serializer.toJson<String?>(triggeredBy),
+    };
+  }
+
+  AttendanceSyncLog copyWith({
+    int? id,
+    int? deviceId,
+    String? syncBatchId,
+    DateTime? startedAt,
+    Value<DateTime?> finishedAt = const Value.absent(),
+    String? status,
+    int? eventsFetched,
+    int? eventsMatched,
+    int? eventsUnmatched,
+    int? eventsDuplicate,
+    Value<String?> errorMessage = const Value.absent(),
+    Value<String?> triggeredBy = const Value.absent(),
+  }) => AttendanceSyncLog(
+    id: id ?? this.id,
+    deviceId: deviceId ?? this.deviceId,
+    syncBatchId: syncBatchId ?? this.syncBatchId,
+    startedAt: startedAt ?? this.startedAt,
+    finishedAt: finishedAt.present ? finishedAt.value : this.finishedAt,
+    status: status ?? this.status,
+    eventsFetched: eventsFetched ?? this.eventsFetched,
+    eventsMatched: eventsMatched ?? this.eventsMatched,
+    eventsUnmatched: eventsUnmatched ?? this.eventsUnmatched,
+    eventsDuplicate: eventsDuplicate ?? this.eventsDuplicate,
+    errorMessage: errorMessage.present ? errorMessage.value : this.errorMessage,
+    triggeredBy: triggeredBy.present ? triggeredBy.value : this.triggeredBy,
+  );
+  AttendanceSyncLog copyWithCompanion(AttendanceSyncLogsCompanion data) {
+    return AttendanceSyncLog(
+      id: data.id.present ? data.id.value : this.id,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      syncBatchId: data.syncBatchId.present
+          ? data.syncBatchId.value
+          : this.syncBatchId,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      finishedAt: data.finishedAt.present
+          ? data.finishedAt.value
+          : this.finishedAt,
+      status: data.status.present ? data.status.value : this.status,
+      eventsFetched: data.eventsFetched.present
+          ? data.eventsFetched.value
+          : this.eventsFetched,
+      eventsMatched: data.eventsMatched.present
+          ? data.eventsMatched.value
+          : this.eventsMatched,
+      eventsUnmatched: data.eventsUnmatched.present
+          ? data.eventsUnmatched.value
+          : this.eventsUnmatched,
+      eventsDuplicate: data.eventsDuplicate.present
+          ? data.eventsDuplicate.value
+          : this.eventsDuplicate,
+      errorMessage: data.errorMessage.present
+          ? data.errorMessage.value
+          : this.errorMessage,
+      triggeredBy: data.triggeredBy.present
+          ? data.triggeredBy.value
+          : this.triggeredBy,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttendanceSyncLog(')
+          ..write('id: $id, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('syncBatchId: $syncBatchId, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('finishedAt: $finishedAt, ')
+          ..write('status: $status, ')
+          ..write('eventsFetched: $eventsFetched, ')
+          ..write('eventsMatched: $eventsMatched, ')
+          ..write('eventsUnmatched: $eventsUnmatched, ')
+          ..write('eventsDuplicate: $eventsDuplicate, ')
+          ..write('errorMessage: $errorMessage, ')
+          ..write('triggeredBy: $triggeredBy')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    deviceId,
+    syncBatchId,
+    startedAt,
+    finishedAt,
+    status,
+    eventsFetched,
+    eventsMatched,
+    eventsUnmatched,
+    eventsDuplicate,
+    errorMessage,
+    triggeredBy,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AttendanceSyncLog &&
+          other.id == this.id &&
+          other.deviceId == this.deviceId &&
+          other.syncBatchId == this.syncBatchId &&
+          other.startedAt == this.startedAt &&
+          other.finishedAt == this.finishedAt &&
+          other.status == this.status &&
+          other.eventsFetched == this.eventsFetched &&
+          other.eventsMatched == this.eventsMatched &&
+          other.eventsUnmatched == this.eventsUnmatched &&
+          other.eventsDuplicate == this.eventsDuplicate &&
+          other.errorMessage == this.errorMessage &&
+          other.triggeredBy == this.triggeredBy);
+}
+
+class AttendanceSyncLogsCompanion extends UpdateCompanion<AttendanceSyncLog> {
+  final Value<int> id;
+  final Value<int> deviceId;
+  final Value<String> syncBatchId;
+  final Value<DateTime> startedAt;
+  final Value<DateTime?> finishedAt;
+  final Value<String> status;
+  final Value<int> eventsFetched;
+  final Value<int> eventsMatched;
+  final Value<int> eventsUnmatched;
+  final Value<int> eventsDuplicate;
+  final Value<String?> errorMessage;
+  final Value<String?> triggeredBy;
+  const AttendanceSyncLogsCompanion({
+    this.id = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.syncBatchId = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.finishedAt = const Value.absent(),
+    this.status = const Value.absent(),
+    this.eventsFetched = const Value.absent(),
+    this.eventsMatched = const Value.absent(),
+    this.eventsUnmatched = const Value.absent(),
+    this.eventsDuplicate = const Value.absent(),
+    this.errorMessage = const Value.absent(),
+    this.triggeredBy = const Value.absent(),
+  });
+  AttendanceSyncLogsCompanion.insert({
+    this.id = const Value.absent(),
+    required int deviceId,
+    required String syncBatchId,
+    required DateTime startedAt,
+    this.finishedAt = const Value.absent(),
+    required String status,
+    this.eventsFetched = const Value.absent(),
+    this.eventsMatched = const Value.absent(),
+    this.eventsUnmatched = const Value.absent(),
+    this.eventsDuplicate = const Value.absent(),
+    this.errorMessage = const Value.absent(),
+    this.triggeredBy = const Value.absent(),
+  }) : deviceId = Value(deviceId),
+       syncBatchId = Value(syncBatchId),
+       startedAt = Value(startedAt),
+       status = Value(status);
+  static Insertable<AttendanceSyncLog> custom({
+    Expression<int>? id,
+    Expression<int>? deviceId,
+    Expression<String>? syncBatchId,
+    Expression<DateTime>? startedAt,
+    Expression<DateTime>? finishedAt,
+    Expression<String>? status,
+    Expression<int>? eventsFetched,
+    Expression<int>? eventsMatched,
+    Expression<int>? eventsUnmatched,
+    Expression<int>? eventsDuplicate,
+    Expression<String>? errorMessage,
+    Expression<String>? triggeredBy,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (deviceId != null) 'device_id': deviceId,
+      if (syncBatchId != null) 'sync_batch_id': syncBatchId,
+      if (startedAt != null) 'started_at': startedAt,
+      if (finishedAt != null) 'finished_at': finishedAt,
+      if (status != null) 'status': status,
+      if (eventsFetched != null) 'events_fetched': eventsFetched,
+      if (eventsMatched != null) 'events_matched': eventsMatched,
+      if (eventsUnmatched != null) 'events_unmatched': eventsUnmatched,
+      if (eventsDuplicate != null) 'events_duplicate': eventsDuplicate,
+      if (errorMessage != null) 'error_message': errorMessage,
+      if (triggeredBy != null) 'triggered_by': triggeredBy,
+    });
+  }
+
+  AttendanceSyncLogsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? deviceId,
+    Value<String>? syncBatchId,
+    Value<DateTime>? startedAt,
+    Value<DateTime?>? finishedAt,
+    Value<String>? status,
+    Value<int>? eventsFetched,
+    Value<int>? eventsMatched,
+    Value<int>? eventsUnmatched,
+    Value<int>? eventsDuplicate,
+    Value<String?>? errorMessage,
+    Value<String?>? triggeredBy,
+  }) {
+    return AttendanceSyncLogsCompanion(
+      id: id ?? this.id,
+      deviceId: deviceId ?? this.deviceId,
+      syncBatchId: syncBatchId ?? this.syncBatchId,
+      startedAt: startedAt ?? this.startedAt,
+      finishedAt: finishedAt ?? this.finishedAt,
+      status: status ?? this.status,
+      eventsFetched: eventsFetched ?? this.eventsFetched,
+      eventsMatched: eventsMatched ?? this.eventsMatched,
+      eventsUnmatched: eventsUnmatched ?? this.eventsUnmatched,
+      eventsDuplicate: eventsDuplicate ?? this.eventsDuplicate,
+      errorMessage: errorMessage ?? this.errorMessage,
+      triggeredBy: triggeredBy ?? this.triggeredBy,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<int>(deviceId.value);
+    }
+    if (syncBatchId.present) {
+      map['sync_batch_id'] = Variable<String>(syncBatchId.value);
+    }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (finishedAt.present) {
+      map['finished_at'] = Variable<DateTime>(finishedAt.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (eventsFetched.present) {
+      map['events_fetched'] = Variable<int>(eventsFetched.value);
+    }
+    if (eventsMatched.present) {
+      map['events_matched'] = Variable<int>(eventsMatched.value);
+    }
+    if (eventsUnmatched.present) {
+      map['events_unmatched'] = Variable<int>(eventsUnmatched.value);
+    }
+    if (eventsDuplicate.present) {
+      map['events_duplicate'] = Variable<int>(eventsDuplicate.value);
+    }
+    if (errorMessage.present) {
+      map['error_message'] = Variable<String>(errorMessage.value);
+    }
+    if (triggeredBy.present) {
+      map['triggered_by'] = Variable<String>(triggeredBy.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttendanceSyncLogsCompanion(')
+          ..write('id: $id, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('syncBatchId: $syncBatchId, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('finishedAt: $finishedAt, ')
+          ..write('status: $status, ')
+          ..write('eventsFetched: $eventsFetched, ')
+          ..write('eventsMatched: $eventsMatched, ')
+          ..write('eventsUnmatched: $eventsUnmatched, ')
+          ..write('eventsDuplicate: $eventsDuplicate, ')
+          ..write('errorMessage: $errorMessage, ')
+          ..write('triggeredBy: $triggeredBy')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -34505,6 +37975,15 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SalesReturnItemsTable salesReturnItems = $SalesReturnItemsTable(
     this,
   );
+  late final $BiometricDevicesTable biometricDevices = $BiometricDevicesTable(
+    this,
+  );
+  late final $StaffBiometricMappingsTable staffBiometricMappings =
+      $StaffBiometricMappingsTable(this);
+  late final $AttendanceRawEventsTable attendanceRawEvents =
+      $AttendanceRawEventsTable(this);
+  late final $AttendanceSyncLogsTable attendanceSyncLogs =
+      $AttendanceSyncLogsTable(this);
   late final ProductDao productDao = ProductDao(this as AppDatabase);
   late final CustomerDao customerDao = CustomerDao(this as AppDatabase);
   late final SupplierDao supplierDao = SupplierDao(this as AppDatabase);
@@ -34544,6 +38023,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this as AppDatabase,
   );
   late final SalesReturnsDao salesReturnsDao = SalesReturnsDao(
+    this as AppDatabase,
+  );
+  late final AttendanceDeviceDao attendanceDeviceDao = AttendanceDeviceDao(
     this as AppDatabase,
   );
   @override
@@ -34597,6 +38079,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     damagedItems,
     salesReturns,
     salesReturnItems,
+    biometricDevices,
+    staffBiometricMappings,
+    attendanceRawEvents,
+    attendanceSyncLogs,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -48029,6 +51515,10 @@ typedef $$AttendanceTableTableCreateCompanionBuilder =
       required String status,
       Value<String?> leaveType,
       Value<String?> notes,
+      Value<String?> source,
+      Value<int?> sourceDeviceId,
+      Value<int?> rawEventId,
+      Value<String?> overrideReason,
       Value<double> overtimeHours,
       Value<String?> approvedBy,
       Value<DateTime?> approvedAt,
@@ -48048,6 +51538,10 @@ typedef $$AttendanceTableTableUpdateCompanionBuilder =
       Value<String> status,
       Value<String?> leaveType,
       Value<String?> notes,
+      Value<String?> source,
+      Value<int?> sourceDeviceId,
+      Value<int?> rawEventId,
+      Value<String?> overrideReason,
       Value<double> overtimeHours,
       Value<String?> approvedBy,
       Value<DateTime?> approvedAt,
@@ -48116,6 +51610,26 @@ class $$AttendanceTableTableFilterComposer
 
   ColumnFilters<String> get notes => $composableBuilder(
     column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sourceDeviceId => $composableBuilder(
+    column: $table.sourceDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get rawEventId => $composableBuilder(
+    column: $table.rawEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get overrideReason => $composableBuilder(
+    column: $table.overrideReason,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -48209,6 +51723,26 @@ class $$AttendanceTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sourceDeviceId => $composableBuilder(
+    column: $table.sourceDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get rawEventId => $composableBuilder(
+    column: $table.rawEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get overrideReason => $composableBuilder(
+    column: $table.overrideReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get overtimeHours => $composableBuilder(
     column: $table.overtimeHours,
     builder: (column) => ColumnOrderings(column),
@@ -48287,6 +51821,24 @@ class $$AttendanceTableTableAnnotationComposer
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<int> get sourceDeviceId => $composableBuilder(
+    column: $table.sourceDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get rawEventId => $composableBuilder(
+    column: $table.rawEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get overrideReason => $composableBuilder(
+    column: $table.overrideReason,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<double> get overtimeHours => $composableBuilder(
     column: $table.overtimeHours,
     builder: (column) => column,
@@ -48353,6 +51905,10 @@ class $$AttendanceTableTableTableManager
                 Value<String> status = const Value.absent(),
                 Value<String?> leaveType = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<String?> source = const Value.absent(),
+                Value<int?> sourceDeviceId = const Value.absent(),
+                Value<int?> rawEventId = const Value.absent(),
+                Value<String?> overrideReason = const Value.absent(),
                 Value<double> overtimeHours = const Value.absent(),
                 Value<String?> approvedBy = const Value.absent(),
                 Value<DateTime?> approvedAt = const Value.absent(),
@@ -48370,6 +51926,10 @@ class $$AttendanceTableTableTableManager
                 status: status,
                 leaveType: leaveType,
                 notes: notes,
+                source: source,
+                sourceDeviceId: sourceDeviceId,
+                rawEventId: rawEventId,
+                overrideReason: overrideReason,
                 overtimeHours: overtimeHours,
                 approvedBy: approvedBy,
                 approvedAt: approvedAt,
@@ -48389,6 +51949,10 @@ class $$AttendanceTableTableTableManager
                 required String status,
                 Value<String?> leaveType = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<String?> source = const Value.absent(),
+                Value<int?> sourceDeviceId = const Value.absent(),
+                Value<int?> rawEventId = const Value.absent(),
+                Value<String?> overrideReason = const Value.absent(),
                 Value<double> overtimeHours = const Value.absent(),
                 Value<String?> approvedBy = const Value.absent(),
                 Value<DateTime?> approvedAt = const Value.absent(),
@@ -48406,6 +51970,10 @@ class $$AttendanceTableTableTableManager
                 status: status,
                 leaveType: leaveType,
                 notes: notes,
+                source: source,
+                sourceDeviceId: sourceDeviceId,
+                rawEventId: rawEventId,
+                overrideReason: overrideReason,
                 overtimeHours: overtimeHours,
                 approvedBy: approvedBy,
                 approvedAt: approvedAt,
@@ -57802,6 +61370,1555 @@ typedef $$SalesReturnItemsTableProcessedTableManager =
       SalesReturnItem,
       PrefetchHooks Function({bool returnId, bool productId})
     >;
+typedef $$BiometricDevicesTableCreateCompanionBuilder =
+    BiometricDevicesCompanion Function({
+      Value<int> id,
+      required String deviceCode,
+      required String name,
+      Value<String?> vendor,
+      Value<String?> model,
+      required String connectionType,
+      Value<String?> ipAddress,
+      Value<int?> port,
+      Value<String?> serialNumber,
+      Value<String?> location,
+      Value<String?> authToken,
+      Value<bool> isActive,
+      Value<DateTime?> lastSyncAt,
+      Value<String?> lastSyncStatus,
+      Value<String?> lastSyncError,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+    });
+typedef $$BiometricDevicesTableUpdateCompanionBuilder =
+    BiometricDevicesCompanion Function({
+      Value<int> id,
+      Value<String> deviceCode,
+      Value<String> name,
+      Value<String?> vendor,
+      Value<String?> model,
+      Value<String> connectionType,
+      Value<String?> ipAddress,
+      Value<int?> port,
+      Value<String?> serialNumber,
+      Value<String?> location,
+      Value<String?> authToken,
+      Value<bool> isActive,
+      Value<DateTime?> lastSyncAt,
+      Value<String?> lastSyncStatus,
+      Value<String?> lastSyncError,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+class $$BiometricDevicesTableFilterComposer
+    extends Composer<_$AppDatabase, $BiometricDevicesTable> {
+  $$BiometricDevicesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceCode => $composableBuilder(
+    column: $table.deviceCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get vendor => $composableBuilder(
+    column: $table.vendor,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get model => $composableBuilder(
+    column: $table.model,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get connectionType => $composableBuilder(
+    column: $table.connectionType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ipAddress => $composableBuilder(
+    column: $table.ipAddress,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get port => $composableBuilder(
+    column: $table.port,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get serialNumber => $composableBuilder(
+    column: $table.serialNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get location => $composableBuilder(
+    column: $table.location,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get authToken => $composableBuilder(
+    column: $table.authToken,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastSyncAt => $composableBuilder(
+    column: $table.lastSyncAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastSyncStatus => $composableBuilder(
+    column: $table.lastSyncStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastSyncError => $composableBuilder(
+    column: $table.lastSyncError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$BiometricDevicesTableOrderingComposer
+    extends Composer<_$AppDatabase, $BiometricDevicesTable> {
+  $$BiometricDevicesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceCode => $composableBuilder(
+    column: $table.deviceCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get vendor => $composableBuilder(
+    column: $table.vendor,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get model => $composableBuilder(
+    column: $table.model,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get connectionType => $composableBuilder(
+    column: $table.connectionType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ipAddress => $composableBuilder(
+    column: $table.ipAddress,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get port => $composableBuilder(
+    column: $table.port,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get serialNumber => $composableBuilder(
+    column: $table.serialNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get location => $composableBuilder(
+    column: $table.location,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get authToken => $composableBuilder(
+    column: $table.authToken,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastSyncAt => $composableBuilder(
+    column: $table.lastSyncAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastSyncStatus => $composableBuilder(
+    column: $table.lastSyncStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastSyncError => $composableBuilder(
+    column: $table.lastSyncError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$BiometricDevicesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BiometricDevicesTable> {
+  $$BiometricDevicesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceCode => $composableBuilder(
+    column: $table.deviceCode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get vendor =>
+      $composableBuilder(column: $table.vendor, builder: (column) => column);
+
+  GeneratedColumn<String> get model =>
+      $composableBuilder(column: $table.model, builder: (column) => column);
+
+  GeneratedColumn<String> get connectionType => $composableBuilder(
+    column: $table.connectionType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get ipAddress =>
+      $composableBuilder(column: $table.ipAddress, builder: (column) => column);
+
+  GeneratedColumn<int> get port =>
+      $composableBuilder(column: $table.port, builder: (column) => column);
+
+  GeneratedColumn<String> get serialNumber => $composableBuilder(
+    column: $table.serialNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get location =>
+      $composableBuilder(column: $table.location, builder: (column) => column);
+
+  GeneratedColumn<String> get authToken =>
+      $composableBuilder(column: $table.authToken, builder: (column) => column);
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastSyncAt => $composableBuilder(
+    column: $table.lastSyncAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastSyncStatus => $composableBuilder(
+    column: $table.lastSyncStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastSyncError => $composableBuilder(
+    column: $table.lastSyncError,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$BiometricDevicesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $BiometricDevicesTable,
+          BiometricDevice,
+          $$BiometricDevicesTableFilterComposer,
+          $$BiometricDevicesTableOrderingComposer,
+          $$BiometricDevicesTableAnnotationComposer,
+          $$BiometricDevicesTableCreateCompanionBuilder,
+          $$BiometricDevicesTableUpdateCompanionBuilder,
+          (
+            BiometricDevice,
+            BaseReferences<
+              _$AppDatabase,
+              $BiometricDevicesTable,
+              BiometricDevice
+            >,
+          ),
+          BiometricDevice,
+          PrefetchHooks Function()
+        > {
+  $$BiometricDevicesTableTableManager(
+    _$AppDatabase db,
+    $BiometricDevicesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BiometricDevicesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BiometricDevicesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BiometricDevicesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> deviceCode = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> vendor = const Value.absent(),
+                Value<String?> model = const Value.absent(),
+                Value<String> connectionType = const Value.absent(),
+                Value<String?> ipAddress = const Value.absent(),
+                Value<int?> port = const Value.absent(),
+                Value<String?> serialNumber = const Value.absent(),
+                Value<String?> location = const Value.absent(),
+                Value<String?> authToken = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime?> lastSyncAt = const Value.absent(),
+                Value<String?> lastSyncStatus = const Value.absent(),
+                Value<String?> lastSyncError = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => BiometricDevicesCompanion(
+                id: id,
+                deviceCode: deviceCode,
+                name: name,
+                vendor: vendor,
+                model: model,
+                connectionType: connectionType,
+                ipAddress: ipAddress,
+                port: port,
+                serialNumber: serialNumber,
+                location: location,
+                authToken: authToken,
+                isActive: isActive,
+                lastSyncAt: lastSyncAt,
+                lastSyncStatus: lastSyncStatus,
+                lastSyncError: lastSyncError,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String deviceCode,
+                required String name,
+                Value<String?> vendor = const Value.absent(),
+                Value<String?> model = const Value.absent(),
+                required String connectionType,
+                Value<String?> ipAddress = const Value.absent(),
+                Value<int?> port = const Value.absent(),
+                Value<String?> serialNumber = const Value.absent(),
+                Value<String?> location = const Value.absent(),
+                Value<String?> authToken = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime?> lastSyncAt = const Value.absent(),
+                Value<String?> lastSyncStatus = const Value.absent(),
+                Value<String?> lastSyncError = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+              }) => BiometricDevicesCompanion.insert(
+                id: id,
+                deviceCode: deviceCode,
+                name: name,
+                vendor: vendor,
+                model: model,
+                connectionType: connectionType,
+                ipAddress: ipAddress,
+                port: port,
+                serialNumber: serialNumber,
+                location: location,
+                authToken: authToken,
+                isActive: isActive,
+                lastSyncAt: lastSyncAt,
+                lastSyncStatus: lastSyncStatus,
+                lastSyncError: lastSyncError,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$BiometricDevicesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $BiometricDevicesTable,
+      BiometricDevice,
+      $$BiometricDevicesTableFilterComposer,
+      $$BiometricDevicesTableOrderingComposer,
+      $$BiometricDevicesTableAnnotationComposer,
+      $$BiometricDevicesTableCreateCompanionBuilder,
+      $$BiometricDevicesTableUpdateCompanionBuilder,
+      (
+        BiometricDevice,
+        BaseReferences<_$AppDatabase, $BiometricDevicesTable, BiometricDevice>,
+      ),
+      BiometricDevice,
+      PrefetchHooks Function()
+    >;
+typedef $$StaffBiometricMappingsTableCreateCompanionBuilder =
+    StaffBiometricMappingsCompanion Function({
+      Value<int> id,
+      required String staffId,
+      required int deviceId,
+      required String externalUserId,
+      Value<String?> cardNumber,
+      Value<int?> fingerIndex,
+      Value<String?> templateRef,
+      required String enrollmentStatus,
+      Value<bool> isPrimary,
+      Value<DateTime?> enrolledAt,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+    });
+typedef $$StaffBiometricMappingsTableUpdateCompanionBuilder =
+    StaffBiometricMappingsCompanion Function({
+      Value<int> id,
+      Value<String> staffId,
+      Value<int> deviceId,
+      Value<String> externalUserId,
+      Value<String?> cardNumber,
+      Value<int?> fingerIndex,
+      Value<String?> templateRef,
+      Value<String> enrollmentStatus,
+      Value<bool> isPrimary,
+      Value<DateTime?> enrolledAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+class $$StaffBiometricMappingsTableFilterComposer
+    extends Composer<_$AppDatabase, $StaffBiometricMappingsTable> {
+  $$StaffBiometricMappingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get staffId => $composableBuilder(
+    column: $table.staffId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalUserId => $composableBuilder(
+    column: $table.externalUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cardNumber => $composableBuilder(
+    column: $table.cardNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fingerIndex => $composableBuilder(
+    column: $table.fingerIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get templateRef => $composableBuilder(
+    column: $table.templateRef,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get enrollmentStatus => $composableBuilder(
+    column: $table.enrollmentStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isPrimary => $composableBuilder(
+    column: $table.isPrimary,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get enrolledAt => $composableBuilder(
+    column: $table.enrolledAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$StaffBiometricMappingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $StaffBiometricMappingsTable> {
+  $$StaffBiometricMappingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get staffId => $composableBuilder(
+    column: $table.staffId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalUserId => $composableBuilder(
+    column: $table.externalUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cardNumber => $composableBuilder(
+    column: $table.cardNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fingerIndex => $composableBuilder(
+    column: $table.fingerIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get templateRef => $composableBuilder(
+    column: $table.templateRef,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get enrollmentStatus => $composableBuilder(
+    column: $table.enrollmentStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isPrimary => $composableBuilder(
+    column: $table.isPrimary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get enrolledAt => $composableBuilder(
+    column: $table.enrolledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$StaffBiometricMappingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $StaffBiometricMappingsTable> {
+  $$StaffBiometricMappingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get staffId =>
+      $composableBuilder(column: $table.staffId, builder: (column) => column);
+
+  GeneratedColumn<int> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<String> get externalUserId => $composableBuilder(
+    column: $table.externalUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get cardNumber => $composableBuilder(
+    column: $table.cardNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get fingerIndex => $composableBuilder(
+    column: $table.fingerIndex,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get templateRef => $composableBuilder(
+    column: $table.templateRef,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get enrollmentStatus => $composableBuilder(
+    column: $table.enrollmentStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isPrimary =>
+      $composableBuilder(column: $table.isPrimary, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get enrolledAt => $composableBuilder(
+    column: $table.enrolledAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$StaffBiometricMappingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $StaffBiometricMappingsTable,
+          StaffBiometricMapping,
+          $$StaffBiometricMappingsTableFilterComposer,
+          $$StaffBiometricMappingsTableOrderingComposer,
+          $$StaffBiometricMappingsTableAnnotationComposer,
+          $$StaffBiometricMappingsTableCreateCompanionBuilder,
+          $$StaffBiometricMappingsTableUpdateCompanionBuilder,
+          (
+            StaffBiometricMapping,
+            BaseReferences<
+              _$AppDatabase,
+              $StaffBiometricMappingsTable,
+              StaffBiometricMapping
+            >,
+          ),
+          StaffBiometricMapping,
+          PrefetchHooks Function()
+        > {
+  $$StaffBiometricMappingsTableTableManager(
+    _$AppDatabase db,
+    $StaffBiometricMappingsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StaffBiometricMappingsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$StaffBiometricMappingsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$StaffBiometricMappingsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> staffId = const Value.absent(),
+                Value<int> deviceId = const Value.absent(),
+                Value<String> externalUserId = const Value.absent(),
+                Value<String?> cardNumber = const Value.absent(),
+                Value<int?> fingerIndex = const Value.absent(),
+                Value<String?> templateRef = const Value.absent(),
+                Value<String> enrollmentStatus = const Value.absent(),
+                Value<bool> isPrimary = const Value.absent(),
+                Value<DateTime?> enrolledAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => StaffBiometricMappingsCompanion(
+                id: id,
+                staffId: staffId,
+                deviceId: deviceId,
+                externalUserId: externalUserId,
+                cardNumber: cardNumber,
+                fingerIndex: fingerIndex,
+                templateRef: templateRef,
+                enrollmentStatus: enrollmentStatus,
+                isPrimary: isPrimary,
+                enrolledAt: enrolledAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String staffId,
+                required int deviceId,
+                required String externalUserId,
+                Value<String?> cardNumber = const Value.absent(),
+                Value<int?> fingerIndex = const Value.absent(),
+                Value<String?> templateRef = const Value.absent(),
+                required String enrollmentStatus,
+                Value<bool> isPrimary = const Value.absent(),
+                Value<DateTime?> enrolledAt = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+              }) => StaffBiometricMappingsCompanion.insert(
+                id: id,
+                staffId: staffId,
+                deviceId: deviceId,
+                externalUserId: externalUserId,
+                cardNumber: cardNumber,
+                fingerIndex: fingerIndex,
+                templateRef: templateRef,
+                enrollmentStatus: enrollmentStatus,
+                isPrimary: isPrimary,
+                enrolledAt: enrolledAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$StaffBiometricMappingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $StaffBiometricMappingsTable,
+      StaffBiometricMapping,
+      $$StaffBiometricMappingsTableFilterComposer,
+      $$StaffBiometricMappingsTableOrderingComposer,
+      $$StaffBiometricMappingsTableAnnotationComposer,
+      $$StaffBiometricMappingsTableCreateCompanionBuilder,
+      $$StaffBiometricMappingsTableUpdateCompanionBuilder,
+      (
+        StaffBiometricMapping,
+        BaseReferences<
+          _$AppDatabase,
+          $StaffBiometricMappingsTable,
+          StaffBiometricMapping
+        >,
+      ),
+      StaffBiometricMapping,
+      PrefetchHooks Function()
+    >;
+typedef $$AttendanceRawEventsTableCreateCompanionBuilder =
+    AttendanceRawEventsCompanion Function({
+      Value<int> id,
+      required int deviceId,
+      required String externalUserId,
+      required DateTime eventTime,
+      Value<String?> eventType,
+      Value<String?> rawPayload,
+      Value<String?> syncBatchId,
+      required String dedupHash,
+      required String status,
+      Value<String?> matchedStaffId,
+      Value<int?> resultingAttendanceId,
+      Value<String?> errorMessage,
+      required DateTime createdAt,
+      Value<DateTime?> processedAt,
+    });
+typedef $$AttendanceRawEventsTableUpdateCompanionBuilder =
+    AttendanceRawEventsCompanion Function({
+      Value<int> id,
+      Value<int> deviceId,
+      Value<String> externalUserId,
+      Value<DateTime> eventTime,
+      Value<String?> eventType,
+      Value<String?> rawPayload,
+      Value<String?> syncBatchId,
+      Value<String> dedupHash,
+      Value<String> status,
+      Value<String?> matchedStaffId,
+      Value<int?> resultingAttendanceId,
+      Value<String?> errorMessage,
+      Value<DateTime> createdAt,
+      Value<DateTime?> processedAt,
+    });
+
+class $$AttendanceRawEventsTableFilterComposer
+    extends Composer<_$AppDatabase, $AttendanceRawEventsTable> {
+  $$AttendanceRawEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalUserId => $composableBuilder(
+    column: $table.externalUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get eventTime => $composableBuilder(
+    column: $table.eventTime,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventType => $composableBuilder(
+    column: $table.eventType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rawPayload => $composableBuilder(
+    column: $table.rawPayload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncBatchId => $composableBuilder(
+    column: $table.syncBatchId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dedupHash => $composableBuilder(
+    column: $table.dedupHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get matchedStaffId => $composableBuilder(
+    column: $table.matchedStaffId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get resultingAttendanceId => $composableBuilder(
+    column: $table.resultingAttendanceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get errorMessage => $composableBuilder(
+    column: $table.errorMessage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get processedAt => $composableBuilder(
+    column: $table.processedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AttendanceRawEventsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AttendanceRawEventsTable> {
+  $$AttendanceRawEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalUserId => $composableBuilder(
+    column: $table.externalUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get eventTime => $composableBuilder(
+    column: $table.eventTime,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventType => $composableBuilder(
+    column: $table.eventType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get rawPayload => $composableBuilder(
+    column: $table.rawPayload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncBatchId => $composableBuilder(
+    column: $table.syncBatchId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get dedupHash => $composableBuilder(
+    column: $table.dedupHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get matchedStaffId => $composableBuilder(
+    column: $table.matchedStaffId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get resultingAttendanceId => $composableBuilder(
+    column: $table.resultingAttendanceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get errorMessage => $composableBuilder(
+    column: $table.errorMessage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get processedAt => $composableBuilder(
+    column: $table.processedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AttendanceRawEventsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AttendanceRawEventsTable> {
+  $$AttendanceRawEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<String> get externalUserId => $composableBuilder(
+    column: $table.externalUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get eventTime =>
+      $composableBuilder(column: $table.eventTime, builder: (column) => column);
+
+  GeneratedColumn<String> get eventType =>
+      $composableBuilder(column: $table.eventType, builder: (column) => column);
+
+  GeneratedColumn<String> get rawPayload => $composableBuilder(
+    column: $table.rawPayload,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get syncBatchId => $composableBuilder(
+    column: $table.syncBatchId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get dedupHash =>
+      $composableBuilder(column: $table.dedupHash, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get matchedStaffId => $composableBuilder(
+    column: $table.matchedStaffId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get resultingAttendanceId => $composableBuilder(
+    column: $table.resultingAttendanceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get errorMessage => $composableBuilder(
+    column: $table.errorMessage,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get processedAt => $composableBuilder(
+    column: $table.processedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$AttendanceRawEventsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AttendanceRawEventsTable,
+          AttendanceRawEvent,
+          $$AttendanceRawEventsTableFilterComposer,
+          $$AttendanceRawEventsTableOrderingComposer,
+          $$AttendanceRawEventsTableAnnotationComposer,
+          $$AttendanceRawEventsTableCreateCompanionBuilder,
+          $$AttendanceRawEventsTableUpdateCompanionBuilder,
+          (
+            AttendanceRawEvent,
+            BaseReferences<
+              _$AppDatabase,
+              $AttendanceRawEventsTable,
+              AttendanceRawEvent
+            >,
+          ),
+          AttendanceRawEvent,
+          PrefetchHooks Function()
+        > {
+  $$AttendanceRawEventsTableTableManager(
+    _$AppDatabase db,
+    $AttendanceRawEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AttendanceRawEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AttendanceRawEventsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$AttendanceRawEventsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> deviceId = const Value.absent(),
+                Value<String> externalUserId = const Value.absent(),
+                Value<DateTime> eventTime = const Value.absent(),
+                Value<String?> eventType = const Value.absent(),
+                Value<String?> rawPayload = const Value.absent(),
+                Value<String?> syncBatchId = const Value.absent(),
+                Value<String> dedupHash = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> matchedStaffId = const Value.absent(),
+                Value<int?> resultingAttendanceId = const Value.absent(),
+                Value<String?> errorMessage = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> processedAt = const Value.absent(),
+              }) => AttendanceRawEventsCompanion(
+                id: id,
+                deviceId: deviceId,
+                externalUserId: externalUserId,
+                eventTime: eventTime,
+                eventType: eventType,
+                rawPayload: rawPayload,
+                syncBatchId: syncBatchId,
+                dedupHash: dedupHash,
+                status: status,
+                matchedStaffId: matchedStaffId,
+                resultingAttendanceId: resultingAttendanceId,
+                errorMessage: errorMessage,
+                createdAt: createdAt,
+                processedAt: processedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int deviceId,
+                required String externalUserId,
+                required DateTime eventTime,
+                Value<String?> eventType = const Value.absent(),
+                Value<String?> rawPayload = const Value.absent(),
+                Value<String?> syncBatchId = const Value.absent(),
+                required String dedupHash,
+                required String status,
+                Value<String?> matchedStaffId = const Value.absent(),
+                Value<int?> resultingAttendanceId = const Value.absent(),
+                Value<String?> errorMessage = const Value.absent(),
+                required DateTime createdAt,
+                Value<DateTime?> processedAt = const Value.absent(),
+              }) => AttendanceRawEventsCompanion.insert(
+                id: id,
+                deviceId: deviceId,
+                externalUserId: externalUserId,
+                eventTime: eventTime,
+                eventType: eventType,
+                rawPayload: rawPayload,
+                syncBatchId: syncBatchId,
+                dedupHash: dedupHash,
+                status: status,
+                matchedStaffId: matchedStaffId,
+                resultingAttendanceId: resultingAttendanceId,
+                errorMessage: errorMessage,
+                createdAt: createdAt,
+                processedAt: processedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AttendanceRawEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AttendanceRawEventsTable,
+      AttendanceRawEvent,
+      $$AttendanceRawEventsTableFilterComposer,
+      $$AttendanceRawEventsTableOrderingComposer,
+      $$AttendanceRawEventsTableAnnotationComposer,
+      $$AttendanceRawEventsTableCreateCompanionBuilder,
+      $$AttendanceRawEventsTableUpdateCompanionBuilder,
+      (
+        AttendanceRawEvent,
+        BaseReferences<
+          _$AppDatabase,
+          $AttendanceRawEventsTable,
+          AttendanceRawEvent
+        >,
+      ),
+      AttendanceRawEvent,
+      PrefetchHooks Function()
+    >;
+typedef $$AttendanceSyncLogsTableCreateCompanionBuilder =
+    AttendanceSyncLogsCompanion Function({
+      Value<int> id,
+      required int deviceId,
+      required String syncBatchId,
+      required DateTime startedAt,
+      Value<DateTime?> finishedAt,
+      required String status,
+      Value<int> eventsFetched,
+      Value<int> eventsMatched,
+      Value<int> eventsUnmatched,
+      Value<int> eventsDuplicate,
+      Value<String?> errorMessage,
+      Value<String?> triggeredBy,
+    });
+typedef $$AttendanceSyncLogsTableUpdateCompanionBuilder =
+    AttendanceSyncLogsCompanion Function({
+      Value<int> id,
+      Value<int> deviceId,
+      Value<String> syncBatchId,
+      Value<DateTime> startedAt,
+      Value<DateTime?> finishedAt,
+      Value<String> status,
+      Value<int> eventsFetched,
+      Value<int> eventsMatched,
+      Value<int> eventsUnmatched,
+      Value<int> eventsDuplicate,
+      Value<String?> errorMessage,
+      Value<String?> triggeredBy,
+    });
+
+class $$AttendanceSyncLogsTableFilterComposer
+    extends Composer<_$AppDatabase, $AttendanceSyncLogsTable> {
+  $$AttendanceSyncLogsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncBatchId => $composableBuilder(
+    column: $table.syncBatchId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get finishedAt => $composableBuilder(
+    column: $table.finishedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get eventsFetched => $composableBuilder(
+    column: $table.eventsFetched,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get eventsMatched => $composableBuilder(
+    column: $table.eventsMatched,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get eventsUnmatched => $composableBuilder(
+    column: $table.eventsUnmatched,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get eventsDuplicate => $composableBuilder(
+    column: $table.eventsDuplicate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get errorMessage => $composableBuilder(
+    column: $table.errorMessage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get triggeredBy => $composableBuilder(
+    column: $table.triggeredBy,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AttendanceSyncLogsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AttendanceSyncLogsTable> {
+  $$AttendanceSyncLogsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncBatchId => $composableBuilder(
+    column: $table.syncBatchId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get finishedAt => $composableBuilder(
+    column: $table.finishedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get eventsFetched => $composableBuilder(
+    column: $table.eventsFetched,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get eventsMatched => $composableBuilder(
+    column: $table.eventsMatched,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get eventsUnmatched => $composableBuilder(
+    column: $table.eventsUnmatched,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get eventsDuplicate => $composableBuilder(
+    column: $table.eventsDuplicate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get errorMessage => $composableBuilder(
+    column: $table.errorMessage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get triggeredBy => $composableBuilder(
+    column: $table.triggeredBy,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AttendanceSyncLogsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AttendanceSyncLogsTable> {
+  $$AttendanceSyncLogsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<String> get syncBatchId => $composableBuilder(
+    column: $table.syncBatchId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get finishedAt => $composableBuilder(
+    column: $table.finishedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get eventsFetched => $composableBuilder(
+    column: $table.eventsFetched,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get eventsMatched => $composableBuilder(
+    column: $table.eventsMatched,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get eventsUnmatched => $composableBuilder(
+    column: $table.eventsUnmatched,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get eventsDuplicate => $composableBuilder(
+    column: $table.eventsDuplicate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get errorMessage => $composableBuilder(
+    column: $table.errorMessage,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get triggeredBy => $composableBuilder(
+    column: $table.triggeredBy,
+    builder: (column) => column,
+  );
+}
+
+class $$AttendanceSyncLogsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AttendanceSyncLogsTable,
+          AttendanceSyncLog,
+          $$AttendanceSyncLogsTableFilterComposer,
+          $$AttendanceSyncLogsTableOrderingComposer,
+          $$AttendanceSyncLogsTableAnnotationComposer,
+          $$AttendanceSyncLogsTableCreateCompanionBuilder,
+          $$AttendanceSyncLogsTableUpdateCompanionBuilder,
+          (
+            AttendanceSyncLog,
+            BaseReferences<
+              _$AppDatabase,
+              $AttendanceSyncLogsTable,
+              AttendanceSyncLog
+            >,
+          ),
+          AttendanceSyncLog,
+          PrefetchHooks Function()
+        > {
+  $$AttendanceSyncLogsTableTableManager(
+    _$AppDatabase db,
+    $AttendanceSyncLogsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AttendanceSyncLogsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AttendanceSyncLogsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AttendanceSyncLogsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> deviceId = const Value.absent(),
+                Value<String> syncBatchId = const Value.absent(),
+                Value<DateTime> startedAt = const Value.absent(),
+                Value<DateTime?> finishedAt = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int> eventsFetched = const Value.absent(),
+                Value<int> eventsMatched = const Value.absent(),
+                Value<int> eventsUnmatched = const Value.absent(),
+                Value<int> eventsDuplicate = const Value.absent(),
+                Value<String?> errorMessage = const Value.absent(),
+                Value<String?> triggeredBy = const Value.absent(),
+              }) => AttendanceSyncLogsCompanion(
+                id: id,
+                deviceId: deviceId,
+                syncBatchId: syncBatchId,
+                startedAt: startedAt,
+                finishedAt: finishedAt,
+                status: status,
+                eventsFetched: eventsFetched,
+                eventsMatched: eventsMatched,
+                eventsUnmatched: eventsUnmatched,
+                eventsDuplicate: eventsDuplicate,
+                errorMessage: errorMessage,
+                triggeredBy: triggeredBy,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int deviceId,
+                required String syncBatchId,
+                required DateTime startedAt,
+                Value<DateTime?> finishedAt = const Value.absent(),
+                required String status,
+                Value<int> eventsFetched = const Value.absent(),
+                Value<int> eventsMatched = const Value.absent(),
+                Value<int> eventsUnmatched = const Value.absent(),
+                Value<int> eventsDuplicate = const Value.absent(),
+                Value<String?> errorMessage = const Value.absent(),
+                Value<String?> triggeredBy = const Value.absent(),
+              }) => AttendanceSyncLogsCompanion.insert(
+                id: id,
+                deviceId: deviceId,
+                syncBatchId: syncBatchId,
+                startedAt: startedAt,
+                finishedAt: finishedAt,
+                status: status,
+                eventsFetched: eventsFetched,
+                eventsMatched: eventsMatched,
+                eventsUnmatched: eventsUnmatched,
+                eventsDuplicate: eventsDuplicate,
+                errorMessage: errorMessage,
+                triggeredBy: triggeredBy,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AttendanceSyncLogsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AttendanceSyncLogsTable,
+      AttendanceSyncLog,
+      $$AttendanceSyncLogsTableFilterComposer,
+      $$AttendanceSyncLogsTableOrderingComposer,
+      $$AttendanceSyncLogsTableAnnotationComposer,
+      $$AttendanceSyncLogsTableCreateCompanionBuilder,
+      $$AttendanceSyncLogsTableUpdateCompanionBuilder,
+      (
+        AttendanceSyncLog,
+        BaseReferences<
+          _$AppDatabase,
+          $AttendanceSyncLogsTable,
+          AttendanceSyncLog
+        >,
+      ),
+      AttendanceSyncLog,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -57897,4 +63014,15 @@ class $AppDatabaseManager {
       $$SalesReturnsTableTableManager(_db, _db.salesReturns);
   $$SalesReturnItemsTableTableManager get salesReturnItems =>
       $$SalesReturnItemsTableTableManager(_db, _db.salesReturnItems);
+  $$BiometricDevicesTableTableManager get biometricDevices =>
+      $$BiometricDevicesTableTableManager(_db, _db.biometricDevices);
+  $$StaffBiometricMappingsTableTableManager get staffBiometricMappings =>
+      $$StaffBiometricMappingsTableTableManager(
+        _db,
+        _db.staffBiometricMappings,
+      );
+  $$AttendanceRawEventsTableTableManager get attendanceRawEvents =>
+      $$AttendanceRawEventsTableTableManager(_db, _db.attendanceRawEvents);
+  $$AttendanceSyncLogsTableTableManager get attendanceSyncLogs =>
+      $$AttendanceSyncLogsTableTableManager(_db, _db.attendanceSyncLogs);
 }

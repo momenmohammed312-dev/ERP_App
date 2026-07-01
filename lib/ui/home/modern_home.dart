@@ -16,6 +16,7 @@ import 'package:pos_offline_desktop/ui/staff/employee_dashboard_page.dart';
 import 'package:pos_offline_desktop/ui/setting/settings.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
+import 'package:drift/drift.dart' as drift;
 
 class ModernHomeScreen extends ConsumerStatefulWidget {
   final AppDatabase db;
@@ -100,12 +101,15 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Gap(40),
+              const Gap(24),
+              // Financial KPIs
+              _DashboardSummary(db: widget.db),
+              const Gap(24),
               const Text(
                 'لوحة التحكم',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
-              const Gap(40),
+              const Gap(24),
               Wrap(
                 spacing: 20,
                 runSpacing: 20,
@@ -383,6 +387,130 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
             borderRadius: BorderRadius.circular(12),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// ملخص مالي سريع يعرض مبيعات ومصروفات وأرباح اليوم
+class _DashboardSummary extends ConsumerStatefulWidget {
+  final AppDatabase db;
+  const _DashboardSummary({required this.db});
+
+  @override
+  ConsumerState<_DashboardSummary> createState() => _DashboardSummaryState();
+}
+
+class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
+  double _todaySales = 0;
+  double _todayExpenses = 0;
+  double _todayPurchases = 0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTodayData();
+  }
+
+  Future<void> _loadTodayData() async {
+    try {
+      final now = DateTime.now();
+      final start = DateTime(now.year, now.month, now.day);
+      final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+      final salesResult = await widget.db.customSelect('''
+        SELECT COALESCE(SUM(total_amount), 0) as total
+        FROM invoices WHERE date BETWEEN ? AND ? AND status != 'voided'
+      ''', variables: [
+        drift.Variable.withDateTime(start),
+        drift.Variable.withDateTime(end),
+      ]).get();
+      final todaySales = (salesResult.first.data['total'] as num?)?.toDouble() ?? 0;
+
+      final expenseResult = await widget.db.customSelect('''
+        SELECT COALESCE(SUM(amount), 0) as total
+        FROM expenses WHERE date BETWEEN ? AND ?
+      ''', variables: [
+        drift.Variable.withDateTime(start),
+        drift.Variable.withDateTime(end),
+      ]).get();
+      final todayExpenses = (expenseResult.first.data['total'] as num?)?.toDouble() ?? 0;
+
+      final purchaseResult = await widget.db.customSelect('''
+        SELECT COALESCE(SUM(total_amount), 0) as total
+        FROM purchases WHERE purchase_date BETWEEN ? AND ? AND is_deleted = 0
+      ''', variables: [
+        drift.Variable.withDateTime(start),
+        drift.Variable.withDateTime(end),
+      ]).get();
+      final todayPurchases = (purchaseResult.first.data['total'] as num?)?.toDouble() ?? 0;
+
+      if (mounted) {
+        setState(() {
+          _todaySales = todaySales;
+          _todayExpenses = todayExpenses;
+          _todayPurchases = todayPurchases;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const SizedBox(
+        height: 100,
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+    final netProfit = _todaySales - _todayPurchases - _todayExpenses;
+    return SizedBox(
+      height: 100,
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildCard('مبيعات اليوم', _todaySales, Colors.green, Icons.trending_up),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildCard('مشتريات', _todayPurchases, Colors.orange, Icons.shopping_cart),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildCard('مصروفات', _todayExpenses, Colors.redAccent, Icons.receipt_long),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildCard('صافي الربح', netProfit, netProfit >= 0 ? Colors.blue : Colors.red, Icons.account_balance),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCard(String label, double amount, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 4),
+          Text(
+            amount.toStringAsFixed(2),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
+          ),
+          Text(label, style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8))),
+        ],
       ),
     );
   }

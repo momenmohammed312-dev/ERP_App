@@ -101,7 +101,8 @@ class AnalyticsService {
           p.id,
           p.name,
           COALESCE(SUM(ii.quantity), 0) as total_sold,
-          COALESCE(SUM(ii.price * ii.quantity), 0) as revenue,
+          COALESCE(SUM(ii.price), 0) as revenue,
+          COALESCE(SUM(ii.quantity * COALESCE(p.cost_price, 0)), 0) as total_cost,
           p.quantity as current_stock
         FROM products p
         LEFT JOIN invoice_items ii ON p.id = ii.product_id
@@ -116,14 +117,14 @@ class AnalyticsService {
           .get();
 
       return productData.map((row) {
+        final revenue = (row.data['revenue'] as double?) ?? 0.0;
+        final totalCost = (row.data['total_cost'] as double?) ?? 0.0;
         return ProductAnalytics(
           productId: row.data['id'].toString(),
           productName: row.data['name'].toString(),
           totalSold: (row.data['total_sold'] as int?) ?? 0,
-          revenue: (row.data['revenue'] as double?) ?? 0.0,
-          profit:
-              (row.data['revenue'] as double?) ??
-              0.0, // Simplified profit calculation
+          revenue: revenue,
+          profit: revenue - totalCost,
           currentStock: (row.data['current_stock'] as int?) ?? 0,
         );
       }).toList();
@@ -184,7 +185,7 @@ class AnalyticsService {
       final inventoryData = await db.customSelect('''
         SELECT 
           COUNT(*) as total_products,
-          SUM(quantity * price) as total_value,
+          SUM(quantity * COALESCE(cost_price, price)) as total_value,
           SUM(CASE WHEN quantity = 0 THEN 1 ELSE 0 END) as dead_stock_count
         FROM products
         ''').get();
@@ -222,38 +223,60 @@ class AnalyticsService {
           startDate ?? DateTime.now().subtract(const Duration(days: 30));
       final end = endDate ?? DateTime.now();
 
-      final financialData = await db
-          .customSelect(
-            '''
-        SELECT 
-          SUM(total_amount) as revenue,
-          SUM(CASE WHEN total_amount < 0 THEN ABS(total_amount) ELSE 0 END) as expenses
+      final revenueData = await db.customSelect(
+        '''
+        SELECT COALESCE(SUM(total_amount), 0) as revenue
         FROM invoices 
-        WHERE date BETWEEN ? AND ?
-        AND status = 'completed'
+        WHERE date BETWEEN ? AND ? AND status = 'completed'
         ''',
-            variables: [
-              Variable.withDateTime(start),
-              Variable.withDateTime(end),
-            ],
-          )
-          .get();
+        variables: [
+          Variable.withDateTime(start),
+          Variable.withDateTime(end),
+        ],
+      ).get();
 
-      final row = financialData.first;
-      final revenue = (row.data['revenue'] as double?) ?? 0.0;
-      final expenses = (row.data['expenses'] as double?) ?? 0.0;
-      final profit = revenue - expenses;
+      final expenseData = await db.customSelect(
+        '''
+        SELECT COALESCE(SUM(amount), 0) as expenses
+        FROM expenses 
+        WHERE date BETWEEN ? AND ?
+        ''',
+        variables: [
+          Variable.withDateTime(start),
+          Variable.withDateTime(end),
+        ],
+      ).get();
+
+      final purchaseData = await db.customSelect(
+        '''
+        SELECT COALESCE(SUM(total_amount), 0) as purchases
+        FROM purchases 
+        WHERE purchase_date BETWEEN ? AND ? AND is_deleted = 0
+        ''',
+        variables: [
+          Variable.withDateTime(start),
+          Variable.withDateTime(end),
+        ],
+      ).get();
+
+      final revenue = (revenueData.first.data['revenue'] as double?) ?? 0.0;
+      final expenses = (expenseData.first.data['expenses'] as double?) ?? 0.0;
+      final purchases = (purchaseData.first.data['purchases'] as double?) ?? 0.0;
+      final grossProfit = revenue - purchases;
+      final netProfit = revenue - purchases - expenses;
       final cashFlow = revenue - expenses;
 
       final margins = <String, double>{};
       if (revenue > 0) {
-        margins['gross'] = (profit / revenue) * 100;
-        margins['net'] = (profit / revenue) * 100;
+        margins['gross'] = (grossProfit / revenue) * 100;
+        margins['net'] = (netProfit / revenue) * 100;
       }
 
       return FinancialAnalytics(
         revenue: revenue,
-        profit: profit,
+        profit: netProfit,
+        purchases: purchases,
+        grossProfit: grossProfit,
         expenses: expenses,
         cashFlow: cashFlow,
         margins: margins,
@@ -403,6 +426,8 @@ class InventoryAnalytics {
 class FinancialAnalytics {
   final double revenue;
   final double profit;
+  final double purchases;
+  final double grossProfit;
   final double expenses;
   final double cashFlow;
   final Map<String, double> margins;
@@ -410,6 +435,8 @@ class FinancialAnalytics {
   FinancialAnalytics({
     required this.revenue,
     required this.profit,
+    this.purchases = 0,
+    this.grossProfit = 0,
     required this.expenses,
     required this.cashFlow,
     required this.margins,

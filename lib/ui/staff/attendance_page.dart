@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' as drift;
 import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
+import '../../core/models/user_model.dart';
+import '../../widgets/permission_guard.dart';
 import 'package:intl/intl.dart';
+import 'manual_override_dialog.dart';
 
 class AttendancePage extends ConsumerStatefulWidget {
   final Staff staff;
@@ -16,7 +18,6 @@ class AttendancePage extends ConsumerStatefulWidget {
 }
 
 class _AttendancePageState extends ConsumerState<AttendancePage> {
-  late StaffManagementDao _dao;
   List<Attendance> _attendanceList = [];
   bool _isLoading = true;
 
@@ -29,9 +30,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
   Future<void> _loadAttendance() async {
     setState(() => _isLoading = true);
     final db = ref.read(appDatabaseProvider);
-    _dao = StaffManagementDao(db);
+    final dao = StaffManagementDao(db);
     try {
-      final attendance = await _dao.getAttendanceByStaff(widget.staff.staffId);
+      final attendance = await dao.getAttendanceByStaff(widget.staff.staffId);
       setState(() {
         _attendanceList = attendance.reversed.toList();
         _isLoading = false;
@@ -41,7 +42,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('خطأ في تحميل سجل الحضور: $e')));
+      ).showSnackBar(const SnackBar(content: Text('خطأ في تحميل سجل الحضور')));
     }
   }
 
@@ -138,7 +139,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                     ),
                     const Divider(),
                     DropdownButtonFormField<String>(
-                      initialValue: selStatus,
+                      value: selStatus,
                       decoration: const InputDecoration(
                         labelText: 'الحالة',
                         border: OutlineInputBorder(),
@@ -230,22 +231,16 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
               checkOutDateTime.difference(checkInDateTime).inMinutes / 60.0;
         }
 
-        await _dao.addAttendance(
-          AttendanceTableCompanion.insert(
-            staffId: widget.staff.staffId,
-            date: dt,
-            checkInTime: drift.Value(checkInDateTime),
-            checkOutTime: checkOutDateTime != null
-                ? drift.Value(checkOutDateTime)
-                : const drift.Value.absent(),
-            status: st,
-            workingHours: workingHours != null
-                ? drift.Value(workingHours)
-                : const drift.Value.absent(),
-            notes: nt.isNotEmpty ? drift.Value(nt) : const drift.Value.absent(),
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ),
+        final service = ref.read(staffManagementServiceProvider);
+        await service.recordManualAttendance(
+          widget.staff.staffId,
+          date: dt,
+          status: st,
+          checkInTime: checkInDateTime,
+          checkOutTime: checkOutDateTime,
+          workingHours: workingHours,
+          notes: nt.isNotEmpty ? nt : null,
+          source: 'manual',
         );
         await _loadAttendance();
         if (mounted) {
@@ -259,7 +254,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+            const SnackBar(content: Text('خطأ في حفظ الحضور'), backgroundColor: Colors.red),
           );
         }
       } finally {
@@ -280,7 +275,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
   Future<void> _checkIn() async {
     setState(() => _isChecking = true);
     try {
-      await _dao.checkIn(widget.staff.staffId);
+      final service = ref.read(staffManagementServiceProvider);
+      await service.recordCheckIn(widget.staff.staffId, source: 'manual');
+      if (!mounted) return;
       await _loadAttendance();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -293,7 +290,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('فشل تسجيل الحضور'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -304,7 +301,18 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
   Future<void> _checkOut() async {
     setState(() => _isChecking = true);
     try {
-      await _dao.checkOut(widget.staff.staffId);
+      final service = ref.read(staffManagementServiceProvider);
+      final success = await service.recordCheckOut(widget.staff.staffId, source: 'manual');
+      if (!mounted) return;
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('لم يتم العثور على سجل حضور اليوم'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
       await _loadAttendance();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -317,7 +325,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('فشل تسجيل الانصراف'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -327,9 +335,11 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('سجل الحضور: ${widget.staff.name}'),
+    return PermissionGuard(
+      permission: Permission.viewAttendance,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('سجل الحضور: ${widget.staff.name}'),
         actions: [
           ElevatedButton.icon(
             onPressed: _isChecking ? null : _checkIn,
@@ -363,6 +373,25 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
             ),
           ),
+          const SizedBox(width: 4),
+          ElevatedButton.icon(
+            onPressed: _isChecking ? null : () async {
+              final result = await showDialog<bool>(
+                context: context,
+                builder: (_) => ManualOverrideDialog(staff: widget.staff),
+              );
+              if (result == true) {
+                _loadAttendance();
+              }
+            },
+            icon: const Icon(Icons.admin_panel_settings, size: 18),
+            label: const Text('تعديل مراقب'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+          ),
           const SizedBox(width: 8),
         ],
       ),
@@ -371,6 +400,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
           : _attendanceList.isEmpty
           ? _buildEmptyState()
           : _buildAttendanceList(),
+      ),
     );
   }
 

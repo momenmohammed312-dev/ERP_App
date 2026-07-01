@@ -278,15 +278,40 @@ class SupplierExpenseService {
       endDate: endDate,
     );
 
+    // Get total purchases for the period
+    final purchaseResult = await db.customSelect(
+      '''
+      SELECT COALESCE(SUM(total_amount), 0) as total_purchases
+      FROM purchases
+      WHERE purchase_date BETWEEN ? AND ? AND is_deleted = 0
+      ''',
+      variables: [
+        Variable.withDateTime(startDate ?? DateTime.now().subtract(const Duration(days: 30))),
+        Variable.withDateTime(endDate ?? DateTime.now()),
+      ],
+    ).get();
+    final totalPurchases = (purchaseResult.first.data['total_purchases'] as double?) ?? 0.0;
+
+    // Calculate total outstanding payables from supplier balances
+    final suppliers = await db.supplierDao.getAllSuppliers();
+    double totalPayables = 0.0;
+    for (final supplier in suppliers) {
+      final transactions = await (db.select(db.ledgerTransactions)
+        ..where((tbl) => tbl.refId.equals(supplier.id))
+        ..where((tbl) => tbl.entityType.equals('Supplier'))).get();
+      final balance = transactions.fold<double>(0.0, (sum, t) => sum + t.credit - t.debit);
+      if (balance > 0) totalPayables += balance;
+    }
+
     return ComprehensiveReportData(
       startDate: startDate ?? DateTime.now(),
       endDate: endDate ?? DateTime.now(),
       salesReport: salesReport,
       expenseReport: expenseReport,
-      netProfit: salesReport.totalSales - expenseReport.totalExpenses,
+      totalPurchases: totalPurchases,
+      netProfit: salesReport.totalSales - totalPurchases - expenseReport.totalExpenses,
       totalOutstandingReceivables: salesReport.totalOutstanding,
-      totalOutstandingPayables:
-          0.0, // Calculate from supplier balances if needed
+      totalOutstandingPayables: totalPayables,
     );
   }
 
@@ -398,6 +423,7 @@ class ComprehensiveReportData {
   final DateTime? endDate;
   final SalesReportData salesReport;
   final SupplierExpenseReportData expenseReport;
+  final double totalPurchases;
   final double netProfit;
   final double totalOutstandingReceivables;
   final double totalOutstandingPayables;
@@ -407,6 +433,7 @@ class ComprehensiveReportData {
     required this.endDate,
     required this.salesReport,
     required this.expenseReport,
+    this.totalPurchases = 0,
     required this.netProfit,
     required this.totalOutstandingReceivables,
     required this.totalOutstandingPayables,

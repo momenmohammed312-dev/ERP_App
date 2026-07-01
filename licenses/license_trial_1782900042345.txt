@@ -1,0 +1,13 @@
+TRIAL LICENSE
+=============
+Generated: 2026-07-01 13:00:42.357231
+Device ID: UNBOUND
+Type: trial
+Max Users: 1
+Duration: 10 days (TRIAL)
+Device: UNBOUND (any device)
+Expires: 2026-07-11
+Features: pos, inventory, customers, suppliers, reports, accounting, users, backup, export, admin
+
+TRIAL LICENSE KEY:
+r7Jpnj56A/w4MTvtuxRek4X+X4Y7mAxSGVp/KsyB81Qh/Je/8qOCrMeP5HzGrwMgpU7CC3T/VC5o0o+4pDzF1u/9hzpu7ehTBx/ZbRCCiVQBAMgQ0sAONhnYcvrXOSbH1qaKKQC4FQOJqjnDXF9okTsRLGhhLHljiu671eS/Vq4gTOo92b04ExAmAWEAeqLi1wHbHS8NOtldiPLOFMpn97ZmZ7Z1o89wOuYn8B2i0BEC8PNZ23iHUKJTrHXTBFFB7t4alZ2yxt+lBJgaqOPOXQB7kFMG7bmPBwgl+3LACNIV3jUdFDpvgFIkLIPJGbn6gE54oh0oW8Pjk6n0ddrh4lepfUszrKWhi+Qwno3qFizKWel8eW44ve0Z17u3dOj4j9dTOsZc8RzeCPOWxpnIAOsuP3kNatTBWQsgRwMSengx3n3HOkArfq+dtorI7j4a.4bd8438ef9a81c07bc4ccee67ccf30d9f145673393270e0f1123bb309c044de3

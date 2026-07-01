@@ -138,12 +138,133 @@ class StaffManagementService {
 
   // ATTENDANCE MANAGEMENT
 
-  Future<void> recordCheckIn(String staffId, {String? location}) async {
-    await _dao.checkIn(staffId, location: location);
+  Future<void> recordCheckIn(
+    String staffId, {
+    String? location,
+    String source = 'manual',
+    int? sourceDeviceId,
+    int? rawEventId,
+  }) async {
+    await _dao.checkIn(
+      staffId,
+      location: location,
+      source: source,
+      sourceDeviceId: sourceDeviceId,
+      rawEventId: rawEventId,
+    );
   }
 
-  Future<void> recordCheckOut(String staffId, {String? location}) async {
-    await _dao.checkOut(staffId, location: location);
+  /// Returns true if checkout was successful, false if no attendance record exists for today
+  Future<bool> recordCheckOut(
+    String staffId, {
+    String? location,
+    String source = 'manual',
+    int? sourceDeviceId,
+    int? rawEventId,
+  }) async {
+    return await _dao.checkOut(
+      staffId,
+      location: location,
+      source: source,
+      sourceDeviceId: sourceDeviceId,
+      rawEventId: rawEventId,
+    );
+  }
+
+  Future<void> recordManualOverride(
+    User? user,
+    String staffId, {
+    required DateTime date,
+    required String status,
+    required String reason,
+    DateTime? checkInTime,
+    DateTime? checkOutTime,
+    String? notes,
+  }) async {
+    PermissionValidator.requirePermission(user, Permission.manageAttendance);
+    if (reason.trim().isEmpty) {
+      throw Exception('Reason is required for manual override');
+    }
+
+    final entry = AttendanceTableCompanion.insert(
+      staffId: staffId,
+      date: date,
+      status: status,
+      checkInTime: Value(checkInTime),
+      checkOutTime: Value(checkOutTime),
+      notes: Value(notes),
+      source: const Value('admin_override'),
+      overrideReason: Value(reason),
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    // If an entry already exists for this date, we should update it, otherwise add.
+    // For simplicity, we can rely on DAO's logic or implement an upsert here if needed.
+    // Assuming adding a new attendance log or updating the existing one:
+    final existing = await _dao.getAttendanceByStaff(staffId, startDate: date, endDate: date.add(const Duration(days: 1)));
+    final todayRecords = existing.where((a) => a.date == date).toList();
+
+    if (todayRecords.isNotEmpty) {
+      final updated = todayRecords.first.copyWith(
+        status: status,
+        checkInTime: Value(checkInTime),
+        checkOutTime: Value(checkOutTime),
+        notes: Value(notes),
+        source: const Value('admin_override'),
+        overrideReason: Value(reason),
+        updatedAt: DateTime.now(),
+      );
+      await _dao.updateAttendance(updated);
+    } else {
+      await _dao.addAttendance(entry);
+    }
+  }
+
+  Future<void> recordManualAttendance(
+    String staffId, {
+    required DateTime date,
+    required String status,
+    DateTime? checkInTime,
+    DateTime? checkOutTime,
+    double? workingHours,
+    String? notes,
+    String source = 'manual',
+  }) async {
+    final entry = AttendanceTableCompanion.insert(
+      staffId: staffId,
+      date: date,
+      status: status,
+      checkInTime: Value(checkInTime),
+      checkOutTime: Value(checkOutTime),
+      workingHours: Value(workingHours),
+      notes: Value(notes),
+      source: Value(source),
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    final existing = await _dao.getAttendanceByStaff(
+      staffId,
+      startDate: date,
+      endDate: date.add(const Duration(days: 1)),
+    );
+    final todayRecords = existing.where((a) => a.date == date).toList();
+
+    if (todayRecords.isNotEmpty) {
+      final updated = todayRecords.first.copyWith(
+        status: status,
+        checkInTime: Value(checkInTime),
+        checkOutTime: Value(checkOutTime),
+        workingHours: Value(workingHours),
+        notes: Value(notes),
+        source: Value(source),
+        updatedAt: DateTime.now(),
+      );
+      await _dao.updateAttendance(updated);
+    } else {
+      await _dao.addAttendance(entry);
+    }
   }
 
   Future<AttendanceSummary> getAttendanceSummary(

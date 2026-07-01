@@ -483,6 +483,7 @@ class _EnhancedNewInvoicePageState
             quantity: Value(entry.quantity),
             price: Value(entry.unitPrice),
             discount: Value(entry.discount),
+            unitCostAtTime: Value(entry.product!.costPrice),
           ),
         );
       }
@@ -744,6 +745,7 @@ class _EnhancedNewInvoicePageState
             price: e.unitPrice,
             ctn: ctn,
             discount: e.discount,
+            unitCostAtTime: e.product!.costPrice,
           );
         }).toList();
 

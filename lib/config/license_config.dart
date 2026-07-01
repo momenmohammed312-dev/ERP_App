@@ -5,6 +5,18 @@ class LicenseConfig {
     defaultValue: 'CHANGE_ME',
   );
 
+  /// When true, runs in fully-free mode — no license activation required.
+  /// Set via: --dart-define=FREE_VERSION=true
+  static bool get isFreeVersion =>
+    const bool.fromEnvironment('FREE_VERSION', defaultValue: false);
+
+  /// Trial license key shown when user taps "تجربة مجانية".
+  /// Only used when isFreeVersion == false.
+  static const String trialLicenseKey = String.fromEnvironment(
+    'TRIAL_LICENSE_KEY',
+    defaultValue: 'r7Jpnj56A/w4MTvtuxRek4X+X4Y7mAxSGVp/KsyB81Qh/Je/8qOCrMeP5HzGrwMgpU7CC3T/VC5o0o+4pDzF1u/9hzpu7ehTBx/ZbRCCiVQBAMgQ0sAONhnYcvrXOSbH1qaKKQC4FQOJqjnDXF9okTsRLGhhLHljiu671eS/Vq4gTOo92b04ExAmAWEAeqLi1wHbHS8NOtldiPLOFMpn97ZmZ7Z1o89wOuYn8B2i0BEC8PNZ23iHUKJTrHXTBFFB7t4alZ2yxt+lBJgaqOPOXQB7kFMG7bmPBwgl+3LACNIV3jUdFDpvgFIkLIPJGbn6gE54oh0oW8Pjk6n0ddrh4lepfUszrKWhi+Qwno3qFizKWel8eW44ve0Z17u3dOj4j9dTOsZc8RzeCPOWxpnIAOsuP3kNatTBWQsgRwMSengx3n3HOkArfq+dtorI7j4a.4bd8438ef9a81c07bc4ccee67ccf30d9f145673393270e0f1123bb309c044de3',
+  );
+
   // License duration types
   static const Map<String, Map<String, dynamic>> licenseDurations = {
     'monthly': {'name': 'شهري', 'days': 30, 'price_multiplier': 1.0},
