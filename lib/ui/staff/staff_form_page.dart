@@ -47,7 +47,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   Future<void> _initializeService() async {
     final db = ref.read(appDatabaseProvider);
-    _service = StaffManagementService(StaffManagementDao(db));
+    _service = StaffManagementService(StaffManagementDao(db), db);
     if (widget.staff != null) {
       _populateForm(widget.staff!);
     }

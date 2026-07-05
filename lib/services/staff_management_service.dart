@@ -5,11 +5,13 @@ import '../core/database/app_database.dart';
 import '../core/database/dao/staff_management_dao.dart';
 import '../core/models/user_model.dart';
 import '../core/services/validation/permission_validator.dart';
+import '../services/attendance/attendance_calculation_engine.dart';
 
 class StaffManagementService {
   final StaffManagementDao _dao;
+  final AppDatabase? _db;
 
-  StaffManagementService(this._dao);
+  StaffManagementService(this._dao, [this._db]);
 
   // STAFF MANAGEMENT
 
@@ -145,12 +147,28 @@ class StaffManagementService {
     int? sourceDeviceId,
     int? rawEventId,
   }) async {
+    // Calculate smart status if engine is available
+    String status = 'present';
+    if (_db != null) {
+      try {
+        final engine = AttendanceCalculationEngine(
+          _db!,
+          _db!.attendanceDeviceDao,
+          _dao,
+        );
+        status = await engine.processCheckIn(staffId);
+      } catch (_) {
+        // Fallback to default 'present' if engine fails
+      }
+    }
+
     await _dao.checkIn(
       staffId,
       location: location,
       source: source,
       sourceDeviceId: sourceDeviceId,
       rawEventId: rawEventId,
+      status: status,
     );
   }
 
@@ -162,12 +180,56 @@ class StaffManagementService {
     int? sourceDeviceId,
     int? rawEventId,
   }) async {
+    // Calculate working hours and overtime if engine is available
+    double? workingHours;
+    double? overtimeHours;
+    String? status;
+
+    if (_db != null) {
+      try {
+        final engine = AttendanceCalculationEngine(
+          _db!,
+          _db!.attendanceDeviceDao,
+          _dao,
+        );
+
+        // Get today's attendance to find check-in time
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final tomorrow = today.add(const Duration(days: 1));
+        final records = await _dao.getAttendanceByStaff(
+          staffId,
+          startDate: today,
+          endDate: tomorrow,
+        );
+        final todayRecord = records.where((a) {
+          final aDate = DateTime(a.date.year, a.date.month, a.date.day);
+          return aDate == today;
+        }).toList();
+
+        if (todayRecord.isNotEmpty && todayRecord.first.checkInTime != null) {
+          final result = await engine.processCheckOut(
+            staffId,
+            checkInTime: todayRecord.first.checkInTime!,
+          );
+          workingHours = result.workingHours;
+          overtimeHours = result.overtimeHours;
+          status = result.status;
+        }
+      } catch (_) {
+        // Fallback: let DAO calculate basic working hours
+      }
+    }
+
     return await _dao.checkOut(
       staffId,
       location: location,
       source: source,
       sourceDeviceId: sourceDeviceId,
       rawEventId: rawEventId,
+      workingHours: workingHours,
+      overtimeHours: overtimeHours,
+      status: status,
     );
   }
 

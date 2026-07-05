@@ -129,7 +129,7 @@ void main(List<String> args) async {
   print('3. Professional (5 users)');
   print('4. Enterprise (10 users)');
   print('5. Administrator (lifetime, unlimited users)');
-  print('6. TRIAL (10 days, UNBOUND, all features)');
+  print('6. TRIAL (7 days, UNBOUND, all features)');
   stdout.write('\nSelect type (1-6): ');
   final typeChoice = stdin.readLineSync()?.trim() ?? '1';
 
@@ -143,10 +143,10 @@ void main(List<String> args) async {
   double priceMultiplier;
 
   if (isTrial) {
-    days = 10;
-    durationName = '10 أيام';
+    days = 7;
+    durationName = '7 أيام';
     priceMultiplier = 0;
-    print('\nTrial license — Device: UNBOUND, Duration: 10 days');
+    print('\nTrial license — Device: UNBOUND, Duration: 7 days');
   } else {
     // Get device fingerprint
     stdout.write('Enter customer\'s Device ID: ');
@@ -268,8 +268,8 @@ void _generateAndPrint({required String type}) {
   const isTrial = true;
 
   const deviceFingerprint = 'UNBOUND';
-  const days = 10;
-  const durationName = '10 أيام';
+  const days = 7;
+  const durationName = '7 أيام';
 
   final now = DateTime.now();
   final expiryDate = now.add(const Duration(days: days));

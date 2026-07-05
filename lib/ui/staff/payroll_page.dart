@@ -295,7 +295,7 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
     if (selectedMethod == null) return;
     try {
       final db = ref.read(appDatabaseProvider);
-      final service = StaffManagementService(StaffManagementDao(db));
+      final service = StaffManagementService(StaffManagementDao(db), db);
       final user = ref.read(authProvider);
       await service.payPayroll(user, payroll.id, selectedMethod);
       if (mounted) {
@@ -331,7 +331,7 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
               Navigator.pop(context);
               try {
                 final db = ref.read(appDatabaseProvider);
-                final service = StaffManagementService(StaffManagementDao(db));
+                final service = StaffManagementService(StaffManagementDao(db), db);
                 final user = ref.read(authProvider);
                 await service.calculatePayroll(user, widget.staff.staffId, selectedPeriod);
                 if (!context.mounted) return;

@@ -34,7 +34,7 @@ final businessDateServiceProvider = Provider<BusinessDateService>((ref) {
 
 final staffManagementServiceProvider = Provider<StaffManagementService>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  return StaffManagementService(db.staffManagementDao);
+  return StaffManagementService(db.staffManagementDao, db);
 });
 
 final invoiceServiceProvider = Provider<InvoiceService>((ref) {

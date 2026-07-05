@@ -132,6 +132,8 @@ class License {
 class LicenseManager {
   static const String _storageKey = 'app_license';
   static const String _secretKey = LicenseConfig.secretKey;
+  static const String _firstRunKey = 'free_version_first_run';
+  static const int _freeTrialDays = 7;
 
   // Singleton
   static final LicenseManager _instance = LicenseManager._internal();
@@ -290,7 +292,12 @@ class LicenseManager {
   // ════════════════════════════════════════════════════════════════════
 
   Future<bool> isLicenseActive() async {
-    if (LicenseConfig.isFreeVersion) return true;
+    if (LicenseConfig.isFreeVersion) {
+      final firstRun = await _getFirstRunDate();
+      if (firstRun == null) return true;
+      final expiry = firstRun.add(Duration(days: _freeTrialDays));
+      return DateTime.now().isBefore(expiry);
+    }
     final license = await getCurrentLicense();
     if (license == null) return false;
     return license.isValid;
@@ -310,12 +317,29 @@ class LicenseManager {
 
   Future<License?> getCurrentLicense() async {
     if (LicenseConfig.isFreeVersion) {
+      final firstRun = await _getFirstRunDate();
+      if (firstRun == null) {
+        await _saveFirstRunDate(DateTime.now());
+        return License(
+          licenseKey: 'FREE_VERSION',
+          deviceFingerprint: 'free',
+          type: LicenseType.free,
+          issueDate: DateTime.now(),
+          expiryDate: DateTime.now().add(Duration(days: _freeTrialDays)),
+          features: List<String>.from(LicenseConfig.availableFeatures),
+          maxUsers: 999,
+          companyName: 'Free Version',
+          contactEmail: '',
+        );
+      }
+      final expiry = firstRun.add(Duration(days: _freeTrialDays));
+      if (DateTime.now().isAfter(expiry)) return null;
       return License(
         licenseKey: 'FREE_VERSION',
         deviceFingerprint: 'free',
         type: LicenseType.free,
-        issueDate: DateTime(2020, 1, 1),
-        expiryDate: DateTime(2100, 1, 1),
+        issueDate: firstRun,
+        expiryDate: expiry,
         features: List<String>.from(LicenseConfig.availableFeatures),
         maxUsers: 999,
         companyName: 'Free Version',
@@ -359,7 +383,7 @@ class LicenseManager {
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // تفعيل النسخة التجريبية (10 أيام)
+  // تفعيل النسخة التجريبية (7 أيام)
   // ════════════════════════════════════════════════════════════════════
 
   Future<LicenseValidationResult> activateTrial() async {
@@ -367,7 +391,7 @@ class LicenseManager {
       final key = generateLicenseKey(
         deviceFingerprint: 'UNBOUND',
         type: LicenseType.trial,
-        validityDays: 10,
+        validityDays: 7,
         features: List<String>.from(LicenseConfig.availableFeatures),
         companyName: 'Trial',
         contactEmail: '',
@@ -394,6 +418,18 @@ class LicenseManager {
   Future<void> _saveLicense(License license) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_storageKey, jsonEncode(license.toJson()));
+  }
+
+  Future<DateTime?> _getFirstRunDate() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dateStr = prefs.getString(_firstRunKey);
+    if (dateStr == null) return null;
+    return DateTime.tryParse(dateStr);
+  }
+
+  Future<void> _saveFirstRunDate(DateTime date) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_firstRunKey, date.toIso8601String());
   }
 
   String _encrypt(String plainText) {

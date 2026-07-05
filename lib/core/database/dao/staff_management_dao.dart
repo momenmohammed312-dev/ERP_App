@@ -95,6 +95,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
     String source = 'manual',
     int? sourceDeviceId,
     int? rawEventId,
+    String status = 'present',
   }) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -115,6 +116,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
         source: Value(source),
         sourceDeviceId: Value(sourceDeviceId),
         rawEventId: Value(rawEventId),
+        status: Value(status),
         updatedAt: now,
       ));
     } else {
@@ -122,7 +124,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
         AttendanceTableCompanion.insert(
           staffId: staffId,
           date: today,
-          status: 'present',
+          status: status,
           checkInTime: Value(now),
           checkInLocation: Value(location),
           source: Value(source),
@@ -142,6 +144,9 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
     String source = 'manual',
     int? sourceDeviceId,
     int? rawEventId,
+    double? workingHours,
+    double? overtimeHours,
+    String? status,
   }) async {
     final now = DateTime.now();
     // Find today's attendance record
@@ -159,10 +164,30 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
     }
 
     final record = attendanceRecords.first;
+
+    // Calculate working hours if not provided
+    double? finalWorkingHours = workingHours;
+    double? finalOvertimeHours = overtimeHours;
+    String? finalStatus = status;
+
+    if (finalWorkingHours == null && record.checkInTime != null) {
+      final diffMinutes = now.difference(record.checkInTime!).inMinutes;
+      finalWorkingHours = diffMinutes / 60.0;
+    }
+
+    // If status not provided, keep existing
+    finalStatus ??= record.status;
+
     await updateAttendance(
       record.copyWith(
         checkOutTime: Value(now),
         checkOutLocation: Value(location),
+        workingHours: Value(finalWorkingHours),
+        overtimeHours: Value(finalOvertimeHours ?? 0),
+        status: Value(finalStatus),
+        source: Value(source),
+        sourceDeviceId: Value(sourceDeviceId),
+        rawEventId: Value(rawEventId),
         updatedAt: now,
       ),
     );

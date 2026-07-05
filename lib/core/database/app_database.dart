@@ -52,6 +52,7 @@ import 'package:pos_offline_desktop/core/database/tables/invoice_payments_table.
 import 'package:pos_offline_desktop/core/database/tables/damaged_items_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/sales_returns_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/attendance_device_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/attendance_settings_table.dart';
 import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart';
 import 'customer_status_fix.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
@@ -111,6 +112,7 @@ part 'app_database.g.dart';
     StaffBiometricMappings,
     AttendanceRawEvents,
     AttendanceSyncLogs,
+    AttendanceSettings,
   ],
   daos: [
     ProductDao,
@@ -145,7 +147,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 47;
+  int get schemaVersion => 48;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -210,6 +212,11 @@ class AppDatabase extends _$AppDatabase {
       // 4i. Schema v47 — attendance device integration
       if (from < 47) {
         await _runV47Migrations(m);
+      }
+
+      // 4j. Schema v48 — attendance settings + staff schedule columns
+      if (from < 48) {
+        await _runV48Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -328,6 +335,39 @@ class AppDatabase extends _$AppDatabase {
       } catch (e) {
         log('Error creating app_notifications table: $e');
       }
+
+      // Safety check for attendance_settings table
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS attendance_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            setting_key TEXT NOT NULL UNIQUE,
+            setting_value TEXT NOT NULL,
+            description TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          )
+        ''');
+      } catch (e) {
+        log('Error creating attendance_settings table: $e');
+      }
+
+      // Safety check for staff_table schedule columns
+      try {
+        await customStatement('ALTER TABLE staff_table ADD COLUMN work_schedule_start TEXT');
+      } catch (_) {}
+      try {
+        await customStatement('ALTER TABLE staff_table ADD COLUMN work_schedule_end TEXT');
+      } catch (_) {}
+      try {
+        await customStatement('ALTER TABLE staff_table ADD COLUMN work_days TEXT');
+      } catch (_) {}
+      try {
+        await customStatement('ALTER TABLE staff_table ADD COLUMN weekend_day TEXT');
+      } catch (_) {}
+      try {
+        await customStatement('ALTER TABLE staff_table ADD COLUMN use_default_schedule INTEGER NOT NULL DEFAULT 1');
+      } catch (_) {}
 
       // Safety check for biometric attendance tables
       try {
@@ -938,6 +978,64 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  /// Schema v48 — attendance settings table + staff schedule columns
+  Future<void> _runV48Migrations(Migrator m) async {
+    await _logMigrationStep(48, 'attendance_settings_schedule', 'started');
+    try {
+      // 1. Create AttendanceSettings table
+      try {
+        await m.createTable(attendanceSettings);
+        log('v48: Created attendance_settings table');
+      } catch (e) {
+        log('v48 warning attendance_settings: $e');
+      }
+
+      // 2. Add schedule columns to staff_table
+      final scheduleColumns = [
+        'ALTER TABLE staff_table ADD COLUMN work_schedule_start TEXT',
+        'ALTER TABLE staff_table ADD COLUMN work_schedule_end TEXT',
+        'ALTER TABLE staff_table ADD COLUMN work_days TEXT',
+        'ALTER TABLE staff_table ADD COLUMN weekend_day TEXT',
+        'ALTER TABLE staff_table ADD COLUMN use_default_schedule INTEGER NOT NULL DEFAULT 1',
+      ];
+      for (final sql in scheduleColumns) {
+        try {
+          await customStatement(sql);
+          log('v48: $sql');
+        } catch (e) {
+          log('v48 warning (column may exist): $e');
+        }
+      }
+
+      // 3. Insert default settings
+      final now = DateTime.now();
+      final nowMs = now.millisecondsSinceEpoch;
+      try {
+        await customStatement('''
+          INSERT OR IGNORE INTO attendance_settings (setting_key, setting_value, description, created_at, updated_at)
+          VALUES 
+            ('default_work_start', '09:00', 'وقت بدء العمل الافتراضي', $nowMs, $nowMs),
+            ('default_work_end', '17:00', 'وقت نهاية العمل الافتراضي', $nowMs, $nowMs),
+            ('default_work_days', 'sun,mon,tue,wed,thu', 'أيام العمل الافتراضية', $nowMs, $nowMs),
+            ('default_weekend', 'fri', 'يوم الإجازة الافتراضي', $nowMs, $nowMs),
+            ('grace_period_minutes', '15', 'فترة السماح بالتأخير (دقائق)', $nowMs, $nowMs),
+            ('overtime_threshold_hours', '8', 'ساعات العمل قبل حساب إضافي', $nowMs, $nowMs),
+            ('late_penalty_amount', '0', 'مبلغ غرامة التأخير (0 = بدون)', $nowMs, $nowMs),
+            ('absence_penalty_amount', '0', 'مبلغ غرامة الغياب (0 = بدون)', $nowMs, $nowMs),
+            ('overtime_rate_multiplier', '1.5', 'مضاعف العمل الإضافي', $nowMs, $nowMs)
+        ''');
+        log('v48: Inserted default attendance settings');
+      } catch (e) {
+        log('v48 warning (default settings): $e');
+      }
+
+      await _logMigrationStep(48, 'attendance_settings_schedule', 'completed');
+    } catch (e) {
+      await _logMigrationStep(48, 'attendance_settings_schedule', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
   Future<void> _fixPurchaseAmountTypes() async {
     try {
       log(' Fixing amount types in purchases table...');
@@ -1112,7 +1210,12 @@ class AppDatabase extends _$AppDatabase {
           notes TEXT,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
-          is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))
+          is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+          work_schedule_start TEXT,
+          work_schedule_end TEXT,
+          work_days TEXT,
+          weekend_day TEXT,
+          use_default_schedule INTEGER NOT NULL DEFAULT 1
         )
       ''',
       'attendance_table': '''

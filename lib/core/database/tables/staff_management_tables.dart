@@ -53,6 +53,13 @@ class StaffTable extends Table {
   DateTimeColumn get updatedAt => dateTime()();
 
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
+  // ── Work Schedule (per-employee overrides) ──────────────────────────
+  TextColumn get workScheduleStart => text().nullable()(); // '09:00' or null = use default
+  TextColumn get workScheduleEnd => text().nullable()();   // '17:00' or null = use default
+  TextColumn get workDays => text().nullable()();          // 'sun,mon,tue,wed,thu' or null = use default
+  TextColumn get weekendDay => text().nullable()();        // 'fri' or null = use default
+  BoolColumn get useDefaultSchedule => boolean().withDefault(const Constant(true))();
 }
 
 /// Attendance table for tracking employee attendance

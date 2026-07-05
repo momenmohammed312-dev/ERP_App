@@ -65,6 +65,246 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
     }
   }
 
+  void _showAddDeviceDialog() {
+    final nameController = TextEditingController();
+    final deviceCodeController = TextEditingController();
+    final vendorController = TextEditingController();
+    final modelController = TextEditingController();
+    final ipController = TextEditingController();
+    final portController = TextEditingController();
+    final serialController = TextEditingController();
+    final locationController = TextEditingController();
+    final authTokenController = TextEditingController();
+    String connectionType = 'tcp_ip';
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('إضافة جهاز حضور جديد'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'اسم الجهاز *',
+                      hintText: 'مثال: بوابة الدخول الرئيسية',
+                    ),
+                    validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: deviceCodeController,
+                    decoration: const InputDecoration(
+                      labelText: 'كود الجهاز *',
+                      hintText: 'مثال: BIO-001',
+                    ),
+                    validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: connectionType,
+                    decoration: const InputDecoration(labelText: 'نوع الاتصال *'),
+                    items: const [
+                      DropdownMenuItem(value: 'tcp_ip', child: Text('TCP/IP')),
+                      DropdownMenuItem(value: 'usb_import', text: Text('استيراد USB')),
+                      DropdownMenuItem(value: 'sdk', child: Text('SDK')),
+                      DropdownMenuItem(value: 'file_import', child: Text('استيراد ملف')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) setDialogState(() => connectionType = v);
+                    },
+                  ),
+                  if (connectionType == 'tcp_ip') ...[
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: ipController,
+                      decoration: const InputDecoration(
+                        labelText: 'عنوان IP *',
+                        hintText: '192.168.1.100',
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (v) {
+                        if (connectionType == 'tcp_ip' && (v == null || v.trim().isEmpty)) {
+                          return 'مطلوب للاتصال TCP/IP';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: portController,
+                      decoration: const InputDecoration(
+                        labelText: 'البورت *',
+                        hintText: '4370',
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (v) {
+                        if (connectionType == 'tcp_ip' && (v == null || v.trim().isEmpty)) {
+                          return 'مطلوب';
+                        }
+                        if (v != null && v.isNotEmpty && int.tryParse(v) == null) {
+                          return 'رقم صحيح مطلوب';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: vendorController,
+                    decoration: const InputDecoration(
+                      labelText: 'الشركة المصنعة',
+                      hintText: 'ZKTeco, Hikvision',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: modelController,
+                    decoration: const InputDecoration(labelText: 'الموديل'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: serialController,
+                    decoration: const InputDecoration(labelText: 'الرقم التسلسلي'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: locationController,
+                    decoration: const InputDecoration(
+                      labelText: 'الموقع',
+                      hintText: 'الفرع الرئيسي، بوابة 1',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: authTokenController,
+                    decoration: const InputDecoration(labelText: 'Auth Token (اختياري)'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+
+                try {
+                  final dao = ref.read(attendanceDeviceDaoProvider);
+                  final now = DateTime.now();
+
+                  // Check unique device code
+                  final existingDevices = await dao.getAllDevices();
+                  final codeExists = existingDevices.any(
+                    (d) => d.deviceCode == deviceCodeController.text.trim(),
+                  );
+                  if (codeExists) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('كود الجهاز موجود بالفعل'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                    }
+                    return;
+                  }
+
+                  await dao.addDevice(BiometricDevicesCompanion.insert(
+                    deviceCode: deviceCodeController.text.trim(),
+                    name: nameController.text.trim(),
+                    connectionType: connectionType,
+                    vendor: Value(vendorController.text.trim().isEmpty ? null : vendorController.text.trim()),
+                    model: Value(modelController.text.trim().isEmpty ? null : modelController.text.trim()),
+                    ipAddress: connectionType == 'tcp_ip' ? Value(ipController.text.trim()) : const Value(null),
+                    port: connectionType == 'tcp_ip' && portController.text.isNotEmpty
+                        ? Value(int.parse(portController.text.trim()))
+                        : const Value(null),
+                    serialNumber: Value(serialController.text.trim().isEmpty ? null : serialController.text.trim()),
+                    location: Value(locationController.text.trim().isEmpty ? null : locationController.text.trim()),
+                    authToken: Value(authTokenController.text.trim().isEmpty ? null : authTokenController.text.trim()),
+                    createdAt: now,
+                    updatedAt: now,
+                  ));
+
+                  if (mounted) {
+                    Navigator.pop(context);
+                    _loadDevices();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('تم إضافة الجهاز بنجاح'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('خطأ في إضافة الجهاز: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteDevice(BiometricDevice device) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('حذف الجهاز'),
+        content: Text('هل أنت متأكد من حذف الجهاز "${device.name}"؟\nسيتم حذف جميع الحركات المرتبطة به.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                final dao = ref.read(attendanceDeviceDaoProvider);
+                await dao.deleteDevice(device.id);
+                _loadDevices();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم حذف الجهاز'), backgroundColor: Colors.green),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('خطأ في الحذف: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('حذف', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PermissionGuard(
@@ -75,9 +315,7 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
           actions: [
             IconButton(
               icon: const Icon(Icons.add),
-              onPressed: () {
-                // TODO: Open add device dialog/page
-              },
+              onPressed: _showAddDeviceDialog,
               tooltip: 'إضافة جهاز',
             ),
           ],
@@ -85,7 +323,7 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _devices.isEmpty
-                ? const Center(child: Text('لا توجد أجهزة مضافة.'))
+                ? const Center(child: Text('لا توجد أجهزة مضافة. اضغط + لإضافة جهاز.'))
                 : ListView.builder(
                     itemCount: _devices.length,
                     itemBuilder: (context, index) {
@@ -117,6 +355,11 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
                                 icon: const Icon(Icons.sync),
                                 onPressed: () => _syncDevice(device),
                                 tooltip: 'مزامنة الآن',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _confirmDeleteDevice(device),
+                                tooltip: 'حذف الجهاز',
                               ),
                             ],
                           ),

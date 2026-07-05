@@ -268,7 +268,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
                     ),
                     icon: const Icon(Icons.card_giftcard, size: 20),
                     label: const Text(
-                      'تجربة مجانية لمدة 10 أيام',
+                      'تجربة مجانية لمدة 7 أيام',
                       style: TextStyle(fontSize: 14),
                     ),
                   ),

@@ -437,7 +437,7 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
     if (selectedMethod == null) return;
     try {
       final db = ref.read(appDatabaseProvider);
-      final service = StaffManagementService(StaffManagementDao(db));
+      final service = StaffManagementService(StaffManagementDao(db), db);
       final user = ref.read(authProvider);
       await service.payAdvance(user, advance.id, selectedMethod);
       if (mounted) {
