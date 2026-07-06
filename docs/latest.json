@@ -1,19 +1,19 @@
 {
-  "version": "2.1.0",
-  "build_number": 2,
-  "release_date": "2026-07-01",
-  "is_critical": false,
+  "version": "2.2.0",
+  "build_number": 3,
+  "release_date": "2026-07-06",
+  "is_critical": true,
   "min_supported_version": "2.0.0",
   "changelog": {
     "ar": [
-      "🎉 إطلاق الإصدار المجاني (Free Version)",
-      "✅ تجربة مجانية لمدة 10 أيام مع كل المميزات",
-      "📊 تحسين مؤشرات الأداء المالي في لوحة التحكم",
-      "💰 إصلاح COGS (تكلفة البضاعة المباعة) في الفواتير",
-      "📈 توحيد صيغة صافي الربح في جميع التقارير",
-      "👥 إضافة شاشة إدارة الموظفين والحضور",
-      "🔄 تحسين النسخ الاحتياطي التلقائي",
-      "🔧 إصلاح مشاكل وأخطاء متعددة"
+      "🔒 حماية متكاملة للترخيص بالجهاز (Hardware Binding)",
+      "🛡️ ملف مشفر AES + HMAC-SHA256 لبيانات الترخيص",
+      "⏱️ كشف تعديل الساعة و session time tracking",
+      "🖥️ ربط المفتاح بـ Disk Serial (مش هينفع يتحول لجهاز تاني)",
+      "⚠️ uninstall/reinstall مش بيعيد الـ 7 أيام المجانية",
+      "🔧 إصلاح أخطاء compile في نظام الحضور والموظفين",
+      "📈 تحسين نظام التحديث التلقائي",
+      "🐛 إصلاحات متعددة وأداء أفضل"
     ]
   },
   "features": [
@@ -35,8 +35,8 @@
   ],
   "downloads": {
     "windows": {
-      "url": "https://github.com/momenmohammed312-dev/pOS-Offline-DesktoP/releases/download/v2.1.0/POS_System_v2.1_Setup.exe",
-      "size": 0,
+      "url": "https://github.com/momenmohammed312-dev/ERP_App/releases/download/v2.2.0/POS_System_v2.2.0_Setup.exe",
+      "size": 18174464,
       "checksum": ""
     }
   },
