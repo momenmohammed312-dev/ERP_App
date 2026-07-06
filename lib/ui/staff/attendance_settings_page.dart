@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/widgets/permission_guard.dart';
 
 class AttendanceSettingsPage extends ConsumerStatefulWidget {
@@ -117,7 +118,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         if (existing != null) {
           await db.update(db.attendanceSettings).replace(
             existing.copyWith(
-              settingValue: drift.Value(entry.value),
+              settingValue: entry.value,
               updatedAt: now,
             ),
           );
@@ -177,7 +178,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             staffId: staff.staffId,
             date: dateOnly,
             status: 'absent',
-            source: const Value('auto_generated'),
+            source: const drift.Value('auto_generated'),
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
           ));

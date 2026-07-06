@@ -116,7 +116,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
         source: Value(source),
         sourceDeviceId: Value(sourceDeviceId),
         rawEventId: Value(rawEventId),
-        status: Value(status),
+        status: status,
         updatedAt: now,
       ));
     } else {
@@ -183,8 +183,8 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
         checkOutTime: Value(now),
         checkOutLocation: Value(location),
         workingHours: Value(finalWorkingHours),
-        overtimeHours: Value(finalOvertimeHours ?? 0),
-        status: Value(finalStatus),
+        overtimeHours: finalOvertimeHours ?? 0,
+        status: finalStatus,
         source: Value(source),
         sourceDeviceId: Value(sourceDeviceId),
         rawEventId: Value(rawEventId),

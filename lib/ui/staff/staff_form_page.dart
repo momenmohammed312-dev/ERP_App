@@ -4,7 +4,7 @@ import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
-import '../../services/staff_management_service_simple.dart';
+import '../../services/staff_management_service.dart';
 
 class StaffFormPage extends ConsumerStatefulWidget {
   final Staff? staff;
@@ -39,6 +39,16 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   DateTime? _contractEndDate;
   bool _isLoading = false;
 
+  // Work schedule
+  bool _useDefaultSchedule = true;
+  TimeOfDay _workScheduleStart = const TimeOfDay(hour: 9, minute: 0);
+  TimeOfDay _workScheduleEnd = const TimeOfDay(hour: 17, minute: 0);
+  final Map<String, bool> _workDays = {
+    'sun': true, 'mon': true, 'tue': true, 'wed': true, 'thu': true,
+    'fri': false, 'sat': false,
+  };
+  String _weekendDay = 'fri';
+
   @override
   void initState() {
     super.initState();
@@ -71,7 +81,35 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     _emergencyContactController.text = staff.emergencyContact ?? '';
     _emergencyPhoneController.text = staff.emergencyPhone ?? '';
     _notesController.text = staff.notes ?? '';
+
+    // Work schedule
+    _useDefaultSchedule = staff.useDefaultSchedule;
+    if (staff.workScheduleStart != null) {
+      _workScheduleStart = _parseTime(staff.workScheduleStart!);
+    }
+    if (staff.workScheduleEnd != null) {
+      _workScheduleEnd = _parseTime(staff.workScheduleEnd!);
+    }
+    if (staff.workDays != null && staff.workDays!.isNotEmpty) {
+      final days = staff.workDays!.split(',');
+      for (final key in _workDays.keys) {
+        _workDays[key] = days.contains(key);
+      }
+    }
+    _weekendDay = staff.weekendDay ?? 'fri';
   }
+
+  TimeOfDay _parseTime(String time) {
+    final parts = time.split(':');
+    if (parts.length != 2) return const TimeOfDay(hour: 9, minute: 0);
+    return TimeOfDay(
+      hour: int.tryParse(parts[0]) ?? 9,
+      minute: int.tryParse(parts[1]) ?? 0,
+    );
+  }
+
+  String _formatTime(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   @override
   void dispose() {
@@ -136,6 +174,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               _buildBankInfo(),
               const SizedBox(height: 16),
               _buildNotes(),
+              const SizedBox(height: 16),
+              _buildWorkScheduleSection(),
             ],
           ),
         ),
@@ -449,6 +489,99 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     );
   }
 
+  Widget _buildWorkScheduleSection() {
+    return Card(
+      color: const Color(0xFF3A3A3A),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'جدول العمل',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: Colors.blue[400],
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              title: const Text(
+                'استخدام الجدول الافتراضي',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: Text(
+                _useDefaultSchedule ? 'من إعدادات الحضور العامة' : 'جدول مخصص لهذا الموظف',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              value: _useDefaultSchedule,
+              onChanged: (v) => setState(() => _useDefaultSchedule = v),
+              activeColor: Colors.blue[400],
+            ),
+            if (!_useDefaultSchedule) ...[
+              const Divider(color: Colors.white24),
+              ListTile(
+                title: const Text('وقت بدء العمل', style: TextStyle(color: Colors.white)),
+                subtitle: Text(_formatTime(_workScheduleStart), style: const TextStyle(color: Colors.white70)),
+                trailing: const Icon(Icons.access_time, color: Colors.blue),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: _workScheduleStart,
+                  );
+                  if (picked != null) setState(() => _workScheduleStart = picked);
+                },
+              ),
+              ListTile(
+                title: const Text('وقت نهاية العمل', style: TextStyle(color: Colors.white)),
+                subtitle: Text(_formatTime(_workScheduleEnd), style: const TextStyle(color: Colors.white70)),
+                trailing: const Icon(Icons.access_time, color: Colors.blue),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: _workScheduleEnd,
+                  );
+                  if (picked != null) setState(() => _workScheduleEnd = picked);
+                },
+              ),
+              const SizedBox(height: 8),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text('أيام العمل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  _buildScheduleDayChip('sun', 'الأحد'),
+                  _buildScheduleDayChip('mon', 'الاثنين'),
+                  _buildScheduleDayChip('tue', 'الثلاثاء'),
+                  _buildScheduleDayChip('wed', 'الأربعاء'),
+                  _buildScheduleDayChip('thu', 'الخميس'),
+                  _buildScheduleDayChip('fri', 'الجمعة'),
+                  _buildScheduleDayChip('sat', 'السبت'),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScheduleDayChip(String key, String label) {
+    final selected = _workDays[key] ?? false;
+    return FilterChip(
+      label: Text(label, style: TextStyle(color: selected ? Colors.white : Colors.white70)),
+      selected: selected,
+      selectedColor: Colors.green.withValues(alpha: 0.3),
+      checkmarkColor: Colors.green,
+      onSelected: (val) => setState(() => _workDays[key] = val),
+    );
+  }
+
   InputDecoration _buildInputDecoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
@@ -559,6 +692,13 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
           notes: _notesController.text.trim().isEmpty
               ? null
               : _notesController.text.trim(),
+          useDefaultSchedule: _useDefaultSchedule,
+          workScheduleStart: _useDefaultSchedule ? null : _formatTime(_workScheduleStart),
+          workScheduleEnd: _useDefaultSchedule ? null : _formatTime(_workScheduleEnd),
+          workDays: _useDefaultSchedule
+              ? null
+              : _workDays.entries.where((e) => e.value).map((e) => e.key).join(','),
+          weekendDay: _useDefaultSchedule ? null : _weekendDay,
         );
       } else {
         final user = ref.read(authProvider);
@@ -601,6 +741,13 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               ? null
               : _notesController.text.trim(),
           contractEndDate: _contractEndDate,
+          useDefaultSchedule: _useDefaultSchedule,
+          workScheduleStart: _useDefaultSchedule ? null : _formatTime(_workScheduleStart),
+          workScheduleEnd: _useDefaultSchedule ? null : _formatTime(_workScheduleEnd),
+          workDays: _useDefaultSchedule
+              ? null
+              : _workDays.entries.where((e) => e.value).map((e) => e.key).join(','),
+          weekendDay: _useDefaultSchedule ? null : _weekendDay,
         );
       }
 

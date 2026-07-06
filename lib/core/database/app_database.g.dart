@@ -17607,6 +17607,65 @@ class $StaffTableTable extends StaffTable
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _workScheduleStartMeta = const VerificationMeta(
+    'workScheduleStart',
+  );
+  @override
+  late final GeneratedColumn<String> workScheduleStart =
+      GeneratedColumn<String>(
+        'work_schedule_start',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _workScheduleEndMeta = const VerificationMeta(
+    'workScheduleEnd',
+  );
+  @override
+  late final GeneratedColumn<String> workScheduleEnd = GeneratedColumn<String>(
+    'work_schedule_end',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _workDaysMeta = const VerificationMeta(
+    'workDays',
+  );
+  @override
+  late final GeneratedColumn<String> workDays = GeneratedColumn<String>(
+    'work_days',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _weekendDayMeta = const VerificationMeta(
+    'weekendDay',
+  );
+  @override
+  late final GeneratedColumn<String> weekendDay = GeneratedColumn<String>(
+    'weekend_day',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _useDefaultScheduleMeta =
+      const VerificationMeta('useDefaultSchedule');
+  @override
+  late final GeneratedColumn<bool> useDefaultSchedule = GeneratedColumn<bool>(
+    'use_default_schedule',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("use_default_schedule" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -17632,6 +17691,11 @@ class $StaffTableTable extends StaffTable
     createdAt,
     updatedAt,
     isActive,
+    workScheduleStart,
+    workScheduleEnd,
+    workDays,
+    weekendDay,
+    useDefaultSchedule,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -17816,6 +17880,45 @@ class $StaffTableTable extends StaffTable
         isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
       );
     }
+    if (data.containsKey('work_schedule_start')) {
+      context.handle(
+        _workScheduleStartMeta,
+        workScheduleStart.isAcceptableOrUnknown(
+          data['work_schedule_start']!,
+          _workScheduleStartMeta,
+        ),
+      );
+    }
+    if (data.containsKey('work_schedule_end')) {
+      context.handle(
+        _workScheduleEndMeta,
+        workScheduleEnd.isAcceptableOrUnknown(
+          data['work_schedule_end']!,
+          _workScheduleEndMeta,
+        ),
+      );
+    }
+    if (data.containsKey('work_days')) {
+      context.handle(
+        _workDaysMeta,
+        workDays.isAcceptableOrUnknown(data['work_days']!, _workDaysMeta),
+      );
+    }
+    if (data.containsKey('weekend_day')) {
+      context.handle(
+        _weekendDayMeta,
+        weekendDay.isAcceptableOrUnknown(data['weekend_day']!, _weekendDayMeta),
+      );
+    }
+    if (data.containsKey('use_default_schedule')) {
+      context.handle(
+        _useDefaultScheduleMeta,
+        useDefaultSchedule.isAcceptableOrUnknown(
+          data['use_default_schedule']!,
+          _useDefaultScheduleMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -17917,6 +18020,26 @@ class $StaffTableTable extends StaffTable
         DriftSqlType.bool,
         data['${effectivePrefix}is_active'],
       )!,
+      workScheduleStart: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}work_schedule_start'],
+      ),
+      workScheduleEnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}work_schedule_end'],
+      ),
+      workDays: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}work_days'],
+      ),
+      weekendDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}weekend_day'],
+      ),
+      useDefaultSchedule: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}use_default_schedule'],
+      )!,
     );
   }
 
@@ -17950,6 +18073,11 @@ class Staff extends DataClass implements Insertable<Staff> {
   final DateTime createdAt;
   final DateTime updatedAt;
   final bool isActive;
+  final String? workScheduleStart;
+  final String? workScheduleEnd;
+  final String? workDays;
+  final String? weekendDay;
+  final bool useDefaultSchedule;
   const Staff({
     required this.id,
     required this.staffId,
@@ -17974,6 +18102,11 @@ class Staff extends DataClass implements Insertable<Staff> {
     required this.createdAt,
     required this.updatedAt,
     required this.isActive,
+    this.workScheduleStart,
+    this.workScheduleEnd,
+    this.workDays,
+    this.weekendDay,
+    required this.useDefaultSchedule,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -18025,6 +18158,19 @@ class Staff extends DataClass implements Insertable<Staff> {
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['is_active'] = Variable<bool>(isActive);
+    if (!nullToAbsent || workScheduleStart != null) {
+      map['work_schedule_start'] = Variable<String>(workScheduleStart);
+    }
+    if (!nullToAbsent || workScheduleEnd != null) {
+      map['work_schedule_end'] = Variable<String>(workScheduleEnd);
+    }
+    if (!nullToAbsent || workDays != null) {
+      map['work_days'] = Variable<String>(workDays);
+    }
+    if (!nullToAbsent || weekendDay != null) {
+      map['weekend_day'] = Variable<String>(weekendDay);
+    }
+    map['use_default_schedule'] = Variable<bool>(useDefaultSchedule);
     return map;
   }
 
@@ -18077,6 +18223,19 @@ class Staff extends DataClass implements Insertable<Staff> {
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       isActive: Value(isActive),
+      workScheduleStart: workScheduleStart == null && nullToAbsent
+          ? const Value.absent()
+          : Value(workScheduleStart),
+      workScheduleEnd: workScheduleEnd == null && nullToAbsent
+          ? const Value.absent()
+          : Value(workScheduleEnd),
+      workDays: workDays == null && nullToAbsent
+          ? const Value.absent()
+          : Value(workDays),
+      weekendDay: weekendDay == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weekendDay),
+      useDefaultSchedule: Value(useDefaultSchedule),
     );
   }
 
@@ -18109,6 +18268,13 @@ class Staff extends DataClass implements Insertable<Staff> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       isActive: serializer.fromJson<bool>(json['isActive']),
+      workScheduleStart: serializer.fromJson<String?>(
+        json['workScheduleStart'],
+      ),
+      workScheduleEnd: serializer.fromJson<String?>(json['workScheduleEnd']),
+      workDays: serializer.fromJson<String?>(json['workDays']),
+      weekendDay: serializer.fromJson<String?>(json['weekendDay']),
+      useDefaultSchedule: serializer.fromJson<bool>(json['useDefaultSchedule']),
     );
   }
   @override
@@ -18138,6 +18304,11 @@ class Staff extends DataClass implements Insertable<Staff> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'isActive': serializer.toJson<bool>(isActive),
+      'workScheduleStart': serializer.toJson<String?>(workScheduleStart),
+      'workScheduleEnd': serializer.toJson<String?>(workScheduleEnd),
+      'workDays': serializer.toJson<String?>(workDays),
+      'weekendDay': serializer.toJson<String?>(weekendDay),
+      'useDefaultSchedule': serializer.toJson<bool>(useDefaultSchedule),
     };
   }
 
@@ -18165,6 +18336,11 @@ class Staff extends DataClass implements Insertable<Staff> {
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? isActive,
+    Value<String?> workScheduleStart = const Value.absent(),
+    Value<String?> workScheduleEnd = const Value.absent(),
+    Value<String?> workDays = const Value.absent(),
+    Value<String?> weekendDay = const Value.absent(),
+    bool? useDefaultSchedule,
   }) => Staff(
     id: id ?? this.id,
     staffId: staffId ?? this.staffId,
@@ -18195,6 +18371,15 @@ class Staff extends DataClass implements Insertable<Staff> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     isActive: isActive ?? this.isActive,
+    workScheduleStart: workScheduleStart.present
+        ? workScheduleStart.value
+        : this.workScheduleStart,
+    workScheduleEnd: workScheduleEnd.present
+        ? workScheduleEnd.value
+        : this.workScheduleEnd,
+    workDays: workDays.present ? workDays.value : this.workDays,
+    weekendDay: weekendDay.present ? weekendDay.value : this.weekendDay,
+    useDefaultSchedule: useDefaultSchedule ?? this.useDefaultSchedule,
   );
   Staff copyWithCompanion(StaffTableCompanion data) {
     return Staff(
@@ -18239,6 +18424,19 @@ class Staff extends DataClass implements Insertable<Staff> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      workScheduleStart: data.workScheduleStart.present
+          ? data.workScheduleStart.value
+          : this.workScheduleStart,
+      workScheduleEnd: data.workScheduleEnd.present
+          ? data.workScheduleEnd.value
+          : this.workScheduleEnd,
+      workDays: data.workDays.present ? data.workDays.value : this.workDays,
+      weekendDay: data.weekendDay.present
+          ? data.weekendDay.value
+          : this.weekendDay,
+      useDefaultSchedule: data.useDefaultSchedule.present
+          ? data.useDefaultSchedule.value
+          : this.useDefaultSchedule,
     );
   }
 
@@ -18267,7 +18465,12 @@ class Staff extends DataClass implements Insertable<Staff> {
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('isActive: $isActive')
+          ..write('isActive: $isActive, ')
+          ..write('workScheduleStart: $workScheduleStart, ')
+          ..write('workScheduleEnd: $workScheduleEnd, ')
+          ..write('workDays: $workDays, ')
+          ..write('weekendDay: $weekendDay, ')
+          ..write('useDefaultSchedule: $useDefaultSchedule')
           ..write(')'))
         .toString();
   }
@@ -18297,6 +18500,11 @@ class Staff extends DataClass implements Insertable<Staff> {
     createdAt,
     updatedAt,
     isActive,
+    workScheduleStart,
+    workScheduleEnd,
+    workDays,
+    weekendDay,
+    useDefaultSchedule,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -18324,7 +18532,12 @@ class Staff extends DataClass implements Insertable<Staff> {
           other.notes == this.notes &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
-          other.isActive == this.isActive);
+          other.isActive == this.isActive &&
+          other.workScheduleStart == this.workScheduleStart &&
+          other.workScheduleEnd == this.workScheduleEnd &&
+          other.workDays == this.workDays &&
+          other.weekendDay == this.weekendDay &&
+          other.useDefaultSchedule == this.useDefaultSchedule);
 }
 
 class StaffTableCompanion extends UpdateCompanion<Staff> {
@@ -18351,6 +18564,11 @@ class StaffTableCompanion extends UpdateCompanion<Staff> {
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<bool> isActive;
+  final Value<String?> workScheduleStart;
+  final Value<String?> workScheduleEnd;
+  final Value<String?> workDays;
+  final Value<String?> weekendDay;
+  final Value<bool> useDefaultSchedule;
   const StaffTableCompanion({
     this.id = const Value.absent(),
     this.staffId = const Value.absent(),
@@ -18375,6 +18593,11 @@ class StaffTableCompanion extends UpdateCompanion<Staff> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.isActive = const Value.absent(),
+    this.workScheduleStart = const Value.absent(),
+    this.workScheduleEnd = const Value.absent(),
+    this.workDays = const Value.absent(),
+    this.weekendDay = const Value.absent(),
+    this.useDefaultSchedule = const Value.absent(),
   });
   StaffTableCompanion.insert({
     this.id = const Value.absent(),
@@ -18400,6 +18623,11 @@ class StaffTableCompanion extends UpdateCompanion<Staff> {
     required DateTime createdAt,
     required DateTime updatedAt,
     this.isActive = const Value.absent(),
+    this.workScheduleStart = const Value.absent(),
+    this.workScheduleEnd = const Value.absent(),
+    this.workDays = const Value.absent(),
+    this.weekendDay = const Value.absent(),
+    this.useDefaultSchedule = const Value.absent(),
   }) : staffId = Value(staffId),
        name = Value(name),
        position = Value(position),
@@ -18433,6 +18661,11 @@ class StaffTableCompanion extends UpdateCompanion<Staff> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<bool>? isActive,
+    Expression<String>? workScheduleStart,
+    Expression<String>? workScheduleEnd,
+    Expression<String>? workDays,
+    Expression<String>? weekendDay,
+    Expression<bool>? useDefaultSchedule,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -18458,6 +18691,12 @@ class StaffTableCompanion extends UpdateCompanion<Staff> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (isActive != null) 'is_active': isActive,
+      if (workScheduleStart != null) 'work_schedule_start': workScheduleStart,
+      if (workScheduleEnd != null) 'work_schedule_end': workScheduleEnd,
+      if (workDays != null) 'work_days': workDays,
+      if (weekendDay != null) 'weekend_day': weekendDay,
+      if (useDefaultSchedule != null)
+        'use_default_schedule': useDefaultSchedule,
     });
   }
 
@@ -18485,6 +18724,11 @@ class StaffTableCompanion extends UpdateCompanion<Staff> {
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<bool>? isActive,
+    Value<String?>? workScheduleStart,
+    Value<String?>? workScheduleEnd,
+    Value<String?>? workDays,
+    Value<String?>? weekendDay,
+    Value<bool>? useDefaultSchedule,
   }) {
     return StaffTableCompanion(
       id: id ?? this.id,
@@ -18510,6 +18754,11 @@ class StaffTableCompanion extends UpdateCompanion<Staff> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isActive: isActive ?? this.isActive,
+      workScheduleStart: workScheduleStart ?? this.workScheduleStart,
+      workScheduleEnd: workScheduleEnd ?? this.workScheduleEnd,
+      workDays: workDays ?? this.workDays,
+      weekendDay: weekendDay ?? this.weekendDay,
+      useDefaultSchedule: useDefaultSchedule ?? this.useDefaultSchedule,
     );
   }
 
@@ -18585,6 +18834,21 @@ class StaffTableCompanion extends UpdateCompanion<Staff> {
     if (isActive.present) {
       map['is_active'] = Variable<bool>(isActive.value);
     }
+    if (workScheduleStart.present) {
+      map['work_schedule_start'] = Variable<String>(workScheduleStart.value);
+    }
+    if (workScheduleEnd.present) {
+      map['work_schedule_end'] = Variable<String>(workScheduleEnd.value);
+    }
+    if (workDays.present) {
+      map['work_days'] = Variable<String>(workDays.value);
+    }
+    if (weekendDay.present) {
+      map['weekend_day'] = Variable<String>(weekendDay.value);
+    }
+    if (useDefaultSchedule.present) {
+      map['use_default_schedule'] = Variable<bool>(useDefaultSchedule.value);
+    }
     return map;
   }
 
@@ -18613,7 +18877,12 @@ class StaffTableCompanion extends UpdateCompanion<Staff> {
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('isActive: $isActive')
+          ..write('isActive: $isActive, ')
+          ..write('workScheduleStart: $workScheduleStart, ')
+          ..write('workScheduleEnd: $workScheduleEnd, ')
+          ..write('workDays: $workDays, ')
+          ..write('weekendDay: $weekendDay, ')
+          ..write('useDefaultSchedule: $useDefaultSchedule')
           ..write(')'))
         .toString();
   }
@@ -37894,6 +38163,427 @@ class AttendanceSyncLogsCompanion extends UpdateCompanion<AttendanceSyncLog> {
   }
 }
 
+class $AttendanceSettingsTable extends AttendanceSettings
+    with TableInfo<$AttendanceSettingsTable, AttendanceSetting> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AttendanceSettingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _settingKeyMeta = const VerificationMeta(
+    'settingKey',
+  );
+  @override
+  late final GeneratedColumn<String> settingKey = GeneratedColumn<String>(
+    'setting_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _settingValueMeta = const VerificationMeta(
+    'settingValue',
+  );
+  @override
+  late final GeneratedColumn<String> settingValue = GeneratedColumn<String>(
+    'setting_value',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    settingKey,
+    settingValue,
+    description,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'attendance_settings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AttendanceSetting> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('setting_key')) {
+      context.handle(
+        _settingKeyMeta,
+        settingKey.isAcceptableOrUnknown(data['setting_key']!, _settingKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_settingKeyMeta);
+    }
+    if (data.containsKey('setting_value')) {
+      context.handle(
+        _settingValueMeta,
+        settingValue.isAcceptableOrUnknown(
+          data['setting_value']!,
+          _settingValueMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_settingValueMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AttendanceSetting map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AttendanceSetting(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      settingKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}setting_key'],
+      )!,
+      settingValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}setting_value'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AttendanceSettingsTable createAlias(String alias) {
+    return $AttendanceSettingsTable(attachedDatabase, alias);
+  }
+}
+
+class AttendanceSetting extends DataClass
+    implements Insertable<AttendanceSetting> {
+  final int id;
+  final String settingKey;
+  final String settingValue;
+  final String? description;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const AttendanceSetting({
+    required this.id,
+    required this.settingKey,
+    required this.settingValue,
+    this.description,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['setting_key'] = Variable<String>(settingKey);
+    map['setting_value'] = Variable<String>(settingValue);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  AttendanceSettingsCompanion toCompanion(bool nullToAbsent) {
+    return AttendanceSettingsCompanion(
+      id: Value(id),
+      settingKey: Value(settingKey),
+      settingValue: Value(settingValue),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory AttendanceSetting.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AttendanceSetting(
+      id: serializer.fromJson<int>(json['id']),
+      settingKey: serializer.fromJson<String>(json['settingKey']),
+      settingValue: serializer.fromJson<String>(json['settingValue']),
+      description: serializer.fromJson<String?>(json['description']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'settingKey': serializer.toJson<String>(settingKey),
+      'settingValue': serializer.toJson<String>(settingValue),
+      'description': serializer.toJson<String?>(description),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  AttendanceSetting copyWith({
+    int? id,
+    String? settingKey,
+    String? settingValue,
+    Value<String?> description = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => AttendanceSetting(
+    id: id ?? this.id,
+    settingKey: settingKey ?? this.settingKey,
+    settingValue: settingValue ?? this.settingValue,
+    description: description.present ? description.value : this.description,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  AttendanceSetting copyWithCompanion(AttendanceSettingsCompanion data) {
+    return AttendanceSetting(
+      id: data.id.present ? data.id.value : this.id,
+      settingKey: data.settingKey.present
+          ? data.settingKey.value
+          : this.settingKey,
+      settingValue: data.settingValue.present
+          ? data.settingValue.value
+          : this.settingValue,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttendanceSetting(')
+          ..write('id: $id, ')
+          ..write('settingKey: $settingKey, ')
+          ..write('settingValue: $settingValue, ')
+          ..write('description: $description, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    settingKey,
+    settingValue,
+    description,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AttendanceSetting &&
+          other.id == this.id &&
+          other.settingKey == this.settingKey &&
+          other.settingValue == this.settingValue &&
+          other.description == this.description &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class AttendanceSettingsCompanion extends UpdateCompanion<AttendanceSetting> {
+  final Value<int> id;
+  final Value<String> settingKey;
+  final Value<String> settingValue;
+  final Value<String?> description;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const AttendanceSettingsCompanion({
+    this.id = const Value.absent(),
+    this.settingKey = const Value.absent(),
+    this.settingValue = const Value.absent(),
+    this.description = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  AttendanceSettingsCompanion.insert({
+    this.id = const Value.absent(),
+    required String settingKey,
+    required String settingValue,
+    this.description = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+  }) : settingKey = Value(settingKey),
+       settingValue = Value(settingValue),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<AttendanceSetting> custom({
+    Expression<int>? id,
+    Expression<String>? settingKey,
+    Expression<String>? settingValue,
+    Expression<String>? description,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (settingKey != null) 'setting_key': settingKey,
+      if (settingValue != null) 'setting_value': settingValue,
+      if (description != null) 'description': description,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  AttendanceSettingsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? settingKey,
+    Value<String>? settingValue,
+    Value<String?>? description,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return AttendanceSettingsCompanion(
+      id: id ?? this.id,
+      settingKey: settingKey ?? this.settingKey,
+      settingValue: settingValue ?? this.settingValue,
+      description: description ?? this.description,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (settingKey.present) {
+      map['setting_key'] = Variable<String>(settingKey.value);
+    }
+    if (settingValue.present) {
+      map['setting_value'] = Variable<String>(settingValue.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttendanceSettingsCompanion(')
+          ..write('id: $id, ')
+          ..write('settingKey: $settingKey, ')
+          ..write('settingValue: $settingValue, ')
+          ..write('description: $description, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -37984,6 +38674,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $AttendanceRawEventsTable(this);
   late final $AttendanceSyncLogsTable attendanceSyncLogs =
       $AttendanceSyncLogsTable(this);
+  late final $AttendanceSettingsTable attendanceSettings =
+      $AttendanceSettingsTable(this);
   late final ProductDao productDao = ProductDao(this as AppDatabase);
   late final CustomerDao customerDao = CustomerDao(this as AppDatabase);
   late final SupplierDao supplierDao = SupplierDao(this as AppDatabase);
@@ -38083,6 +38775,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     staffBiometricMappings,
     attendanceRawEvents,
     attendanceSyncLogs,
+    attendanceSettings,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -50979,6 +51672,11 @@ typedef $$StaffTableTableCreateCompanionBuilder =
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<bool> isActive,
+      Value<String?> workScheduleStart,
+      Value<String?> workScheduleEnd,
+      Value<String?> workDays,
+      Value<String?> weekendDay,
+      Value<bool> useDefaultSchedule,
     });
 typedef $$StaffTableTableUpdateCompanionBuilder =
     StaffTableCompanion Function({
@@ -51005,6 +51703,11 @@ typedef $$StaffTableTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<bool> isActive,
+      Value<String?> workScheduleStart,
+      Value<String?> workScheduleEnd,
+      Value<String?> workDays,
+      Value<String?> weekendDay,
+      Value<bool> useDefaultSchedule,
     });
 
 class $$StaffTableTableFilterComposer
@@ -51128,6 +51831,31 @@ class $$StaffTableTableFilterComposer
 
   ColumnFilters<bool> get isActive => $composableBuilder(
     column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get workScheduleStart => $composableBuilder(
+    column: $table.workScheduleStart,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get workScheduleEnd => $composableBuilder(
+    column: $table.workScheduleEnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get workDays => $composableBuilder(
+    column: $table.workDays,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get weekendDay => $composableBuilder(
+    column: $table.weekendDay,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get useDefaultSchedule => $composableBuilder(
+    column: $table.useDefaultSchedule,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -51255,6 +51983,31 @@ class $$StaffTableTableOrderingComposer
     column: $table.isActive,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get workScheduleStart => $composableBuilder(
+    column: $table.workScheduleStart,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get workScheduleEnd => $composableBuilder(
+    column: $table.workScheduleEnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get workDays => $composableBuilder(
+    column: $table.workDays,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get weekendDay => $composableBuilder(
+    column: $table.weekendDay,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get useDefaultSchedule => $composableBuilder(
+    column: $table.useDefaultSchedule,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$StaffTableTableAnnotationComposer
@@ -51352,6 +52105,29 @@ class $$StaffTableTableAnnotationComposer
 
   GeneratedColumn<bool> get isActive =>
       $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<String> get workScheduleStart => $composableBuilder(
+    column: $table.workScheduleStart,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get workScheduleEnd => $composableBuilder(
+    column: $table.workScheduleEnd,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get workDays =>
+      $composableBuilder(column: $table.workDays, builder: (column) => column);
+
+  GeneratedColumn<String> get weekendDay => $composableBuilder(
+    column: $table.weekendDay,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get useDefaultSchedule => $composableBuilder(
+    column: $table.useDefaultSchedule,
+    builder: (column) => column,
+  );
 }
 
 class $$StaffTableTableTableManager
@@ -51405,6 +52181,11 @@ class $$StaffTableTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
+                Value<String?> workScheduleStart = const Value.absent(),
+                Value<String?> workScheduleEnd = const Value.absent(),
+                Value<String?> workDays = const Value.absent(),
+                Value<String?> weekendDay = const Value.absent(),
+                Value<bool> useDefaultSchedule = const Value.absent(),
               }) => StaffTableCompanion(
                 id: id,
                 staffId: staffId,
@@ -51429,6 +52210,11 @@ class $$StaffTableTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 isActive: isActive,
+                workScheduleStart: workScheduleStart,
+                workScheduleEnd: workScheduleEnd,
+                workDays: workDays,
+                weekendDay: weekendDay,
+                useDefaultSchedule: useDefaultSchedule,
               ),
           createCompanionCallback:
               ({
@@ -51455,6 +52241,11 @@ class $$StaffTableTableTableManager
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<bool> isActive = const Value.absent(),
+                Value<String?> workScheduleStart = const Value.absent(),
+                Value<String?> workScheduleEnd = const Value.absent(),
+                Value<String?> workDays = const Value.absent(),
+                Value<String?> weekendDay = const Value.absent(),
+                Value<bool> useDefaultSchedule = const Value.absent(),
               }) => StaffTableCompanion.insert(
                 id: id,
                 staffId: staffId,
@@ -51479,6 +52270,11 @@ class $$StaffTableTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 isActive: isActive,
+                workScheduleStart: workScheduleStart,
+                workScheduleEnd: workScheduleEnd,
+                workDays: workDays,
+                weekendDay: weekendDay,
+                useDefaultSchedule: useDefaultSchedule,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -62919,6 +63715,238 @@ typedef $$AttendanceSyncLogsTableProcessedTableManager =
       AttendanceSyncLog,
       PrefetchHooks Function()
     >;
+typedef $$AttendanceSettingsTableCreateCompanionBuilder =
+    AttendanceSettingsCompanion Function({
+      Value<int> id,
+      required String settingKey,
+      required String settingValue,
+      Value<String?> description,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+    });
+typedef $$AttendanceSettingsTableUpdateCompanionBuilder =
+    AttendanceSettingsCompanion Function({
+      Value<int> id,
+      Value<String> settingKey,
+      Value<String> settingValue,
+      Value<String?> description,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+class $$AttendanceSettingsTableFilterComposer
+    extends Composer<_$AppDatabase, $AttendanceSettingsTable> {
+  $$AttendanceSettingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get settingKey => $composableBuilder(
+    column: $table.settingKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get settingValue => $composableBuilder(
+    column: $table.settingValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AttendanceSettingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AttendanceSettingsTable> {
+  $$AttendanceSettingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get settingKey => $composableBuilder(
+    column: $table.settingKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get settingValue => $composableBuilder(
+    column: $table.settingValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AttendanceSettingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AttendanceSettingsTable> {
+  $$AttendanceSettingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get settingKey => $composableBuilder(
+    column: $table.settingKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get settingValue => $composableBuilder(
+    column: $table.settingValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$AttendanceSettingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AttendanceSettingsTable,
+          AttendanceSetting,
+          $$AttendanceSettingsTableFilterComposer,
+          $$AttendanceSettingsTableOrderingComposer,
+          $$AttendanceSettingsTableAnnotationComposer,
+          $$AttendanceSettingsTableCreateCompanionBuilder,
+          $$AttendanceSettingsTableUpdateCompanionBuilder,
+          (
+            AttendanceSetting,
+            BaseReferences<
+              _$AppDatabase,
+              $AttendanceSettingsTable,
+              AttendanceSetting
+            >,
+          ),
+          AttendanceSetting,
+          PrefetchHooks Function()
+        > {
+  $$AttendanceSettingsTableTableManager(
+    _$AppDatabase db,
+    $AttendanceSettingsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AttendanceSettingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AttendanceSettingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AttendanceSettingsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> settingKey = const Value.absent(),
+                Value<String> settingValue = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => AttendanceSettingsCompanion(
+                id: id,
+                settingKey: settingKey,
+                settingValue: settingValue,
+                description: description,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String settingKey,
+                required String settingValue,
+                Value<String?> description = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+              }) => AttendanceSettingsCompanion.insert(
+                id: id,
+                settingKey: settingKey,
+                settingValue: settingValue,
+                description: description,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AttendanceSettingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AttendanceSettingsTable,
+      AttendanceSetting,
+      $$AttendanceSettingsTableFilterComposer,
+      $$AttendanceSettingsTableOrderingComposer,
+      $$AttendanceSettingsTableAnnotationComposer,
+      $$AttendanceSettingsTableCreateCompanionBuilder,
+      $$AttendanceSettingsTableUpdateCompanionBuilder,
+      (
+        AttendanceSetting,
+        BaseReferences<
+          _$AppDatabase,
+          $AttendanceSettingsTable,
+          AttendanceSetting
+        >,
+      ),
+      AttendanceSetting,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -63025,4 +64053,6 @@ class $AppDatabaseManager {
       $$AttendanceRawEventsTableTableManager(_db, _db.attendanceRawEvents);
   $$AttendanceSyncLogsTableTableManager get attendanceSyncLogs =>
       $$AttendanceSyncLogsTableTableManager(_db, _db.attendanceSyncLogs);
+  $$AttendanceSettingsTableTableManager get attendanceSettings =>
+      $$AttendanceSettingsTableTableManager(_db, _db.attendanceSettings);
 }

@@ -43,6 +43,11 @@ class StaffManagementService {
     String? emergencyContact,
     String? emergencyPhone,
     String? notes,
+    bool useDefaultSchedule = true,
+    String? workScheduleStart,
+    String? workScheduleEnd,
+    String? workDays,
+    String? weekendDay,
   }) async {
     PermissionValidator.requirePermission(user, Permission.createEmployee, 'إضافة موظف');
     final staffId = await generateStaffId();
@@ -68,6 +73,11 @@ class StaffManagementService {
         emergencyContact: Value(emergencyContact),
         emergencyPhone: Value(emergencyPhone),
         notes: Value(notes),
+        useDefaultSchedule: Value(useDefaultSchedule),
+        workScheduleStart: Value(workScheduleStart),
+        workScheduleEnd: Value(workScheduleEnd),
+        workDays: Value(workDays),
+        weekendDay: Value(weekendDay),
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),
@@ -93,6 +103,11 @@ class StaffManagementService {
     String? notes,
     String? status,
     DateTime? contractEndDate,
+    bool? useDefaultSchedule,
+    String? workScheduleStart,
+    String? workScheduleEnd,
+    String? workDays,
+    String? weekendDay,
   }) async {
     PermissionValidator.requirePermission(user, Permission.editEmployee, 'تعديل موظف');
     final staff = await _dao.getStaffById(staffId);
@@ -126,6 +141,17 @@ class StaffManagementService {
           notes: notes != null ? Value(notes) : const Value.absent(),
           contractEndDate: contractEndDate != null
               ? Value(contractEndDate)
+              : const Value.absent(),
+          useDefaultSchedule: useDefaultSchedule ?? staff.useDefaultSchedule,
+          workScheduleStart: workScheduleStart != null
+              ? Value(workScheduleStart)
+              : const Value.absent(),
+          workScheduleEnd: workScheduleEnd != null
+              ? Value(workScheduleEnd)
+              : const Value.absent(),
+          workDays: workDays != null ? Value(workDays) : const Value.absent(),
+          weekendDay: weekendDay != null
+              ? Value(weekendDay)
               : const Value.absent(),
           updatedAt: DateTime.now(),
         ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
@@ -32,7 +33,34 @@ class AttendanceSyncService {
   /// Prevents concurrent syncs for the same device
   final Set<int> _syncingDevices = {};
 
+  /// Auto-sync timer
+  Timer? _autoSyncTimer;
+  bool _isAutoSyncEnabled = false;
+
   AttendanceSyncService(this._deviceDao, this._staffDao);
+
+  /// Whether auto-sync is currently running
+  bool get isAutoSyncEnabled => _isAutoSyncEnabled;
+
+  /// Starts periodic auto-sync for all active devices
+  void startAutoSync({Duration interval = const Duration(minutes: 5)}) {
+    stopAutoSync();
+    _isAutoSyncEnabled = true;
+    _autoSyncTimer = Timer.periodic(interval, (_) async {
+      try {
+        await syncAllDevices(triggeredBy: 'auto_sync');
+      } catch (e) {
+        // Silently ignore auto-sync errors
+      }
+    });
+  }
+
+  /// Stops the auto-sync timer
+  void stopAutoSync() {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = null;
+    _isAutoSyncEnabled = false;
+  }
 
   /// Triggers a sync for all active devices
   Future<void> syncAllDevices({String triggeredBy = 'manual'}) async {

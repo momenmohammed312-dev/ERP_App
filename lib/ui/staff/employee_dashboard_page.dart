@@ -8,6 +8,7 @@ import 'staff_list_page.dart';
 import 'staff_form_page.dart';
 import 'device_management_page.dart';
 import 'unmatched_attendance_page.dart';
+import 'attendance_settings_page.dart';
 
 class EmployeeDashboardPage extends ConsumerStatefulWidget {
   const EmployeeDashboardPage({super.key});
@@ -412,6 +413,26 @@ class _EmployeeDashboardPageState
                   ),
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionBtn(
+                  'إعدادات الحضور',
+                  Icons.settings,
+                  Colors.teal,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AttendanceSettingsPage(),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(child: SizedBox()),
             ],
           ),
         ],

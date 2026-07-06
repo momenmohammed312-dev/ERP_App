@@ -4,6 +4,7 @@ import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/widgets/permission_guard.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 
 class DeviceManagementPage extends ConsumerStatefulWidget {
@@ -112,7 +113,7 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
                     decoration: const InputDecoration(labelText: 'نوع الاتصال *'),
                     items: const [
                       DropdownMenuItem(value: 'tcp_ip', child: Text('TCP/IP')),
-                      DropdownMenuItem(value: 'usb_import', text: Text('استيراد USB')),
+                      DropdownMenuItem(value: 'usb_import', child: Text('استيراد USB')),
                       DropdownMenuItem(value: 'sdk', child: Text('SDK')),
                       DropdownMenuItem(value: 'file_import', child: Text('استيراد ملف')),
                     ],
