@@ -20,6 +20,7 @@ import 'package:pos_offline_desktop/services/security_service.dart';
 import 'package:pos_offline_desktop/services/user_session_service.dart';
 import 'package:pos_offline_desktop/services/integrity_checker.dart';
 import 'package:pos_offline_desktop/services/enhanced_backup_service.dart';
+import 'package:pos_offline_desktop/services/secure_license_storage.dart';
 import 'package:pos_offline_desktop/core/services/periodic_license_validator.dart';
 
 import 'package:pos_offline_desktop/screens/license/activation_screen.dart';
@@ -32,6 +33,9 @@ void main() async {
 
   // Initialize security service first
   await SecurityService.initialize();
+
+  // Initialize secure license storage
+  await SecureLicenseStorage.init();
 
   // Create shared container for all services
   final container = ProviderContainer();

@@ -1,16 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:flutter/foundation.dart';
 import '../core/utils/logger.dart';
 import 'package:pos_offline_desktop/config/license_config.dart';
+import 'hardware_id_service.dart';
+import 'secure_license_storage.dart';
 
 enum LicenseType {
   free, // مجاني — كل المميزات بدون تفعيل
-  trial, // تجريبي - 10 أيام - مستخدم واحد
+  trial, // تجريبي - 7 أيام - مستخدم واحد
   basic, // أساسي - مستخدم واحد
   standard, // قياسي - 3 مستخدمين
   professional, // احترافي - 5 مستخدمين
@@ -27,9 +28,9 @@ class License {
   final int maxUsers;
   final String companyName;
   final String contactEmail;
-  final String? signature; // Add signature for validation
-  final String? hardwareId; // Add hardware ID for binding
-  final int gracePeriodDays = 7; // Grace period in days
+  final String? signature;
+  final String? hardwareId;
+  final int gracePeriodDays = 7;
 
   License({
     required this.licenseKey,
@@ -54,7 +55,7 @@ class License {
   bool get isValid => !isExpired && isSignatureValid;
 
   bool get isSignatureValid {
-    if (signature == null) return true; // Allow old licenses without signature
+    if (signature == null) return true;
     final data =
         '$licenseKey$deviceFingerprint$type$issueDate$expiryDate$maxUsers$companyName';
     final expectedSignature = _generateSignature(data);
@@ -62,8 +63,8 @@ class License {
   }
 
   Future<bool> get isHardwareBound async {
-    if (hardwareId == null) return true; // Allow unbound licenses
-    return hardwareId == await _getHardwareId();
+    if (hardwareId == null) return true;
+    return hardwareId == await HardwareIdService.getHardwareId();
   }
 
   int get daysRemaining {
@@ -82,18 +83,7 @@ class License {
   }
 
   static Future<String> _getHardwareId() async {
-    final deviceInfo = DeviceInfoPlugin();
-    if (Platform.isWindows) {
-      final windowsInfo = await deviceInfo.windowsInfo;
-      return '${windowsInfo.computerName}_${windowsInfo.systemMemoryInMegabytes}';
-    } else if (Platform.isLinux) {
-      final linuxInfo = await deviceInfo.linuxInfo;
-      return '${linuxInfo.name}_${linuxInfo.machineId}';
-    } else if (Platform.isMacOS) {
-      final macInfo = await deviceInfo.macOsInfo;
-      return '${macInfo.computerName}_${macInfo.systemGUID}';
-    }
-    return 'unknown';
+    return await HardwareIdService.getHardwareId();
   }
 
   Map<String, dynamic> toJson() => {
@@ -145,41 +135,18 @@ class LicenseManager {
   // ════════════════════════════════════════════════════════════════════
 
   Future<String> generateDeviceFingerprint() async {
-    if (kIsWeb) {
-      // Web doesn't support device fingerprinting, return a generic one
-      return 'web-device-fingerprint';
-    }
-    final deviceInfo = DeviceInfoPlugin();
-    String fingerprint = '';
+    if (kIsWeb) return 'web-device-fingerprint';
 
     try {
-      if (Platform.isWindows) {
-        final windowsInfo = await deviceInfo.windowsInfo;
-        fingerprint =
-            '${windowsInfo.computerName}-'
-            '${windowsInfo.numberOfCores}-'
-            '${windowsInfo.systemMemoryInMegabytes}';
-      } else if (Platform.isLinux) {
-        final linuxInfo = await deviceInfo.linuxInfo;
-        fingerprint = '${linuxInfo.machineId}-${linuxInfo.name}';
-      } else if (Platform.isMacOS) {
-        final macInfo = await deviceInfo.macOsInfo;
-        fingerprint = '${macInfo.systemGUID}-${macInfo.model}';
-      }
-
-      // تشفير البصمة
-      final bytes = utf8.encode(fingerprint);
-      final digest = sha256.convert(bytes);
-      AppLogger.i('Fingerprint generated: $digest');
-      return digest.toString();
+      return await HardwareIdService.getHardwareId();
     } catch (e) {
-      AppLogger.e('Error generating fingerprint: $e');
+      AppLogger.e('Error generating fingerprint', e);
       throw Exception('فشل في توليد بصمة الجهاز: $e');
     }
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // توليد مفتاح ترخيص (للاستخدام من طرفك فقط)
+  // توليد مفتاح ترخيص
   // ════════════════════════════════════════════════════════════════════
 
   String generateLicenseKey({
@@ -220,7 +187,6 @@ class LicenseManager {
 
   Future<LicenseValidationResult> validateLicense(String licenseKey) async {
     try {
-      // فصل البيانات المشفرة والتوقيع
       final parts = licenseKey.split('.');
       if (parts.length != 2) {
         return LicenseValidationResult.invalid('صيغة مفتاح الترخيص غير صحيحة');
@@ -229,7 +195,6 @@ class LicenseManager {
       final encryptedData = parts[0];
       final providedSignature = parts[1];
 
-      // التحقق من التوقيع
       final calculatedSignature = _generateSignature(encryptedData);
       if (calculatedSignature != providedSignature) {
         return LicenseValidationResult.invalid(
@@ -237,25 +202,22 @@ class LicenseManager {
         );
       }
 
-      // فك التشفير
       final decryptedJson = _decrypt(encryptedData);
       final licenseData = jsonDecode(decryptedJson) as Map<String, dynamic>;
 
-      // التحقق من بصمة الجهاز (مع دعم التراخيص الطافية)
+      // Hardware binding
       final currentFingerprint = await generateDeviceFingerprint();
       final savedDevice = licenseData['device'];
 
       if (savedDevice == 'UNBOUND' || savedDevice.isEmpty) {
-        // ترخيص طافٍ - يُربط بالجهاز الحالي عند التفعيل الأول
         licenseData['device'] = currentFingerprint;
       } else if (savedDevice != currentFingerprint) {
-        // مُفعَّل على جهاز آخر
         return LicenseValidationResult.invalid(
           'هذا الترخيص مُفعَّل على جهاز آخر',
         );
       }
 
-      // التحقق من تاريخ الانتهاء
+      // Expiry check
       final expiryDate = DateTime.parse(licenseData['expiry']);
       if (DateTime.now().isAfter(expiryDate)) {
         return LicenseValidationResult.expired(
@@ -263,7 +225,8 @@ class LicenseManager {
         );
       }
 
-      // إنشاء كائن License
+      // Build License with hardware ID
+      final hardwareId = await HardwareIdService.getHardwareId();
       final license = License(
         licenseKey: licenseKey,
         deviceFingerprint: licenseData['device'],
@@ -276,10 +239,11 @@ class LicenseManager {
         maxUsers: licenseData['max_users'],
         companyName: licenseData['company_name'],
         contactEmail: licenseData['contact_email'],
+        hardwareId: hardwareId,
       );
 
-      // حفظ الترخيص
-      await _saveLicense(license);
+      // Save to secure storage
+      await _saveLicenseSecure(license);
 
       return LicenseValidationResult.valid(license);
     } catch (e) {
@@ -292,12 +256,28 @@ class LicenseManager {
   // ════════════════════════════════════════════════════════════════════
 
   Future<bool> isLicenseActive() async {
+    // Anti-tamper: check clock before license
+    try {
+      final tampered = await _checkClockTamper();
+      if (tampered) return false;
+    } catch (_) {}
+
     if (LicenseConfig.isFreeVersion) {
-      final firstRun = await _getFirstRunDate();
-      if (firstRun == null) return true;
-      final expiry = firstRun.add(Duration(days: _freeTrialDays));
+      final data = await SecureLicenseStorage.read();
+      if (data == null) return true; // First run — 7 days start now
+
+      // Hardware check
+      final currentHwId = await HardwareIdService.getHardwareId();
+      if (data.hardwareId.isNotEmpty && data.hardwareId != currentHwId) {
+        AppLogger.w('Hardware mismatch in free version');
+        return false;
+      }
+
+      final expiry = data.firstRunDate.add(Duration(days: _freeTrialDays));
       return DateTime.now().isBefore(expiry);
     }
+
+    // Paid license: check from secure storage first, fallback to prefs
     final license = await getCurrentLicense();
     if (license == null) return false;
     return license.isValid;
@@ -317,43 +297,91 @@ class LicenseManager {
 
   Future<License?> getCurrentLicense() async {
     if (LicenseConfig.isFreeVersion) {
-      final firstRun = await _getFirstRunDate();
-      if (firstRun == null) {
-        await _saveFirstRunDate(DateTime.now());
+      final data = await SecureLicenseStorage.read();
+      final hardwareId = await HardwareIdService.getHardwareId();
+
+      if (data == null) {
+        // First run — create and save
+        final now = DateTime.now();
+        final newData = SecureLicenseData.create(
+          firstRunDate: now,
+          hardwareId: hardwareId,
+        );
+        await SecureLicenseStorage.write(newData);
+        // Also save to SharedPreferences for migration
+        await _saveFirstRunDate(now);
         return License(
           licenseKey: 'FREE_VERSION',
           deviceFingerprint: 'free',
           type: LicenseType.free,
-          issueDate: DateTime.now(),
-          expiryDate: DateTime.now().add(Duration(days: _freeTrialDays)),
+          issueDate: now,
+          expiryDate: now.add(Duration(days: _freeTrialDays)),
           features: List<String>.from(LicenseConfig.availableFeatures),
           maxUsers: 999,
           companyName: 'Free Version',
           contactEmail: '',
+          hardwareId: hardwareId,
         );
       }
-      final expiry = firstRun.add(Duration(days: _freeTrialDays));
+
+      // Hardware binding check
+      if (data.hardwareId.isNotEmpty && data.hardwareId != hardwareId) {
+        AppLogger.w('Hardware mismatch — free version bound to different device');
+        return null;
+      }
+
+      final expiry = data.firstRunDate.add(Duration(days: _freeTrialDays));
       if (DateTime.now().isAfter(expiry)) return null;
+
       return License(
         licenseKey: 'FREE_VERSION',
         deviceFingerprint: 'free',
         type: LicenseType.free,
-        issueDate: firstRun,
+        issueDate: data.firstRunDate,
         expiryDate: expiry,
         features: List<String>.from(LicenseConfig.availableFeatures),
         maxUsers: 999,
         companyName: 'Free Version',
         contactEmail: '',
+        hardwareId: data.hardwareId,
       );
     }
+
+    // Paid license: try secure storage first
+    try {
+      final secureData = await SecureLicenseStorage.read();
+      if (secureData != null && secureData.licenseJson != null) {
+        final license = License.fromJson(secureData.licenseJson!);
+
+        // Hardware binding check
+        final currentHwId = await HardwareIdService.getHardwareId();
+        if (secureData.hardwareId.isNotEmpty && secureData.hardwareId != currentHwId) {
+          AppLogger.w('Hardware mismatch — license bound to different device');
+          return null;
+        }
+
+        // Update session tracking
+        await _updateSessionTracking(secureData);
+
+        return license;
+      }
+    } catch (e) {
+      AppLogger.e('Error reading license from secure storage', e);
+    }
+
+    // Fallback to SharedPreferences (migration path)
     try {
       final prefs = await SharedPreferences.getInstance();
       final licenseJson = prefs.getString(_storageKey);
-
       if (licenseJson == null) return null;
 
       final data = jsonDecode(licenseJson);
-      return License.fromJson(data);
+      final license = License.fromJson(data);
+
+      // Migrate to secure storage
+      await _saveLicenseSecure(license);
+
+      return license;
     } catch (e) {
       AppLogger.e('Error loading current license: $e');
       return null;
@@ -361,7 +389,7 @@ class LicenseManager {
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // التحقق من الميزة
+  // FEATURE / USER CHECKS
   // ════════════════════════════════════════════════════════════════════
 
   Future<bool> hasFeature(String featureName) async {
@@ -371,10 +399,6 @@ class LicenseManager {
     return license.features.contains(featureName);
   }
 
-  // ════════════════════════════════════════════════════════════════════
-  // التحقق من عدد المستخدمين
-  // ════════════════════════════════════════════════════════════════════
-
   Future<bool> canAddUser(int currentUserCount) async {
     if (LicenseConfig.isFreeVersion) return true;
     final license = await getCurrentLicense();
@@ -383,7 +407,7 @@ class LicenseManager {
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // تفعيل النسخة التجريبية (7 أيام)
+  // FREE TRIAL ACTIVATION
   // ════════════════════════════════════════════════════════════════════
 
   Future<LicenseValidationResult> activateTrial() async {
@@ -403,34 +427,131 @@ class LicenseManager {
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // إلغاء التفعيل
+  // DEACTIVATION
   // ════════════════════════════════════════════════════════════════════
 
   Future<void> deactivate() async {
+    // Clear secure storage
+    await SecureLicenseStorage.clear();
+    // Also clear SharedPreferences (legacy)
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_storageKey);
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // دوال مساعدة خاصة
+  // INTERNAL HELPERS
   // ════════════════════════════════════════════════════════════════════
 
-  Future<void> _saveLicense(License license) async {
+  /// Save license to secure storage (encrypted file).
+  Future<void> _saveLicenseSecure(License license) async {
+    final existing = await SecureLicenseStorage.read();
+    final hardwareId = await HardwareIdService.getHardwareId();
+
+    final data = SecureLicenseData(
+      firstRunDate: existing?.firstRunDate ?? DateTime.now(),
+      hardwareId: hardwareId,
+      licenseJson: license.toJson(),
+      lastCheckTime: DateTime.now(),
+      sessionElapsedMs: existing?.sessionElapsedMs ?? 0,
+      installCount: (existing?.installCount ?? 0) + 1,
+    );
+
+    await SecureLicenseStorage.write(data);
+
+    // Also keep SharedPreferences for backward compatibility
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_storageKey, jsonEncode(license.toJson()));
   }
 
+  /// Update session elapsed time tracking.
+  Future<void> _updateSessionTracking(SecureLicenseData current) async {
+    final now = DateTime.now();
+    final elapsed = now.difference(current.lastCheckTime).inMilliseconds;
+
+    // Only add if elapsed is reasonable (not negative, not more than 24h)
+    final adjustedElapsed = (elapsed > 0 && elapsed < 86400000)
+        ? current.sessionElapsedMs + elapsed
+        : current.sessionElapsedMs;
+
+    final updated = current.copyWith(
+      lastCheckTime: now,
+      sessionElapsedMs: adjustedElapsed,
+    );
+
+    await SecureLicenseStorage.write(updated);
+  }
+
+  /// Detect clock tampering by comparing session elapsed time vs calendar time.
+  Future<bool> _checkClockTamper() async {
+    try {
+      final data = await SecureLicenseStorage.read();
+      if (data == null) return false;
+
+      final calendarElapsed = DateTime.now().difference(data.lastCheckTime).inMilliseconds;
+
+      // If clock went backwards (negative elapsed) — tampering
+      if (calendarElapsed < -60000) {
+        // Allow 1 minute tolerance for timezone/NTP adjustments
+        AppLogger.w('Clock tampering detected via session tracking: ${calendarElapsed}ms');
+        return true;
+      }
+
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // MIGRATION FROM SHARED PREFERENCES
+  // ════════════════════════════════════════════════════════════════════
+
   Future<DateTime?> _getFirstRunDate() async {
+    // Try secure storage first
+    final secureData = await SecureLicenseStorage.read();
+    if (secureData != null) return secureData.firstRunDate;
+
+    // Fallback to SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     final dateStr = prefs.getString(_firstRunKey);
     if (dateStr == null) return null;
-    return DateTime.tryParse(dateStr);
+
+    final date = DateTime.tryParse(dateStr);
+    if (date != null) {
+      // Migrate to secure storage
+      final hwId = await HardwareIdService.getHardwareId();
+      final newData = SecureLicenseData.create(
+        firstRunDate: date,
+        hardwareId: hwId,
+      );
+      await SecureLicenseStorage.write(newData);
+    }
+    return date;
   }
 
   Future<void> _saveFirstRunDate(DateTime date) async {
+    final hwId = await HardwareIdService.getHardwareId();
+    final existing = await SecureLicenseStorage.read();
+
+    if (existing != null) {
+      // Update existing
+      await SecureLicenseStorage.write(existing.copyWith(firstRunDate: date));
+    } else {
+      // Create new
+      await SecureLicenseStorage.write(SecureLicenseData.create(
+        firstRunDate: date,
+        hardwareId: hwId,
+      ));
+    }
+
+    // Also save to SharedPreferences for backward compatibility
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_firstRunKey, date.toIso8601String());
   }
+
+  // ════════════════════════════════════════════════════════════════════
+  // ENCRYPTION HELPERS
+  // ════════════════════════════════════════════════════════════════════
 
   String _encrypt(String plainText) {
     final keyBytes = md5.convert(utf8.encode(_secretKey)).bytes;
@@ -481,10 +602,6 @@ class LicenseManager {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 }
-
-// ════════════════════════════════════════════════════════════════════════
-// 3. نتيجة التحقق
-// ════════════════════════════════════════════════════════════════════════
 
 class LicenseValidationResult {
   final bool isValid;
