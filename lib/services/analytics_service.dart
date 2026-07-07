@@ -55,6 +55,36 @@ class AnalyticsService {
         totalInvoices += count;
       }
 
+      // Deduct sales returns from totals
+      final returnsData = await db
+          .customSelect(
+            '''
+        SELECT 
+          date(return_date) as return_date,
+          SUM(total_amount) as total_returns
+        FROM sales_returns
+        WHERE return_date BETWEEN ? AND ?
+        GROUP BY date(return_date)
+        ''',
+            variables: [
+              Variable.withDateTime(start),
+              Variable.withDateTime(end),
+            ],
+          )
+          .get();
+
+      double totalReturns = 0;
+      for (final row in returnsData) {
+        final date = row.data['return_date'].toString();
+        final amount = (row.data['total_returns'] as double?) ?? 0.0;
+        totalReturns += amount;
+        // Deduct returns from the corresponding day's sales
+        if (dailySales.containsKey(date)) {
+          dailySales[date] = dailySales[date]! - amount;
+        }
+      }
+      totalSales -= totalReturns;
+
       // Get payment methods distribution
       final paymentData = await db
           .customSelect(

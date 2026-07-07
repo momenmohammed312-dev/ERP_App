@@ -276,6 +276,35 @@ class _SalesSummaryWidgetState extends State<SalesSummaryWidget> {
         }
       }
 
+      // Deduct sales returns from totals
+      try {
+        final returnsResult = await widget.db
+            .customSelect(
+              '''
+          SELECT COALESCE(SUM(total_amount), 0) as total_returns
+          FROM sales_returns
+          WHERE return_date >= ?
+          ''',
+              variables: [Variable.withDateTime(startOfMonth)],
+            )
+            .get();
+        final totalReturns =
+            returnsResult.first.readNullable<double>('total_returns') ?? 0.0;
+        totalSales -= totalReturns;
+        // Distribute returns proportionally: deduct from credit first, then cash
+        if (totalReturns > 0) {
+          if (creditSales >= totalReturns) {
+            creditSales -= totalReturns;
+          } else {
+            final remaining = totalReturns - creditSales;
+            creditSales = 0;
+            cashSales = (cashSales - remaining).clamp(0.0, cashSales);
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading returns: $e');
+      }
+
       return SalesStats(
         totalSales: totalSales,
         creditSales: creditSales,

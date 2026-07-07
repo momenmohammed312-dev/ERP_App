@@ -238,6 +238,37 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
         }
       }
 
+      // Deduct sales returns from totals
+      try {
+        final returnsResult = await db
+            .customSelect(
+              '''
+          SELECT 
+            DATE(return_date) as report_date,
+            SUM(total_amount) as total_returns
+          FROM sales_returns
+          WHERE return_date >= ? AND return_date <= ?
+          GROUP BY DATE(return_date)
+          ''',
+              variables: [
+                drift.Variable.withDateTime(_selectedDateRange!.start),
+                drift.Variable.withDateTime(_selectedDateRange!.end),
+              ],
+            )
+            .get();
+
+        for (final row in returnsResult) {
+          final date = row.readNullable<String>('report_date') ?? 'unknown';
+          final returns = row.readNullable<double>('total_returns') ?? 0.0;
+          if (combinedData.containsKey(date)) {
+            final data = combinedData[date]!;
+            data['total_sales'] = (data['total_sales'] as double) - returns;
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading returns: $e');
+      }
+
       // Calculate profit for each day
       final comparisonData = combinedData.values.map((data) {
         final totalSales = data['total_sales'] as double;
