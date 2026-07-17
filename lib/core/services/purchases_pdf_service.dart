@@ -39,14 +39,6 @@ class PurchasesPdfService {
         print('Error loading logo from file: $e');
       }
     }
-    if (logoImage == null) {
-      try {
-        final logoData = await rootBundle.load('assets/receipt/receipt_logo.png');
-        logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
-      } catch (e) {
-        print('Error loading logo from assets: $e');
-      }
-    }
 
     final pdf = pw.Document();
 

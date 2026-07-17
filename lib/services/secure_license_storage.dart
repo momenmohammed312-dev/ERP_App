@@ -23,8 +23,8 @@ class SecureLicenseStorage {
       _appDir = await getApplicationSupportDirectory();
     } catch (e) {
       AppLogger.e('Failed to get app directory', e);
-      // Fallback: use current directory
-      _appDir = Directory.current;
+      // Fallback: use temp directory (NOT Directory.current, which may be Program Files)
+      _appDir = Directory.systemTemp;
     }
   }
 

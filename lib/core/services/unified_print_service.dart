@@ -825,8 +825,7 @@ class UnifiedPrintService {
           return pw.MemoryImage(logoData);
         }
       }
-      final logoData = await rootBundle.load(_logoAssetPath);
-      return pw.MemoryImage(logoData.buffer.asUint8List());
+      return null;
     } catch (e) {
       debugPrint('Failed to load logo image: $e');
       return null;

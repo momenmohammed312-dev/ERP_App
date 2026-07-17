@@ -169,11 +169,15 @@ class _EnhancedPurchaseInvoicePageState
       context: context,
       builder: (context) => ProductSelectionModal(
         product: product ?? _filteredProducts.first,
+        forPurchase: true,
         onConfirm: (quantity, unit, unitPrice, discount, tax) {
           _addProductToPurchase(
             product ?? _filteredProducts.first,
             quantity,
             unitPrice,
+            unit: unit,
+            discount: discount,
+            tax: tax,
           );
         },
       ),
@@ -202,11 +206,21 @@ class _EnhancedPurchaseInvoicePageState
     }
   }
 
-  void _addProductToPurchase(Product product, int quantity, double unitPrice) {
+  void _addProductToPurchase(
+    Product product,
+    int quantity,
+    double unitPrice, {
+    String unit = 'piece',
+    double discount = 0.0,
+    double tax = 0.0,
+  }) {
     final entry = ProductEntry(product: product);
     entry.quantity = quantity;
     entry.unitPrice = unitPrice;
-    entry.lineTotal = unitPrice * quantity;
+    entry.unit = unit;
+    entry.discount = discount;
+    entry.tax = tax;
+    entry.lineTotal = (unitPrice * quantity) - discount + tax;
 
     setState(() {
       _productEntries.add(entry);
@@ -233,10 +247,15 @@ class _EnhancedPurchaseInvoicePageState
       0.0,
       (sum, entry) => sum + entry.lineTotal,
     );
-    // For purchases, we might not apply tax/discount in the same way
-    _totalTax = 0.0;
-    _totalDiscount = 0.0;
-    _grandTotal = _subtotal + _totalTax - _totalDiscount;
+    _totalDiscount = _productEntries.fold(
+      0.0,
+      (sum, entry) => sum + entry.discount,
+    );
+    _totalTax = _productEntries.fold(
+      0.0,
+      (sum, entry) => sum + entry.tax,
+    );
+    _grandTotal = _subtotal;
     _remainingAmount = _grandTotal - _paidAmount;
   }
 
@@ -470,7 +489,7 @@ class _EnhancedPurchaseInvoicePageState
           children: [
             // Left side - Invoice details
             Expanded(
-              flex: 1,
+              flex: 2,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -707,7 +726,7 @@ class _EnhancedPurchaseInvoicePageState
 
             // Right side - Product selection
             Expanded(
-              flex: 2,
+              flex: 1,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -752,7 +771,7 @@ class _EnhancedPurchaseInvoicePageState
                           : GridView.builder(
                               gridDelegate:
                                   const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 4,
+                                    crossAxisCount: 3,
                                     childAspectRatio: 0.8,
                                     crossAxisSpacing: 8,
                                     mainAxisSpacing: 8,

@@ -382,6 +382,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
   final _formKey = GlobalKey<FormState>();
   Product? _selectedProduct;
   final _quantityController = TextEditingController();
+  final _costPriceController = TextEditingController();
   final _reasonController = TextEditingController();
   final _notesController = TextEditingController();
   List<Product> _products = [];
@@ -405,6 +406,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
             _reasonController.text = widget.existingItem!.reason;
             _notesController.text = widget.existingItem!.notes ?? '';
             _quantityController.text = widget.existingItem!.quantity.toString();
+            _costPriceController.text = widget.existingItem!.unitCost.toString();
             _selectedProduct = products.cast<Product?>().firstWhere(
               (p) => p!.id == widget.existingItem!.productId,
               orElse: () => null,
@@ -424,6 +426,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
   @override
   void dispose() {
     _quantityController.dispose();
+    _costPriceController.dispose();
     _reasonController.dispose();
     _notesController.dispose();
     super.dispose();
@@ -442,7 +445,9 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
         return;
       }
 
-      final cost = _selectedProduct!.costPrice ?? _selectedProduct!.price;
+      final cost = double.tryParse(_costPriceController.text) ??
+          _selectedProduct!.costPrice ??
+          _selectedProduct!.price;
       final loss = cost * qty;
 
       try {
@@ -574,6 +579,11 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
                   onChanged: (val) {
                     setState(() {
                       _selectedProduct = val;
+                      // Auto-fill cost price from selected product
+                      if (val != null && _costPriceController.text.isEmpty) {
+                        _costPriceController.text =
+                            (val.costPrice ?? val.price).toString();
+                      }
                     });
                   },
                   validator: (val) => val == null ? 'يرجى اختيار المنتج' : null,
@@ -599,6 +609,33 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
                     if (int.tryParse(val) == null || int.parse(val) <= 0) {
                       return 'كمية غير صالحة';
                     }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _costPriceController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'سعر التكلفة للوحدة',
+                    labelStyle: const TextStyle(color: _textMuted),
+                    hintText: _selectedProduct != null
+                        ? 'الحالي: ${(_selectedProduct!.costPrice ?? _selectedProduct!.price).toStringAsFixed(2)}'
+                        : 'اختر منتج أولاً',
+                    hintStyle: const TextStyle(color: _textMuted, fontSize: 12),
+                    border: const OutlineInputBorder(),
+                    enabledBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: _border),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: _gold),
+                    ),
+                  ),
+                  validator: (val) {
+                    if (val == null || val.isEmpty) return 'يرجى إدخال سعر التكلفة';
+                    final price = double.tryParse(val);
+                    if (price == null || price < 0) return 'سعر غير صالح';
                     return null;
                   },
                 ),

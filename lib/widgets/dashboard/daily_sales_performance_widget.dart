@@ -93,12 +93,12 @@ class _DailySalesPerformanceWidgetState
           .customSelect(
             '''
         SELECT 
-          DATE(date) as report_date,
+          DATE(date / 1000, 'unixepoch', 'localtime') as report_date,
           COALESCE(SUM($salesTotalColumn), 0) as total_sales,
           COUNT(*) as invoice_count
         FROM invoices 
         WHERE date >= ? AND date <= ? AND status != 'deleted'
-        GROUP BY DATE(date)
+        GROUP BY DATE(date / 1000, 'unixepoch', 'localtime')
         ORDER BY report_date DESC
       ''',
             variables: [
@@ -113,12 +113,12 @@ class _DailySalesPerformanceWidgetState
           .customSelect(
             '''
         SELECT 
-          DATE(purchase_date) as report_date,
+          DATE(purchase_date / 1000, 'unixepoch', 'localtime') as report_date,
           COALESCE(SUM($purchasesTotalColumn), 0) as total_purchases,
           COUNT(*) as purchase_count
         FROM purchases 
         WHERE purchase_date >= ? AND purchase_date <= ? AND is_deleted = 0
-        GROUP BY DATE(purchase_date)
+        GROUP BY DATE(purchase_date / 1000, 'unixepoch', 'localtime')
         ORDER BY report_date DESC
       ''',
             variables: [
@@ -133,7 +133,7 @@ class _DailySalesPerformanceWidgetState
           .customSelect(
             '''
         SELECT 
-          DATE(date) as report_date,
+          DATE(date / 1000, 'unixepoch', 'localtime') as report_date,
           opening_balance,
           closing_balance,
           is_open

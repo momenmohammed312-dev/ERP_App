@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import 'dart:io';
+import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -217,6 +218,44 @@ class _OverviewPageContentState extends State<_OverviewPageContent> {
       // Get recent transactions (last 5 invoices)
       final recentInvoices = todayInvoices.take(5).toList();
 
+      // Weekly sales (last 7 days)
+      final weeklySpots = <FlSpot>[];
+      for (int i = 6; i >= 0; i--) {
+        final day = today.subtract(Duration(days: i));
+        final dayInvoices = await widget.db.invoiceDao.getInvoicesByDate(day);
+        final dayTotal = dayInvoices.fold<double>(0, (s, inv) => s + inv.totalAmount);
+        weeklySpots.add(FlSpot((6 - i).toDouble(), dayTotal));
+      }
+
+      // Top products by sales volume
+      final rawTopProducts = await widget.db.customSelect('''
+        SELECT p.name, SUM(ii.quantity) as total_qty, SUM(ii.total_price) as total_revenue
+        FROM invoice_items ii
+        JOIN products p ON ii.product_id = p.id
+        JOIN invoices i ON ii.invoice_id = i.id
+        WHERE i.date >= ? AND i.date <= ? AND i.status != 'deleted'
+        GROUP BY p.id, p.name
+        ORDER BY total_qty DESC
+        LIMIT 5
+      ''', variables: [
+        drift.Variable.withDateTime(DateTime(today.year, today.month, today.day - 30)),
+        drift.Variable.withDateTime(todayEnd),
+      ]).get();
+
+      // Sales by category (for pie chart)
+      final rawCategorySales = await widget.db.customSelect('''
+        SELECT COALESCE(p.category, 'أخرى') as category, SUM(ii.total_price) as total
+        FROM invoice_items ii
+        JOIN products p ON ii.product_id = p.id
+        JOIN invoices i ON ii.invoice_id = i.id
+        WHERE i.date >= ? AND i.date <= ? AND i.status != 'deleted'
+        GROUP BY category
+        ORDER BY total DESC
+      ''', variables: [
+        drift.Variable.withDateTime(DateTime(today.year, today.month, today.day - 90)),
+        drift.Variable.withDateTime(todayEnd),
+      ]).get();
+
       return {
         'todaySales': todaySales,
         'todayInvoiceCount': todayInvoices.length,
@@ -225,6 +264,9 @@ class _OverviewPageContentState extends State<_OverviewPageContent> {
         'totalProducts': totalProducts,
         'totalSuppliers': totalSuppliers,
         'recentInvoices': recentInvoices,
+        'weeklySpots': weeklySpots,
+        'topProducts': rawTopProducts,
+        'categorySales': rawCategorySales,
         'lastUpdated': DateTime.now(),
       };
     } catch (e) {
@@ -351,6 +393,16 @@ class _OverviewPageContentState extends State<_OverviewPageContent> {
                 Expanded(flex: 2, child: _buildSalesChart()),
                 const SizedBox(width: 16),
                 Expanded(child: _buildTopProductsCard()),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Category Pie Chart Row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _buildCategoryPieChart()),
               ],
             ),
 
@@ -523,66 +575,62 @@ class _OverviewPageContentState extends State<_OverviewPageContent> {
             const SizedBox(height: 24),
             SizedBox(
               height: 300,
-              child: LineChart(
-                LineChartData(
-                  gridData: FlGridData(show: true),
-                  titlesData: FlTitlesData(
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (value, meta) {
-                          const days = [
-                            'السبت',
-                            'الأحد',
-                            'الاثنين',
-                            'الثلاثاء',
-                            'الأربعاء',
-                            'الخميس',
-                            'الجمعة',
-                          ];
-                          return Text(
-                            days[value.toInt() % 7],
-                            style: const TextStyle(fontSize: 12),
-                          );
-                        },
+              child: FutureBuilder<Map<String, dynamic>>(
+                future: _dashboardData,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || snapshot.data!.containsKey('error')) {
+                    return const Center(child: Text('لا توجد بيانات'));
+                  }
+                  final spots = (snapshot.data!['weeklySpots'] as List<FlSpot>?) ?? [];
+                  if (spots.isEmpty || spots.every((s) => s.y == 0)) {
+                    return const Center(child: Text('لا توجد مبيعات هذا الأسبوع'));
+                  }
+                  return LineChart(
+                    LineChartData(
+                      gridData: FlGridData(show: true),
+                      titlesData: FlTitlesData(
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (value, meta) {
+                              const days = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
+                              return Text(
+                                days[value.toInt() % 7],
+                                style: const TextStyle(fontSize: 12),
+                              );
+                            },
+                          ),
+                        ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 40,
+                          ),
+                        ),
+                        topTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
                       ),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 40,
-                      ),
-                    ),
-                    topTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    rightTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                  ),
-                  borderData: FlBorderData(show: true),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: [
-                        const FlSpot(0, 30),
-                        const FlSpot(1, 45),
-                        const FlSpot(2, 35),
-                        const FlSpot(3, 50),
-                        const FlSpot(4, 40),
-                        const FlSpot(5, 55),
-                        const FlSpot(6, 45),
+                      borderData: FlBorderData(show: true),
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: spots,
+                          isCurved: true,
+                          color: Colors.blue,
+                          barWidth: 3,
+                          dotData: FlDotData(show: true),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            color: Colors.blue.withValues(alpha: 0.1),
+                          ),
+                        ),
                       ],
-                      isCurved: true,
-                      color: Colors.blue,
-                      barWidth: 3,
-                      dotData: FlDotData(show: true),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        color: Colors.blue.withValues(alpha: 0.1),
-                      ),
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           ],
@@ -604,18 +652,35 @@ class _OverviewPageContentState extends State<_OverviewPageContent> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            _buildProductItem('منتج A', '1,234', 85),
-            _buildProductItem('منتج B', '987', 70),
-            _buildProductItem('منتج C', '765', 55),
-            _buildProductItem('منتج D', '543', 40),
-            _buildProductItem('منتج E', '321', 25),
+            FutureBuilder<Map<String, dynamic>>(
+              future: _dashboardData,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData || snapshot.data!.containsKey('error')) {
+                  return const Text('لا توجد بيانات', style: TextStyle(color: Colors.grey));
+                }
+                final topProducts = snapshot.data!['topProducts'] as List? ?? [];
+                if (topProducts.isEmpty) {
+                  return const Text('لا توجد مبيعات', style: TextStyle(color: Colors.grey));
+                }
+                final maxQty = (topProducts.first.data['total_qty'] as num?)?.toDouble() ?? 1;
+                return Column(
+                  children: topProducts.map((row) {
+                    final name = row.data['name'] as String? ?? '';
+                    final qty = (row.data['total_qty'] as num?)?.toInt() ?? 0;
+                    final revenue = (row.data['total_revenue'] as num?)?.toDouble() ?? 0.0;
+                    final pct = maxQty > 0 ? (qty / maxQty) : 0.0;
+                    return _buildProductItem(name, '$qty (${revenue.toStringAsFixed(0)} ج.م)', pct);
+                  }).toList(),
+                );
+              },
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildProductItem(String name, String sales, double percentage) {
+  Widget _buildProductItem(String name, String sales, double fraction) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
@@ -630,11 +695,67 @@ class _OverviewPageContentState extends State<_OverviewPageContent> {
           ),
           const SizedBox(height: 4),
           LinearProgressIndicator(
-            value: percentage / 100,
+            value: fraction,
             backgroundColor: Colors.grey[200],
             valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryPieChart() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'المبيعات حسب الفئة (آخر 3 أشهر)',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 300,
+              child: FutureBuilder<Map<String, dynamic>>(
+                future: _dashboardData,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || snapshot.data!.containsKey('error')) {
+                    return const Center(child: Text('لا توجد بيانات'));
+                  }
+                  final categories = snapshot.data!['categorySales'] as List? ?? [];
+                  if (categories.isEmpty) {
+                    return const Center(child: Text('لا توجد مبيعات'));
+                  }
+                  final total = categories.fold<double>(0, (s, r) => s + ((r.data['total'] as num?)?.toDouble() ?? 0));
+                  if (total <= 0) {
+                    return const Center(child: Text('لا توجد مبيعات'));
+                  }
+                  final colors = [Colors.blue, Colors.green, Colors.orange, Colors.purple, Colors.red, Colors.teal, Colors.cyan, Colors.pink];
+                  return PieChart(
+                    PieChartData(
+                      sections: categories.asMap().entries.map((e) {
+                        final row = e.value;
+                        final amount = (row.data['total'] as num?)?.toDouble() ?? 0;
+                        final name = row.data['category'] as String? ?? 'أخرى';
+                        final pct = (amount / total) * 100;
+                        return PieChartSectionData(
+                          value: amount,
+                          title: '${pct.toStringAsFixed(1)}%\n$name',
+                          color: colors[e.key % colors.length],
+                          radius: 100,
+                          titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                        );
+                      }).toList(),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -872,7 +993,7 @@ class _SalesAnalyticsPageState extends ConsumerState<SalesAnalyticsPage> {
                               ),
                             ],
                     ),
-                  ),
+                    ),
                 ),
                 const SizedBox(height: 16),
                 ...categoryData.map(

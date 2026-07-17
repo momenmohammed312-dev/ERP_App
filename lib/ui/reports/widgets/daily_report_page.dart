@@ -114,10 +114,10 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         final purchasesRows = await db
             .customSelect(
               '''
-          SELECT DATE(purchase_date) as p_date, SUM(total_amount) as total_purchases
+          SELECT DATE(purchase_date / 1000, 'unixepoch', 'localtime') as p_date, SUM(total_amount) as total_purchases
           FROM purchases
           WHERE purchase_date >= ? AND purchase_date <= ? AND is_deleted = 0
-          GROUP BY DATE(purchase_date)
+          GROUP BY DATE(purchase_date / 1000, 'unixepoch', 'localtime')
           ''',
               variables: [
                 drift.Variable.withDateTime(DateTime(_startDate!.year, _startDate!.month, _startDate!.day)),
@@ -168,6 +168,37 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         AppLogger.e('Failed to load sales returns', e);
       }
 
+      // Load damaged items (waste/defect losses)
+      Map<String, double> wasteByDate = {};
+      try {
+        final wasteRows = await db
+            .customSelect(
+              '''
+          SELECT DATE(damage_date / 1000, 'unixepoch', 'localtime') as w_date, SUM(total_loss) as total_waste
+          FROM damaged_items
+          WHERE damage_date >= ? AND damage_date <= ?
+          GROUP BY DATE(damage_date / 1000, 'unixepoch', 'localtime')
+          ''',
+              variables: [
+                drift.Variable.withDateTime(DateTime(_startDate!.year, _startDate!.month, _startDate!.day)),
+                drift.Variable.withDateTime(DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59)),
+              ],
+            )
+            .get();
+
+        for (final row in wasteRows) {
+          final data = row.data;
+          final dateStr = data['w_date'].toString();
+          if (dateStr.isEmpty) continue;
+          final parsed = DateTime.tryParse(dateStr);
+          if (parsed == null || parsed.year < 2000) continue;
+          final amount = (data['total_waste'] as num?)?.toDouble() ?? 0.0;
+          wasteByDate[dateStr] = (wasteByDate[dateStr] ?? 0.0) + amount;
+        }
+      } catch (e) {
+        AppLogger.e('Failed to load damaged items', e);
+      }
+
       final result = <Map<String, dynamic>>[];
 
       final allDatesSet = <String>{
@@ -176,6 +207,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         ...expensesByDate.keys,
         ...purchasesByDate.keys,
         ...returnsByDate.keys,
+        ...wasteByDate.keys,
       };
       // فلتر التواريخ غير الصالحة (قبل 2000-01-01)
       allDatesSet.removeWhere((dateStr) {
@@ -194,6 +226,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         final dailyExpenses = expensesByDate[dateStr] ?? 0.0;
         final dailyPurchases = purchasesByDate[dateStr] ?? 0.0;
         final dailyReturns = returnsByDate[dateStr] ?? 0.0;
+        final dailyWaste = wasteByDate[dateStr] ?? 0.0;
 
         double totalSales = 0.0;
         double cash = 0.0;
@@ -271,7 +304,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         final surplusDeficit = (hasDayRecord && !dayIsOpen && closingBalance != null)
             ? closingBalance -
                   openingBalance -
-                  cash + dailyExpenses + dailyPurchases + dailyReturns
+                  cash + dailyExpenses + dailyPurchases + dailyReturns + dailyWaste
             : null;
 
         result.add({
@@ -288,6 +321,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
           'expenses': dailyExpenses,
           'purchases': dailyPurchases,
           'returns': dailyReturns,
+          'waste': dailyWaste,
           'surplusDeficit': surplusDeficit ?? 0.0,
           'surplusKnown': surplusDeficit != null,
           'invoiceCount': dayInvoices.length,
@@ -406,8 +440,12 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
       0.0,
       (sum, d) => sum + ((d['purchases'] as num?)?.toDouble() ?? 0.0),
     );
+    final totalWaste = _dailyData.fold<double>(
+      0.0,
+      (sum, d) => sum + ((d['waste'] as num?)?.toDouble() ?? 0.0),
+    );
     final netSales = totalSales - totalReturns;
-    final netProfit = netSales - totalPurchases - totalExpenses;
+    final netProfit = netSales - totalPurchases - totalExpenses - totalWaste;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -536,7 +574,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                     ],
                   ),
                   const Gap(12),
-                  // Third row: Expenses (full width)
+                  // Third row: Expenses + Waste
                   Row(
                     children: [
                       Expanded(
@@ -547,6 +585,17 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                           cardBg,
                           textColor,
                           onTap: () => _showDrillDown(context, 'expenses', totalExpenses),
+                        ),
+                      ),
+                      const Gap(12),
+                      Expanded(
+                        child: _buildSummaryCard(
+                          'الهالك والخسائر',
+                          totalWaste.toStringAsFixed(2),
+                          Colors.deepOrange,
+                          cardBg,
+                          textColor,
+                          onTap: () => _showDrillDown(context, 'waste', totalWaste),
                         ),
                       ),
                     ],
@@ -600,6 +649,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                 DataColumn(label: Text('المشتريات')),
                                 DataColumn(label: Text('المصروفات')),
                                 DataColumn(label: Text('المرتجعات')),
+                                DataColumn(label: Text('الهالك')),
                                 DataColumn(label: Text('عجز/زيادة')),
                                 DataColumn(label: Text('عدد الفواتير')),
                               ],
@@ -711,6 +761,12 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                                       Text(
                                         returns.toStringAsFixed(2),
                                         style: const TextStyle(color: Colors.redAccent),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        ((d['waste'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2),
+                                        style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold),
                                       ),
                                     ),
                                     // FIX: show surplus/deficit only when day closed

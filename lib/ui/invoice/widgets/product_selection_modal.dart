@@ -5,6 +5,7 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 
 class ProductSelectionModal extends StatefulWidget {
   final Product product;
+  final bool forPurchase;
   final Function(
     int quantity,
     String unit,
@@ -18,6 +19,7 @@ class ProductSelectionModal extends StatefulWidget {
     super.key,
     required this.product,
     required this.onConfirm,
+    this.forPurchase = false,
   });
 
   @override
@@ -141,7 +143,7 @@ class _ProductSelectionModalState extends State<ProductSelectionModal> {
                         if (qty == null || qty <= 0) {
                           return 'Invalid quantity';
                         }
-                        if (qty > widget.product.quantity) {
+                        if (!widget.forPurchase && qty > widget.product.quantity) {
                           return 'Exceeds available stock';
                         }
                         return null;

@@ -526,7 +526,7 @@ class EnhancedBackupService {
     return path.join(
       appDir.path,
       'pos_offline_desktop_database',
-      'pos_system_encrypted.db',
+      'pos_offline_desktop_database.sqlite',
     );
   }
 
@@ -534,19 +534,24 @@ class EnhancedBackupService {
     final configFiles = <String>[];
 
     // نسخ ملفات الإعدادات المهمة
-    final importantFiles = [
-      'data/config.json',
-      'data/settings.json',
-      'data/license.json',
-    ];
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final importantFiles = [
+        'data/config.json',
+        'data/settings.json',
+        'data/license.json',
+      ];
 
-    for (final configPath in importantFiles) {
-      final configFile = File(configPath);
-      if (await configFile.exists()) {
-        final targetPath = path.join(tempDir, path.basename(configPath));
-        await configFile.copy(targetPath);
-        configFiles.add(path.basename(configPath));
+      for (final configPath in importantFiles) {
+        final configFile = File(path.join(appDir.path, configPath));
+        if (await configFile.exists()) {
+          final targetPath = path.join(tempDir, path.basename(configPath));
+          await configFile.copy(targetPath);
+          configFiles.add(path.basename(configPath));
+        }
       }
+    } catch (e) {
+      // Config files are optional — continue without them
     }
 
     return configFiles;
