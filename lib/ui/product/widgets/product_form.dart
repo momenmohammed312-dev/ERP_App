@@ -28,6 +28,7 @@ class _ProductFormState extends State<ProductForm> {
   late TextEditingController cartonQtyCtrl;
   late TextEditingController cartonPriceCtrl;
   String selectedStatus = 'Active';
+  bool isBarneka = false;
 
   @override
   void initState() {
@@ -55,6 +56,7 @@ class _ProductFormState extends State<ProductForm> {
       text: widget.product?.cartonPrice?.toString() ?? '',
     );
     selectedStatus = widget.product?.status ?? 'Active';
+    isBarneka = widget.product?.barneka ?? false;
   }
 
   @override
@@ -130,6 +132,7 @@ class _ProductFormState extends State<ProductForm> {
               cartonQuantity: Value(newCartonQty),
               cartonPrice: Value(newCartonPrice),
               status: Value(selectedStatus),
+              barneka: Value(isBarneka),
             ),
           );
         } else {
@@ -147,20 +150,25 @@ class _ProductFormState extends State<ProductForm> {
             cartonQuantity: Value(newCartonQty),
             cartonPrice: Value(newCartonPrice),
             status: Value(selectedStatus),
+            barneka: isBarneka,
           );
           
           await widget.db.productDao.updateProduct(updatedProduct);
 
-          // Audit Log
-          await AuditService.log(
-            db: widget.db,
-            action: 'UPDATE',
-            tableName: 'products',
-            recordId: updatedProduct.id,
-            details: 'تعديل منتج: ${updatedProduct.name}',
-            oldValue: oldProduct.toJson(),
-            newValue: updatedProduct.toJson(),
-          );
+          // Audit Log (non-blocking: failure must not break the product save)
+          try {
+            await AuditService.log(
+              db: widget.db,
+              action: 'UPDATE',
+              tableName: 'products',
+              recordId: updatedProduct.id,
+              details: 'تعديل منتج: ${updatedProduct.name}',
+              oldValue: oldProduct.toJson(),
+              newValue: updatedProduct.toJson(),
+            );
+          } catch (auditErr) {
+            debugPrint('Audit log skipped (non-fatal): $auditErr');
+          }
         }
 
         if (mounted) {
@@ -395,6 +403,19 @@ class _ProductFormState extends State<ProductForm> {
                         selectedStatus = value;
                       });
                     }
+                  },
+                ),
+                const Gap(16),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.eco),
+                  title: const Text('منتج برنيكه (عبوة قابلة للاسترجاع)'),
+                  subtitle: const Text('يُتتبَّع للعملاء: كم أخذ وكم رجع من العبوات'),
+                  value: isBarneka,
+                  onChanged: (value) {
+                    setState(() {
+                      isBarneka = value;
+                    });
                   },
                 ),
                 const Gap(24),

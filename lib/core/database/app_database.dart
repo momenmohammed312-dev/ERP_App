@@ -2,6 +2,7 @@ import 'dart:developer';
 
 import 'package:drift/drift.dart';
 
+import 'package:pos_offline_desktop/core/database/dao/customer_container_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/customer_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/credit_payments_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/expense_dao.dart';
@@ -25,6 +26,7 @@ import 'package:pos_offline_desktop/core/database/dao/damaged_items_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/sales_returns_dao.dart';
 import 'package:pos_offline_desktop/core/database/tables/audit_log_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/categories_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/customer_containers_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/credit_payments_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/employees_table.dart';
@@ -53,7 +55,11 @@ import 'package:pos_offline_desktop/core/database/tables/damaged_items_table.dar
 import 'package:pos_offline_desktop/core/database/tables/sales_returns_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/attendance_device_tables.dart';
 import 'package:pos_offline_desktop/core/database/tables/attendance_settings_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/empty_barnika_tracking_table.dart';
 import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/vegetable_shipment_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/empty_barnika_tracking_dao.dart';
 import 'customer_status_fix.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
 // import 'package:pos_offline_desktop/core/database/amount_types_fix.dart';
@@ -108,11 +114,14 @@ part 'app_database.g.dart';
     DamagedItems,
     SalesReturns,
     SalesReturnItems,
+    CustomerContainers,
     BiometricDevices,
     StaffBiometricMappings,
     AttendanceRawEvents,
     AttendanceSyncLogs,
     AttendanceSettings,
+    VegetableShipments,
+    EmptyBarnikaTracking,
   ],
   daos: [
     ProductDao,
@@ -137,6 +146,9 @@ part 'app_database.g.dart';
     DamagedItemsDao,
     SalesReturnsDao,
     AttendanceDeviceDao,
+    CustomerContainerDao,
+    VegetableShipmentDao,
+    EmptyBarnikaTrackingDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -147,7 +159,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 48;
+  int get schemaVersion => 51;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -219,6 +231,21 @@ class AppDatabase extends _$AppDatabase {
         await _runV48Migrations(m);
       }
 
+      // 4k. Schema v49 — برنيكه (returnable containers) support
+      if (from < 49) {
+        await _runV49Migrations(m);
+      }
+
+      // 4l. Schema v50 — allow walk-in (cash) sales in customer_containers
+      if (from < 50) {
+        await _runV50Migrations(m);
+      }
+
+      // 4m. Schema v51 — vegetable shipments + empty barnika tracking tables
+      if (from < 51) {
+        await _runV51Migrations(m);
+      }
+
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
       await _ensureStaffTables(m);
 
@@ -239,6 +266,26 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
       await _ensureMigrationLogTable();
       await CustomerStatusFix.fixCustomerStatusColumn(this);
+
+      // Safety check to prevent SQL logic error on missing audit_log
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS audit_log (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER,
+            action TEXT NOT NULL,
+            table_name_field TEXT NOT NULL,
+            record_id INTEGER,
+            details TEXT,
+            timestamp INTEGER NOT NULL,
+            ip_address TEXT,
+            old_value TEXT,
+            new_value TEXT
+          )
+        ''');
+      } catch (e) {
+        log('Error creating audit_log table: $e');
+      }
 
       // Safety check to prevent SQL logic error on missing cash_sessions
       try {
@@ -280,6 +327,71 @@ class AppDatabase extends _$AppDatabase {
         ''');
       } catch (e) {
         log('Error creating damaged_items table: $e');
+      }
+
+      // Safety check for customer_containers (ensure correct schema and no FK to customers)
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS customer_containers (
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            customer_id TEXT NOT NULL,
+            quantity_out INTEGER NOT NULL DEFAULT 0,
+            quantity_returned INTEGER NOT NULL DEFAULT 0,
+            date INTEGER,
+            note TEXT,
+            updated_at INTEGER,
+            PRIMARY KEY (product_id, customer_id)
+          )
+        ''');
+      } catch (e) {
+        log('Error ensuring customer_containers: $e');
+      }
+
+      // Recreate to drop FK constraint if needed, copying data safely without 'id'
+      try {
+        final tableInfo = await customSelect("PRAGMA foreign_key_list('customer_containers')").get();
+        bool hasCustomerFk = false;
+        for (final row in tableInfo) {
+          if (row.read<String>('table') == 'customers') {
+            hasCustomerFk = true;
+            break;
+          }
+        }
+        if (hasCustomerFk) {
+          log('customer_containers has legacy foreign key to customers. Recreating table...');
+          await customStatement('PRAGMA foreign_keys = OFF');
+          await customStatement('''
+            CREATE TABLE customer_containers_new (
+              product_id INTEGER NOT NULL REFERENCES products(id),
+              customer_id TEXT NOT NULL,
+              quantity_out INTEGER NOT NULL DEFAULT 0,
+              quantity_returned INTEGER NOT NULL DEFAULT 0,
+              date INTEGER,
+              note TEXT,
+              updated_at INTEGER,
+              PRIMARY KEY (product_id, customer_id)
+            )
+          ''');
+          
+          try {
+            await customStatement('''
+              INSERT INTO customer_containers_new
+                (product_id, customer_id, quantity_out, quantity_returned, date, note, updated_at)
+              SELECT
+                product_id, customer_id, quantity_out, quantity_returned, date, note, updated_at
+              FROM customer_containers
+            ''');
+          } catch (e) {
+            log('Error copying customer_containers data: $e');
+          }
+          
+          await customStatement('DROP TABLE customer_containers');
+          await customStatement('ALTER TABLE customer_containers_new RENAME TO customer_containers');
+          await customStatement('PRAGMA foreign_keys = ON');
+          log('Recreated customer_containers successfully.');
+        }
+      } catch (e) {
+        log('Error checking/recreating customer_containers FK: $e');
       }
 
       // Safety check to prevent SQL logic error on missing sales_returns tables
@@ -1036,6 +1148,77 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  /// Schema v49 — برنيكه (returnable containers) support
+  Future<void> _runV49Migrations(Migrator m) async {
+    await _logMigrationStep(49, 'barneka_containers', 'started');
+    try {
+      // 1. Add barneka flag to products
+      try {
+        await customStatement(
+          'ALTER TABLE products ADD COLUMN barneka INTEGER NOT NULL DEFAULT 0',
+        );
+        log('v49: Added barneka column to products');
+      } catch (e) {
+        log('v49 warning (barneka column may exist): $e');
+      }
+
+      // 2. Create customer_containers table
+      try {
+        await m.createTable(customerContainers);
+        log('v49: Created customer_containers table');
+      } catch (e) {
+        log('v49 warning customer_containers: $e');
+      }
+
+      await _logMigrationStep(49, 'barneka_containers', 'completed');
+    } catch (e) {
+      await _logMigrationStep(49, 'barneka_containers', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v50 — allow walk-in (cash) sales in customer_containers
+  /// by dropping the strict FK to customers and using a nullable customer_id
+  /// with a UNIQUE(product_id, customer_id) constraint. Existing data is kept.
+  Future<void> _runV50Migrations(Migrator m) async {
+    await _logMigrationStep(50, 'barneka_walkin', 'started');
+    try {
+      try {
+        await customStatement('''
+          CREATE TABLE customer_containers_new (
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            customer_id TEXT NOT NULL,
+            quantity_out INTEGER NOT NULL DEFAULT 0,
+            quantity_returned INTEGER NOT NULL DEFAULT 0,
+            date INTEGER,
+            note TEXT,
+            updated_at INTEGER,
+            PRIMARY KEY (product_id, customer_id)
+          )
+        ''');
+        await customStatement('''
+          INSERT INTO customer_containers_new
+            (id, product_id, customer_id, quantity_out, quantity_returned, date, note, updated_at)
+          SELECT
+            id, product_id, customer_id, quantity_out, quantity_returned, date, note, updated_at
+          FROM customer_containers
+        ''');
+        await customStatement('DROP TABLE customer_containers');
+        await customStatement(
+          'ALTER TABLE customer_containers_new RENAME TO customer_containers',
+        );
+        log('v50: Recreated customer_containers without customers FK');
+      } catch (e) {
+        log('v50 warning (customer_containers recreate): $e');
+      }
+
+      await _logMigrationStep(50, 'barneka_walkin', 'completed');
+    } catch (e) {
+      await _logMigrationStep(50, 'barneka_walkin', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
   Future<void> _fixPurchaseAmountTypes() async {
     try {
       log(' Fixing amount types in purchases table...');
@@ -1136,6 +1319,7 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'customers','column': 'created_at',   'type': 'INTEGER'},
       {'table': 'products', 'column': 'cost_price',   'type': 'REAL'},
       {'table': 'products', 'column': 'min_stock_level', 'type': 'INTEGER DEFAULT 0'},
+      {'table': 'products', 'column': 'barneka', 'type': 'INTEGER NOT NULL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'discount', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'commission', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'unit_cost_at_time', 'type': 'REAL'},
@@ -1143,6 +1327,15 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'attendance_table', 'column': 'source_device_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'raw_event_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'override_reason', 'type': 'TEXT'},
+      {'table': 'audit_log', 'column': 'old_value', 'type': 'TEXT'},
+      {'table': 'audit_log', 'column': 'new_value', 'type': 'TEXT'},
+      // Invoice void support columns
+      {'table': 'invoices', 'column': 'voided_at', 'type': 'INTEGER'},
+      {'table': 'invoices', 'column': 'void_reason', 'type': 'TEXT'},
+      {'table': 'invoices', 'column': 'voided_by', 'type': 'TEXT'},
+      // Expenses extra columns
+      {'table': 'expenses', 'column': 'user_id', 'type': 'TEXT'},
+      {'table': 'expenses', 'column': 'day_id', 'type': 'TEXT'},
     ];
 
     for (final check in columnChecks) {
@@ -1161,6 +1354,7 @@ class AppDatabase extends _$AppDatabase {
     final columnChecks = [
       {'table': 'products', 'column': 'cost_price', 'type': 'REAL'},
       {'table': 'products', 'column': 'min_stock_level', 'type': 'INTEGER DEFAULT 0'},
+      {'table': 'products', 'column': 'barneka', 'type': 'INTEGER NOT NULL DEFAULT 0'},
       {'table': 'invoices', 'column': 'customer_id', 'type': 'TEXT'},
       {'table': 'invoices', 'column': 'total_amount', 'type': 'REAL DEFAULT 0.0'},
       {'table': 'invoices', 'column': 'paid_amount', 'type': 'REAL DEFAULT 0.0'},
@@ -1174,6 +1368,15 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'attendance_table', 'column': 'source_device_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'raw_event_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'override_reason', 'type': 'TEXT'},
+      {'table': 'audit_log', 'column': 'old_value', 'type': 'TEXT'},
+      {'table': 'audit_log', 'column': 'new_value', 'type': 'TEXT'},
+      // Invoice void support columns
+      {'table': 'invoices', 'column': 'voided_at', 'type': 'INTEGER'},
+      {'table': 'invoices', 'column': 'void_reason', 'type': 'TEXT'},
+      {'table': 'invoices', 'column': 'voided_by', 'type': 'TEXT'},
+      // Expenses extra columns
+      {'table': 'expenses', 'column': 'user_id', 'type': 'TEXT'},
+      {'table': 'expenses', 'column': 'day_id', 'type': 'TEXT'},
     ];
     for (final check in columnChecks) {
       try {
@@ -1390,6 +1593,55 @@ class AppDatabase extends _$AppDatabase {
       } catch (e) {
         log('Staff table safety check (${entry.key}): $e');
       }
+    }
+  }
+
+  /// Schema v51 — vegetable shipments + empty barnika tracking tables.
+  /// These tables are registered in @DriftDatabase so `m.createAll()` handles
+  /// fresh installs. For upgrades we create them defensively (IF NOT EXISTS).
+  Future<void> _runV51Migrations(Migrator m) async {
+    await _logMigrationStep(51, 'vegetable_shipments_barnika_tracking', 'started');
+    try {
+      // VegetableShipments table
+      try {
+        await m.createTable(vegetableShipments);
+        log('v51: Created vegetable_shipments table');
+      } catch (e) {
+        log('v51: vegetable_shipments table likely already exists: $e');
+      }
+
+      // EmptyBarnikaTracking table
+      try {
+        await m.createTable(emptyBarnikaTracking);
+        log('v51: Created empty_barnika_tracking table');
+      } catch (e) {
+        log('v51: empty_barnika_tracking table likely already exists: $e');
+      }
+
+      // shipmentId on Invoices (nullable FK, safe to add)
+      try {
+        await customStatement(
+          'ALTER TABLE invoices ADD COLUMN shipment_id INTEGER REFERENCES vegetable_shipments(id)',
+        );
+        log('v51: Added shipment_id to invoices');
+      } catch (e) {
+        log('v51: invoices.shipment_id likely already exists: $e');
+      }
+
+      // shipmentId on InvoiceItems (nullable FK, safe to add)
+      try {
+        await customStatement(
+          'ALTER TABLE invoice_items ADD COLUMN shipment_id INTEGER REFERENCES vegetable_shipments(id)',
+        );
+        log('v51: Added shipment_id to invoice_items');
+      } catch (e) {
+        log('v51: invoice_items.shipment_id likely already exists: $e');
+      }
+
+      await _logMigrationStep(51, 'vegetable_shipments_barnika_tracking', 'completed');
+    } catch (e) {
+      await _logMigrationStep(51, 'vegetable_shipments_barnika_tracking', 'failed', error: e.toString());
+      rethrow;
     }
   }
 }

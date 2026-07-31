@@ -15,6 +15,7 @@ import 'package:pos_offline_desktop/screens/splash_screen.dart';
 import 'package:pos_offline_desktop/ui/product/damaged_items_screen.dart';
 import 'package:pos_offline_desktop/screens/reports/returns_report_screen.dart';
 import 'package:pos_offline_desktop/ui/about/about_screen.dart';
+import 'package:pos_offline_desktop/ui/barneka/barneka_products_screen.dart';
 
 final firstRunCompleteProvider = FutureProvider<bool>((ref) async {
   return SettingsService.isFirstRunComplete();
@@ -91,6 +92,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/damaged-items',
         builder: (context, state) => DamagedItemsScreen(db: db),
+      ),
+      GoRoute(
+        path: '/barneka',
+        builder: (context, state) => BarnekaProductsScreen(db: db),
       ),
       GoRoute(
         path: '/returns-report',

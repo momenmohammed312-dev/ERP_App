@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/invoice_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/invoice_items_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/customer_containers_table.dart';
 import '../../models/report_dtos.dart';
 
 part 'invoice_dao.g.dart';
@@ -166,6 +167,45 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
   }
 
   // === Reporting Methods ===
+  /// Returns, for a given product, how many units were sold to each customer
+  /// within [start]–[end]. Each sold unit counts as one برنيكه (1:1).
+  /// Walk-in / cash sales (no customer) are grouped under [kWalkInCustomerId].
+  Future<List<ProductSalesByCustomer>> getProductSalesByCustomer(
+    int productId,
+    DateTime start,
+    DateTime end,
+  ) async {
+    final query = select(invoiceItems).join([
+      innerJoin(invoices, invoices.id.equalsExp(invoiceItems.invoiceId)),
+    ])
+      ..where(invoiceItems.productId.equals(productId))
+      ..where(invoices.date.isBetweenValues(start, end))
+      ..where(invoices.status.equals('voided').not());
+
+    final rows = await query.get();
+    final Map<String, ProductSalesByCustomer> map = {};
+
+    for (final row in rows) {
+      final item = row.readTable(invoiceItems);
+      final inv = row.readTable(invoices);
+      final isWalkIn = inv.customerId == null;
+      final cid = isWalkIn ? kWalkInCustomerId : inv.customerId!;
+      final name = isWalkIn ? kWalkInCustomerName : (inv.customerName ?? '');
+      final existing = map[cid];
+      if (existing == null) {
+        map[cid] = ProductSalesByCustomer(
+          customerId: cid,
+          customerName: name,
+          totalQty: item.quantity,
+        );
+      } else {
+        map[cid] = existing.copyWith(totalQty: existing.totalQty + item.quantity);
+      }
+    }
+
+    return map.values.toList();
+  }
+
   Future<List<InvoiceReportDTO>> getInvoicesWithDetails(
     DateTime start,
     DateTime end,
@@ -217,4 +257,29 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
     }
     return reportData;
   }
+}
+
+/// Lightweight result of [InvoiceDao.getProductSalesByCustomer]:
+/// how many units of a product were sold to a customer in a date range.
+class ProductSalesByCustomer {
+  final String customerId;
+  final String customerName;
+  final int totalQty;
+
+  const ProductSalesByCustomer({
+    required this.customerId,
+    required this.customerName,
+    required this.totalQty,
+  });
+
+  ProductSalesByCustomer copyWith({
+    String? customerId,
+    String? customerName,
+    int? totalQty,
+  }) =>
+      ProductSalesByCustomer(
+        customerId: customerId ?? this.customerId,
+        customerName: customerName ?? this.customerName,
+        totalQty: totalQty ?? this.totalQty,
+      );
 }

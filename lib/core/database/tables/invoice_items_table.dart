@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'invoice_table.dart';
 import 'product_table.dart';
+import 'vegetable_shipments_table.dart';
 
 class InvoiceItems extends Table {
   IntColumn get id => integer().autoIncrement()(); // Primary key
@@ -16,4 +17,8 @@ class InvoiceItems extends Table {
   RealColumn get discount => real().withDefault(const Constant(0))(); // Discount per line
   RealColumn get commission => real().withDefault(const Constant(0))(); // Commission per line
   RealColumn get unitCostAtTime => real().nullable()(); // Snapshot of costPrice at time of sale
+
+  /// Shipment this line was drawn from (multi-shipment sales).
+  IntColumn get shipmentId =>
+      integer().nullable().references(VegetableShipments, #id)();
 }

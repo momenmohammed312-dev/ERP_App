@@ -13,6 +13,7 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/ui/product/widgets/product_form.dart';
 import 'package:pos_offline_desktop/ui/customer/add_edit_customer_page.dart';
+import 'package:pos_offline_desktop/ui/barneka/barneka_products_screen.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart' as models;
 
 // ════════════════════════════════════════════════════════════════════════
@@ -57,6 +58,7 @@ class _AdminDashboardPageContentState
       const UsersPage(),
       const ReportsPage(),
       const SettingsPage(),
+      BarnekaProductsScreen(db: widget.db),
     ];
   }
 
@@ -133,6 +135,11 @@ class _AdminDashboardPageContentState
                 icon: Icon(Icons.settings, color: Colors.white70),
                 selectedIcon: Icon(Icons.settings, color: Colors.white),
                 label: Text('الإعدادات', style: TextStyle(color: Colors.white)),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.eco, color: Colors.white70),
+                selectedIcon: Icon(Icons.eco, color: Colors.white),
+                label: Text('البرنيكه', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),

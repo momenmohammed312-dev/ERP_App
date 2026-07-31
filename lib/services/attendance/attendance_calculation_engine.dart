@@ -40,6 +40,7 @@ class ScheduleConfig {
   int get workStartMinutesSinceMidnight => workStartHour * 60 + workStartMinute;
   int get workEndMinutesSinceMidnight => workEndHour * 60 + workEndMinute;
   int get standardMinutesPerDay => workEndMinutesSinceMidnight - workStartMinutesSinceMidnight;
+  int get standardMinutesTotal => standardMinutesPerDay; // alias for clarity
 }
 
 /// Result of attendance status calculation
@@ -137,9 +138,9 @@ class AttendanceCalculationEngine {
         workEndMinute: end.$2,
         workDays: days.isEmpty ? [0, 1, 2, 3, 4] : days,
         weekendDay: weekend,
-        gracePeriodMinutes: int.parse(await _getSetting('grace_period_minutes', '15')),
-        standardHoursPerDay: double.parse(await _getSetting('overtime_threshold_hours', '8')),
-        overtimeRateMultiplier: double.parse(await _getSetting('overtime_rate_multiplier', '1.5')),
+        gracePeriodMinutes: int.tryParse(await _getSetting('grace_period_minutes', '15')) ?? 15,
+        standardHoursPerDay: double.tryParse(await _getSetting('overtime_threshold_hours', '8')) ?? 8.0,
+        overtimeRateMultiplier: double.tryParse(await _getSetting('overtime_rate_multiplier', '1.5')) ?? 1.5,
       );
     }
 
@@ -208,7 +209,7 @@ class AttendanceCalculationEngine {
 
     if (checkOutTime != null) {
       final totalMinutes = checkOutTime.difference(checkInTime).inMinutes;
-      final standardMinutes = schedule.standardMinutesPerDay * 60;
+      final standardMinutes = schedule.standardMinutesPerDay; // already in minutes
 
       if (totalMinutes <= standardMinutes) {
         workingHours = totalMinutes / 60.0;
@@ -243,39 +244,43 @@ class AttendanceCalculationEngine {
   Future<int> generateAbsencesForDate(DateTime date) async {
     int created = 0;
     final activeStaff = await _staffDao.getActiveStaff();
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    final nextDay = dateOnly.add(const Duration(days: 1));
 
-    for (final staff in activeStaff) {
-      final schedule = await getScheduleForStaff(staff.staffId);
+    // Batch: fetch all attendance records for all staff for this date in one query
+    final allStaffIds = activeStaff.map((s) => s.staffId).toList();
+    final allRecords = await Future.wait(
+      allStaffIds.map((id) => _staffDao.getAttendanceByStaff(id, startDate: dateOnly, endDate: nextDay)),
+    );
 
-      // Skip if not a work day
-      if (!isWorkDay(date, schedule)) continue;
-
-      // Check if attendance record already exists for this date
-      final dateOnly = DateTime(date.year, date.month, date.day);
-      final nextDay = dateOnly.add(const Duration(days: 1));
-      final existing = await _staffDao.getAttendanceByStaff(
-        staff.staffId,
-        startDate: dateOnly,
-        endDate: nextDay,
-      );
-
-      final todayRecord = existing.where((a) {
+    // Build a set of staff IDs that already have attendance for this date
+    final staffWithAttendance = <String>{};
+    for (int i = 0; i < allRecords.length; i++) {
+      final todayRecord = allRecords[i].where((a) {
         final aDate = DateTime(a.date.year, a.date.month, a.date.day);
         return aDate == dateOnly;
       }).toList();
-
-      if (todayRecord.isEmpty) {
-        // No record → create absence
-        await _staffDao.addAttendance(AttendanceTableCompanion.insert(
-          staffId: staff.staffId,
-          date: dateOnly,
-          status: 'absent',
-          source: const Value('auto_generated'),
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ));
-        created++;
+      if (todayRecord.isNotEmpty) {
+        staffWithAttendance.add(allStaffIds[i]);
       }
+    }
+
+    // Create absences only for staff without records
+    for (final staff in activeStaff) {
+      if (staffWithAttendance.contains(staff.staffId)) continue;
+
+      final schedule = await getScheduleForStaff(staff.staffId);
+      if (!isWorkDay(date, schedule)) continue;
+
+      await _staffDao.addAttendance(AttendanceTableCompanion.insert(
+        staffId: staff.staffId,
+        date: dateOnly,
+        status: 'absent',
+        source: const Value('auto_generated'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ));
+      created++;
     }
 
     return created;

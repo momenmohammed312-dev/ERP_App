@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:drift/drift.dart';
 import '../database/app_database.dart';
+import '../database/tables/vegetable_shipments_table.dart';
+import 'shipment_pricing_service.dart';
 
 class InvoiceItemParams {
   final int productId;
@@ -10,6 +12,7 @@ class InvoiceItemParams {
   final double discount;
   final double commission;
   final double? unitCostAtTime;
+  final int? shipmentId;
 
   InvoiceItemParams({
     required this.productId,
@@ -19,6 +22,7 @@ class InvoiceItemParams {
     this.discount = 0,
     this.commission = 0,
     this.unitCostAtTime,
+    this.shipmentId,
   });
 }
 
@@ -50,6 +54,7 @@ class InvoiceService {
     required List<InvoiceItemParams> items,
     String? ledgerDescription,
     List<SplitPaymentEntry>? splitPayments,
+    int? primaryShipmentId,
   }) async {
     final actualInvoiceNumber = invoiceNumber ?? 'INV${DateTime.now().millisecondsSinceEpoch}';
     final rand = Random.secure();
@@ -70,8 +75,12 @@ class InvoiceService {
           creditAmount: Value(creditAmount),
           status: Value(status),
           date: Value(DateTime.now()),
+          shipmentId: Value(primaryShipmentId),
         ),
       );
+
+      // Track supplier commission totals per shipment for ledger entries.
+      final supplierCommissions = <int, _SupplierCommissionAccumulator>{};
 
       for (final item in items) {
         final product = await _db.productDao.getProductById(item.productId);
@@ -96,6 +105,20 @@ class InvoiceService {
           ),
         );
 
+        // Auto-calculate commission for commission-based shipments.
+        var itemCommission = item.commission;
+        if (item.shipmentId != null && itemCommission == 0) {
+          final shipment = await _db.vegetableShipmentDao.getById(item.shipmentId!);
+          if (shipment != null &&
+              shipment.pricingMode == ShipmentPricingMode.commission &&
+              shipment.commissionPercentage != null) {
+            itemCommission = ShipmentPricingService.calculateCommission(
+              item.price * item.quantity,
+              shipment.commissionPercentage!,
+            );
+          }
+        }
+
         await _db.invoiceDao.insertInvoiceItem(
           InvoiceItemsCompanion(
             invoiceId: Value(invoiceId),
@@ -104,10 +127,43 @@ class InvoiceService {
             ctn: Value(item.ctn),
             price: Value(item.price),
             discount: Value(item.discount),
-            commission: Value(item.commission),
+            commission: Value(itemCommission),
             unitCostAtTime: Value(item.unitCostAtTime),
+            shipmentId: Value(item.shipmentId),
           ),
         );
+
+        // Update shipment barnika counts.
+        if (item.shipmentId != null) {
+          final shipment = await _db.vegetableShipmentDao.getById(item.shipmentId!);
+          if (shipment == null) {
+            throw Exception('الشحنة #${item.shipmentId} غير موجودة');
+          }
+
+          final newSold = shipment.barnikaSoldCount + item.quantity;
+          final newRemaining = shipment.barnikaRemainingCount - item.quantity;
+          if (newRemaining < 0) {
+            throw Exception(
+              'الشحنة #${item.shipmentId} لا تحتوي على كمية كافية '
+              '(متبقي: ${shipment.barnikaRemainingCount}, مطلوب: ${item.quantity})',
+            );
+          }
+
+          await _db.vegetableShipmentDao.updateShipment(
+            shipment.copyWith(
+              barnikaSoldCount: newSold,
+              barnikaRemainingCount: newRemaining,
+            ),
+          );
+
+          // Accumulate supplier commission for ledger entry.
+          if (itemCommission > 0) {
+            supplierCommissions.putIfAbsent(
+              item.shipmentId!,
+              () => _SupplierCommissionAccumulator(shipment.supplierId),
+            ).add(item.price * item.quantity, itemCommission);
+          }
+        }
       }
 
       if (splitPayments != null) {
@@ -160,6 +216,27 @@ class InvoiceService {
         }
       }
 
+      // Create supplier ledger entries for commission-based shipments.
+      for (final entry in supplierCommissions.entries) {
+        final acc = entry.value;
+        final supplierDue = acc.sellAmount - acc.commissionAmount;
+        final ledgerIdSupplier =
+            '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_supplier';
+        await _db.ledgerDao.insertTransaction(
+          LedgerTransactionsCompanion.insert(
+            id: ledgerIdSupplier,
+            entityType: 'Supplier',
+            refId: acc.supplierId,
+            date: DateTime.now(),
+            description: 'عمولة بيع #$actualInvoiceNumber',
+            debit: Value(supplierDue),
+            credit: const Value(0.0),
+            origin: 'sale',
+            receiptNumber: Value('INV$invoiceId'),
+          ),
+        );
+      }
+
       final invoice = await (_db.select(_db.invoices)
           ..where((t) => t.id.equals(invoiceId)))
           .getSingleOrNull();
@@ -194,4 +271,20 @@ class SplitPaymentEntry {
   final double amount;
 
   SplitPaymentEntry({required this.method, required this.amount});
+}
+
+/// Accumulates sell amount and commission for a single supplier across
+/// multiple invoice items from the same shipment (or different shipments
+/// of the same supplier).
+class _SupplierCommissionAccumulator {
+  final String supplierId;
+  double sellAmount = 0;
+  double commissionAmount = 0;
+
+  _SupplierCommissionAccumulator(this.supplierId);
+
+  void add(double sell, double commission) {
+    sellAmount += sell;
+    commissionAmount += commission;
+  }
 }

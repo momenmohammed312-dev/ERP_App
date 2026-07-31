@@ -53,3 +53,8 @@ lib/config/app_secrets.dart
 web_admin_dashboard/lib/config/app_secrets.dart
 installer_output/
 output_build/
+
+# Local artifacts / generated files
+vc_redist.x64.exe
+data/vegetable_market_import.json
+licenses/license_trial_*.txt

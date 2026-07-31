@@ -207,6 +207,16 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                       context.push('/damaged-items');
                     },
                   ),
+                  // Barneka (Returnable Containers) Button
+                  _buildLauncherButton(
+                    context,
+                    'البرنيكه',
+                    Icons.eco,
+                    Colors.teal,
+                    () {
+                      context.push('/barneka');
+                    },
+                  ),
                 ],
               ),
               const Gap(40),

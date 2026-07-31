@@ -6,6 +6,7 @@ import 'package:pos_offline_desktop/core/services/price_list_print_service.dart'
 
 import '../../widgets/widgets.dart';
 import 'widgets.dart';
+import 'package:pos_offline_desktop/ui/barneka/barneka_tracking_screen.dart';
 
 class ProductContainer extends StatefulWidget {
   final AppDatabase db;
@@ -228,7 +229,38 @@ class _ProductContainerState extends State<ProductContainer> {
                               return DataRow(
                                 cells: [
                                   DataCell(Text('${index + 1}')),
-                                  DataCell(Text(product.name)),
+                                  DataCell(
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(product.name),
+                                        if (product.barneka) ...[
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.teal.withValues(
+                                                alpha: 0.12,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: const Text(
+                                              'برنيكه',
+                                              style: TextStyle(
+                                                color: Colors.teal,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
                                   DataCell(Text('${product.quantity}')),
                                   DataCell(
                                     Text(
@@ -270,6 +302,25 @@ class _ProductContainerState extends State<ProductContainer> {
                                   DataCell(
                                     Row(
                                       children: [
+                                        if (product.barneka)
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.people_alt_outlined,
+                                              color: Colors.teal,
+                                            ),
+                                            tooltip: 'عملاء البرنيكه',
+                                            onPressed: () {
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      BarnekaTrackingScreen(
+                                                    db: widget.db,
+                                                    product: product,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
                                         IconButton(
                                           icon: const Icon(Icons.edit_outlined),
                                           onPressed: () =>

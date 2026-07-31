@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart'; // ← Solution: handles Web/Windows/macOS automatically
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../config/app_flavor.dart';
 import '../database/app_database.dart';
 import '../services/business_date_service.dart';
 import '../services/invoice_service.dart';
@@ -59,7 +60,7 @@ QueryExecutor _openConnection() {
   // • Web → WasmDatabase (drift/wasm.dart) — compiled separately
   // No more "dart:html not available on this platform" errors!
   return driftDatabase(
-    name: 'pos_offline_desktop_database',
+    name: AppFlavor.databaseName,
     native: const DriftNativeOptions(shareAcrossIsolates: true),
     web: DriftWebOptions(
       sqlite3Wasm: Uri.parse('/sqlite3.wasm'),

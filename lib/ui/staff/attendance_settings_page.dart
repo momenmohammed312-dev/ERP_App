@@ -156,34 +156,42 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
 
       final today = DateTime.now();
       final dateOnly = DateTime(today.year, today.month, today.day);
+      final nextDay = dateOnly.add(const Duration(days: 1));
       int created = 0;
 
       final activeStaff = await staffDao.getActiveStaff();
-      for (final staff in activeStaff) {
-        // Check if attendance record exists for today
-        final nextDay = dateOnly.add(const Duration(days: 1));
-        final existing = await staffDao.getAttendanceByStaff(
-          staff.staffId,
-          startDate: dateOnly,
-          endDate: nextDay,
-        );
+      final allStaffIds = activeStaff.map((s) => s.staffId).toList();
 
-        final todayRecord = existing.where((a) {
+      // Batch: fetch all attendance records for all staff for this date
+      final allRecords = await Future.wait(
+        allStaffIds.map((id) => staffDao.getAttendanceByStaff(id, startDate: dateOnly, endDate: nextDay)),
+      );
+
+      // Build set of staff with existing records
+      final staffWithAttendance = <String>{};
+      for (int i = 0; i < allRecords.length; i++) {
+        final todayRecord = allRecords[i].where((a) {
           final aDate = DateTime(a.date.year, a.date.month, a.date.day);
           return aDate == dateOnly;
         }).toList();
-
-        if (todayRecord.isEmpty) {
-          await staffDao.addAttendance(AttendanceTableCompanion.insert(
-            staffId: staff.staffId,
-            date: dateOnly,
-            status: 'absent',
-            source: const drift.Value('auto_generated'),
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ));
-          created++;
+        if (todayRecord.isNotEmpty) {
+          staffWithAttendance.add(allStaffIds[i]);
         }
+      }
+
+      // Create absences only for staff without records
+      for (final staff in activeStaff) {
+        if (staffWithAttendance.contains(staff.staffId)) continue;
+
+        await staffDao.addAttendance(AttendanceTableCompanion.insert(
+          staffId: staff.staffId,
+          date: dateOnly,
+          status: 'absent',
+          source: const drift.Value('auto_generated'),
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ));
+        created++;
       }
 
       setState(() => _absencesGenerated = created);

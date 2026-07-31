@@ -1,25 +1,43 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "POS-Offline-Desktop-main",
-            "request": "launch",
-            "type": "dart"
-        },
-        {
-            "name": "POS-Offline-Desktop-main (profile mode)",
+            "name": "POS Base (main.dart)",
             "request": "launch",
             "type": "dart",
-            "flutterMode": "profile"
+            "program": "lib/main.dart",
+            "args": [
+                "--dart-define=FLAVOR=base"
+            ]
         },
         {
-            "name": "POS-Offline-Desktop-main (release mode)",
+            "name": "POS Vegetable (سوق الخضار)",
             "request": "launch",
             "type": "dart",
-            "flutterMode": "release"
+            "program": "lib/main_vegetable.dart",
+            "args": [
+                "--dart-define=FLAVOR=vegetable"
+            ]
+        },
+        {
+            "name": "POS Base (profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "flutterMode": "profile",
+            "args": [
+                "--dart-define=FLAVOR=base"
+            ]
+        },
+        {
+            "name": "POS Vegetable (release mode)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main_vegetable.dart",
+            "flutterMode": "release",
+            "args": [
+                "--dart-define=FLAVOR=vegetable"
+            ]
         }
     ]
 }

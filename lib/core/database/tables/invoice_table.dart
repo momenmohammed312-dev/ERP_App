@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 
+import 'vegetable_shipments_table.dart';
+
 class Invoices extends Table {
   IntColumn get id => integer().autoIncrement()(); // Primary key
 
@@ -26,6 +28,10 @@ class Invoices extends Table {
   RealColumn get cashAmount => real().withDefault(const Constant(0))();
   RealColumn get cardAmount => real().withDefault(const Constant(0))();
   RealColumn get creditAmount => real().withDefault(const Constant(0))();
+
+  /// Primary shipment when the whole invoice draws from one shipment (optional).
+  IntColumn get shipmentId =>
+      integer().nullable().references(VegetableShipments, #id)();
 
   // primaryKey is defined by autoIncrement() on 'id'
 }

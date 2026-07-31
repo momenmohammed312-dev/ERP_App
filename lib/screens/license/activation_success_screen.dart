@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -42,11 +43,50 @@ class _ActivationSuccessScreenState
 
     // Refresh license provider then navigate
     Future.delayed(const Duration(seconds: 2), () async {
-      if (mounted) {
-        // Trigger refresh to update MyApp's router configuration
-        ref.invalidate(licenseStateProvider);
+      if (!mounted) return;
 
-        // Wait for it to update or just go to /splash (which will now show home)
+      // Trigger refresh to update MyApp's router configuration
+      ref.invalidate(licenseStateProvider);
+
+      // Wait for the provider to resolve to true (license valid)
+      // so the router switches from activation router to main router
+      final completer = Completer<void>();
+
+      final sub = ref.listenManual(licenseStateProvider, (previous, next) {
+        next.when(
+          data: (valid) {
+            if (valid && !completer.isCompleted) {
+              completer.complete();
+            }
+          },
+          loading: () {},
+          error: (_, _) {
+            if (!completer.isCompleted) {
+              completer.completeError('License check failed');
+            }
+          },
+        );
+      });
+
+      // Check if already resolved
+      final currentState = ref.read(licenseStateProvider);
+      currentState.whenData((valid) {
+        if (valid && !completer.isCompleted) {
+          completer.complete();
+        }
+      });
+
+      // Timeout after 5 seconds
+      Future.delayed(const Duration(seconds: 5), () {
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+      });
+
+      await completer.future;
+      sub.close();
+
+      if (mounted) {
         context.go('/splash');
       }
     });

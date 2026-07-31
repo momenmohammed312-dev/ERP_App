@@ -67,203 +67,9 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
   }
 
   void _showAddDeviceDialog() {
-    final nameController = TextEditingController();
-    final deviceCodeController = TextEditingController();
-    final vendorController = TextEditingController();
-    final modelController = TextEditingController();
-    final ipController = TextEditingController();
-    final portController = TextEditingController();
-    final serialController = TextEditingController();
-    final locationController = TextEditingController();
-    final authTokenController = TextEditingController();
-    String connectionType = 'tcp_ip';
-    final formKey = GlobalKey<FormState>();
-
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('إضافة جهاز حضور جديد'),
-          content: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'اسم الجهاز *',
-                      hintText: 'مثال: بوابة الدخول الرئيسية',
-                    ),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: deviceCodeController,
-                    decoration: const InputDecoration(
-                      labelText: 'كود الجهاز *',
-                      hintText: 'مثال: BIO-001',
-                    ),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: connectionType,
-                    decoration: const InputDecoration(labelText: 'نوع الاتصال *'),
-                    items: const [
-                      DropdownMenuItem(value: 'tcp_ip', child: Text('TCP/IP')),
-                      DropdownMenuItem(value: 'usb_import', child: Text('استيراد USB')),
-                      DropdownMenuItem(value: 'sdk', child: Text('SDK')),
-                      DropdownMenuItem(value: 'file_import', child: Text('استيراد ملف')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setDialogState(() => connectionType = v);
-                    },
-                  ),
-                  if (connectionType == 'tcp_ip') ...[
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: ipController,
-                      decoration: const InputDecoration(
-                        labelText: 'عنوان IP *',
-                        hintText: '192.168.1.100',
-                      ),
-                      keyboardType: TextInputType.number,
-                      validator: (v) {
-                        if (connectionType == 'tcp_ip' && (v == null || v.trim().isEmpty)) {
-                          return 'مطلوب للاتصال TCP/IP';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: portController,
-                      decoration: const InputDecoration(
-                        labelText: 'البورت *',
-                        hintText: '4370',
-                      ),
-                      keyboardType: TextInputType.number,
-                      validator: (v) {
-                        if (connectionType == 'tcp_ip' && (v == null || v.trim().isEmpty)) {
-                          return 'مطلوب';
-                        }
-                        if (v != null && v.isNotEmpty && int.tryParse(v) == null) {
-                          return 'رقم صحيح مطلوب';
-                        }
-                        return null;
-                      },
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: vendorController,
-                    decoration: const InputDecoration(
-                      labelText: 'الشركة المصنعة',
-                      hintText: 'ZKTeco, Hikvision',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: modelController,
-                    decoration: const InputDecoration(labelText: 'الموديل'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: serialController,
-                    decoration: const InputDecoration(labelText: 'الرقم التسلسلي'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: locationController,
-                    decoration: const InputDecoration(
-                      labelText: 'الموقع',
-                      hintText: 'الفرع الرئيسي، بوابة 1',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: authTokenController,
-                    decoration: const InputDecoration(labelText: 'Auth Token (اختياري)'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('إلغاء'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) return;
-
-                try {
-                  final dao = ref.read(attendanceDeviceDaoProvider);
-                  final now = DateTime.now();
-
-                  // Check unique device code
-                  final existingDevices = await dao.getAllDevices();
-                  final codeExists = existingDevices.any(
-                    (d) => d.deviceCode == deviceCodeController.text.trim(),
-                  );
-                  if (codeExists) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('كود الجهاز موجود بالفعل'),
-                          backgroundColor: Colors.orange,
-                        ),
-                      );
-                    }
-                    return;
-                  }
-
-                  await dao.addDevice(BiometricDevicesCompanion.insert(
-                    deviceCode: deviceCodeController.text.trim(),
-                    name: nameController.text.trim(),
-                    connectionType: connectionType,
-                    vendor: Value(vendorController.text.trim().isEmpty ? null : vendorController.text.trim()),
-                    model: Value(modelController.text.trim().isEmpty ? null : modelController.text.trim()),
-                    ipAddress: connectionType == 'tcp_ip' ? Value(ipController.text.trim()) : const Value(null),
-                    port: connectionType == 'tcp_ip' && portController.text.isNotEmpty
-                        ? Value(int.parse(portController.text.trim()))
-                        : const Value(null),
-                    serialNumber: Value(serialController.text.trim().isEmpty ? null : serialController.text.trim()),
-                    location: Value(locationController.text.trim().isEmpty ? null : locationController.text.trim()),
-                    authToken: Value(authTokenController.text.trim().isEmpty ? null : authTokenController.text.trim()),
-                    createdAt: now,
-                    updatedAt: now,
-                  ));
-
-                  if (mounted) {
-                    Navigator.pop(context);
-                    _loadDevices();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('تم إضافة الجهاز بنجاح'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('خطأ في إضافة الجهاز: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const Text('حفظ'),
-            ),
-          ],
-        ),
-      ),
+      builder: (context) => _AddDeviceDialog(onDeviceAdded: _loadDevices),
     );
   }
 
@@ -370,5 +176,229 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
                   ),
       ),
     );
+  }
+}
+
+class _AddDeviceDialog extends ConsumerStatefulWidget {
+  final VoidCallback onDeviceAdded;
+  const _AddDeviceDialog({required this.onDeviceAdded});
+
+  @override
+  ConsumerState<_AddDeviceDialog> createState() => _AddDeviceDialogState();
+}
+
+class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
+  final _nameController = TextEditingController();
+  final _deviceCodeController = TextEditingController();
+  final _vendorController = TextEditingController();
+  final _modelController = TextEditingController();
+  final _ipController = TextEditingController();
+  final _portController = TextEditingController(text: '4370');
+  final _serialController = TextEditingController();
+  final _locationController = TextEditingController();
+  final _authTokenController = TextEditingController();
+  String _connectionType = 'tcp_ip';
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _deviceCodeController.dispose();
+    _vendorController.dispose();
+    _modelController.dispose();
+    _ipController.dispose();
+    _portController.dispose();
+    _serialController.dispose();
+    _locationController.dispose();
+    _authTokenController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('إضافة جهاز حضور جديد'),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'اسم الجهاز *',
+                  hintText: 'مثال: بوابة الدخول الرئيسية',
+                ),
+                validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _deviceCodeController,
+                decoration: const InputDecoration(
+                  labelText: 'كود الجهاز *',
+                  hintText: 'مثال: BIO-001',
+                ),
+                validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _connectionType,
+                decoration: const InputDecoration(labelText: 'نوع الاتصال *'),
+                items: const [
+                  DropdownMenuItem(value: 'tcp_ip', child: Text('TCP/IP')),
+                  DropdownMenuItem(value: 'usb_import', child: Text('استيراد USB')),
+                  DropdownMenuItem(value: 'sdk', child: Text('SDK')),
+                  DropdownMenuItem(value: 'file_import', child: Text('استيراد ملف')),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _connectionType = v);
+                },
+              ),
+              if (_connectionType == 'tcp_ip') ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _ipController,
+                  decoration: const InputDecoration(
+                    labelText: 'عنوان IP *',
+                    hintText: '192.168.1.100',
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (v) {
+                    if (_connectionType == 'tcp_ip' && (v == null || v.trim().isEmpty)) {
+                      return 'مطلوب للاتصال TCP/IP';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _portController,
+                  decoration: const InputDecoration(
+                    labelText: 'البورت *',
+                    hintText: '4370',
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (v) {
+                    if (_connectionType == 'tcp_ip' && (v == null || v.trim().isEmpty)) {
+                      return 'مطلوب';
+                    }
+                    if (v != null && v.isNotEmpty && int.tryParse(v) == null) {
+                      return 'رقم صحيح مطلوب';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _vendorController,
+                decoration: const InputDecoration(
+                  labelText: 'الشركة المصنعة',
+                  hintText: 'ZKTeco, Hikvision',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _modelController,
+                decoration: const InputDecoration(labelText: 'الموديل'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _serialController,
+                decoration: const InputDecoration(labelText: 'الرقم التسلسلي'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _locationController,
+                decoration: const InputDecoration(
+                  labelText: 'الموقع',
+                  hintText: 'الفرع الرئيسي، بوابة 1',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _authTokenController,
+                decoration: const InputDecoration(labelText: 'Auth Token (اختياري)'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إلغاء'),
+        ),
+        ElevatedButton(
+          onPressed: _save,
+          child: const Text('حفظ'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final dao = db.attendanceDeviceDao;
+      final now = DateTime.now();
+
+      // Check unique device code
+      final existingDevices = await dao.getAllDevices();
+      final codeExists = existingDevices.any(
+        (d) => d.deviceCode == _deviceCodeController.text.trim(),
+      );
+      if (codeExists) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('كود الجهاز موجود بالفعل'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      await dao.addDevice(BiometricDevicesCompanion.insert(
+        deviceCode: _deviceCodeController.text.trim(),
+        name: _nameController.text.trim(),
+        connectionType: _connectionType,
+        vendor: Value(_vendorController.text.trim().isEmpty ? null : _vendorController.text.trim()),
+        model: Value(_modelController.text.trim().isEmpty ? null : _modelController.text.trim()),
+        ipAddress: _connectionType == 'tcp_ip' ? Value(_ipController.text.trim()) : const Value(null),
+        port: _connectionType == 'tcp_ip' && _portController.text.isNotEmpty
+            ? Value(int.parse(_portController.text.trim()))
+            : const Value(null),
+        serialNumber: Value(_serialController.text.trim().isEmpty ? null : _serialController.text.trim()),
+        location: Value(_locationController.text.trim().isEmpty ? null : _locationController.text.trim()),
+        authToken: Value(_authTokenController.text.trim().isEmpty ? null : _authTokenController.text.trim()),
+        createdAt: now,
+        updatedAt: now,
+      ));
+
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onDeviceAdded();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم إضافة الجهاز بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ في إضافة الجهاز: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
