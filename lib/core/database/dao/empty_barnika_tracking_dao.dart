@@ -29,11 +29,29 @@ class EmptyBarnikaTrackingDao extends DatabaseAccessor<AppDatabase>
             ..orderBy([(t) => OrderingTerm.desc(t.dateOut)]))
           .get();
 
+  Stream<List<EmptyBarnikaTrackingData>> watchOutstandingByCustomer(
+    String customerId,
+  ) =>
+      (select(emptyBarnikaTracking)
+            ..where(
+              (t) =>
+                  t.customerId.equals(customerId) &
+                  t.status.isNotValue(EmptyBarnikaStatus.returned),
+            )
+            ..orderBy([(t) => OrderingTerm.desc(t.dateOut)]))
+          .watch();
+
   Future<List<EmptyBarnikaTrackingData>> getAllOutstanding() =>
       (select(emptyBarnikaTracking)
             ..where((t) => t.status.isNotValue(EmptyBarnikaStatus.returned))
             ..orderBy([(t) => OrderingTerm.desc(t.dateOut)]))
           .get();
+
+  Stream<List<EmptyBarnikaTrackingData>> watchAllOutstanding() =>
+      (select(emptyBarnikaTracking)
+            ..where((t) => t.status.isNotValue(EmptyBarnikaStatus.returned))
+            ..orderBy([(t) => OrderingTerm.desc(t.dateOut)]))
+          .watch();
 
   Future<int> insertRecord(EmptyBarnikaTrackingCompanion entry) =>
       into(emptyBarnikaTracking).insert(entry);

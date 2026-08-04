@@ -32779,6 +32779,17 @@ class $CashSessionsTable extends CashSessions
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _settlementAmountMeta = const VerificationMeta(
+    'settlementAmount',
+  );
+  @override
+  late final GeneratedColumn<double> settlementAmount = GeneratedColumn<double>(
+    'settlement_amount',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -32793,6 +32804,7 @@ class $CashSessionsTable extends CashSessions
     totalSales,
     totalExpenses,
     notes,
+    settlementAmount,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -32889,6 +32901,15 @@ class $CashSessionsTable extends CashSessions
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
       );
     }
+    if (data.containsKey('settlement_amount')) {
+      context.handle(
+        _settlementAmountMeta,
+        settlementAmount.isAcceptableOrUnknown(
+          data['settlement_amount']!,
+          _settlementAmountMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -32946,6 +32967,10 @@ class $CashSessionsTable extends CashSessions
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       ),
+      settlementAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}settlement_amount'],
+      ),
     );
   }
 
@@ -32968,6 +32993,11 @@ class CashSession extends DataClass implements Insertable<CashSession> {
   final double totalSales;
   final double totalExpenses;
   final String? notes;
+
+  /// Optional settlement/large-invoice adjustment amount captured at day close
+  /// (vegetable flavor). Display-only informational field — not part of the
+  /// expected cash math. Added in schema v52.
+  final double? settlementAmount;
   const CashSession({
     required this.id,
     this.openedBy,
@@ -32981,6 +33011,7 @@ class CashSession extends DataClass implements Insertable<CashSession> {
     required this.totalSales,
     required this.totalExpenses,
     this.notes,
+    this.settlementAmount,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -33008,6 +33039,9 @@ class CashSession extends DataClass implements Insertable<CashSession> {
     map['total_expenses'] = Variable<double>(totalExpenses);
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
+    }
+    if (!nullToAbsent || settlementAmount != null) {
+      map['settlement_amount'] = Variable<double>(settlementAmount);
     }
     return map;
   }
@@ -33038,6 +33072,9 @@ class CashSession extends DataClass implements Insertable<CashSession> {
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
+      settlementAmount: settlementAmount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settlementAmount),
     );
   }
 
@@ -33059,6 +33096,7 @@ class CashSession extends DataClass implements Insertable<CashSession> {
       totalSales: serializer.fromJson<double>(json['totalSales']),
       totalExpenses: serializer.fromJson<double>(json['totalExpenses']),
       notes: serializer.fromJson<String?>(json['notes']),
+      settlementAmount: serializer.fromJson<double?>(json['settlementAmount']),
     );
   }
   @override
@@ -33077,6 +33115,7 @@ class CashSession extends DataClass implements Insertable<CashSession> {
       'totalSales': serializer.toJson<double>(totalSales),
       'totalExpenses': serializer.toJson<double>(totalExpenses),
       'notes': serializer.toJson<String?>(notes),
+      'settlementAmount': serializer.toJson<double?>(settlementAmount),
     };
   }
 
@@ -33093,6 +33132,7 @@ class CashSession extends DataClass implements Insertable<CashSession> {
     double? totalSales,
     double? totalExpenses,
     Value<String?> notes = const Value.absent(),
+    Value<double?> settlementAmount = const Value.absent(),
   }) => CashSession(
     id: id ?? this.id,
     openedBy: openedBy.present ? openedBy.value : this.openedBy,
@@ -33108,6 +33148,9 @@ class CashSession extends DataClass implements Insertable<CashSession> {
     totalSales: totalSales ?? this.totalSales,
     totalExpenses: totalExpenses ?? this.totalExpenses,
     notes: notes.present ? notes.value : this.notes,
+    settlementAmount: settlementAmount.present
+        ? settlementAmount.value
+        : this.settlementAmount,
   );
   CashSession copyWithCompanion(CashSessionsCompanion data) {
     return CashSession(
@@ -33135,6 +33178,9 @@ class CashSession extends DataClass implements Insertable<CashSession> {
           ? data.totalExpenses.value
           : this.totalExpenses,
       notes: data.notes.present ? data.notes.value : this.notes,
+      settlementAmount: data.settlementAmount.present
+          ? data.settlementAmount.value
+          : this.settlementAmount,
     );
   }
 
@@ -33152,7 +33198,8 @@ class CashSession extends DataClass implements Insertable<CashSession> {
           ..write('difference: $difference, ')
           ..write('totalSales: $totalSales, ')
           ..write('totalExpenses: $totalExpenses, ')
-          ..write('notes: $notes')
+          ..write('notes: $notes, ')
+          ..write('settlementAmount: $settlementAmount')
           ..write(')'))
         .toString();
   }
@@ -33171,6 +33218,7 @@ class CashSession extends DataClass implements Insertable<CashSession> {
     totalSales,
     totalExpenses,
     notes,
+    settlementAmount,
   );
   @override
   bool operator ==(Object other) =>
@@ -33187,7 +33235,8 @@ class CashSession extends DataClass implements Insertable<CashSession> {
           other.difference == this.difference &&
           other.totalSales == this.totalSales &&
           other.totalExpenses == this.totalExpenses &&
-          other.notes == this.notes);
+          other.notes == this.notes &&
+          other.settlementAmount == this.settlementAmount);
 }
 
 class CashSessionsCompanion extends UpdateCompanion<CashSession> {
@@ -33203,6 +33252,7 @@ class CashSessionsCompanion extends UpdateCompanion<CashSession> {
   final Value<double> totalSales;
   final Value<double> totalExpenses;
   final Value<String?> notes;
+  final Value<double?> settlementAmount;
   const CashSessionsCompanion({
     this.id = const Value.absent(),
     this.openedBy = const Value.absent(),
@@ -33216,6 +33266,7 @@ class CashSessionsCompanion extends UpdateCompanion<CashSession> {
     this.totalSales = const Value.absent(),
     this.totalExpenses = const Value.absent(),
     this.notes = const Value.absent(),
+    this.settlementAmount = const Value.absent(),
   });
   CashSessionsCompanion.insert({
     this.id = const Value.absent(),
@@ -33230,6 +33281,7 @@ class CashSessionsCompanion extends UpdateCompanion<CashSession> {
     this.totalSales = const Value.absent(),
     this.totalExpenses = const Value.absent(),
     this.notes = const Value.absent(),
+    this.settlementAmount = const Value.absent(),
   }) : openedAt = Value(openedAt);
   static Insertable<CashSession> custom({
     Expression<int>? id,
@@ -33244,6 +33296,7 @@ class CashSessionsCompanion extends UpdateCompanion<CashSession> {
     Expression<double>? totalSales,
     Expression<double>? totalExpenses,
     Expression<String>? notes,
+    Expression<double>? settlementAmount,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -33258,6 +33311,7 @@ class CashSessionsCompanion extends UpdateCompanion<CashSession> {
       if (totalSales != null) 'total_sales': totalSales,
       if (totalExpenses != null) 'total_expenses': totalExpenses,
       if (notes != null) 'notes': notes,
+      if (settlementAmount != null) 'settlement_amount': settlementAmount,
     });
   }
 
@@ -33274,6 +33328,7 @@ class CashSessionsCompanion extends UpdateCompanion<CashSession> {
     Value<double>? totalSales,
     Value<double>? totalExpenses,
     Value<String?>? notes,
+    Value<double?>? settlementAmount,
   }) {
     return CashSessionsCompanion(
       id: id ?? this.id,
@@ -33288,6 +33343,7 @@ class CashSessionsCompanion extends UpdateCompanion<CashSession> {
       totalSales: totalSales ?? this.totalSales,
       totalExpenses: totalExpenses ?? this.totalExpenses,
       notes: notes ?? this.notes,
+      settlementAmount: settlementAmount ?? this.settlementAmount,
     );
   }
 
@@ -33330,6 +33386,9 @@ class CashSessionsCompanion extends UpdateCompanion<CashSession> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (settlementAmount.present) {
+      map['settlement_amount'] = Variable<double>(settlementAmount.value);
+    }
     return map;
   }
 
@@ -33347,7 +33406,8 @@ class CashSessionsCompanion extends UpdateCompanion<CashSession> {
           ..write('difference: $difference, ')
           ..write('totalSales: $totalSales, ')
           ..write('totalExpenses: $totalExpenses, ')
-          ..write('notes: $notes')
+          ..write('notes: $notes, ')
+          ..write('settlementAmount: $settlementAmount')
           ..write(')'))
         .toString();
   }
@@ -63177,6 +63237,7 @@ typedef $$CashSessionsTableCreateCompanionBuilder =
       Value<double> totalSales,
       Value<double> totalExpenses,
       Value<String?> notes,
+      Value<double?> settlementAmount,
     });
 typedef $$CashSessionsTableUpdateCompanionBuilder =
     CashSessionsCompanion Function({
@@ -63192,6 +63253,7 @@ typedef $$CashSessionsTableUpdateCompanionBuilder =
       Value<double> totalSales,
       Value<double> totalExpenses,
       Value<String?> notes,
+      Value<double?> settlementAmount,
     });
 
 class $$CashSessionsTableFilterComposer
@@ -63260,6 +63322,11 @@ class $$CashSessionsTableFilterComposer
 
   ColumnFilters<String> get notes => $composableBuilder(
     column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get settlementAmount => $composableBuilder(
+    column: $table.settlementAmount,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -63332,6 +63399,11 @@ class $$CashSessionsTableOrderingComposer
     column: $table.notes,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<double> get settlementAmount => $composableBuilder(
+    column: $table.settlementAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$CashSessionsTableAnnotationComposer
@@ -63390,6 +63462,11 @@ class $$CashSessionsTableAnnotationComposer
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<double> get settlementAmount => $composableBuilder(
+    column: $table.settlementAmount,
+    builder: (column) => column,
+  );
 }
 
 class $$CashSessionsTableTableManager
@@ -63435,6 +63512,7 @@ class $$CashSessionsTableTableManager
                 Value<double> totalSales = const Value.absent(),
                 Value<double> totalExpenses = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<double?> settlementAmount = const Value.absent(),
               }) => CashSessionsCompanion(
                 id: id,
                 openedBy: openedBy,
@@ -63448,6 +63526,7 @@ class $$CashSessionsTableTableManager
                 totalSales: totalSales,
                 totalExpenses: totalExpenses,
                 notes: notes,
+                settlementAmount: settlementAmount,
               ),
           createCompanionCallback:
               ({
@@ -63463,6 +63542,7 @@ class $$CashSessionsTableTableManager
                 Value<double> totalSales = const Value.absent(),
                 Value<double> totalExpenses = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<double?> settlementAmount = const Value.absent(),
               }) => CashSessionsCompanion.insert(
                 id: id,
                 openedBy: openedBy,
@@ -63476,6 +63556,7 @@ class $$CashSessionsTableTableManager
                 totalSales: totalSales,
                 totalExpenses: totalExpenses,
                 notes: notes,
+                settlementAmount: settlementAmount,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

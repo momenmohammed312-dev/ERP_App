@@ -133,4 +133,33 @@ class BusinessDateService {
   Future<CashSession?> getCurrentSession() => db.cashSessionDao.getCurrentSession();
   
   Future<bool> isSessionOpen() => db.cashSessionDao.isCashOpen();
+
+  /// صافي الكاش المتوقع للجلسة المفتوحة حالياً (لسه ما اتقفلتش).
+  /// نفس منطق الحساب الموجود في [closeSession] بالظبط: رصيد افتتاحي
+  /// + كاش وارد − كاش صادر من بداية الجلسة حتى الآن، من غير origin = 'opening'.
+  /// لو مفيش جلسة مفتوحة بترجع 0.
+  Future<double> getExpectedCash() async {
+    final session = await getCurrentSession();
+    if (session == null || session.status != 'open') return 0.0;
+
+    final now = DateTime.now();
+    final transactions = await db.ledgerDao.getAllTransactionsByDateRange(
+      session.openedAt,
+      now,
+    );
+
+    final cashTxs =
+        transactions.where((t) => t.paymentMethod == 'cash' || t.entityType == 'Cash');
+
+    double income = 0;
+    double expenses = 0;
+
+    for (var tx in cashTxs) {
+      if (tx.origin == 'opening') continue;
+      income += tx.debit;
+      expenses += tx.credit;
+    }
+
+    return session.openingBalance + income - expenses;
+  }
 }

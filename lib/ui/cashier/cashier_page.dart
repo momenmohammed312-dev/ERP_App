@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/services/printer_service.dart';
+import 'package:pos_offline_desktop/ui/day/close_day_dialog.dart';
 import '../../core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
@@ -125,6 +127,24 @@ class _CashierPageState extends ConsumerState<CashierPage> {
 
   Future<void> _closeDay() async {
     if (_currentSession == null) return;
+
+    // Vegetable flavor: day close goes through the full settlement dialog.
+    if (AppFeatures.hasDaySettlement) {
+      final closed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const CloseDayDialog(),
+      );
+      if (closed == true && mounted) {
+        await _loadCurrentDay();
+        if (!mounted) return;
+        final l10n = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.day_closed_successfully)),
+        );
+      }
+      return;
+    }
 
     final result = await _showClosingBalanceDialog();
     if (result == null || !mounted) return;

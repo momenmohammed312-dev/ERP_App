@@ -97,6 +97,24 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
     }).get();
   }
 
+  Future<List<(InvoiceItem, Invoice, Product?)>> getItemsWithDetailsByShipment(
+    int shipmentId,
+  ) {
+    final productsTable = attachedDatabase.products;
+    final query = select(invoiceItems).join([
+      innerJoin(invoices, invoices.id.equalsExp(invoiceItems.invoiceId)),
+      leftOuterJoin(productsTable, productsTable.id.equalsExp(invoiceItems.productId)),
+    ])..where(invoiceItems.shipmentId.equals(shipmentId));
+
+    return query.map((row) {
+      return (
+        row.readTable(invoiceItems),
+        row.readTable(invoices),
+        row.readTableOrNull(productsTable),
+      );
+    }).get();
+  }
+
   // === Reporting / Dashboard ===
   Future<List<Invoice>> getInvoicesByDate(DateTime date) {
     final start = DateTime(date.year, date.month, date.day);
@@ -109,6 +127,23 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
             (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
           ]))
         .get();
+  }
+
+  /// Today's cash sales total: sum of the cash portion of non-voided invoices
+  /// on [date] where the cash portion is strictly positive.
+  /// Used by the day-close settlement view (vegetable flavor).
+  Future<double> getTotalCashSalesForDate(DateTime date) async {
+    final start = DateTime(date.year, date.month, date.day);
+    final end = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+    final query = selectOnly(invoices)
+      ..addColumns([invoices.cashAmount.sum()])
+      ..where(invoices.date.isBetweenValues(start, end))
+      ..where(invoices.status.equals('voided').not())
+      ..where(invoices.cashAmount.isBiggerThanValue(0));
+
+    final row = await query.getSingle();
+    return row.read(invoices.cashAmount.sum()) ?? 0.0;
   }
 
   Future<List<Invoice>> getInvoicesByDateRange(DateTime start, DateTime end) {

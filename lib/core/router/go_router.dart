@@ -16,6 +16,9 @@ import 'package:pos_offline_desktop/ui/product/damaged_items_screen.dart';
 import 'package:pos_offline_desktop/screens/reports/returns_report_screen.dart';
 import 'package:pos_offline_desktop/ui/about/about_screen.dart';
 import 'package:pos_offline_desktop/ui/barneka/barneka_products_screen.dart';
+import 'package:pos_offline_desktop/ui/shipments/shipments_screen.dart';
+import 'package:pos_offline_desktop/ui/shipments/widgets/shipment_detail_screen.dart';
+import 'package:pos_offline_desktop/ui/empty_barnika/empty_barnika_screen.dart';
 
 final firstRunCompleteProvider = FutureProvider<bool>((ref) async {
   return SettingsService.isFirstRunComplete();
@@ -104,6 +107,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/about',
         builder: (context, state) => const AboutScreen(),
+      ),
+      GoRoute(
+        path: '/shipments',
+        builder: (context, state) => ShipmentsScreen(db: db),
+      ),
+      GoRoute(
+        path: '/empty-barnika',
+        builder: (context, state) => EmptyBarnikaScreen(db: db),
+      ),
+      GoRoute(
+        path: '/shipments/:id',
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+          return ShipmentDetailScreen(db: db, shipmentId: id);
+        },
       ),
     ],
   );

@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/services/backup_service.dart';
+import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/core/services/validation/permission_validator.dart';
 import 'package:pos_offline_desktop/core/utils/logger.dart';
 import 'dart:async';
@@ -22,9 +24,20 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
   final _formKey = GlobalKey<FormState>();
   final _actualBalanceController = TextEditingController();
   final _notesController = TextEditingController();
+  final _settlementAmountController = TextEditingController();
   bool _isLoading = false;
   Map<String, dynamic>? _daySummary;
   double _expectedBalance = 0.0;
+
+  /// Vegetable flavor day-close settlement view (gated via AppFeatures).
+  final bool _isVegetable = AppFeatures.hasDaySettlement;
+
+  // Settlement summary values (vegetable flavor only).
+  double _cashSales = 0;
+  double _creditCollections = 0;
+  double _expenses = 0;
+  double _expectedNetCash = 0;
+  double _supplierOwed = 0;
 
   @override
   void initState() {
@@ -37,6 +50,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
   void dispose() {
     _actualBalanceController.dispose();
     _notesController.dispose();
+    _settlementAmountController.dispose();
     super.dispose();
   }
 
@@ -63,9 +77,23 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
       // Calculate day totals
       final summary = await _calculateDayTotals(db);
 
+      double expectedBalance = summary['expected_balance'] as double;
+      if (_isVegetable) {
+        // Vegetable flavor: compute the settlement summary (today's cash sales
+        // + credit collections - expenses) and use its net cash as the
+        // expected balance shown in the variance display.
+        final settlement = await _calculateVegetableSettlement(db);
+        _cashSales = settlement['cash_sales']!;
+        _creditCollections = settlement['credit_collections']!;
+        _expenses = settlement['expenses']!;
+        _expectedNetCash = settlement['expected_net_cash']!;
+        _supplierOwed = settlement['supplier_owed']!;
+        expectedBalance = _expectedNetCash;
+      }
+
       setState(() {
         _daySummary = summary;
-        _expectedBalance = summary['expected_balance'] as double;
+        _expectedBalance = expectedBalance;
         _isLoading = false;
       });
     } catch (e) {
@@ -228,6 +256,33 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
     }
   }
 
+  /// Vegetable flavor settlement summary — auto-computed, read-only:
+  /// expected net cash = cash sales + credit collections - expenses.
+  /// Supplier outstanding balance is display-only (not part of the cash math).
+  Future<Map<String, double>> _calculateVegetableSettlement(
+    AppDatabase db,
+  ) async {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+    final cashSales = await db.invoiceDao.getTotalCashSalesForDate(now);
+    final creditCollections = await db.invoicePaymentsDao
+        .getTotalByMethodAndDateRange('cash', startOfDay, endOfDay);
+    final expenses = await db.expenseDao.getTotalExpensesForDate(now);
+    final supplierOwed = await db.ledgerDao.getSupplierOutstandingBalance();
+
+    final expectedNetCash = cashSales + creditCollections - expenses;
+
+    return {
+      'cash_sales': cashSales,
+      'credit_collections': creditCollections,
+      'expenses': expenses,
+      'expected_net_cash': expectedNetCash,
+      'supplier_owed': supplierOwed,
+    };
+  }
+
   void _calculateDifference() {
     setState(() {});
   }
@@ -236,6 +291,21 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
     final actual = double.tryParse(_actualBalanceController.text) ?? 0.0;
     return actual - _expectedBalance;
   }
+
+  /// Variance color: vegetable settlement is green when the difference is
+  /// zero, red otherwise. Base flavor keeps the existing behavior (zero →
+  /// grey, positive → red, negative → green).
+  Color get _differenceColor {
+    if (_isVegetable) {
+      return _difference.abs() <= 0.01 ? Colors.green : Colors.red;
+    }
+    return _difference.abs() > 0.01
+        ? (_difference > 0 ? Colors.red : Colors.green)
+        : Colors.grey;
+  }
+
+  Color get _differenceBackgroundColor =>
+      _differenceColor.withValues(alpha: 0.1);
 
   Future<void> _closeDay() async {
     if (_formKey.currentState?.validate() == true) {
@@ -255,13 +325,42 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
         final actualBalance =
             double.tryParse(_actualBalanceController.text) ?? 0.0;
         final closedBy = currentUser?.username ?? '';
+        final notes = _notesController.text.trim();
+        final settlementAmount =
+            double.tryParse(_settlementAmountController.text);
 
-        await db.dayDao.closeDay(
-          dayId: today['id'] as int,
-          closingBalance: actualBalance,
-          notes: _notesController.text.trim(),
-          closedBy: closedBy,
-        );
+        if (_isVegetable) {
+          // Vegetable flavor: close both the cash session (persisting the
+          // expected/actual/difference/settlement into existing columns) and
+          // the day in one transaction via the existing DAO machinery.
+          final difference = actualBalance - _expectedBalance;
+          await db.transaction(() async {
+            final session = await db.cashSessionDao.getCurrentSession();
+            if (session != null && session.status == 'open') {
+              await db.cashSessionDao.closeCashSession(
+                session.id,
+                expectedBalance: _expectedBalance,
+                actualCash: actualBalance,
+                difference: difference,
+                notes: notes,
+                settlementAmount: settlementAmount,
+              );
+            }
+            await db.dayDao.closeDay(
+              dayId: today['id'] as int,
+              closingBalance: actualBalance,
+              notes: notes,
+              closedBy: closedBy,
+            );
+          });
+        } else {
+          await db.dayDao.closeDay(
+            dayId: today['id'] as int,
+            closingBalance: actualBalance,
+            notes: notes,
+            closedBy: closedBy,
+          );
+        }
 
         unawaited(
           BackupService(db)
@@ -388,6 +487,9 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (_isVegetable) ...[
+                      _buildSettlementSummaryBlock(),
+                    ] else ...[
                     // Summary Cards
                     Row(
                       children: [
@@ -504,6 +606,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
                         ],
                       ),
                     ),
+                    ],
                     const SizedBox(height: 20),
 
                     // Close Day Form
@@ -544,19 +647,9 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: difference.abs() > 0.01
-                                  ? (difference > 0
-                                        ? Colors.red.withValues(alpha: 0.1)
-                                        : Colors.green.withValues(alpha: 0.1))
-                                  : Colors.grey.withValues(alpha: 0.1),
+                              color: _differenceBackgroundColor,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: difference.abs() > 0.01
-                                    ? (difference > 0
-                                          ? Colors.red
-                                          : Colors.green)
-                                    : Colors.grey,
-                              ),
+                              border: Border.all(color: _differenceColor),
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -573,11 +666,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
-                                    color: difference.abs() > 0.01
-                                        ? (difference > 0
-                                              ? Colors.red
-                                              : Colors.green)
-                                        : Colors.grey,
+                                    color: _differenceColor,
                                   ),
                                 ),
                               ],
@@ -593,6 +682,27 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
                             ),
                             maxLines: 3,
                           ),
+
+                          if (_isVegetable) ...[
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _settlementAmountController,
+                              decoration: const InputDecoration(
+                                labelText: 'مبلغ التسوية / فاتورة كبيرة (اختياري)',
+                                border: OutlineInputBorder(),
+                                prefixText: 'ج.م ',
+                              ),
+                              keyboardType: TextInputType.number,
+                              validator: (value) {
+                                if (value != null &&
+                                    value.trim().isNotEmpty &&
+                                    double.tryParse(value) == null) {
+                                  return 'يجب إدخال مبلغ صحيح';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -614,6 +724,14 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  if (_isVegetable) ...[
+                    OutlinedButton.icon(
+                      onPressed: _isLoading ? null : _exportSettlementSummary,
+                      icon: const Icon(Icons.print),
+                      label: const Text('طباعة / تصدير الملخص'),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   TextButton(
                     onPressed: _isLoading
                         ? null
@@ -677,5 +795,124 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
         ],
       ),
     );
+  }
+
+  /// Vegetable flavor auto-computed settlement summary (read-only).
+  Widget _buildSettlementSummaryBlock() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'ملخص تسوية اليوم',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildSummaryCard(
+                'مبيعات كاش',
+                '${_cashSales.toStringAsFixed(2)} ج.م',
+                Colors.green,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildSummaryCard(
+                'تحصيل آجل (كاش)',
+                '${_creditCollections.toStringAsFixed(2)} ج.م',
+                Colors.teal,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildSummaryCard(
+                'المصروفات',
+                '${_expenses.toStringAsFixed(2)} ج.م',
+                Colors.red,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildSummaryCard(
+                'مستحق للموردين',
+                '${_supplierOwed.toStringAsFixed(2)} ج.م',
+                Colors.indigo,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+
+        // Expected Net Cash
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.amber.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'صافي الكاش المتوقع:',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                '${_expectedBalance.toStringAsFixed(2)} ج.م',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.amber,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Reuse the existing [ExportService] to print/export the settlement summary
+  /// (no new PDF generation logic).
+  Future<void> _exportSettlementSummary() async {
+    final actual = double.tryParse(_actualBalanceController.text) ?? 0.0;
+    final settlementAmount = double.tryParse(
+      _settlementAmountController.text,
+    );
+
+    final data = [
+      {'item': 'مبيعات كاش', 'amount': _cashSales},
+      {'item': 'تحصيل آجل (كاش)', 'amount': _creditCollections},
+      {'item': 'المصروفات', 'amount': _expenses},
+      {'item': 'صافي الكاش المتوقع', 'amount': _expectedNetCash},
+      {'item': 'مستحق للموردين - للعرض فقط', 'amount': _supplierOwed},
+      if (settlementAmount != null)
+        {'item': 'مبلغ التسوية / فاتورة كبيرة', 'amount': settlementAmount},
+      {'item': 'الكاش الفعلي المعدود', 'amount': actual},
+      {'item': 'الفرق (فعلي - متوقع)', 'amount': _difference},
+    ];
+
+    try {
+      await ExportService().exportToPDF(
+        title: 'تسوية يوم ${DateFormat('yyyy-MM-dd').format(DateTime.now())}',
+        data: data,
+        headers: const ['البند', 'المبلغ'],
+        columns: const ['item', 'amount'],
+        fileName:
+            'day_settlement_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في تصدير الملخص: $e')),
+        );
+      }
+    }
   }
 }

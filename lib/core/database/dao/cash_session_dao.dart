@@ -35,7 +35,18 @@ class CashSessionDao extends DatabaseAccessor<AppDatabase>
     )..where((tbl) => tbl.id.equals(id))).getSingle();
   }
 
-  Future<bool> closeCashSession(int sessionId) async {
+  /// Closes a cash session. The extra settlement values (expected/actual cash,
+  /// difference, notes, optional settlement amount) persist in existing
+  /// columns on [CashSessions] — all parameters are optional so existing
+  /// callers are unaffected.
+  Future<bool> closeCashSession(
+    int sessionId, {
+    double? expectedBalance,
+    double? actualCash,
+    double? difference,
+    String? notes,
+    double? settlementAmount,
+  }) async {
     final result =
         await (update(
           cashSessions,
@@ -43,6 +54,15 @@ class CashSessionDao extends DatabaseAccessor<AppDatabase>
           CashSessionsCompanion(
             closedAt: Value(DateTime.now()),
             status: const Value('closed'),
+            closingBalance: expectedBalance != null
+                ? Value(expectedBalance)
+                : const Value.absent(),
+            closingCash: actualCash != null ? Value(actualCash) : const Value.absent(),
+            difference: difference != null ? Value(difference) : const Value.absent(),
+            notes: notes != null ? Value(notes) : const Value.absent(),
+            settlementAmount: settlementAmount != null
+                ? Value(settlementAmount)
+                : const Value.absent(),
           ),
         );
     return result > 0;

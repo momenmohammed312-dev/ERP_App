@@ -21,6 +21,11 @@ import 'package:pos_offline_desktop/ui/invoice/widgets/day_opening_page.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
+import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
+import 'package:pos_offline_desktop/core/services/shipment_allocation_service.dart';
+import 'package:pos_offline_desktop/core/services/shipment_pricing_service.dart';
+import 'package:pos_offline_desktop/ui/invoice/widgets/shipment_picker_dialog.dart';
 
 class EnhancedNewInvoicePage extends StatefulHookConsumerWidget {
   final AppDatabase db;
@@ -79,6 +84,11 @@ class _EnhancedNewInvoicePageState
   bool _showInvoiceTypeModal = true;
   Timer? _searchDebounce;
   String? _invoiceNumber;
+
+  // Vegetable-flavor: record empty crates issued to the customer on sale.
+  bool _registerEmptyBarnika = true;
+  // Guards against stale async allocation results overwriting newer ones.
+  int _allocationResolveSeq = 0;
 
   @override
   void initState() {
@@ -424,6 +434,8 @@ class _EnhancedNewInvoicePageState
       _productEntries.add(entry);
       _calculateTotals();
     });
+
+    unawaited(_resolveAllocations(_productEntries.length - 1));
   }
 
   void _removeProductEntry(int index) {
@@ -438,6 +450,129 @@ class _EnhancedNewInvoicePageState
       _productEntries[index] = entry;
       _calculateTotals();
     });
+    unawaited(_resolveAllocations(index));
+  }
+
+  // ---- Vegetable-flavor shipment allocation (FIFO / manual override) ----
+
+  /// Total empty crates (barnikas) resolved across all line items.
+  int get _totalBarnikaQuantity => _productEntries.fold<int>(
+        0,
+        (sum, e) => sum + e.allocatedQuantity,
+      );
+
+  /// Supplier due (commission shipments) across all line items, for display.
+  double get _totalSupplierDue {
+    var total = 0.0;
+    for (final e in _productEntries) {
+      for (final allocation in e.allocations) {
+        final shipment = e.shipmentsById[allocation.shipmentId];
+        if (shipment != null &&
+            shipment.pricingMode == ShipmentPricingMode.commission &&
+            shipment.commissionPercentage != null) {
+          final sellAmount = e.unitPrice * allocation.quantity;
+          total += ShipmentPricingService.calculateSupplierDue(
+            sellAmount,
+            shipment.commissionPercentage!,
+          );
+        }
+      }
+    }
+    return total;
+  }
+
+  /// Resolves shipment allocation for a line item via FIFO (or the manual
+  /// override shipment if the user picked one). Vegetable flavor only.
+  Future<void> _resolveAllocations(int index) async {
+    if (!AppFeatures.hasShipmentTracking || index >= _productEntries.length) {
+      return;
+    }
+    final entry = _productEntries[index];
+    if (!entry.isBarnikaTracked) return;
+
+    final seq = ++_allocationResolveSeq;
+    try {
+      final allocations = await ShipmentAllocationService(
+        widget.db.vegetableShipmentDao,
+      ).allocate(
+        requestedQuantity: entry.quantity,
+        overrideShipmentId: entry.overrideMode
+            ? entry.overrideShipmentId
+            : null,
+      );
+
+      final shipments = await Future.wait(
+        allocations.map(
+          (a) => widget.db.vegetableShipmentDao.getById(a.shipmentId),
+        ),
+      );
+
+      if (!mounted || seq != _allocationResolveSeq) return;
+      setState(() {
+        _productEntries[index].allocations = allocations;
+        _productEntries[index].shipmentsById = {
+          for (final s in shipments)
+            if (s != null) s.id: s,
+        };
+        _productEntries[index].allocationError = null;
+      });
+    } catch (e) {
+      if (!mounted || seq != _allocationResolveSeq) return;
+      setState(() {
+        _productEntries[index].allocations = [];
+        _productEntries[index].shipmentsById = {};
+        _productEntries[index].allocationError = e.toString();
+      });
+    }
+  }
+
+  /// Opens the shipment picker for a line item (manual override).
+  Future<void> _pickShipment(int index) async {
+    if (index >= _productEntries.length) return;
+    final entry = _productEntries[index];
+
+    final result = await showDialog<ShipmentPickerResult>(
+      context: context,
+      builder: (context) => ShipmentPickerDialog(
+        db: widget.db,
+        currentOverrideShipmentId: entry.overrideMode
+            ? entry.overrideShipmentId
+            : null,
+      ),
+    );
+
+    if (result == null || !mounted) return;
+
+    setState(() {
+      if (result.useFifo) {
+        entry.overrideMode = false;
+        entry.overrideShipmentId = null;
+      } else {
+        entry.overrideMode = true;
+        entry.overrideShipmentId = result.shipmentId;
+      }
+    });
+    await _resolveAllocations(index);
+  }
+
+  bool get _shouldShowEmptyBarnikaCheckbox {
+    if (!AppFeatures.hasShipmentTracking) return false;
+    if (_selectedCustomerId == null || _selectedCustomerId == 'cash') {
+      return false;
+    }
+    return _totalBarnikaQuantity > 0;
+  }
+
+  Widget _buildEmptyBarnikaCheckbox() {
+    return CheckboxListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      controlAffinity: ListTileControlAffinity.leading,
+      value: _registerEmptyBarnika,
+      onChanged: (v) => setState(() => _registerEmptyBarnika = v ?? true),
+      secondary: const Icon(Icons.eco, color: Colors.green),
+      title: Text('تسجيل خروج برانيك فاضية لنفس العميل ($_totalBarnikaQuantity)'),
+    );
   }
 
   Future<void> _saveDraft() async {
@@ -730,24 +865,64 @@ class _EnhancedNewInvoicePageState
       );
     }
 
-    // Build invoice items for service
-    final items = _productEntries
-        .where((e) => e.product != null)
-        .map((e) {
-          int? ctn;
+    // Build invoice items for service.
+    // Vegetable-tracked lines expand into one item per allocated shipment so
+    // the existing InvoiceService API (single shipmentId per item) stays
+    // correct under FIFO spanning multiple shipments.
+    final items = <InvoiceItemParams>[];
+    int? primaryShipmentId;
+    var primaryQuantity = 0;
+
+    for (final e in _productEntries) {
+      if (e.product == null) continue;
+
+      final isTracked = AppFeatures.hasShipmentTracking &&
+          e.isBarnikaTracked &&
+          e.allocations.isNotEmpty;
+
+      if (isTracked) {
+        for (final allocation in e.allocations) {
+          int? subCtn;
           if (e.product!.cartonQuantity != null &&
               e.product!.cartonQuantity! > 0) {
-            ctn = e.quantity ~/ e.product!.cartonQuantity!;
+            subCtn = allocation.quantity ~/ e.product!.cartonQuantity!;
           }
-          return InvoiceItemParams(
+          // Distribute line discount proportionally across split shipments.
+          final subDiscount = e.quantity == allocation.quantity
+              ? e.discount
+              : e.discount * allocation.quantity / e.quantity;
+
+          items.add(InvoiceItemParams(
             productId: e.product!.id,
-            quantity: e.quantity,
+            quantity: allocation.quantity,
             price: e.unitPrice,
-            ctn: ctn,
-            discount: e.discount,
+            ctn: subCtn,
+            discount: subDiscount,
             unitCostAtTime: e.product!.costPrice,
-          );
-        }).toList();
+            shipmentId: allocation.shipmentId,
+          ));
+
+          if (allocation.quantity > primaryQuantity) {
+            primaryQuantity = allocation.quantity;
+            primaryShipmentId = allocation.shipmentId;
+          }
+        }
+      } else {
+        int? ctn;
+        if (e.product!.cartonQuantity != null &&
+            e.product!.cartonQuantity! > 0) {
+          ctn = e.quantity ~/ e.product!.cartonQuantity!;
+        }
+        items.add(InvoiceItemParams(
+          productId: e.product!.id,
+          quantity: e.quantity,
+          price: e.unitPrice,
+          ctn: ctn,
+          discount: e.discount,
+          unitCostAtTime: e.product!.costPrice,
+        ));
+      }
+    }
 
     final productSummary = _productEntries
         .map((e) => e.product?.name ?? '')
@@ -767,9 +942,29 @@ class _EnhancedNewInvoicePageState
       invoiceNumber: _invoiceNumber,
       items: items,
       ledgerDescription: ledgerDescription,
+      primaryShipmentId: primaryShipmentId,
     );
 
     final invoiceId = result.invoiceId;
+
+    // Vegetable flavor: record empty crates issued to a real customer.
+    // Separate insert (InvoiceService stays untouched); a failure here is
+    // logged but does not fail the already-completed invoice.
+    if (_registerEmptyBarnika &&
+        _totalBarnikaQuantity > 0 &&
+        customerId != 'cash') {
+      try {
+        await widget.db.emptyBarnikaTrackingDao.insertRecord(
+          EmptyBarnikaTrackingCompanion.insert(
+            customerId: customerId,
+            dateOut: DateTime.now(),
+            quantityOut: _totalBarnikaQuantity,
+          ),
+        );
+      } catch (e) {
+        log('Error recording empty barnika out: $e');
+      }
+    }
 
     // Build print data
     final invoiceItems = _productEntries
@@ -1061,6 +1256,14 @@ class _EnhancedNewInvoicePageState
             ),
           ),
 
+          // Vegetable flavor: empty-crate checkout toggle
+          if (_shouldShowEmptyBarnikaCheckbox) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _buildEmptyBarnikaCheckbox(),
+            ),
+          ],
+
           // Order lines - Enlarged section
           Expanded(
             flex: 3,
@@ -1103,6 +1306,11 @@ class _EnhancedNewInvoicePageState
                         onDelete: () {
                           _removeProductEntry(index);
                         },
+                        onPickShipment:
+                            AppFeatures.hasShipmentTracking &&
+                                entry.isBarnikaTracked
+                            ? () => _pickShipment(index)
+                            : null,
                       );
                     },
                   ),
@@ -1335,6 +1543,15 @@ class _EnhancedNewInvoicePageState
             isBold: true,
             fontSize: 18,
           ),
+          if (AppFeatures.hasShipmentTracking && _totalSupplierDue > 0) ...[
+            const Divider(),
+            _buildTotalRow(
+              'مستحق للموردين (عمولات):',
+              _totalSupplierDue,
+              color: Colors.purple.shade700,
+              isBold: true,
+            ),
+          ],
         ],
       ),
     );

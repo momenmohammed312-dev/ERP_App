@@ -31,6 +31,16 @@ class VegetableShipmentDao extends DatabaseAccessor<AppDatabase>
   Stream<List<VegetableShipment>> watchAll() =>
       select(vegetableShipments).watch();
 
+  /// إجمالي البرانيك المتبقية بالمخزن عبر كل الشحنات المفتوحة
+  /// (barnikaRemainingCount > 0) — مجرد SUM، من غير أي جدول جديد.
+  Future<int> getTotalRemainingBarnikas() async {
+    final query = selectOnly(vegetableShipments)
+      ..addColumns([vegetableShipments.barnikaRemainingCount.sum()])
+      ..where(vegetableShipments.barnikaRemainingCount.isBiggerThanValue(0));
+    final row = await query.getSingle();
+    return row.read(vegetableShipments.barnikaRemainingCount.sum()) ?? 0;
+  }
+
   Future<int> insertShipment(VegetableShipmentsCompanion entry) {
     validatePricingFields(
       pricingMode: entry.pricingMode.value,

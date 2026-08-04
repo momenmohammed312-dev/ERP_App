@@ -16,4 +16,9 @@ class CashSessions extends Table {
   RealColumn get totalSales => real().withDefault(const Constant(0.0))();
   RealColumn get totalExpenses => real().withDefault(const Constant(0.0))();
   TextColumn get notes => text().nullable()();
+
+  /// Optional settlement/large-invoice adjustment amount captured at day close
+  /// (vegetable flavor). Display-only informational field — not part of the
+  /// expected cash math. Added in schema v52.
+  RealColumn get settlementAmount => real().nullable()();
 }

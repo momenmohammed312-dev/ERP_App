@@ -6,6 +6,7 @@ import '../../core/models/user_model.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../core/services/unified_print_service.dart' as ups;
 import '../../widgets/permission_guard.dart';
+import 'close_day_dialog.dart';
 
 /// Day Management Screen
 /// شاشة إدارة اليومية المركزية
@@ -412,7 +413,7 @@ class _DayManagementScreenState extends ConsumerState<DayManagementScreen>
                                 permission: Permission.closeDay,
                                 fallback: const SizedBox.shrink(),
                                 child: ElevatedButton.icon(
-                                  onPressed: _closeDay,
+                                  onPressed: _openCloseDayDialog,
                                   icon: const Icon(Icons.lock),
                                   label: const Text('إغلاق اليوم'),
                                   style: ElevatedButton.styleFrom(
@@ -639,50 +640,16 @@ class _DayManagementScreenState extends ConsumerState<DayManagementScreen>
     }
   }
 
-  Future<void> _closeDay() async {
-    try {
-      // Get the current open day
-      final todayDay = await widget.db.dayDao.getTodayDay();
-      if (todayDay == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('لا يوجد يوم مفتوح حالياً'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
-      }
-
-      // Calculate closing balance (you may need to implement this logic)
-      final dayId = todayDay['id'] as int;
-      final closingBalance = await _calculateClosingBalance(dayId);
-
-      final currentUser = ref.read(authProvider);
-      await widget.db.dayDao.closeDay(
-        dayId: dayId,
-        closingBalance: closingBalance,
-        closedBy: currentUser?.username ?? '',
-      );
+  /// Opens the shared day-closing dialog (CloseDayDialog). The dialog handles
+  /// permission validation, closing balance entry, and — for the vegetable
+  /// flavor — the settlement summary. Returns after the day is closed.
+  Future<void> _openCloseDayDialog() async {
+    final closed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => const CloseDayDialog(),
+    );
+    if (closed == true) {
       await _loadDays();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم إغلاق اليوم بنجاح'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ في إغلاق اليوم: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     }
   }
 
@@ -736,12 +703,5 @@ class _DayManagementScreenState extends ConsumerState<DayManagementScreen>
         }
       }
     }
-  }
-
-  Future<double> _calculateClosingBalance(int dayId) async {
-    // Implement your closing balance calculation logic here
-    // This might include summing up all transactions for the day
-    // For now, returning a default value
-    return 0.0;
   }
 }

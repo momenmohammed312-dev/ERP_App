@@ -16,6 +16,8 @@ import 'package:pos_offline_desktop/ui/staff/employee_dashboard_page.dart';
 import 'package:pos_offline_desktop/ui/setting/settings.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
+import 'package:pos_offline_desktop/core/services/business_date_service.dart';
 import 'package:drift/drift.dart' as drift;
 
 class ModernHomeScreen extends ConsumerStatefulWidget {
@@ -217,6 +219,26 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                       context.push('/barneka');
                     },
                   ),
+                  if (AppFeatures.hasShipmentTracking)
+                    _buildLauncherButton(
+                      context,
+                      'الشحنات',
+                      Icons.local_shipping,
+                      Colors.amber.shade800,
+                      () {
+                        context.push('/shipments');
+                      },
+                    ),
+                  if (AppFeatures.hasEmptyContainerTracking)
+                    _buildLauncherButton(
+                      context,
+                      'البرانيك المستحقة',
+                      Icons.assignment_return,
+                      Colors.teal.shade700,
+                      () {
+                        context.push('/empty-barnika');
+                      },
+                    ),
                 ],
               ),
               const Gap(40),
@@ -417,6 +439,12 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
   double _todayPurchases = 0;
   bool _isLoading = true;
 
+  // Vegetable-flavor cards (gated behind AppFeatures.hasShipmentTracking)
+  int _remainingBarnikas = 0;
+  double _receivablesDue = 0;
+  double _expectedCash = 0;
+  double _supplierCommissionDue = 0;
+
   @override
   void initState() {
     super.initState();
@@ -456,11 +484,30 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
       ]).get();
       final todayPurchases = (purchaseResult.first.data['total'] as num?)?.toDouble() ?? 0;
 
+      // Vegetable-flavor cards — بتتقرأ بس لما feature الشحنات مفعّل
+      int remainingBarnikas = 0;
+      double receivablesDue = 0;
+      double expectedCash = 0;
+      double supplierCommissionDue = 0;
+
+      if (AppFeatures.hasShipmentTracking) {
+        remainingBarnikas = await widget.db.vegetableShipmentDao
+            .getTotalRemainingBarnikas();
+        receivablesDue = await widget.db.ledgerDao.getTotalReceivables();
+        expectedCash = await BusinessDateService(widget.db).getExpectedCash();
+        supplierCommissionDue = await widget.db.ledgerDao
+            .getSupplierCommissionDue();
+      }
+
       if (mounted) {
         setState(() {
           _todaySales = todaySales;
           _todayExpenses = todayExpenses;
           _todayPurchases = todayPurchases;
+          _remainingBarnikas = remainingBarnikas;
+          _receivablesDue = receivablesDue;
+          _expectedCash = expectedCash;
+          _supplierCommissionDue = supplierCommissionDue;
           _isLoading = false;
         });
       }
@@ -478,27 +525,80 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
       );
     }
     final netProfit = _todaySales - _todayPurchases - _todayExpenses;
-    return SizedBox(
-      height: 100,
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildCard('مبيعات اليوم', _todaySales, Colors.green, Icons.trending_up),
+    final baseCardsRow = Row(
+      children: [
+        Expanded(
+          child: _buildCard('مبيعات اليوم', _todaySales, Colors.green, Icons.trending_up),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _buildCard('مشتريات', _todayPurchases, Colors.orange, Icons.shopping_cart),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _buildCard('مصروفات', _todayExpenses, Colors.redAccent, Icons.receipt_long),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _buildCard('صافي الربح', netProfit, netProfit >= 0 ? Colors.blue : Colors.red, Icons.account_balance),
+        ),
+      ],
+    );
+
+    // الأصل (base flavor) بيشوف الكروت الأربعة بس زي ما هو
+    if (!AppFeatures.hasShipmentTracking) {
+      return SizedBox(height: 100, child: baseCardsRow);
+    }
+
+    // Vegetable flavor: الكروت الأربعة الحالية + 4 كروت جديدة لتحتها
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(height: 100, child: baseCardsRow),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 100,
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildCard(
+                  'برانيك متبقية بالمخزن',
+                  _remainingBarnikas.toDouble(),
+                  Colors.teal,
+                  Icons.eco,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildCard(
+                  'مديونيات آجل مستحقة اليوم',
+                  _receivablesDue,
+                  Colors.deepPurple,
+                  Icons.account_balance_wallet,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildCard(
+                  'صافي كاش متوقع لسه ما اتقفلش',
+                  _expectedCash,
+                  Colors.indigo,
+                  Icons.payments,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildCard(
+                  'مستحق للموردين',
+                  _supplierCommissionDue,
+                  Colors.brown,
+                  Icons.storefront,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildCard('مشتريات', _todayPurchases, Colors.orange, Icons.shopping_cart),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildCard('مصروفات', _todayExpenses, Colors.redAccent, Icons.receipt_long),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildCard('صافي الربح', netProfit, netProfit >= 0 ? Colors.blue : Colors.red, Icons.account_balance),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

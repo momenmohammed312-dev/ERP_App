@@ -11,4 +11,8 @@ class AppFeatures {
   static bool get hasEmptyContainerTracking => flavor == Flavor.vegetable;
 
   static bool get hasCommissionPricing => flavor == Flavor.vegetable;
+
+  /// Vegetable flavor day-close settlement view (net cash, variance,
+  /// settlement entry) inside CloseDayDialog.
+  static bool get hasDaySettlement => flavor == Flavor.vegetable;
 }

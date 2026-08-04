@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
+import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
+import 'package:pos_offline_desktop/core/services/shipment_allocation_service.dart';
+import 'package:pos_offline_desktop/core/services/shipment_pricing_service.dart';
 import 'package:pos_offline_desktop/ui/invoice/models/product_entry.dart';
 
 class OrderLineItem extends StatefulWidget {
@@ -10,6 +14,9 @@ class OrderLineItem extends StatefulWidget {
   final VoidCallback onDelete;
   final bool canDelete;
 
+  /// When non-null, renders the "change shipment" (manual override) control.
+  final VoidCallback? onPickShipment;
+
   const OrderLineItem({
     super.key,
     required this.entry,
@@ -17,6 +24,7 @@ class OrderLineItem extends StatefulWidget {
     required this.onEdit,
     required this.onDelete,
     this.canDelete = true,
+    this.onPickShipment,
   });
 
   @override
@@ -66,7 +74,13 @@ class _OrderLineItemState extends State<OrderLineItem> {
       ..tax = double.tryParse(_taxController.text) ?? 0.0
       ..priceOverride =
           (double.tryParse(_priceController.text) ?? 0.0) !=
-          widget.entry.product?.price;
+          widget.entry.product?.price
+      // Preserve shipment allocation state across edits
+      ..allocations = widget.entry.allocations
+      ..shipmentsById = widget.entry.shipmentsById
+      ..allocationError = widget.entry.allocationError
+      ..overrideMode = widget.entry.overrideMode
+      ..overrideShipmentId = widget.entry.overrideShipmentId;
 
     // Calculate line total
     updatedEntry.lineTotal =
@@ -93,46 +107,68 @@ class _OrderLineItemState extends State<OrderLineItem> {
               widget.entry.product?.name ?? 'Unknown Product',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
-            subtitle: Row(
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    widget.entry.unit.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.blue.shade700,
-                      fontWeight: FontWeight.bold,
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        widget.entry.unit.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.blue.shade700,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const Gap(8),
+                    if (widget.entry.priceOverride) ...[
+                      Icon(Icons.edit, size: 12, color: Colors.orange.shade600),
+                      const Gap(2),
+                      Text(
+                        'Price Modified',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.orange.shade600,
+                        ),
+                      ),
+                      const Gap(8),
+                    ],
+                    Text(
+                      'Line Total: ${widget.entry.lineTotal.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                if (widget.entry.isBarnikaTracked &&
+                    (widget.entry.allocations.isNotEmpty ||
+                        widget.entry.allocationError != null))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      _allocationSummary(),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: widget.entry.allocationError != null
+                            ? Colors.red.shade700
+                            : Colors.green.shade800,
+                      ),
                     ),
                   ),
-                ),
-                const Gap(8),
-                if (widget.entry.priceOverride) ...[
-                  Icon(Icons.edit, size: 12, color: Colors.orange.shade600),
-                  const Gap(2),
-                  Text(
-                    'Price Modified',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.orange.shade600,
-                    ),
-                  ),
-                  const Gap(8),
-                ],
-                Text(
-                  'Line Total: ${widget.entry.lineTotal.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
               ],
             ),
             trailing: Row(
@@ -255,6 +291,10 @@ class _OrderLineItemState extends State<OrderLineItem> {
                       ),
                     ],
                   ),
+                  if (_shouldShowAllocationSection()) ...[
+                    const Gap(12),
+                    _buildAllocationSection(),
+                  ],
                 ],
               ),
             ),
@@ -262,5 +302,160 @@ class _OrderLineItemState extends State<OrderLineItem> {
         ],
       ),
     );
+  }
+
+  bool _shouldShowAllocationSection() {
+    return widget.entry.isBarnikaTracked &&
+        (widget.entry.allocations.isNotEmpty ||
+            widget.entry.allocationError != null ||
+            widget.onPickShipment != null);
+  }
+
+  String _allocationSummary() {
+    final entry = widget.entry;
+    if (entry.allocationError != null) {
+      return '⚠ لا يوجد مخزون شحنات متاح لهذه الكمية';
+    }
+    if (entry.allocations.length == 1) {
+      final a = entry.allocations.first;
+      final shipment = entry.shipmentsById[a.shipmentId];
+      final label =
+          shipment == null ? '#${a.shipmentId}' : shipment.shipmentNumber;
+      return '${entry.overrideMode ? 'يدوي — ' : ''}سحب من شحنة $label: ${a.quantity} برنيكة';
+    }
+    return '${entry.overrideMode ? 'يدوي — ' : ''}سحب من ${entry.allocations.length} شحنات: ${entry.allocatedQuantity} برنيكة';
+  }
+
+  Widget _buildAllocationSection() {
+    final entry = widget.entry;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.green.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.inventory_2, size: 16, color: Colors.green),
+              const Gap(6),
+              const Text(
+                'الشحنات (سحب البرانيك):',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const Gap(8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: entry.overrideMode
+                      ? Colors.orange.shade100
+                      : Colors.green.shade200,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  entry.overrideMode ? 'يدوي' : 'تلقائي FIFO',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: entry.overrideMode
+                        ? Colors.orange.shade800
+                        : Colors.green.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Gap(6),
+          if (entry.allocationError != null)
+            Text(
+              '⚠ ${entry.allocationError}',
+              style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+            )
+          else if (entry.allocations.isEmpty)
+            const Text(
+              'لا يوجد مخزون شحنات متاح لهذه الكمية',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            )
+          else
+            for (final allocation in entry.allocations)
+              _buildAllocationLine(allocation),
+          if (widget.onPickShipment != null) ...[
+            const Gap(8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: widget.onPickShipment,
+                icon: const Icon(Icons.swap_horiz, size: 16),
+                label: Text(
+                  entry.overrideMode ? 'تغيير الشحنة المحددة' : 'اختيار شحنة يدوياً',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.green.shade800,
+                  side: BorderSide(color: Colors.green.shade300),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAllocationLine(ShipmentAllocation allocation) {
+    final shipment = widget.entry.shipmentsById[allocation.shipmentId];
+    final label = shipment == null
+        ? 'شحنة #${allocation.shipmentId}'
+        : 'شحنة ${shipment.shipmentNumber}';
+
+    final commissionText = _commissionText(allocation, shipment);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          const Icon(Icons.arrow_left, size: 16, color: Colors.grey),
+          const Gap(4),
+          Expanded(
+            child: Text(
+              commissionText == null
+                  ? '$label: ${allocation.quantity} برنيكة'
+                  : '$label: ${allocation.quantity} برنيكة — $commissionText',
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// For commission-based shipments, returns the supplier-due inline summary.
+  String? _commissionText(
+    ShipmentAllocation allocation,
+    VegetableShipment? shipment,
+  ) {
+    if (shipment == null ||
+        shipment.pricingMode != ShipmentPricingMode.commission ||
+        shipment.commissionPercentage == null) {
+      return null;
+    }
+
+    final sellAmount = widget.entry.unitPrice * allocation.quantity;
+    final supplierDue = ShipmentPricingService.calculateSupplierDue(
+      sellAmount,
+      shipment.commissionPercentage!,
+    );
+
+    return 'عمولة ${shipment.commissionPercentage!.toStringAsFixed(0)}% — '
+        'مستحق للمورد: ${supplierDue.toStringAsFixed(2)} ج';
   }
 }

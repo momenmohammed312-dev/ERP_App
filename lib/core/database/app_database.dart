@@ -159,7 +159,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 51;
+  int get schemaVersion => 52;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -244,6 +244,11 @@ class AppDatabase extends _$AppDatabase {
       // 4m. Schema v51 — vegetable shipments + empty barnika tracking tables
       if (from < 51) {
         await _runV51Migrations(m);
+      }
+
+      // 4n. Schema v52 — cash_sessions.settlement_amount (day-close settlement)
+      if (from < 52) {
+        await _runV52Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -1377,6 +1382,8 @@ class AppDatabase extends _$AppDatabase {
       // Expenses extra columns
       {'table': 'expenses', 'column': 'user_id', 'type': 'TEXT'},
       {'table': 'expenses', 'column': 'day_id', 'type': 'TEXT'},
+      // Cash session day-close settlement (v52)
+      {'table': 'cash_sessions', 'column': 'settlement_amount', 'type': 'REAL'},
     ];
     for (final check in columnChecks) {
       try {
@@ -1641,6 +1648,27 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(51, 'vegetable_shipments_barnika_tracking', 'completed');
     } catch (e) {
       await _logMigrationStep(51, 'vegetable_shipments_barnika_tracking', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v52 — nullable settlement_amount on cash_sessions for the
+  /// vegetable flavor day-close settlement entry. Safe to re-run; column is
+  /// nullable so existing rows are never affected.
+  Future<void> _runV52Migrations(Migrator m) async {
+    await _logMigrationStep(52, 'cash_sessions_settlement_amount', 'started');
+    try {
+      try {
+        await customStatement(
+          'ALTER TABLE cash_sessions ADD COLUMN settlement_amount REAL',
+        );
+        log('v52: Added settlement_amount to cash_sessions');
+      } catch (e) {
+        log('v52: cash_sessions.settlement_amount likely already exists: $e');
+      }
+      await _logMigrationStep(52, 'cash_sessions_settlement_amount', 'completed');
+    } catch (e) {
+      await _logMigrationStep(52, 'cash_sessions_settlement_amount', 'failed', error: e.toString());
       rethrow;
     }
   }

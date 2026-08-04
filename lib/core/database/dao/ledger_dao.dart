@@ -243,6 +243,18 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
     });
   }
 
+  /// إجمالي الرصيد المستحق للموردين عبر كل الفترات (شحنات عمولة + مشتريات)
+  /// = SUM(debit − credit). يستخدم في تسوية نهاية اليوم للمعرض فقط — عرض فقط.
+  Future<double> getSupplierOutstandingBalance() async {
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(debit - credit), 0) as total FROM ledger_transactions '
+      "WHERE entity_type = 'Supplier'",
+      readsFrom: {ledgerTransactions},
+    ).getSingle();
+
+    return row.read<double>('total');
+  }
+
   Stream<double> watchTotalReceivables() {
     return customSelect(
       'SELECT SUM(balance) as total FROM ('
@@ -253,6 +265,32 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
       ') WHERE balance > 0',
       readsFrom: {db.customers, db.ledgerTransactions},
     ).watchSingle().map((row) => row.readNullable<double>('total') ?? 0.0);
+  }
+
+  /// إجمالي مديونيات العملاء المستحقة (آجل) — نفس حساب [watchTotalReceivables]
+  /// لكن كـ Future لواحد-shot (مطابق لنمط تحميل الـDashboard).
+  Future<double> getTotalReceivables() async {
+    final row = await customSelect(
+      'SELECT SUM(balance) as total FROM ('
+      '  SELECT c.opening_balance + SUM(COALESCE(l.debit, 0) - COALESCE(l.credit, 0)) as balance '
+      '  FROM customers c '
+      '  LEFT JOIN ledger_transactions l ON l.ref_id = c.id AND l.entity_type = \'Customer\' '
+      '  GROUP BY c.id'
+      ') WHERE balance > 0',
+      readsFrom: {db.customers, db.ledgerTransactions},
+    ).getSingle();
+    return row.readNullable<double>('total') ?? 0.0;
+  }
+
+  /// المستحق للموردين من شحنات العمولة — مجموع (debit - credit) لكل
+  /// `LedgerTransactions` فيها `origin = 'sale'` و `entityType = 'Supplier'`.
+  Future<double> getSupplierCommissionDue() async {
+    final rows = await customSelect(
+      'SELECT COALESCE(SUM(debit - credit), 0) as total '
+      "FROM ledger_transactions WHERE origin = 'sale' AND entity_type = 'Supplier'",
+      readsFrom: {ledgerTransactions},
+    ).get();
+    return (rows.first.data['total'] as num?)?.toDouble() ?? 0.0;
   }
 
   Future<List<Map<String, dynamic>>> getAllCustomerBalances() async {
