@@ -114,10 +114,10 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         final purchasesRows = await db
             .customSelect(
               '''
-          SELECT DATE(purchase_date / 1000, 'unixepoch', 'localtime') as p_date, SUM(total_amount) as total_purchases
+          SELECT DATE(purchase_date, 'localtime') as p_date, SUM(total_amount) as total_purchases
           FROM purchases
           WHERE purchase_date >= ? AND purchase_date <= ? AND is_deleted = 0
-          GROUP BY DATE(purchase_date / 1000, 'unixepoch', 'localtime')
+          GROUP BY DATE(purchase_date, 'localtime')
           ''',
               variables: [
                 drift.Variable.withDateTime(DateTime(_startDate!.year, _startDate!.month, _startDate!.day)),
@@ -174,10 +174,10 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         final wasteRows = await db
             .customSelect(
               '''
-          SELECT DATE(damage_date / 1000, 'unixepoch', 'localtime') as w_date, SUM(total_loss) as total_waste
+          SELECT DATE(damage_date, 'localtime') as w_date, SUM(total_loss) as total_waste
           FROM damaged_items
           WHERE damage_date >= ? AND damage_date <= ?
-          GROUP BY DATE(damage_date / 1000, 'unixepoch', 'localtime')
+          GROUP BY DATE(damage_date, 'localtime')
           ''',
               variables: [
                 drift.Variable.withDateTime(DateTime(_startDate!.year, _startDate!.month, _startDate!.day)),

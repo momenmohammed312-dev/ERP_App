@@ -1,0 +1,19 @@
+# Flutter Launcher Icons config for Vegetable Flavor (سوق الخضار)
+# Usage: flutter pub run flutter_launcher_icons -f flutter_launcher_icons_vegetable.yaml
+# Requires: assets/logo/app_logo_vegetable.png (tomato icon)
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  windows:
+    generate: true
+    icon_path: "assets/logo/app_logo_vegetable.png"
+  macos:
+    generate: true
+    icon_path: "assets/logo/app_logo_vegetable.png"
+  image_path: "assets/logo/app_logo_vegetable.png"
+  adaptive_icon_background: "#FF6B35"  # Tomato orange-red
+  adaptive_icon_foreground: "assets/logo/app_logo_vegetable.png"
+  android_12:
+    image_path: "assets/logo/app_logo_vegetable.png"
+    background_color: "#FF6B35"

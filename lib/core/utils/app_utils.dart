@@ -48,13 +48,15 @@ DateTime parseDate(dynamic raw, {DateTime? fallback}) {
   final defaultDate = fallback ?? DateTime.now();
   if (raw is int) {
     if (raw == 0) return defaultDate;
-    final dt = DateTime.fromMicrosecondsSinceEpoch(raw);
+    // Drift يخزن التواريخ في SQLite بالثواني (epoch seconds) وليس
+    // بالميكروثانية، لذلك نحول الـ int من ثوانٍ إلى ميلي ثانية هنا.
+    final dt = DateTime.fromMillisecondsSinceEpoch(raw * 1000);
     if (dt.year < 2000) return defaultDate;
     return dt;
   }
   if (raw is double) {
     if (raw == 0) return defaultDate;
-    final dt = DateTime.fromMicrosecondsSinceEpoch(raw.toInt());
+    final dt = DateTime.fromMillisecondsSinceEpoch((raw * 1000).round());
     if (dt.year < 2000) return defaultDate;
     return dt;
   }

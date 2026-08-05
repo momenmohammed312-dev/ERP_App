@@ -47,26 +47,40 @@ class _CashierPageState extends ConsumerState<CashierPage> {
         final allTransactions = await db.ledgerDao
             .getAllTransactionsByDateRange(session.openedAt, today);
 
+        // Cash drawer figures come from the invoices/expenses tables
+        // (mirrors the day-close settlement). The ledger double-books a
+        // cash sale as sale-debit + payment-credit, which cancels to zero,
+        // so it cannot be used for the drawer total.
+        final invoices = await db.invoiceDao.getInvoicesByDateRange(
+          session.openedAt,
+          today,
+        );
+        double cashSales = 0.0;
+        double creditCollections = 0.0;
+        for (final invoice in invoices) {
+          if (invoice.paymentMethod == 'cash') {
+            cashSales += invoice.totalAmount;
+          } else {
+            creditCollections += invoice.paidAmount;
+          }
+        }
+        final expenseItems = await db.expenseDao.getExpensesByDateRange(
+          session.openedAt,
+          today,
+        );
+        final totalExpenses = expenseItems.fold<double>(
+          0.0,
+          (sum, e) => sum + e.amount,
+        );
+
         setState(() {
           _currentSession = session;
           _isDayOpen = true;
           _transactions = allTransactions;
           _openingBalance = session.openingBalance;
 
-          // Calculate totals for CASH
-          final cashTransactions = allTransactions.where(
-            (t) => (t.paymentMethod == 'cash' || t.entityType == 'Cash') &&
-                   t.origin != 'opening' && t.origin != 'closing',
-          );
-
-          _totalIncome = cashTransactions
-              .where((t) => t.debit > 0)
-              .fold(0.0, (sum, t) => sum + t.debit);
-
-          _totalExpenses = cashTransactions
-              .where((t) => t.credit > 0)
-              .fold(0.0, (sum, t) => sum + t.credit);
-
+          _totalIncome = cashSales + creditCollections;
+          _totalExpenses = totalExpenses;
           _closingBalance = _openingBalance + _totalIncome - _totalExpenses;
         });
       } else {

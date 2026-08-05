@@ -103,7 +103,7 @@ class ProductSalesPieChart extends ConsumerWidget {
         FROM invoice_items ii
         JOIN products p ON ii.product_id = p.id
         JOIN invoices i ON ii.invoice_id = i.id
-        WHERE i.date >= ? AND i.date <= ? AND i.status != 'deleted'
+        WHERE i.date >= ? AND i.date <= ? AND i.status != 'voided'
         GROUP BY p.id, p.name
         ORDER BY total_sales DESC
         LIMIT 10

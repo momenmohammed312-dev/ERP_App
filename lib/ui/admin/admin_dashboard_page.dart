@@ -14,6 +14,7 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/ui/product/widgets/product_form.dart';
 import 'package:pos_offline_desktop/ui/customer/add_edit_customer_page.dart';
 import 'package:pos_offline_desktop/ui/barneka/barneka_products_screen.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart' as models;
 
 // ════════════════════════════════════════════════════════════════════════
@@ -58,7 +59,10 @@ class _AdminDashboardPageContentState
       const UsersPage(),
       const ReportsPage(),
       const SettingsPage(),
-      BarnekaProductsScreen(db: widget.db),
+      // البرنيكه (empty container tracking) is a vegetable-market feature;
+      // hide it in the factory (base) flavor.
+      if (AppFeatures.hasEmptyContainerTracking)
+        BarnekaProductsScreen(db: widget.db),
     ];
   }
 
@@ -94,28 +98,28 @@ class _AdminDashboardPageContentState
                 ],
               ),
             ),
-            destinations: const [
-              NavigationRailDestination(
+            destinations: [
+              const NavigationRailDestination(
                 icon: Icon(Icons.dashboard, color: Colors.white70),
                 selectedIcon: Icon(Icons.dashboard, color: Colors.white),
                 label: Text('نظرة عامة', style: TextStyle(color: Colors.white)),
               ),
-              NavigationRailDestination(
+              const NavigationRailDestination(
                 icon: Icon(Icons.analytics, color: Colors.white70),
                 selectedIcon: Icon(Icons.analytics, color: Colors.white),
                 label: Text('المبيعات', style: TextStyle(color: Colors.white)),
               ),
-              NavigationRailDestination(
+              const NavigationRailDestination(
                 icon: Icon(Icons.inventory, color: Colors.white70),
                 selectedIcon: Icon(Icons.inventory, color: Colors.white),
                 label: Text('المخزون', style: TextStyle(color: Colors.white)),
               ),
-              NavigationRailDestination(
+              const NavigationRailDestination(
                 icon: Icon(Icons.people, color: Colors.white70),
                 selectedIcon: Icon(Icons.people, color: Colors.white),
                 label: Text('العملاء', style: TextStyle(color: Colors.white)),
               ),
-              NavigationRailDestination(
+              const NavigationRailDestination(
                 icon: Icon(Icons.admin_panel_settings, color: Colors.white70),
                 selectedIcon: Icon(
                   Icons.admin_panel_settings,
@@ -126,21 +130,27 @@ class _AdminDashboardPageContentState
                   style: TextStyle(color: Colors.white),
                 ),
               ),
-              NavigationRailDestination(
+              const NavigationRailDestination(
                 icon: Icon(Icons.bar_chart, color: Colors.white70),
                 selectedIcon: Icon(Icons.bar_chart, color: Colors.white),
                 label: Text('التقارير', style: TextStyle(color: Colors.white)),
               ),
-              NavigationRailDestination(
+              const NavigationRailDestination(
                 icon: Icon(Icons.settings, color: Colors.white70),
                 selectedIcon: Icon(Icons.settings, color: Colors.white),
                 label: Text('الإعدادات', style: TextStyle(color: Colors.white)),
               ),
-              NavigationRailDestination(
-                icon: Icon(Icons.eco, color: Colors.white70),
-                selectedIcon: Icon(Icons.eco, color: Colors.white),
-                label: Text('البرنيكه', style: TextStyle(color: Colors.white)),
-              ),
+              // البرنيكه (empty container tracking) is a vegetable-market
+              // feature; hide it in the factory (base) flavor.
+              if (AppFeatures.hasEmptyContainerTracking)
+                const NavigationRailDestination(
+                  icon: Icon(Icons.eco, color: Colors.white70),
+                  selectedIcon: Icon(Icons.eco, color: Colors.white),
+                  label: Text(
+                    'البرنيكه',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
             ],
           ),
 
@@ -240,7 +250,7 @@ class _OverviewPageContentState extends State<_OverviewPageContent> {
         FROM invoice_items ii
         JOIN products p ON ii.product_id = p.id
         JOIN invoices i ON ii.invoice_id = i.id
-        WHERE i.date >= ? AND i.date <= ? AND i.status != 'deleted'
+        WHERE i.date >= ? AND i.date <= ? AND i.status != 'voided'
         GROUP BY p.id, p.name
         ORDER BY total_qty DESC
         LIMIT 5
@@ -255,7 +265,7 @@ class _OverviewPageContentState extends State<_OverviewPageContent> {
         FROM invoice_items ii
         JOIN products p ON ii.product_id = p.id
         JOIN invoices i ON ii.invoice_id = i.id
-        WHERE i.date >= ? AND i.date <= ? AND i.status != 'deleted'
+        WHERE i.date >= ? AND i.date <= ? AND i.status != 'voided'
         GROUP BY category
         ORDER BY total DESC
       ''', variables: [

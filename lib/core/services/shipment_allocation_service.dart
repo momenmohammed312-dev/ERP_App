@@ -1,3 +1,5 @@
+import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/dao/empty_barnika_tracking_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/vegetable_shipment_dao.dart';
 
 /// Result of allocating barnikas across one or more shipments.
@@ -13,8 +15,9 @@ class ShipmentAllocation {
 /// shipment instead of automatic FIFO.
 class ShipmentAllocationService {
   final VegetableShipmentDao _shipmentDao;
+  final EmptyBarnikaTrackingDao _emptyBarnikaDao;
 
-  ShipmentAllocationService(this._shipmentDao);
+  ShipmentAllocationService(this._shipmentDao, this._emptyBarnikaDao);
 
   /// Allocates [requestedQuantity] barnikas across open shipments.
   ///
@@ -100,5 +103,31 @@ class ShipmentAllocationService {
   Future<int> totalRemaining() async {
     final open = await _shipmentDao.getOpenShipmentsFifo();
     return open.fold<int>(0, (sum, s) => sum + s.barnikaRemainingCount);
+  }
+
+  /// Records that [quantity] empty barnikas were issued to [customerId].
+  /// Call this when a sale includes barnika products and the customer
+  /// takes empty crates with them.
+  ///
+  /// Returns the ID of the created tracking record.
+  Future<int> recordBarnikaOut({
+    required String customerId,
+    required int quantity,
+    DateTime? dateOut,
+  }) async {
+    if (quantity <= 0) {
+      throw ArgumentError('quantity must be positive');
+    }
+    if (customerId.isEmpty) {
+      throw ArgumentError('customerId cannot be empty');
+    }
+
+    return _emptyBarnikaDao.insertRecord(
+      EmptyBarnikaTrackingCompanion.insert(
+        customerId: customerId,
+        dateOut: dateOut ?? DateTime.now(),
+        quantityOut: quantity,
+      ),
+    );
   }
 }

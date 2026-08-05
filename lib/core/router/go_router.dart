@@ -19,6 +19,9 @@ import 'package:pos_offline_desktop/ui/barneka/barneka_products_screen.dart';
 import 'package:pos_offline_desktop/ui/shipments/shipments_screen.dart';
 import 'package:pos_offline_desktop/ui/shipments/widgets/shipment_detail_screen.dart';
 import 'package:pos_offline_desktop/ui/empty_barnika/empty_barnika_screen.dart';
+import 'package:pos_offline_desktop/ui/day/day_management_screen.dart';
+import 'package:pos_offline_desktop/ui/customer/customer_debt_list_screen.dart';
+import 'package:pos_offline_desktop/ui/import/excel_import_screen.dart';
 
 final firstRunCompleteProvider = FutureProvider<bool>((ref) async {
   return SettingsService.isFirstRunComplete();
@@ -115,6 +118,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/empty-barnika',
         builder: (context, state) => EmptyBarnikaScreen(db: db),
+      ),
+      GoRoute(
+        path: '/day-management',
+        builder: (context, state) => DayManagementScreen(db: db),
+      ),
+      GoRoute(
+        path: '/customer-debts',
+        builder: (context, state) => CustomerDebtListScreen(db: db),
+      ),
+      GoRoute(
+        path: '/excel-import',
+        builder: (context, state) => ExcelImportScreen(db: db),
       ),
       GoRoute(
         path: '/shipments/:id',

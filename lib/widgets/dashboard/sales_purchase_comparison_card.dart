@@ -57,7 +57,7 @@ class _SalesPurchaseComparisonCardState
               '''
           SELECT COALESCE(SUM($salesTotalColumn), 0) as total_sales
           FROM invoices 
-          WHERE date >= ? AND date < ? AND status != 'deleted'
+          WHERE date >= ? AND date < ? AND status != 'voided'
         ''',
               variables: [
                 drift.Variable.withDateTime(startOfDay),

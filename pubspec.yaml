@@ -78,6 +78,7 @@ dev_dependencies:
     sdk: flutter
   drift_dev: ^2.21.0
   build_runner: ^2.4.13
+  flutter_launcher_icons: ^0.14.3
 
   flutter_lints: ^6.0.0
   test: ^1.26.2
@@ -85,7 +86,7 @@ dev_dependencies:
     sdk: flutter
 
 
-flutter: 
+flutter:
   uses-material-design: true
   generate: true
 
@@ -102,6 +103,22 @@ flutter:
     - family: DejaVuSans
       fonts:
         - asset: assets/fonts/DejaVuSans.ttf
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  windows:
+    generate: true
+    icon_path: "assets/logo/app_logo.ico"
+  macos:
+    generate: true
+    icon_path: "assets/logo/app_logo.png"
+  image_path: "assets/logo/app_logo.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/logo/app_logo.png"
+  # Vegetable flavor (سوق الخضار) - tomato icon
+  # Run with: flutter pub run flutter_launcher_icons -f flutter_launcher_icons_vegetable.yaml
+  # After adding a tomato icon at: assets/logo/app_logo_vegetable.png
     
   
 

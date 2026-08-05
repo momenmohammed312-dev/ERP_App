@@ -63,20 +63,28 @@ class BusinessDateService {
       final now = DateTime.now();
 
       // 2. Calculate Expected Balance
-      final transactions = await db.ledgerDao.getAllTransactionsByDateRange(
+      // Cash figures come from the invoices/expenses tables (mirrors the
+      // day-close settlement). The ledger double-books a cash sale as
+      // sale-debit + payment-credit, which cancels to zero.
+      final invoices = await db.invoiceDao.getInvoicesByDateRange(
         session.openedAt,
         now,
       );
-
-      final cashTxs = transactions.where((t) => t.paymentMethod == 'cash' || t.entityType == 'Cash');
-
       double income = 0;
+      for (final invoice in invoices) {
+        if (invoice.paymentMethod == 'cash') {
+          income += invoice.totalAmount;
+        } else {
+          income += invoice.paidAmount;
+        }
+      }
+      final expenseItems = await db.expenseDao.getExpensesByDateRange(
+        session.openedAt,
+        now,
+      );
       double expenses = 0;
-
-      for (var tx in cashTxs) {
-        if (tx.origin == 'opening') continue;
-        income += tx.debit;
-        expenses += tx.credit;
+      for (final e in expenseItems) {
+        expenses += e.amount;
       }
 
       double expectedBalance = session.openingBalance + income - expenses;
@@ -143,23 +151,26 @@ class BusinessDateService {
     if (session == null || session.status != 'open') return 0.0;
 
     final now = DateTime.now();
-    final transactions = await db.ledgerDao.getAllTransactionsByDateRange(
+    final invoices = await db.invoiceDao.getInvoicesByDateRange(
       session.openedAt,
       now,
     );
-
-    final cashTxs =
-        transactions.where((t) => t.paymentMethod == 'cash' || t.entityType == 'Cash');
-
     double income = 0;
-    double expenses = 0;
-
-    for (var tx in cashTxs) {
-      if (tx.origin == 'opening') continue;
-      income += tx.debit;
-      expenses += tx.credit;
+    for (final invoice in invoices) {
+      if (invoice.paymentMethod == 'cash') {
+        income += invoice.totalAmount;
+      } else {
+        income += invoice.paidAmount;
+      }
     }
-
+    final expenseItems = await db.expenseDao.getExpensesByDateRange(
+      session.openedAt,
+      now,
+    );
+    double expenses = 0;
+    for (final e in expenseItems) {
+      expenses += e.amount;
+    }
     return session.openingBalance + income - expenses;
   }
 }

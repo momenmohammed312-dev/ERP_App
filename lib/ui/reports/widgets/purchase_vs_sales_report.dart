@@ -86,14 +86,14 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
           .customSelect(
             '''
         SELECT 
-          DATE(date / 1000, 'unixepoch', 'localtime') as report_date,
+          DATE(date, 'localtime') as report_date,
           COUNT(*) as invoice_count,
           SUM(total_amount) as total_sales,
           SUM(CASE WHEN LOWER(TRIM(COALESCE(payment_method, 'cash'))) = 'cash' THEN total_amount ELSE 0 END) as cash_sales,
           SUM(CASE WHEN LOWER(TRIM(COALESCE(payment_method, 'cash'))) = 'credit' OR LOWER(TRIM(payment_method)) LIKE '%آجل%' THEN total_amount ELSE 0 END) as credit_sales
         FROM invoices 
-        WHERE date >= ? AND date <= ? AND status != 'deleted'
-        GROUP BY DATE(date / 1000, 'unixepoch', 'localtime')
+        WHERE date >= ? AND date <= ? AND status != 'voided'
+        GROUP BY DATE(date, 'localtime')
         ORDER BY report_date
       ''',
             variables: [
@@ -108,14 +108,14 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
           .customSelect(
             '''
         SELECT 
-          DATE(purchase_date / 1000, 'unixepoch', 'localtime') as report_date,
+          DATE(purchase_date, 'localtime') as report_date,
           COUNT(*) as purchase_count,
           SUM(total_amount) as total_purchases,
           SUM(CASE WHEN LOWER(TRIM(COALESCE(payment_method, 'cash'))) = 'cash' THEN total_amount ELSE 0 END) as cash_purchases,
           SUM(CASE WHEN LOWER(TRIM(COALESCE(payment_method, 'cash'))) = 'credit' OR LOWER(TRIM(payment_method)) LIKE '%آجل%' THEN total_amount ELSE 0 END) as credit_purchases
         FROM purchases 
         WHERE purchase_date >= ? AND purchase_date <= ? AND is_deleted = 0
-        GROUP BY DATE(purchase_date / 1000, 'unixepoch', 'localtime')
+        GROUP BY DATE(purchase_date, 'localtime')
         ORDER BY report_date
       ''',
             variables: [
@@ -130,14 +130,14 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
           .customSelect(
             '''
         SELECT 
-          DATE(date / 1000, 'unixepoch', 'localtime') as report_date,
+          DATE(date, 'localtime') as report_date,
           COUNT(*) as expense_count,
           SUM(amount) as total_expenses,
           SUM(CASE WHEN category = 'salaries' THEN amount ELSE 0 END) as salaries_expenses,
           SUM(CASE WHEN category != 'salaries' OR category IS NULL THEN amount ELSE 0 END) as other_expenses
         FROM expenses 
         WHERE date >= ? AND date <= ?
-        GROUP BY DATE(date / 1000, 'unixepoch', 'localtime')
+        GROUP BY DATE(date, 'localtime')
         ORDER BY report_date
       ''',
             variables: [
@@ -246,11 +246,11 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
             .customSelect(
               '''
           SELECT 
-            DATE(return_date / 1000, 'unixepoch', 'localtime') as report_date,
+            DATE(return_date, 'localtime') as report_date,
             SUM(total_amount) as total_returns
           FROM sales_returns
           WHERE return_date >= ? AND return_date <= ?
-          GROUP BY DATE(return_date / 1000, 'unixepoch', 'localtime')
+          GROUP BY DATE(return_date, 'localtime')
           ''',
               variables: [
                 drift.Variable.withDateTime(_selectedDateRange!.start),

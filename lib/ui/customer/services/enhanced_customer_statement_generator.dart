@@ -670,13 +670,13 @@ class EnhancedCustomerStatementGenerator {
         _cell(_b('التاريخ'), fonts['arabicBold'], bold: true, centered: true),
         _cell(_b('البيان'), fonts['arabicBold'], bold: true, centered: true),
         _cell(
-          _b('مدين (+)'),
+          _b('قيمة المشتريات'),
           fonts['arabicBold'],
           bold: true,
           centered: true,
         ),
         _cell(
-          _b('دائن (-)'),
+          _b('قيمة المدفوعات'),
           fonts['arabicBold'],
           bold: true,
           centered: true,
@@ -693,8 +693,8 @@ class EnhancedCustomerStatementGenerator {
     return pw.TableRow(
       children: [
         _cell('', fonts['arabic']),
-        _cell(_b('رصيد سابق'), fonts['arabicBold'], bold: true),
         _cell('', fonts['arabic']),
+        _cell(_b('رصيد سابق'), fonts['arabicBold'], bold: true),
         _cell(
           openingBalance > 0 ? _fmt(openingBalance) : '',
           fonts['arabicBold'],
@@ -729,13 +729,13 @@ class EnhancedCustomerStatementGenerator {
       decoration: const pw.BoxDecoration(color: PdfColors.grey200),
       children: [
         _cell('', fonts['arabic']),
+        _cell('', fonts['arabic']),
         _cell(
           _b('الإجمالي'),
           fonts['arabicBold'],
           bold: true,
           centered: true,
         ),
-        _cell('', fonts['arabic']),
         _cell(
           _fmt(totalDebit),
           fonts['arabicBold'],

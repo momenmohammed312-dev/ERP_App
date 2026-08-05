@@ -12,6 +12,7 @@ import 'package:pos_offline_desktop/ui/invoice/widgets/invoice_type_selection_mo
 import 'package:pos_offline_desktop/ui/invoice/widgets/product_selection_modal.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/order_line_item.dart';
 import 'package:pos_offline_desktop/ui/invoice/models/product_entry.dart';
+import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/services/invoice_service.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
@@ -492,9 +493,8 @@ class _EnhancedNewInvoicePageState
 
     final seq = ++_allocationResolveSeq;
     try {
-      final allocations = await ShipmentAllocationService(
-        widget.db.vegetableShipmentDao,
-      ).allocate(
+      final allocationService = ref.read(shipmentAllocationServiceProvider);
+      final allocations = await allocationService.allocate(
         requestedQuantity: entry.quantity,
         overrideShipmentId: entry.overrideMode
             ? entry.overrideShipmentId
@@ -948,18 +948,16 @@ class _EnhancedNewInvoicePageState
     final invoiceId = result.invoiceId;
 
     // Vegetable flavor: record empty crates issued to a real customer.
-    // Separate insert (InvoiceService stays untouched); a failure here is
-    // logged but does not fail the already-completed invoice.
+    // Uses ShipmentAllocationService to record barnika out.
     if (_registerEmptyBarnika &&
         _totalBarnikaQuantity > 0 &&
         customerId != 'cash') {
       try {
-        await widget.db.emptyBarnikaTrackingDao.insertRecord(
-          EmptyBarnikaTrackingCompanion.insert(
-            customerId: customerId,
-            dateOut: DateTime.now(),
-            quantityOut: _totalBarnikaQuantity,
-          ),
+        final allocationService =
+            ref.read(shipmentAllocationServiceProvider);
+        await allocationService.recordBarnikaOut(
+          customerId: customerId,
+          quantity: _totalBarnikaQuantity,
         );
       } catch (e) {
         log('Error recording empty barnika out: $e');

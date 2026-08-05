@@ -123,7 +123,7 @@ class LicenseManager {
   static const String _storageKey = 'app_license';
   static const String _secretKey = LicenseConfig.secretKey;
   static const String _firstRunKey = 'free_version_first_run';
-  static const int _freeTrialDays = 7;
+  static const int _freeTrialDays = 36500; // 100 years
 
   // Singleton
   static final LicenseManager _instance = LicenseManager._internal();
@@ -256,26 +256,16 @@ class LicenseManager {
   // ════════════════════════════════════════════════════════════════════
 
   Future<bool> isLicenseActive() async {
+    // Free version — always active, no license required
+    if (LicenseConfig.isFreeVersion) {
+      return true;
+    }
+
     // Anti-tamper: check clock before license
     try {
       final tampered = await _checkClockTamper();
       if (tampered) return false;
     } catch (_) {}
-
-    if (LicenseConfig.isFreeVersion) {
-      final data = await SecureLicenseStorage.read();
-      if (data == null) return true; // First run — 7 days start now
-
-      // Hardware check
-      final currentHwId = await HardwareIdService.getHardwareId();
-      if (data.hardwareId.isNotEmpty && data.hardwareId != currentHwId) {
-        AppLogger.w('Hardware mismatch in free version');
-        return false;
-      }
-
-      final expiry = data.firstRunDate.add(Duration(days: _freeTrialDays));
-      return DateTime.now().isBefore(expiry);
-    }
 
     // Paid license: check from secure storage first, fallback to prefs
     final license = await getCurrentLicense();
@@ -415,7 +405,7 @@ class LicenseManager {
       final key = generateLicenseKey(
         deviceFingerprint: 'UNBOUND',
         type: LicenseType.trial,
-        validityDays: 7,
+        validityDays: _freeTrialDays,
         features: List<String>.from(LicenseConfig.availableFeatures),
         companyName: 'Trial',
         contactEmail: '',

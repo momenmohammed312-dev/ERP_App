@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/product_table.dart';
 
 class ShipmentFormDialog extends StatefulWidget {
   final AppDatabase db;
@@ -183,7 +184,24 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
           totalCost: Value(totalCost),
           notes: Value(_notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim()),
         );
-        await widget.db.vegetableShipmentDao.insertShipment(companion);
+        final shipmentId = await widget.db.vegetableShipmentDao.insertShipment(companion);
+
+        // Vegetable flavor: auto-create product for this shipment (barnika/crate)
+        final productName = 'برنيكة ${_selectedSupplier!.name} - $number';
+        await widget.db.productDao.insertProduct(
+          ProductsCompanion(
+            name: Value(productName),
+            price: Value(containerPrice ?? costPerBarnika ?? 0),
+            unit: const Value('قطعة'),
+            category: const Value('خضار - برانيك'),
+            barcode: Value('SHP-$number'),
+            cartonQuantity: Value(totalCount),
+            cartonPrice: Value(totalCost),
+            status: const Value('active'),
+            barneka: const Value(true),
+            costPrice: Value(costPerBarnika ?? 0),
+          ),
+        );
       } else {
         final updated = widget.shipment!.copyWith(
           supplierId: _selectedSupplier!.id,

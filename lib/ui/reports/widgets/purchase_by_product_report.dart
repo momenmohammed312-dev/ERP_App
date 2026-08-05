@@ -99,11 +99,9 @@ class _PurchaseByProductReportState
           HAVING COALESCE(SUM(pi.quantity), 0) > 0
           ORDER BY total_quantity DESC
         ''';
-        final startMicro = start.microsecondsSinceEpoch;
-        final endMicro = end.microsecondsSinceEpoch;
         final result = await db.customSelect(query, variables: [
-          drift.Variable.withInt(startMicro),
-          drift.Variable.withInt(endMicro),
+          drift.Variable.withDateTime(start),
+          drift.Variable.withDateTime(end),
         ]).get();
 
         final productData = result
@@ -160,11 +158,9 @@ class _PurchaseByProductReportState
             HAVING COALESCE(SUM(epi.quantity), 0) > 0
             ORDER BY total_quantity DESC
           ''';
-          final startMicro = start.microsecondsSinceEpoch;
-          final endMicro = end.microsecondsSinceEpoch;
           final result = await db.customSelect(query, variables: [
-            drift.Variable.withInt(startMicro),
-            drift.Variable.withInt(endMicro),
+            drift.Variable.withDateTime(start),
+            drift.Variable.withDateTime(end),
           ]).get();
 
           final productData = result

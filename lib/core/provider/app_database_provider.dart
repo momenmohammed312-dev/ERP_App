@@ -7,6 +7,7 @@ import '../config/app_flavor.dart';
 import '../database/app_database.dart';
 import '../services/business_date_service.dart';
 import '../services/invoice_service.dart';
+import '../services/shipment_allocation_service.dart';
 import '../../services/staff_management_service.dart';
 import '../database/dao/attendance_device_dao.dart';
 import '../../services/attendance/attendance_sync_service.dart';
@@ -41,6 +42,14 @@ final staffManagementServiceProvider = Provider<StaffManagementService>((ref) {
 final invoiceServiceProvider = Provider<InvoiceService>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return InvoiceService(db);
+});
+
+final shipmentAllocationServiceProvider = Provider<ShipmentAllocationService>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return ShipmentAllocationService(
+    db.vegetableShipmentDao,
+    db.emptyBarnikaTrackingDao,
+  );
 });
 
 final attendanceDeviceDaoProvider = Provider<AttendanceDeviceDao>((ref) {

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:pos_offline_desktop/config/license_config.dart';
 import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/services/anti_tamper_service.dart';
 import 'package:pos_offline_desktop/services/firebase_license_service.dart';
@@ -139,7 +140,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _updateStatus('التحقق من الترخيص...', 0.50);
     await Future.delayed(const Duration(milliseconds: 400));
     final licenseManager = LicenseManager();
-    final isLicenseValid = await licenseManager.isLicenseValid();
+    
+    // Skip license check for free version
+    final isLicenseValid = LicenseConfig.isFreeVersion ? true : await licenseManager.isLicenseValid();
 
     if (!isLicenseValid) {
       if (mounted) context.go('/activation');

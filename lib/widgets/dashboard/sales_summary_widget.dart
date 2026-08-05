@@ -245,7 +245,7 @@ class _SalesSummaryWidgetState extends State<SalesSummaryWidget> {
           COUNT(*) as invoice_count,
           COALESCE(SUM($totalColumn), 0) as total_amount
         FROM invoices 
-        WHERE date >= ? AND status != 'deleted'
+        WHERE date >= ? AND status != 'voided'
         GROUP BY payment_method
       ''',
             variables: [Variable.withDateTime(startOfMonth)],

@@ -20,8 +20,10 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
   List<CustomerWithBalance> _filteredCustomers = [];
   bool _isLoading = false;
   bool _showOnlyDues = false;
-  DateTime _reportStart = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-  DateTime _reportEnd = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  // Default to the last 30 days so the "تقرير كامل مع الحركات" report shows a
+  // meaningful period instead of only today (which used to look empty).
+  DateTime _reportStart = DateTime.now().subtract(const Duration(days: 30));
+  DateTime _reportEnd = DateTime.now();
   final TextEditingController _searchController = TextEditingController();
   final ExportService _exportService = ExportService();
 
@@ -44,11 +46,11 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
         // Balance = Sales - Payments.
         // Positive = They owe us (Receivable).
         // Negative = We owe them (Payable).
-        final rawBalance = await widget.db.ledgerDao.getCustomerBalance(
+        // getCustomerBalance already includes openingBalance from the
+        // customer entity, so no need to add it again here.
+        final totalBalance = await widget.db.ledgerDao.getCustomerBalance(
           customer.id,
         );
-        // Add opening balance from Customer entity
-        final totalBalance = rawBalance + customer.openingBalance;
 
         result.add(
           CustomerWithBalance(customer: customer, balance: totalBalance),
@@ -93,88 +95,6 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
         return matchesSearch && passesDuesFilter;
       }).toList();
     });
-  }
-
-  Future<void> _exportPDF() async {
-    try {
-      final customersToExport = _showOnlyDues
-          ? _filteredCustomers.where((c) => c.balance > 0).toList()
-          : _filteredCustomers;
-
-      final data = customersToExport.map((c) {
-        return {
-          'name': c.customer.name,
-          'phone': c.customer.phone ?? '',
-          'balance':
-              c.balance, // This will trigger red coloring for positive values
-        };
-      }).toList();
-
-      await _exportService.exportToPDF(
-        title: context.l10n.customer_balances_tab,
-        data: data,
-        headers: [
-          context.l10n.customer,
-          context.l10n.phone,
-          context.l10n.receivable_balance,
-        ],
-        columns: [
-          'name',
-          'phone',
-          'balance',
-        ],
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.error_exporting_with_error(e))),
-        );
-      }
-    }
-  }
-
-
-
-
-
-
-  Future<void> _exportExcel() async {
-    try {
-      final customersToExport = _showOnlyDues
-          ? _filteredCustomers.where((c) => c.balance > 0).toList()
-          : _filteredCustomers;
-
-      final data = customersToExport.map((c) {
-        return {
-          context.l10n.customer: c.customer.name,
-          context.l10n.phone: c.customer.phone ?? '',
-          context.l10n.receivable_balance: c.balance,
-        };
-      }).toList();
-
-      await _exportService.exportToExcel(
-        title: context.l10n.customer_balances_tab,
-        data: data,
-        headers: [
-          context.l10n.customer,
-          context.l10n.phone,
-          context.l10n.receivable_balance,
-        ],
-        columns: [
-          context.l10n.customer,
-          context.l10n.phone,
-          context.l10n.receivable_balance,
-        ],
-        fileName:
-            'customers_report_${DateTime.now().millisecondsSinceEpoch}.xlsx',
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.error_exporting_with_error(e))),
-        );
-      }
-    }
   }
 
   Future<void> _showStatementDialog(Customer customer) async {
@@ -422,26 +342,6 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFC9A84C),
                         foregroundColor: Colors.black87,
-                      ),
-                    ),
-                    const Gap(8),
-                    ElevatedButton.icon(
-                      onPressed: _exportPDF,
-                      icon: const Icon(Icons.picture_as_pdf),
-                      label: Text(context.l10n.pdf_label),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                    const Gap(8),
-                    ElevatedButton.icon(
-                      onPressed: _exportExcel,
-                      icon: const Icon(Icons.table_chart),
-                      label: Text(context.l10n.excel_label),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
                       ),
                     ),
                   ],

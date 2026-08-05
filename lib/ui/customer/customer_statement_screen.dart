@@ -421,7 +421,7 @@ class _CustomerStatementScreenState
           Expanded(
             flex: 2,
             child: Text(
-              'مدين (+)',
+              'قيمة المشتريات',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.redAccent,
@@ -432,7 +432,7 @@ class _CustomerStatementScreenState
           Expanded(
             flex: 2,
             child: Text(
-              'دائن (-)',
+              'قيمة المدفوعات',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.green,

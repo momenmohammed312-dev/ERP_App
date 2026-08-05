@@ -209,16 +209,18 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                       context.push('/damaged-items');
                     },
                   ),
-                  // Barneka (Returnable Containers) Button
-                  _buildLauncherButton(
-                    context,
-                    'البرنيكه',
-                    Icons.eco,
-                    Colors.teal,
-                    () {
-                      context.push('/barneka');
-                    },
-                  ),
+                  // Barneka (Returnable Containers) Button — vegetable-market
+                  // feature, hidden in the factory (base) flavor.
+                  if (AppFeatures.hasEmptyContainerTracking)
+                    _buildLauncherButton(
+                      context,
+                      'البرنيكه',
+                      Icons.eco,
+                      Colors.teal,
+                      () {
+                        context.push('/barneka');
+                      },
+                    ),
                   if (AppFeatures.hasShipmentTracking)
                     _buildLauncherButton(
                       context,
@@ -237,6 +239,27 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                       Colors.teal.shade700,
                       () {
                         context.push('/empty-barnika');
+                      },
+                    ),
+
+                  if (AppFeatures.hasShipmentTracking)
+                    _buildLauncherButton(
+                      context,
+                      'مديونيات العملاء',
+                      Icons.account_balance_wallet,
+                      Colors.red.shade700,
+                      () {
+                        context.push('/customer-debts');
+                      },
+                    ),
+                  if (AppFeatures.hasShipmentTracking)
+                    _buildLauncherButton(
+                      context,
+                      'استيراد إكسل',
+                      Icons.table_chart,
+                      Colors.purple,
+                      () {
+                        context.push('/excel-import');
                       },
                     ),
                 ],

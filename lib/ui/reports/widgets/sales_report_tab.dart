@@ -36,6 +36,7 @@ class _SalesReportTabState extends State<SalesReportTab> {
   ); // End of today
   List<Invoice> _invoices = [];
   List<Invoice> _filteredInvoices = [];
+  Map<int, double> _returnsByInvoice = {};
   bool _isLoading = false;
   final _exportService = ExportService();
   final _searchController = TextEditingController();
@@ -82,9 +83,25 @@ class _SalesReportTabState extends State<SalesReportTab> {
         _endDate,
       );
 
+      // Fetch sales returns in the same range and index them by their
+      // original invoice so the grand total can subtract them.
+      final returns = await widget.db.salesReturnsDao.getReturnsByDateRange(
+        _startDate,
+        _endDate,
+      );
+      final returnsByInvoice = <int, double>{};
+      for (final ret in returns) {
+        returnsByInvoice.update(
+          ret.originalInvoiceId,
+          (sum) => sum + ret.totalAmount,
+          ifAbsent: () => ret.totalAmount,
+        );
+      }
+
       setState(() {
         _invoices = invoices;
         _filteredInvoices = List.from(invoices);
+        _returnsByInvoice = returnsByInvoice;
         _isLoading = false;
       });
 
@@ -185,7 +202,8 @@ class _SalesReportTabState extends State<SalesReportTab> {
 
       final grandTotal = _invoices.fold(
         0.0,
-        (sum, inv) => sum + inv.totalAmount,
+        (sum, inv) =>
+            sum + inv.totalAmount - (_returnsByInvoice[inv.id] ?? 0),
       );
 
       // Create sales report data for UnifiedPrintService
@@ -392,7 +410,8 @@ class _SalesReportTabState extends State<SalesReportTab> {
   Widget build(BuildContext context) {
     final grandTotal = _filteredInvoices.fold(
       0.0,
-      (sum, invoice) => sum + invoice.totalAmount,
+      (sum, invoice) =>
+          sum + invoice.totalAmount - (_returnsByInvoice[invoice.id] ?? 0),
     );
 
     return Scaffold(
@@ -563,6 +582,7 @@ class _SalesReportTabState extends State<SalesReportTab> {
                         return _InvoiceExpansionTile(
                           invoice: invoice,
                           db: widget.db,
+                          hasReturn: _returnsByInvoice.containsKey(invoice.id),
                           onPrint: () => _printIndividualInvoice(invoice),
                           onReturn: () => _showReturnDialog(invoice),
                         );
@@ -579,12 +599,14 @@ class _SalesReportTabState extends State<SalesReportTab> {
 class _InvoiceExpansionTile extends StatefulWidget {
   final Invoice invoice;
   final AppDatabase db;
+  final bool hasReturn;
   final VoidCallback onPrint;
   final VoidCallback onReturn;
 
   const _InvoiceExpansionTile({
     required this.invoice,
     required this.db,
+    required this.hasReturn,
     required this.onPrint,
     required this.onReturn,
   });
@@ -639,12 +661,34 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
             ),
           ),
         ),
-        title: Text(
-          widget.invoice.invoiceNumber ?? widget.invoice.id.toString(),
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white, // White text for dark theme
-          ),
+        title: Row(
+          children: [
+            Text(
+              widget.invoice.invoiceNumber ?? widget.invoice.id.toString(),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white, // White text for dark theme
+              ),
+            ),
+            if (widget.hasReturn) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'مرتجع',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
