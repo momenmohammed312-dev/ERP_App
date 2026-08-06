@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/config/license_config.dart';
 import 'package:pos_offline_desktop/services/license_manager.dart';
-import 'package:pos_offline_desktop/services/anti_tamper_service.dart';
 import 'package:pos_offline_desktop/services/firebase_license_service.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -127,16 +126,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _runLoadingChecks() async {
-    // Step 1 — Anti-tamper
-    _updateStatus('فحص أمان النظام...', 0.25);
-    await Future.delayed(const Duration(milliseconds: 500));
-    final isTampered = await AntiTamperService.detectClockTampering();
-    if (isTampered) {
-      if (mounted) context.go('/tamper-detected');
-      return;
-    }
-
-    // Step 2 — License (local check)
+    // Step 1 — License (local check)
     _updateStatus('التحقق من الترخيص...', 0.50);
     await Future.delayed(const Duration(milliseconds: 400));
     final licenseManager = LicenseManager();

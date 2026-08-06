@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'license_manager.dart';
-import 'anti_tamper_service.dart';
 import 'audit_service.dart';
 import 'user_session_service.dart';
 import '../core/database/app_database.dart';
@@ -55,17 +54,14 @@ class IntegrityChecker {
       // Check 1: License validity
       final licenseValid = await _checkLicenseValidity();
 
-      // Check 2: Clock tampering
-      final clockTampered = await AntiTamperService.detectClockTampering();
-
-      // Check 3: User session limits
+      // Check 2: User session limits
       final sessionStats = await UserSessionService.getSessionStats();
       final sessionsValid =
           !sessionStats['isAtLimit'] ||
           sessionStats['utilizationPercent'] <= 100;
 
       // Overall result
-      final checkResult = licenseValid && !clockTampered && sessionsValid;
+      final checkResult = licenseValid && sessionsValid;
 
       if (checkResult) {
         _consecutiveFailures = 0;
@@ -77,7 +73,6 @@ class IntegrityChecker {
         );
         await _handleFailedCheck(
           licenseValid,
-          clockTampered,
           sessionsValid,
           sessionStats,
         );
@@ -93,7 +88,6 @@ class IntegrityChecker {
         details: {
           'check_time': _lastCheckTime?.toIso8601String(),
           'license_valid': licenseValid,
-          'clock_tampered': clockTampered,
           'sessions_valid': sessionsValid,
           'check_result': checkResult,
           'consecutive_failures': _consecutiveFailures,
@@ -158,7 +152,6 @@ class IntegrityChecker {
   /// Handle failed integrity check
   static Future<void> _handleFailedCheck(
     bool licenseValid,
-    bool clockTampered,
     bool sessionsValid,
     Map<String, dynamic> sessionStats,
   ) async {
@@ -166,7 +159,6 @@ class IntegrityChecker {
 
     debugPrint('🚨 INTEGRITY BREACH DETECTED!');
     debugPrint('  License Valid: $licenseValid');
-    debugPrint('  Clock Tampered: $clockTampered');
     debugPrint('  Sessions Valid: $sessionsValid');
     debugPrint(
       '  Active Users: ${sessionStats['activeUsers']}/${sessionStats['maxUsers']}',
@@ -180,7 +172,6 @@ class IntegrityChecker {
       details: {
         'incident_type': 'integrity_check_failed',
         'license_valid': licenseValid,
-        'clock_tampered': clockTampered,
         'sessions_valid': sessionsValid,
         'consecutive_failures': _consecutiveFailures,
         'session_stats': sessionStats,
@@ -289,9 +280,8 @@ class IntegrityChecker {
     try {
       // Quick check before allowing critical operations
       final licenseValid = await _checkLicenseValidity();
-      final clockTampered = await AntiTamperService.detectClockTampering();
 
-      if (!licenseValid || clockTampered) {
+      if (!licenseValid) {
         debugPrint(
           '🚨 System integrity compromised - blocking critical operation',
         );

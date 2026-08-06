@@ -15,7 +15,6 @@ import 'package:pos_offline_desktop/core/router/go_router.dart';
 import 'package:pos_offline_desktop/core/config/theme.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 
-import 'package:pos_offline_desktop/services/anti_tamper_service.dart';
 import 'package:pos_offline_desktop/services/notification_service.dart';
 import 'package:pos_offline_desktop/services/security_service.dart';
 import 'package:pos_offline_desktop/services/user_session_service.dart';
@@ -27,7 +26,6 @@ import 'package:pos_offline_desktop/core/services/periodic_license_validator.dar
 import 'package:pos_offline_desktop/screens/license/activation_screen.dart';
 import 'package:pos_offline_desktop/screens/license/activation_success_screen.dart';
 import 'package:pos_offline_desktop/screens/license/license_info_screen.dart';
-import 'package:pos_offline_desktop/screens/license/tamper_detected_screen.dart';
 
 /// Shared startup for all flavors. [flavor] wins over `--dart-define=FLAVOR=…`.
 Future<void> bootstrapApp({Flavor? flavor}) async {
@@ -41,15 +39,8 @@ Future<void> bootstrapApp({Flavor? flavor}) async {
   final container = ProviderContainer();
   final db = container.read(appDatabaseProvider);
 
-  AntiTamperService.init(db);
   UserSessionService.init(db);
   await db.userDao.createDefaultAdmin();
-
-  final isTampered = await AntiTamperService.detectClockTampering();
-  if (isTampered) {
-    runApp(const ProviderScope(child: TamperDetectedApp()));
-    return;
-  }
 
   await PeriodicLicenseValidator.validateWithPeriodicCheck();
 
@@ -57,6 +48,17 @@ Future<void> bootstrapApp({Flavor? flavor}) async {
   IntegrityChecker.startPeriodicCheck(db);
   EnhancedBackupService().init(db);
   EnhancedAutoBackupService.start();
+
+  // Multi-device sync (local-first → Supabase): initialize the client once and
+  // start the background outbox flush. Guarded so a missing/placeholder
+  // SUPABASE_URL never blocks app startup.
+  try {
+    final syncService = container.read(syncServiceProvider);
+    await syncService.initialize();
+    syncService.startPeriodicSync();
+  } catch (e) {
+    debugPrint('Sync service init error (continuing offline): $e');
+  }
 
   await NotificationService().initialize(db);
 
@@ -146,25 +148,7 @@ class PosApp extends ConsumerWidget {
           path: '/license-info',
           builder: (context, state) => const LicenseInfoScreen(),
         ),
-        GoRoute(
-          path: '/tamper-detected',
-          builder: (context, state) => const TamperDetectedScreen(),
-        ),
       ],
-    );
-  }
-}
-
-class TamperDetectedApp extends StatelessWidget {
-  const TamperDetectedApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'POS System - Security Alert',
-      home: const TamperDetectedScreen(),
-      theme: ThemeData.dark(),
-      debugShowCheckedModeBanner: false,
     );
   }
 }

@@ -27,7 +27,11 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
   late TextEditingController _gstinController;
   late TextEditingController _notesController;
   late TextEditingController _openingBalanceController;
+  late TextEditingController _totalDebtController;
+  late TextEditingController _totalPaidController;
 
+  bool _isActive = true;
+  String _status = 'Active';
   bool _isLoading = false;
   bool get _isEditing => widget.customer != null;
 
@@ -53,12 +57,27 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
     _openingBalanceController = TextEditingController(
       text: widget.customer?.openingBalance.toString() ?? '0.0',
     );
+    _totalDebtController = TextEditingController(
+      text: widget.customer?.totalDebt.toString() ?? '0.0',
+    );
+    _totalPaidController = TextEditingController(
+      text: widget.customer?.totalPaid.toString() ?? '0.0',
+    );
+    _isActive = widget.customer?.isActive ?? true;
+    _status = widget.customer?.status ?? 'Active';
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _addressController.dispose();
+    _emailController.dispose();
+    _gstinController.dispose();
+    _notesController.dispose();
+    _openingBalanceController.dispose();
+    _totalDebtController.dispose();
+    _totalPaidController.dispose();
     super.dispose();
   }
 
@@ -70,6 +89,14 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
         appBar: AppBar(
           title: Text(_isEditing ? 'تعديل عميل' : 'إضافة عميل جديد'),
           centerTitle: true,
+          actions: [
+            if (_isEditing)
+              IconButton(
+                icon: const Icon(Icons.delete_forever, color: Colors.red),
+                tooltip: 'حذف العميل',
+                onPressed: _deleteCustomer,
+              ),
+          ],
         ),
         body: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -236,6 +263,96 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
                   textInputAction: TextInputAction.done,
                 ),
 
+                const Gap(16),
+
+                // إجمالي الدين
+                TextFormField(
+                  controller: _totalDebtController,
+                  decoration: InputDecoration(
+                    labelText: 'إجمالي الدين',
+                    hintText: '0.0',
+                    prefixIcon: const Icon(Icons.account_balance),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'^\d+\.?\d{0,2}'),
+                    ),
+                  ],
+                  textInputAction: TextInputAction.next,
+                ),
+
+                const Gap(16),
+
+                // إجمالي المدفوع
+                TextFormField(
+                  controller: _totalPaidController,
+                  decoration: InputDecoration(
+                    labelText: 'إجمالي المدفوع',
+                    hintText: '0.0',
+                    prefixIcon: const Icon(Icons.payments),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'^\d+\.?\d{0,2}'),
+                    ),
+                  ],
+                  textInputAction: TextInputAction.next,
+                ),
+
+                const Gap(16),
+
+                // الحالة
+                DropdownButtonFormField<String>(
+                  value: _status,
+                  decoration: InputDecoration(
+                    labelText: 'الحالة',
+                    prefixIcon: const Icon(Icons.flag),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Active', child: Text('نشط')),
+                    DropdownMenuItem(value: 'Inactive', child: Text('غير نشط')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _status = value);
+                    }
+                  },
+                ),
+
+                const Gap(16),
+
+                // نشط
+                SwitchListTile(
+                  title: const Text('نشط'),
+                  subtitle: Text(_isActive ? 'العميل نشط' : 'العميل غير نشط'),
+                  value: _isActive,
+                  onChanged: (value) {
+                    setState(() => _isActive = value);
+                  },
+                  secondary: Icon(
+                    _isActive ? Icons.check_circle : Icons.cancel,
+                    color: _isActive ? Colors.green : Colors.red,
+                  ),
+                ),
+
                 const Gap(32),
 
                 // زر الحفظ
@@ -274,6 +391,59 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
     );
   }
 
+  Future<void> _deleteCustomer() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تأكيد الحذف'),
+        content: Text('هل أنت متأكد من حذف العميل "${widget.customer?.name}"؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final database = ref.read(appDatabaseProvider);
+      await database.customerDao.deleteCustomer(widget.customer!.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ تم حذف العميل بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ خطأ في حذف العميل: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   Future<void> _saveCustomer() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -294,6 +464,17 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
           email: Value(_emailController.text.trim().isEmpty ? null : _emailController.text.trim()),
           gstinNumber: Value(_gstinController.text.trim().isEmpty ? null : _gstinController.text.trim()),
           notes: Value(_notesController.text.trim().isEmpty ? null : _notesController.text.trim()),
+          openingBalance: Value(
+            double.tryParse(_openingBalanceController.text) ?? 0.0,
+          ),
+          totalDebt: Value(
+            double.tryParse(_totalDebtController.text) ?? 0.0,
+          ),
+          totalPaid: Value(
+            double.tryParse(_totalPaidController.text) ?? 0.0,
+          ),
+          isActive: Value(_isActive),
+          status: Value(_status),
           updatedAt: Value(DateTime.now()),
         );
 
@@ -323,28 +504,18 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
           gstinNumber: Value(_gstinController.text.trim().isEmpty ? null : _gstinController.text.trim()),
           notes: Value(_notesController.text.trim().isEmpty ? null : _notesController.text.trim()),
           openingBalance: Value(openingBalance),
-          isActive: const Value(true),
-          status: const Value('Active'),
+          totalDebt: Value(
+            double.tryParse(_totalDebtController.text) ?? 0.0,
+          ),
+          totalPaid: Value(
+            double.tryParse(_totalPaidController.text) ?? 0.0,
+          ),
+          isActive: Value(_isActive),
+          status: Value(_status),
           createdAt: Value(DateTime.now()),
         );
 
         await database.customerDao.insertCustomer(newCustomer);
-
-        if (openingBalance != 0.0) {
-          await database.ledgerDao.insertTransaction(
-            LedgerTransactionsCompanion.insert(
-              id: '${DateTime.now().millisecondsSinceEpoch}_opening',
-              entityType: 'Customer',
-              refId: uuid,
-              date: DateTime.now(),
-              description: 'رصيد افتتاحي للعميل ${_nameController.text.trim()}',
-              debit: Value(openingBalance > 0 ? openingBalance : 0.0),
-              credit: Value(openingBalance < 0 ? -openingBalance : 0.0),
-              origin: 'opening',
-              paymentMethod: const Value('cash'),
-            ),
-          );
-        }
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

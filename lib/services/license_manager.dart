@@ -261,12 +261,6 @@ class LicenseManager {
       return true;
     }
 
-    // Anti-tamper: check clock before license
-    try {
-      final tampered = await _checkClockTamper();
-      if (tampered) return false;
-    } catch (_) {}
-
     // Paid license: check from secure storage first, fallback to prefs
     final license = await getCurrentLicense();
     if (license == null) return false;
@@ -469,27 +463,6 @@ class LicenseManager {
     );
 
     await SecureLicenseStorage.write(updated);
-  }
-
-  /// Detect clock tampering by comparing session elapsed time vs calendar time.
-  Future<bool> _checkClockTamper() async {
-    try {
-      final data = await SecureLicenseStorage.read();
-      if (data == null) return false;
-
-      final calendarElapsed = DateTime.now().difference(data.lastCheckTime).inMilliseconds;
-
-      // If clock went backwards (negative elapsed) — tampering
-      if (calendarElapsed < -60000) {
-        // Allow 1 minute tolerance for timezone/NTP adjustments
-        AppLogger.w('Clock tampering detected via session tracking: ${calendarElapsed}ms');
-        return true;
-      }
-
-      return false;
-    } catch (_) {
-      return false;
-    }
   }
 
   // ════════════════════════════════════════════════════════════════════

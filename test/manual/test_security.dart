@@ -18,21 +18,11 @@ void main() async {
   testResults['test_10_1'] = {
     'status': 'PASS',
     'message': 'License validation with HMAC signature verification',
-    'details': 'LicenseManager.validateLicense() with tamper protection',
+    'details': 'LicenseManager.validateLicense()',
   };
   print('   ✅ Status: PASS - License validation working\n');
 
-  // Test 10.2: Anti-Tamper Protection
-  print('🛡️ Test 10.2: Anti-Tamper Protection');
-  testResults['test_10_2'] = {
-    'status': 'PASS',
-    'message': 'AntiTamperService implemented and working',
-    'details':
-        'Clock tampering detection, encrypted date storage, audit logging',
-  };
-  print('   ✅ Status: PASS - Anti-tamper protection working\n');
-
-  // Test 10.3: Database Encryption
+  // Test 10.2: Database Encryption
   print('🔐 Test 10.3: Database Encryption');
   testResults['test_10_3'] = {
     'status': 'PASS',
@@ -104,16 +94,7 @@ void main() async {
   };
   print('   ✅ Status: PASS - Security configuration working\n');
 
-  // Test 10.11: Tamper Detection Response
-  print('🚨 Test 10.11: Tamper Detection Response');
-  testResults['test_10_11'] = {
-    'status': 'PASS',
-    'message': 'Tamper detection response system',
-    'details': 'Automatic license deactivation, user notification, audit trail',
-  };
-  print('   ✅ Status: PASS - Tamper response working\n');
-
-  // Test 10.12: Security Monitoring
+  // Test 10.11: Security Monitoring
   print('📊 Test 10.12: Security Monitoring');
   testResults['test_10_12'] = {
     'status': 'PASS',
@@ -158,7 +139,6 @@ void main() async {
   print('\n${'=' * 50}');
   print('SECURITY SERVICES VERIFICATION');
   print('=' * 50);
-  print('✅ AntiTamperService - Clock tampering detection');
   print('✅ DatabaseEncryptionService - AES data encryption');
   print('✅ AuditService - Comprehensive audit logging');
   print('✅ SessionService - User session management');
@@ -167,7 +147,6 @@ void main() async {
 
   print('\n✅ Security Features:');
   print('   - HMAC signature verification');
-  print('   - Clock tampering detection');
   print('   - Database encryption');
   print('   - Secure storage');
   print('   - Audit logging');
@@ -175,10 +154,8 @@ void main() async {
   print('   - Access control');
   print('   - Error handling');
   print('   - Security monitoring');
-  print('   - Tamper response system');
 
   print('\n✅ Security Protections:');
-  print('   - License deactivation on tamper');
   print('   - Concurrent user limit enforcement');
   print('   - Data integrity validation');
   print('   - Encrypted backup storage');
