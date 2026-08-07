@@ -63,6 +63,8 @@ class CustomerDao extends DatabaseAccessor<AppDatabase>
 
       // Insert customer directly - database will handle createdAt with default value
       await into(customers).insert(customer);
+      // Queue the new customer for sync. Customers.id IS the UUID.
+      await _enqueueCustomer(customer.id.value, 'insert');
       // Drift insert returns rowId (int) for auto-increment, or 0/void for custom primary keys?
       // Since ID is String (UUID) and provided in companion, standard insert returns success indication if rowid usage is standard.
       // But for customized primary key tables, better to treat as void or just return success.
@@ -76,11 +78,11 @@ class CustomerDao extends DatabaseAccessor<AppDatabase>
   /// Update an existing customer
   Future<bool> updateCustomer(CustomersCompanion customer) async {
     try {
-      // Update customer without touching timestamps to avoid datatype issues
+      // Update customer; bump updatedAt for sync. createdAt is left untouched
+      // to avoid datatype issues on the legacy timestamp column.
       final updated = customer.copyWith(
-        // Remove both timestamps from update to prevent database errors
         createdAt: const Value.absent(),
-        updatedAt: const Value.absent(),
+        updatedAt: Value(DateTime.now()),
       );
 
       // We need to match by ID. The companion should have the ID set.
@@ -90,11 +92,37 @@ class CustomerDao extends DatabaseAccessor<AppDatabase>
       // Let's safe-guard by using update(..).replace(...) which relies on the primary key being present.
 
       final result = await update(customers).replace(updated);
+      // Queue the change for sync.
+      await _enqueueCustomer(customer.id.value, 'update');
       debugPrint('✅ Customer updated');
       return result;
     } catch (e) {
       debugPrint('❌ Error updating customer: $e');
       rethrow;
+    }
+  }
+
+  /// Enqueues a customer for sync. Payload only contains Supabase columns
+  /// (snake_case). Failures are swallowed so the local write always wins.
+  Future<void> _enqueueCustomer(String syncId, String operation) async {
+    try {
+      final customer = await getCustomerById(syncId);
+      if (customer == null || syncId.isEmpty) return;
+      await db.syncQueueDao.enqueue(
+        tableName: 'customers',
+        recordSyncId: syncId,
+        operation: operation,
+        payload: {
+          'sync_id': syncId,
+          'name': customer.name,
+          'phone': customer.phone,
+          'address': customer.address,
+          'opening_balance': customer.openingBalance,
+          'updated_at': (customer.updatedAt ?? DateTime.now()).toIso8601String(),
+        },
+      );
+    } catch (e) {
+      debugPrint('Enqueue customer ($operation) failed: $e');
     }
   }
 

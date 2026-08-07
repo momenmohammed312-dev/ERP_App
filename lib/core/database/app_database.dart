@@ -57,7 +57,9 @@ import 'package:pos_offline_desktop/core/database/tables/attendance_device_table
 import 'package:pos_offline_desktop/core/database/tables/attendance_settings_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/empty_barnika_tracking_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/sync_queue_table.dart';
 import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/sync_queue_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/vegetable_shipment_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/empty_barnika_tracking_dao.dart';
 import 'customer_status_fix.dart';
@@ -123,6 +125,7 @@ part 'app_database.g.dart';
     AttendanceSettings,
     VegetableShipments,
     EmptyBarnikaTracking,
+    SyncQueue,
   ],
   daos: [
     ProductDao,
@@ -150,6 +153,7 @@ part 'app_database.g.dart';
     CustomerContainerDao,
     VegetableShipmentDao,
     EmptyBarnikaTrackingDao,
+    SyncQueueDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {

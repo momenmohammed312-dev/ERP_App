@@ -33,6 +33,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _addressController = TextEditingController();
   final _taxController = TextEditingController();
   final _footerController = TextEditingController();
+  final _locationIdController = TextEditingController();
+  String _lastSyncedText = 'لم تتم المزامنة بعد';
+  int _pendingCount = 0;
+  bool _syncing = false;
 
   @override
   void initState() {
@@ -63,6 +67,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     SettingsService.getBusinessLogoPath().then((path) {
       setState(() => _logoPath = path);
     });
+
+    _loadSyncState();
+  }
+
+  Future<void> _loadSyncState() async {
+    final locationId = await SettingsService.getDeviceLocationId();
+    final lastSynced = await SettingsService.getLastSyncedAt();
+    final pending = await ref.read(syncServiceProvider).pendingCount();
+    if (!mounted) return;
+    setState(() {
+      _locationIdController.text = locationId;
+      _lastSyncedText = lastSynced != null
+          ? 'آخر مزامنة: ${lastSynced.toLocal()}'
+          : 'لم تتم المزامنة بعد';
+      _pendingCount = pending;
+    });
   }
 
   @override
@@ -72,6 +92,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _addressController.dispose();
     _taxController.dispose();
     _footerController.dispose();
+    _locationIdController.dispose();
     super.dispose();
   }
 
@@ -314,6 +335,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _buildBusinessInfoSection(textColor, subTextColor, goldColor, cardBg, borderColor, isDark),
           Divider(color: borderColor, height: 32),
 
+          _buildSectionTitle('مزامنة متعددة الأجهزة', goldColor),
+          const Gap(10),
+          Text(
+            'استخدم نفس الحساب على أكثر من جهاز لمزامنة المنتجات والفواتير والمخزون تلقائياً.',
+            style: TextStyle(color: subTextColor, fontSize: 13),
+          ),
+          const Gap(12),
+          _buildSyncSection(textColor, subTextColor, goldColor, cardBg, borderColor),
+          Divider(color: borderColor, height: 32),
+
           _buildSectionTitle('إدارة المستخدمين', goldColor),
           const Gap(10),
 
@@ -459,6 +490,111 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ],
     );
+  }
+
+  Widget _buildSyncSection(Color textColor, Color subTextColor, Color goldColor, Color cardBg, Color borderColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: _locationIdController,
+          style: TextStyle(color: textColor),
+          decoration: InputDecoration(
+            labelText: 'معرّف الجهاز / الفرع (مثال: فرع-1)',
+            labelStyle: TextStyle(color: subTextColor),
+            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            prefixIcon: Icon(Icons.business, color: goldColor),
+            filled: true,
+            fillColor: cardBg,
+          ),
+        ),
+        const Gap(10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _saveLocationId,
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('حفظ معرّف الجهاز'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: goldColor,
+                  side: BorderSide(color: borderColor),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const Gap(16),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _syncing ? null : _syncNow,
+                icon: _syncing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0D1117)),
+                      )
+                    : const Icon(Icons.sync),
+                label: Text(_syncing ? 'جارٍ المزامنة...' : 'مزامنة الآن'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  backgroundColor: goldColor,
+                  foregroundColor: const Color(0xFF0D1117),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const Gap(10),
+        Text(
+          '$_lastSyncedText  —  $_pendingCount قيد الانتظار',
+          style: TextStyle(color: subTextColor, fontSize: 13),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _saveLocationId() async {
+    await SettingsService.setDeviceLocationId(_locationIdController.text);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم حفظ معرّف الجهاز'), backgroundColor: Colors.green),
+    );
+  }
+
+  Future<void> _syncNow() async {
+    setState(() => _syncing = true);
+    try {
+      final summary = await ref.read(syncServiceProvider).syncNow();
+      final lastSynced = await SettingsService.getLastSyncedAt();
+      final pending = await ref.read(syncServiceProvider).pendingCount();
+      if (!mounted) return;
+      setState(() {
+        _lastSyncedText = lastSynced != null
+            ? 'آخر مزامنة: ${lastSynced.toLocal()}'
+            : 'لم تتم المزامنة بعد';
+        _pendingCount = pending;
+      });
+      final message = summary.skippedOffline
+          ? 'لا يوجد اتصال بالإنترنت — لم تتم المزامنة'
+          : 'تمت المزامنة: ${summary.synced} بنجاح، ${summary.failed} فشلت';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: summary.failed > 0 ? Colors.orange : Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في المزامنة: $e'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
   }
 
   Future<void> _pickLogo() async {

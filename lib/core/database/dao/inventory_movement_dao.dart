@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 import '../app_database.dart';
 import '../tables/inventory_movements_table.dart';
 
@@ -57,8 +58,60 @@ class InventoryMovementDao extends DatabaseAccessor<AppDatabase>
 
   /// Create inventory movement
   /// إنشاء حركة مخزون
-  Future<int> createMovement(InventoryMovementsCompanion movement) =>
-      into(inventoryMovements).insert(movement);
+  Future<int> createMovement(InventoryMovementsCompanion movement) async {
+    final movementId = await into(inventoryMovements).insert(movement);
+    await _enqueueStockMovement(movement, movementId);
+    return movementId;
+  }
+
+  /// Enqueues a signed stock delta for sync. The payload matches the
+  /// `apply_stock_delta` Postgres RPC arguments (snake_case) and never includes
+  /// local snapshots like previous/new quantity. Failures are swallowed so the
+  /// local movement write always succeeds.
+  Future<void> _enqueueStockMovement(
+    InventoryMovementsCompanion movement,
+    int movementId,
+  ) async {
+    try {
+      final productLocalId = movement.productId.value;
+      String? productSyncId;
+      final product = await (select(db.products)
+            ..where((p) => p.id.equals(productLocalId)))
+          .getSingleOrNull();
+      productSyncId = product?.syncId;
+      if (productSyncId == null) return;
+
+      // Guards against absent companion values so a partial companion never
+      // crashes the enqueue (and silently drops a stock delta from sync).
+      final quantityDelta =
+          movement.quantity.present ? movement.quantity.value : null;
+      final movementType =
+          movement.movementType.present ? movement.movementType.value : null;
+      final reference =
+          movement.reference.present ? movement.reference.value : null;
+      final movementDate = movement.movementDate.present
+          ? movement.movementDate.value
+          : null;
+      if (quantityDelta == null || movementType == null || movementDate == null) {
+        return;
+      }
+
+      await db.syncQueueDao.enqueue(
+        tableName: 'stock_movements',
+        recordSyncId: const Uuid().v4(),
+        operation: 'stock_delta',
+        payload: {
+          'product_sync_id': productSyncId,
+          'quantity_delta': quantityDelta,
+          'movement_type': movementType,
+          'reference': reference,
+          'movement_date': movementDate.toIso8601String(),
+        },
+      );
+    } catch (e) {
+      print('Enqueue stock movement (id=$movementId) failed: $e');
+    }
+  }
 
   /// Create movement with automatic timestamps
   /// إنشاء حركة مع طوابع زمنية تلقائية

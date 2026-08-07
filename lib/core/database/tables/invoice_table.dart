@@ -33,5 +33,10 @@ class Invoices extends Table {
   IntColumn get shipmentId =>
       integer().nullable().references(VegetableShipments, #id)();
 
+  /// Sync identity used only for multi-device sync (local int `id` stays for FKs).
+  TextColumn get syncId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
   // primaryKey is defined by autoIncrement() on 'id'
 }

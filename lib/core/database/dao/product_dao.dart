@@ -1,5 +1,6 @@
 // database/dao/product_dao.dart
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/product_table.dart';
@@ -16,11 +17,79 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   Stream<List<Product>> watchAllProducts() => 
       (select(products)..where((p) => p.status.equals('Deleted').not() | p.status.isNull())).watch();
       
-  Future insertProduct(Insertable<Product> product) =>
-      into(products).insert(product);
+  /// Inserts a product, stamps it with a fresh `syncId` + createdAt/updatedAt,
+  /// and queues an 'insert' sync entry. The local write always succeeds even if
+  /// enqueueing fails.
+  Future<int> insertProduct(Insertable<Product> product) async {
+    final syncId = const Uuid().v4();
+    final now = DateTime.now();
+    Insertable<Product> decorated = product;
+    if (product is ProductsCompanion) {
+      decorated = product.copyWith(
+        syncId: Value(syncId),
+        createdAt: Value(now),
+        updatedAt: Value(now),
+      );
+    } else if (product is Product) {
+      decorated = product.copyWith(
+        syncId: Value(syncId),
+        createdAt: Value(now),
+        updatedAt: Value(now),
+      );
+    }
+    final insertedId = await into(products).insert(decorated);
+    await _enqueueProduct(insertedId, syncId, 'insert');
+    return insertedId;
+  }
       
-  Future updateProduct(Insertable<Product> product) =>
-      update(products).replace(product);
+  /// Updates a product, bumps `updatedAt`, and queues an 'update' sync.
+  Future updateProduct(Insertable<Product> product) async {
+    Insertable<Product> decorated = product;
+    if (product is ProductsCompanion) {
+      decorated = product.copyWith(updatedAt: Value(DateTime.now()));
+    } else if (product is Product) {
+      decorated = product.copyWith(updatedAt: Value(DateTime.now()));
+    }
+    await update(products).replace(decorated);
+    final localId = product is ProductsCompanion
+        ? product.id.value
+        : product is Product
+            ? product.id
+            : null;
+    if (localId != null) {
+      await _enqueueProduct(localId, null, 'update');
+    }
+  }
+
+  /// Enqueues a product for sync. Re-reads the row to build a payload that only
+  /// references Supabase columns (snake_case), never the local int `id`.
+  /// Any failure here is caught so it never breaks the local write.
+  Future<void> _enqueueProduct(int id, String? syncIdOverride, String operation) async {
+    try {
+      final p = await getProductById(id);
+      final syncId = syncIdOverride ?? p?.syncId;
+      if (p == null || syncId == null) return;
+      await db.syncQueueDao.enqueue(
+        tableName: 'products',
+        recordSyncId: syncId,
+        operation: operation,
+        payload: {
+          'sync_id': syncId,
+          'name': p.name,
+          'quantity': p.quantity,
+          'price': p.price,
+          'unit': p.unit,
+          'category': p.category,
+          'barcode': p.barcode,
+          'cost_price': p.costPrice,
+          'status': p.status,
+          'updated_at': (p.updatedAt ?? DateTime.now()).toIso8601String(),
+        },
+      );
+    } catch (e) {
+      print('Enqueue product ($operation) failed: $e');
+    }
+  }
       
   // Total products count
   Future<int> getTotalProductCount() async {

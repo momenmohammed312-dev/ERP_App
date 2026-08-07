@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/invoice_table.dart';
@@ -23,11 +24,34 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
 
   Stream<List<Invoice>> watchAllInvoices() => select(invoices).watch();
 
-  Future<int> insertInvoice(InvoicesCompanion invoice) =>
-      into(invoices).insert(invoice);
+  Future<int> insertInvoice(InvoicesCompanion invoice) async {
+    final syncId = const Uuid().v4();
+    final now = DateTime.now();
+    final decorated = invoice.copyWith(
+      syncId: Value(syncId),
+      createdAt: Value(now),
+      updatedAt: Value(now),
+    );
+    final invoiceId = await into(invoices).insert(decorated);
+    await _enqueueInvoice(invoiceId, 'insert');
+    return invoiceId;
+  }
 
-  Future updateInvoice(Insertable<Invoice> invoice) =>
-      update(invoices).replace(invoice);
+  Future updateInvoice(Insertable<Invoice> invoice) async {
+    Insertable<Invoice> decorated = invoice;
+    int? localId;
+    if (invoice is InvoicesCompanion) {
+      decorated = invoice.copyWith(updatedAt: Value(DateTime.now()));
+      localId = invoice.id.value;
+    } else if (invoice is Invoice) {
+      decorated = invoice.copyWith(updatedAt: Value(DateTime.now()));
+      localId = invoice.id;
+    }
+    await update(invoices).replace(decorated);
+    if (localId != null) {
+      await _enqueueInvoice(localId, 'update');
+    }
+  }
 
   Future deleteInvoice(Insertable<Invoice> invoice) =>
       delete(invoices).delete(invoice);
@@ -68,8 +92,117 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
     )..where((item) => item.invoiceId.equals(invoiceId))).get();
   }
 
-  Future insertInvoiceItem(Insertable<InvoiceItem> item) =>
-      into(invoiceItems).insert(item);
+  Future insertInvoiceItem(Insertable<InvoiceItem> item) async {
+    final syncId = const Uuid().v4();
+    final now = DateTime.now();
+    Insertable<InvoiceItem> decorated = item;
+    int? invoiceLocalId;
+    int? productLocalId;
+    if (item is InvoiceItemsCompanion) {
+      decorated = item.copyWith(
+        syncId: Value(syncId),
+        createdAt: Value(now),
+        updatedAt: Value(now),
+      );
+      invoiceLocalId = item.invoiceId.value;
+      productLocalId = item.productId.value;
+    } else if (item is InvoiceItem) {
+      decorated = item.copyWith(
+        syncId: Value(syncId),
+        createdAt: Value(now),
+        updatedAt: Value(now),
+      );
+      invoiceLocalId = item.invoiceId;
+      productLocalId = item.productId;
+    }
+    await into(invoiceItems).insert(decorated);
+    await _enqueueInvoiceItem(syncId, invoiceLocalId, productLocalId, item);
+  }
+
+  /// Enqueues an invoice for sync. Only Supabase columns (snake_case) are sent;
+  /// `customer_sync_id` is the customer UUID (never a local int id).
+  Future<void> _enqueueInvoice(int localId, String operation) async {
+    try {
+      final inv = await (select(invoices)..where((t) => t.id.equals(localId)))
+          .getSingleOrNull();
+      final syncId = inv?.syncId;
+      if (inv == null || syncId == null) return;
+      await db.syncQueueDao.enqueue(
+        tableName: 'invoices',
+        recordSyncId: syncId,
+        operation: operation,
+        payload: {
+          'sync_id': syncId,
+          'invoice_number': inv.invoiceNumber,
+          'customer_sync_id': inv.customerId,
+          'total_amount': inv.totalAmount,
+          'paid_amount': inv.paidAmount,
+          'status': inv.status,
+          'invoice_date': inv.date.toIso8601String(),
+          'updated_at': (inv.updatedAt ?? DateTime.now()).toIso8601String(),
+        },
+      );
+    } catch (e) {
+      print('Enqueue invoice ($operation) failed: $e');
+    }
+  }
+
+  /// Enqueues an invoice item for sync. Resolves the parent invoice's syncId
+  /// and the product's syncId from their local ids so the payload never leaks
+  /// local integer ids to the server.
+  Future<void> _enqueueInvoiceItem(
+    String syncId,
+    int? invoiceLocalId,
+    int? productLocalId,
+    Insertable<InvoiceItem> item,
+  ) async {
+    try {
+      String? invoiceSyncId;
+      if (invoiceLocalId != null) {
+        final inv = await (select(invoices)..where((t) => t.id.equals(invoiceLocalId)))
+            .getSingleOrNull();
+        invoiceSyncId = inv?.syncId;
+      }
+      String? productSyncId;
+      if (productLocalId != null) {
+        final product = await (select(attachedDatabase.products)
+              ..where((p) => p.id.equals(productLocalId)))
+            .getSingleOrNull();
+        productSyncId = product?.syncId;
+      }
+      if (invoiceSyncId == null || productSyncId == null) return;
+
+      int? qty;
+      double? price;
+      double? discount;
+      if (item is InvoiceItemsCompanion) {
+        qty = item.quantity.present ? item.quantity.value : null;
+        price = item.price.present ? item.price.value : null;
+        discount = item.discount.present ? item.discount.value : null;
+      } else if (item is InvoiceItem) {
+        qty = item.quantity;
+        price = item.price;
+        discount = item.discount;
+      }
+
+      await db.syncQueueDao.enqueue(
+        tableName: 'invoice_items',
+        recordSyncId: syncId,
+        operation: 'insert',
+        payload: {
+          'sync_id': syncId,
+          'invoice_sync_id': invoiceSyncId,
+          'product_sync_id': productSyncId,
+          'quantity': qty,
+          'price': price,
+          'discount': discount,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      print('Enqueue invoice item failed: $e');
+    }
+  }
 
   Future deleteItemsByInvoiceId(int invoiceId) {
     return (delete(
