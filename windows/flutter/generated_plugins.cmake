@@ -3,6 +3,8 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  app_links
+  connectivity_plus
   desktop_window
   flutter_secure_storage_windows
   permission_handler_windows
