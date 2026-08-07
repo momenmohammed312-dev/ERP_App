@@ -160,6 +160,7 @@ class SecureLicenseData {
   final DateTime lastCheckTime;
   final int sessionElapsedMs;
   final int installCount;
+  final String? appVersion;
 
   SecureLicenseData({
     required this.firstRunDate,
@@ -168,6 +169,7 @@ class SecureLicenseData {
     required this.lastCheckTime,
     this.sessionElapsedMs = 0,
     this.installCount = 1,
+    this.appVersion,
   });
 
   /// Create a fresh entry for first run.
@@ -175,6 +177,7 @@ class SecureLicenseData {
     required DateTime firstRunDate,
     required String hardwareId,
     Map<String, dynamic>? licenseJson,
+    String? appVersion,
   }) {
     return SecureLicenseData(
       firstRunDate: firstRunDate,
@@ -183,6 +186,7 @@ class SecureLicenseData {
       lastCheckTime: DateTime.now(),
       sessionElapsedMs: 0,
       installCount: 1,
+      appVersion: appVersion,
     );
   }
 
@@ -193,6 +197,7 @@ class SecureLicenseData {
     'last_check_time': lastCheckTime.toIso8601String(),
     'session_elapsed_ms': sessionElapsedMs,
     'install_count': installCount,
+    'app_version': appVersion,
   };
 
   factory SecureLicenseData.fromJson(Map<String, dynamic> json) {
@@ -203,6 +208,7 @@ class SecureLicenseData {
       lastCheckTime: DateTime.tryParse(json['last_check_time'] ?? '') ?? DateTime.now(),
       sessionElapsedMs: json['session_elapsed_ms'] ?? 0,
       installCount: json['install_count'] ?? 1,
+      appVersion: json['app_version'] as String?,
     );
   }
 
@@ -214,6 +220,7 @@ class SecureLicenseData {
     DateTime? lastCheckTime,
     int? sessionElapsedMs,
     int? installCount,
+    String? appVersion,
     bool clearLicense = false,
   }) {
     return SecureLicenseData(
@@ -223,6 +230,7 @@ class SecureLicenseData {
       lastCheckTime: lastCheckTime ?? this.lastCheckTime,
       sessionElapsedMs: sessionElapsedMs ?? this.sessionElapsedMs,
       installCount: installCount ?? this.installCount,
+      appVersion: appVersion ?? this.appVersion,
     );
   }
 }

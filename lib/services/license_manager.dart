@@ -279,17 +279,31 @@ class LicenseManager {
     await deactivate();
   }
 
+  /// Current app version - when this changes, old license data is cleared
+  /// to give clients a fresh 100-year period after updates.
+  static const String _currentAppVersion = '2.3.0';
+
   Future<License?> getCurrentLicense() async {
     if (LicenseConfig.isFreeVersion) {
       final data = await SecureLicenseStorage.read();
       final hardwareId = await HardwareIdService.getHardwareId();
 
-      if (data == null) {
-        // First run — create and save
+      // Clear old license data if app version changed (update detected)
+      if (data != null && data.appVersion != _currentAppVersion) {
+        AppLogger.i('App updated from ${data.appVersion} to $_currentAppVersion — resetting license');
+        await SecureLicenseStorage.clear();
+        // Fall through to create fresh data below
+      }
+
+      final freshData = await SecureLicenseStorage.read();
+
+      if (freshData == null) {
+        // First run or update — create and save fresh data
         final now = DateTime.now();
         final newData = SecureLicenseData.create(
           firstRunDate: now,
           hardwareId: hardwareId,
+          appVersion: _currentAppVersion,
         );
         await SecureLicenseStorage.write(newData);
         // Also save to SharedPreferences for migration
@@ -309,25 +323,25 @@ class LicenseManager {
       }
 
       // Hardware binding check
-      if (data.hardwareId.isNotEmpty && data.hardwareId != hardwareId) {
+      if (freshData.hardwareId.isNotEmpty && freshData.hardwareId != hardwareId) {
         AppLogger.w('Hardware mismatch — free version bound to different device');
         return null;
       }
 
-      final expiry = data.firstRunDate.add(Duration(days: _freeTrialDays));
+      final expiry = freshData.firstRunDate.add(Duration(days: _freeTrialDays));
       if (DateTime.now().isAfter(expiry)) return null;
 
       return License(
         licenseKey: 'FREE_VERSION',
         deviceFingerprint: 'free',
         type: LicenseType.free,
-        issueDate: data.firstRunDate,
+        issueDate: freshData.firstRunDate,
         expiryDate: expiry,
         features: List<String>.from(LicenseConfig.availableFeatures),
         maxUsers: 999,
         companyName: 'Free Version',
         contactEmail: '',
-        hardwareId: data.hardwareId,
+        hardwareId: freshData.hardwareId,
       );
     }
 
