@@ -61,6 +61,7 @@ import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart
 import 'package:pos_offline_desktop/core/database/dao/vegetable_shipment_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/empty_barnika_tracking_dao.dart';
 import 'customer_status_fix.dart';
+import 'customer_opening_balance_fix.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
 // import 'package:pos_offline_desktop/core/database/amount_types_fix.dart';
 
@@ -271,6 +272,7 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
       await _ensureMigrationLogTable();
       await CustomerStatusFix.fixCustomerStatusColumn(this);
+      await CustomerOpeningBalanceFix.fixDuplicateOpeningTransactions(this);
 
       // Safety check to prevent SQL logic error on missing audit_log
       try {

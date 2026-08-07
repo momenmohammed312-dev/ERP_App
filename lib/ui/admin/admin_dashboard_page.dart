@@ -3,16 +3,20 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/ui/product/widgets/product_form.dart';
 import 'package:pos_offline_desktop/ui/customer/add_edit_customer_page.dart';
+import 'package:pos_offline_desktop/ui/customer/customer_statement_screen.dart';
 import 'package:pos_offline_desktop/ui/barneka/barneka_products_screen.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart' as models;
@@ -2035,14 +2039,29 @@ class _CustomersPageContentState extends State<_CustomersPageContent> {
             ),
           ),
           SizedBox(
-            width: 120,
+            width: 250,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 IconButton(
                   icon: const Icon(Icons.visibility, size: 20),
                   onPressed: () => _viewCustomerDetails(customer),
-                  tooltip: 'عرض التفاصيل',
+                  tooltip: 'عرض',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.payment, size: 20, color: Colors.green),
+                  onPressed: () => _showPaymentDialog(customer),
+                  tooltip: 'سداد',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.print, size: 20, color: Colors.blue),
+                  onPressed: () => _printCustomerStatement(customer),
+                  tooltip: 'طباعة',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.picture_as_pdf, size: 20, color: Colors.orange),
+                  onPressed: () => _exportCustomerPdf(customer),
+                  tooltip: 'تصدير PDF',
                 ),
                 IconButton(
                   icon: const Icon(Icons.edit, size: 20),
@@ -2140,6 +2159,178 @@ class _CustomersPageContentState extends State<_CustomersPageContent> {
         ],
       ),
     );
+  }
+
+  void _showPaymentDialog(Customer customer) {
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: ui.TextDirection.rtl,
+        child: AlertDialog(
+          title: Text('سداد قيمة للعميل: ${customer.name}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                decoration: const InputDecoration(
+                  labelText: 'المبلغ',
+                  border: OutlineInputBorder(),
+                  prefixText: 'ج.م ',
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const Gap(16),
+              TextField(
+                controller: noteController,
+                decoration: const InputDecoration(
+                  labelText: 'ملاحظة / سبب (اختياري)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final amount = double.tryParse(amountController.text);
+                if (amount == null || amount <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('الرجاء إدخال مبلغ صحيح'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+
+                try {
+                  await widget.db.ledgerDao.insertTransaction(
+                    LedgerTransactionsCompanion.insert(
+                      id:
+                          '${DateTime.now().millisecondsSinceEpoch}_customer_payment',
+                      entityType: 'Customer',
+                      refId: customer.id,
+                      date: DateTime.now(),
+                      description: noteController.text.isNotEmpty
+                          ? noteController.text
+                          : 'سداد قيمة',
+                      debit: const drift.Value(0.0),
+                      credit: drift.Value(amount),
+                      origin: 'payment',
+                      paymentMethod: const drift.Value('cash'),
+                    ),
+                  );
+
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  setState(() {});
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('تم تسجيل السداد بنجاح'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('خطأ في تسجيل السداد: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('تأكيد السداد'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _printCustomerStatement(Customer customer) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CustomerStatementScreen(customer: customer),
+      ),
+    );
+  }
+
+  void _exportCustomerPdf(Customer customer) async {
+    try {
+      final now = DateTime.now();
+      final startOfMonth = DateTime(now.year, now.month, 1);
+      final transactionsWithBalance = await widget.db.ledgerDao
+          .getTransactionsWithRunningBalance(
+        'Customer',
+        customer.id,
+        startOfMonth,
+        now,
+      );
+
+      final transactionData = transactionsWithBalance
+          .map(
+            (tx) => {
+              'date': tx.transaction.date,
+              'description': tx.transaction.description,
+              'debit': tx.transaction.debit,
+              'credit': tx.transaction.credit,
+              'balance': tx.runningBalance,
+              'receiptNumber': tx.transaction.receiptNumber,
+              'paymentMethod': tx.transaction.paymentMethod,
+            },
+          )
+          .toList();
+
+      final openingBalance = await widget.db.ledgerDao.getRunningBalance(
+        'Customer',
+        customer.id,
+        upToDate: startOfMonth.subtract(const Duration(days: 1)),
+      );
+
+      final currentBalance = await widget.db.ledgerDao.getRunningBalance(
+        'Customer',
+        customer.id,
+        upToDate: now,
+      );
+
+      final exportService = ExportService();
+      await exportService.exportCustomerStatement(
+        db: widget.db,
+        customerName: customer.name,
+        transactions: transactionData,
+        openingBalance: openingBalance,
+        currentBalance: currentBalance,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم تصدير كشف حساب ${customer.name} بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ في التصدير: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 

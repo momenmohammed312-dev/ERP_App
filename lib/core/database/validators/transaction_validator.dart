@@ -113,9 +113,7 @@ class TransactionValidator {
     }
 
     // Validate opening balance
-    if (openingBalance != null && openingBalance < 0) {
-      throw TransactionValidationError('Opening balance cannot be negative');
-    }
+    // السالب مسموح: عميل موجود قبل البرنامج ممكن يبقى عنده رصيد دائن
   }
 
   static void validateReversalTransaction(

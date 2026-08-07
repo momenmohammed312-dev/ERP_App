@@ -176,4 +176,63 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_isFirstRunKey, true);
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Label (ملصق باركود) dimensions
+  // ─────────────────────────────────────────────────────────────────────────
+  static const _labelWidthKey = 'label_width_mm';
+  static const _labelHeightKey = 'label_height_mm';
+
+  static Future<double> getLabelWidthMm() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_labelWidthKey) ?? 50.0;
+  }
+
+  static Future<void> setLabelWidthMm(double mm) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_labelWidthKey, mm);
+  }
+
+  static Future<double> getLabelHeightMm() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_labelHeightKey) ?? 30.0;
+  }
+
+  static Future<void> setLabelHeightMm(double mm) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_labelHeightKey, mm);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Multi-Device Sync
+  // ─────────────────────────────────────────────────────────────────────────
+  static const _deviceLocationIdKey = 'device_location_id';
+  static const _lastSyncedAtKey = 'last_synced_at';
+
+  /// Identifies this device (e.g. فرع، محل، مخزن) for row-level sync scoping.
+  static Future<String> getDeviceLocationId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_deviceLocationIdKey) ?? '';
+  }
+
+  static Future<void> setDeviceLocationId(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value.trim().isEmpty) {
+      await prefs.remove(_deviceLocationIdKey);
+    } else {
+      await prefs.setString(_deviceLocationIdKey, value.trim());
+    }
+  }
+
+  static Future<DateTime?> getLastSyncedAt() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getString(_lastSyncedAtKey);
+    if (v == null) return null;
+    return DateTime.tryParse(v);
+  }
+
+  static Future<void> setLastSyncedAt(DateTime value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastSyncedAtKey, value.toIso8601String());
+  }
 }

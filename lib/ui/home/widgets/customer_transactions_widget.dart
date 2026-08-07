@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -464,63 +465,90 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
     final addressController = TextEditingController(
       text: customer.address ?? '',
     );
+    final openingBalanceController = TextEditingController(
+      text: customer.openingBalance.toString(),
+    );
 
     showDialog(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('تعديل بيانات العميل'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'اسم العميل',
-                  border: OutlineInputBorder(),
-                ),
+        return Directionality(
+          textDirection: ui.TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('تعديل بيانات العميل'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'اسم العميل',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const Gap(12),
+                  TextField(
+                    controller: phoneController,
+                    decoration: const InputDecoration(
+                      labelText: 'رقم الهاتف',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.phone,
+                  ),
+                  const Gap(12),
+                  TextField(
+                    controller: addressController,
+                    decoration: const InputDecoration(
+                      labelText: 'العنوان',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const Gap(12),
+                  TextField(
+                    controller: openingBalanceController,
+                    decoration: const InputDecoration(
+                      labelText: 'الرصيد الافتتاحي',
+                      border: OutlineInputBorder(),
+                      prefixText: 'ج.م ',
+                      helperText: 'موجب = مدين، سالب = دائن',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: phoneController,
-                decoration: const InputDecoration(
-                  labelText: 'رقم الهاتف',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: addressController,
-                decoration: const InputDecoration(
-                  labelText: 'العنوان',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('إلغاء'),
             ),
-            ElevatedButton(
-              onPressed: () async {
-                if (nameController.text.isNotEmpty) {
+            actions: [
+              TextButton.icon(
+                onPressed: () => _confirmDeleteCustomer(context, customer),
+                icon: const Icon(Icons.delete, color: Colors.red),
+                label: const Text('حذف', style: TextStyle(color: Colors.red)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (nameController.text.isEmpty) return;
                   try {
+                    final openingBalance =
+                        double.tryParse(openingBalanceController.text) ?? 0.0;
                     await widget.db.customerDao.updateCustomer(
                       CustomersCompanion(
                         id: Value(customer.id),
-                        name: Value(nameController.text),
+                        name: Value(nameController.text.trim()),
                         phone: phoneController.text.isNotEmpty
-                            ? Value(phoneController.text)
+                            ? Value(phoneController.text.trim())
                             : const Value.absent(),
                         address: addressController.text.isNotEmpty
-                            ? Value(addressController.text)
+                            ? Value(addressController.text.trim())
                             : const Value.absent(),
-                        status: const Value('Active'),
-                        createdAt:
-                            const Value.absent(), // Prevent createdAt update
+                        openingBalance: Value(openingBalance),
+                        updatedAt: Value(DateTime.now()),
                       ),
                     );
 
@@ -542,13 +570,58 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
                       ),
                     );
                   }
-                }
-              },
-              child: const Text('حفظ'),
-            ),
-          ],
+                },
+                child: const Text('حفظ'),
+              ),
+            ],
+          ),
         );
       },
+    );
+  }
+
+  void _confirmDeleteCustomer(BuildContext context, Customer customer) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: ui.TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('تأكيد الحذف'),
+          content: Text('هل أنت متأكد من حذف العميل "${customer.name}"؟'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                try {
+                  await widget.db.customerDao.deleteCustomer(customer.id);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('تم حذف العميل بنجاح'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('خطأ في الحذف: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('حذف', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

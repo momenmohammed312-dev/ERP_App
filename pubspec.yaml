@@ -32,6 +32,8 @@ dependencies:
 
   pdf: ^3.11.3
   printing: ^5.14.2
+  barcode: ^2.2.9
+  barcode_widget: ^2.0.4
   bidi: ^2.0.13
   share_plus: ^7.2.1
 
@@ -47,6 +49,10 @@ dependencies:
   http: ^1.6.0
   mobile_scanner: ^5.2.3
   uuid: ^4.5.1
+
+  # Multi-Device Sync (local-first → Supabase)
+  supabase_flutter: ^2.8.0
+  connectivity_plus: ^6.1.0
   
   # Security & Encryption
   crypto: ^3.0.3
