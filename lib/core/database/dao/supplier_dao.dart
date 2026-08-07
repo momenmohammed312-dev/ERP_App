@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import '../tables/supplier_table.dart';
 import '../app_database.dart';
@@ -19,7 +20,7 @@ class SupplierDao extends DatabaseAccessor<AppDatabase>
       (select(suppliers)..where((tbl) => tbl.status.equals('Active'))).get();
 
   Future<Supplier> insertSupplier(SuppliersCompanion supplier) async {
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final id = const Uuid().v4();
     final supplierWithId = supplier.copyWith(id: Value(id));
     await into(suppliers).insert(supplierWithId);
     return await getSupplierById(id) ??

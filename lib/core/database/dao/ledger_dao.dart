@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import '../tables/ledger_transactions_table.dart';
 import '../app_database.dart';
@@ -74,7 +75,7 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
   ) async {
     final id = transaction.id.present
         ? transaction.id.value
-        : DateTime.now().millisecondsSinceEpoch.toString();
+        : const Uuid().v4();
     final transactionWithId = transaction.copyWith(id: Value(id));
     await into(ledgerTransactions).insert(transactionWithId);
     return await getTransactionById(id) ??

@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 import '../app_database.dart';
 import '../tables/audit_log_table.dart';
 
@@ -18,7 +19,7 @@ class AuditDao extends DatabaseAccessor<AppDatabase> with _$AuditDaoMixin {
   }) async {
     await into(auditLog).insert(
       AuditLogCompanion.insert(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: const Uuid().v4(),
         userId: Value(userId),
         action: action,
         tableNameField: tableName,

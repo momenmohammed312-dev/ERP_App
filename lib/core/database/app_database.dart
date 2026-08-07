@@ -1,6 +1,7 @@
 import 'dart:developer';
 
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:pos_offline_desktop/core/database/dao/customer_container_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/customer_dao.dart';
@@ -164,7 +165,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 52;
+  int get schemaVersion => 54;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -254,6 +255,17 @@ class AppDatabase extends _$AppDatabase {
       // 4n. Schema v52 — cash_sessions.settlement_amount (day-close settlement)
       if (from < 52) {
         await _runV52Migrations(m);
+      }
+
+      // 4o. Schema v53 — multi-device sync foundation (sync_id/created_at/updated_at
+      // columns on products/invoices/invoice_items + sync_queue table)
+      if (from < 53) {
+        await _runV53Migrations(m);
+      }
+
+      // 4p. Schema v54 — sync_queue.device_name (enqueue-time device marker)
+      if (from < 54) {
+        await _runV54Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -1347,6 +1359,16 @@ class AppDatabase extends _$AppDatabase {
       // Expenses extra columns
       {'table': 'expenses', 'column': 'user_id', 'type': 'TEXT'},
       {'table': 'expenses', 'column': 'day_id', 'type': 'TEXT'},
+      // Multi-device sync columns (v53)
+      {'table': 'products', 'column': 'sync_id', 'type': 'TEXT'},
+      {'table': 'products', 'column': 'created_at', 'type': 'INTEGER'},
+      {'table': 'products', 'column': 'updated_at', 'type': 'INTEGER'},
+      {'table': 'invoices', 'column': 'sync_id', 'type': 'TEXT'},
+      {'table': 'invoices', 'column': 'created_at', 'type': 'INTEGER'},
+      {'table': 'invoices', 'column': 'updated_at', 'type': 'INTEGER'},
+      {'table': 'invoice_items', 'column': 'sync_id', 'type': 'TEXT'},
+      {'table': 'invoice_items', 'column': 'created_at', 'type': 'INTEGER'},
+      {'table': 'invoice_items', 'column': 'updated_at', 'type': 'INTEGER'},
     ];
 
     for (final check in columnChecks) {
@@ -1359,6 +1381,10 @@ class AppDatabase extends _$AppDatabase {
         // Ignore — column already exists
       }
     }
+
+    // Multi-device sync outbox table (idempotent safety net, same columns as
+    // SyncQueue class in tables/sync_queue_table.dart).
+    await _ensureSyncQueueTableIfMissing();
   }
 
   Future<void> _ensureCriticalColumnsInBeforeOpen() async {
@@ -1390,6 +1416,16 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'expenses', 'column': 'day_id', 'type': 'TEXT'},
       // Cash session day-close settlement (v52)
       {'table': 'cash_sessions', 'column': 'settlement_amount', 'type': 'REAL'},
+      // Multi-device sync columns (v53)
+      {'table': 'products', 'column': 'sync_id', 'type': 'TEXT'},
+      {'table': 'products', 'column': 'created_at', 'type': 'INTEGER'},
+      {'table': 'products', 'column': 'updated_at', 'type': 'INTEGER'},
+      {'table': 'invoices', 'column': 'sync_id', 'type': 'TEXT'},
+      {'table': 'invoices', 'column': 'created_at', 'type': 'INTEGER'},
+      {'table': 'invoices', 'column': 'updated_at', 'type': 'INTEGER'},
+      {'table': 'invoice_items', 'column': 'sync_id', 'type': 'TEXT'},
+      {'table': 'invoice_items', 'column': 'created_at', 'type': 'INTEGER'},
+      {'table': 'invoice_items', 'column': 'updated_at', 'type': 'INTEGER'},
     ];
     for (final check in columnChecks) {
       try {
@@ -1397,6 +1433,53 @@ class AppDatabase extends _$AppDatabase {
           'ALTER TABLE ${check['table']} ADD COLUMN ${check['column']} ${check['type']}',
         );
       } catch (_) {}
+    }
+
+    await _ensureSyncQueueTableIfMissing();
+  }
+
+  /// Idempotent safety net that creates the sync outbox table when it is
+  /// missing (mirrors the SyncQueue class in tables/sync_queue_table.dart,
+  /// including the v54 `device_name` column). Also backfills sync ids for any
+  /// rows that were left without them by an interrupted v53 migration.
+  Future<void> _ensureSyncQueueTableIfMissing() async {
+    try {
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS sync_queue (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          table_ref TEXT NOT NULL,
+          record_sync_id TEXT NOT NULL,
+          operation TEXT NOT NULL,
+          payload_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
+          synced_at INTEGER,
+          retry_count INTEGER NOT NULL DEFAULT 0,
+          last_error TEXT,
+          device_name TEXT
+        )
+      ''');
+    } catch (e) {
+      log('Ensure sync_queue table warning: $e');
+    }
+
+    for (final table in const ['products', 'invoices', 'invoice_items']) {
+      try {
+        final ids =
+            await customSelect('SELECT id FROM $table WHERE sync_id IS NULL').get();
+        for (final row in ids) {
+          final id = row.data['id'];
+          if (id is! int) continue;
+          await customUpdate(
+            'UPDATE $table SET sync_id = ? WHERE id = ?',
+            variables: [
+              Variable.withString(const Uuid().v4()),
+              Variable.withInt(id),
+            ],
+          );
+        }
+      } catch (e) {
+        log('Ensure sync_id backfill warning for $table: $e');
+      }
     }
   }
 
@@ -1676,6 +1759,95 @@ class AppDatabase extends _$AppDatabase {
     } catch (e) {
       await _logMigrationStep(52, 'cash_sessions_settlement_amount', 'failed', error: e.toString());
       rethrow;
+    }
+  }
+
+  Future<void> _runV53Migrations(Migrator m) async {
+    await _logMigrationStep(53, 'sync_columns_queue', 'started');
+    try {
+      // 1. Sync columns on the three int-PK tables (idempotent per column).
+      for (final entry in const [
+        ('products', 'sync_id', 'TEXT'),
+        ('products', 'created_at', 'INTEGER'),
+        ('products', 'updated_at', 'INTEGER'),
+        ('invoices', 'sync_id', 'TEXT'),
+        ('invoices', 'created_at', 'INTEGER'),
+        ('invoices', 'updated_at', 'INTEGER'),
+        ('invoice_items', 'sync_id', 'TEXT'),
+        ('invoice_items', 'created_at', 'INTEGER'),
+        ('invoice_items', 'updated_at', 'INTEGER'),
+      ]) {
+        try {
+          await customStatement(
+            'ALTER TABLE ${entry.$1} ADD COLUMN ${entry.$2} ${entry.$3}',
+          );
+          log('v53: Added ${entry.$2} to ${entry.$1}');
+        } catch (e) {
+          log('v53: ${entry.$1}.${entry.$2} likely already exists: $e');
+        }
+      }
+
+      // 2. Outbox queue table (current schema, incl. device_name from v54 —
+      //    the v54 step is a no-op when the column already exists here).
+      try {
+        await m.createTable(syncQueue);
+        log('v53: Created sync_queue table');
+      } catch (e) {
+        log('v53: sync_queue table likely already exists: $e');
+      }
+
+      // 3. Backfill sync ids + timestamps for existing rows (fresh UUID per row).
+      await _backfillSyncColumns('products');
+      await _backfillSyncColumns('invoices');
+      await _backfillSyncColumns('invoice_items');
+
+      await _logMigrationStep(53, 'sync_columns_queue', 'completed');
+    } catch (e) {
+      await _logMigrationStep(53, 'sync_columns_queue', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> _runV54Migrations(Migrator m) async {
+    await _logMigrationStep(54, 'sync_queue_device_name', 'started');
+    try {
+      try {
+        await m.addColumn(syncQueue, syncQueue.deviceName);
+        log('v54: Added sync_queue.device_name column');
+      } catch (e) {
+        log('v54: device_name column likely already exists: $e');
+      }
+      await _logMigrationStep(54, 'sync_queue_device_name', 'completed');
+    } catch (e) {
+      await _logMigrationStep(54, 'sync_queue_device_name', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Backfills `sync_id` (a fresh UUID per row) plus `created_at`/`updated_at`
+  /// for every existing row of a sync-enabled table that is still missing them.
+  Future<void> _backfillSyncColumns(String table) async {
+    try {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await customStatement(
+        'UPDATE $table SET created_at = $now, updated_at = $now '
+        'WHERE created_at IS NULL OR updated_at IS NULL',
+      );
+      final ids = await customSelect('SELECT id FROM $table').get();
+      for (final row in ids) {
+        final id = row.data['id'];
+        if (id is! int) continue;
+        await customUpdate(
+          'UPDATE $table SET sync_id = ? WHERE id = ?',
+          variables: [
+            Variable.withString(const Uuid().v4()),
+            Variable.withInt(id),
+          ],
+        );
+      }
+      log('v53: Backfilled sync_id for $table (${ids.length} rows)');
+    } catch (e) {
+      log('v53: Backfill $table warning: $e');
     }
   }
 }

@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 import '../app_database.dart';
 import '../tables/sales_returns_table.dart';
 
@@ -103,7 +104,7 @@ class SalesReturnsDao extends DatabaseAccessor<AppDatabase>
         final returnAmount = returnCompanion.totalAmount.value;
         await db.ledgerDao.insertTransaction(
           LedgerTransactionsCompanion.insert(
-            id: '${now.millisecondsSinceEpoch}_ret_$returnId',
+            id: '${const Uuid().v4()}_ret_$returnId',
             entityType: 'Customer',
             refId: invoice.customerId!,
             date: now,

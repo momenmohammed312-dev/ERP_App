@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import '../tables/expenses_table.dart';
 import '../app_database.dart';
@@ -28,7 +29,7 @@ class ExpenseDao extends DatabaseAccessor<AppDatabase> with _$ExpenseDaoMixin {
           .get();
 
   Future<Expense> insertExpense(ExpensesCompanion expense) async {
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final id = const Uuid().v4();
     final expenseWithId = expense.copyWith(id: Value(id));
     await into(expenses).insert(expenseWithId);
     return await getExpenseById(id) ??

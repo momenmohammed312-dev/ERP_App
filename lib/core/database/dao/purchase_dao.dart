@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 import '../app_database.dart';
 import '../tables/tables.dart';
 
@@ -96,7 +97,7 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
   }) async {
     return transaction(() async {
       // Insert purchase
-      final purchaseId = DateTime.now().millisecondsSinceEpoch.toString();
+      final purchaseId = const Uuid().v4();
       await into(purchases).insert(
         PurchasesCompanion(
           id: Value(purchaseId),
