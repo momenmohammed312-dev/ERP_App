@@ -61,6 +61,16 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     }
   }
 
+  Future<void> updateProductBarcode(int id, String barcode) async {
+    await (update(products)..where((p) => p.id.equals(id))).write(
+      ProductsCompanion(
+        barcode: Value(barcode),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    await _enqueueProduct(id, null, 'update');
+  }
+
   /// Enqueues a product for sync. Re-reads the row to build a payload that only
   /// references Supabase columns (snake_case), never the local int `id`.
   /// Any failure here is caught so it never breaks the local write.

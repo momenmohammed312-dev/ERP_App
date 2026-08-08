@@ -1,9 +1,19 @@
 class LicenseConfig {
-  // SECURITY: Secret key moved to AppSecrets
   static const String secretKey = String.fromEnvironment(
     'LICENSE_SECRET_KEY',
     defaultValue: 'CHANGE_ME',
   );
+
+  /// Throws if the release build still has the insecure default key.
+  static void assertSecretKeyConfigured() {
+    if (secretKey == 'CHANGE_ME') {
+      throw StateError(
+        "LICENSE_SECRET_KEY not injected via --dart-define. "
+        "Refusing to run with insecure 'CHANGE_ME' default in release.",
+      );
+    }
+  }
+
 
   /// When true, runs in fully-free mode — no license activation required.
   /// Set via: --dart-define=FREE_VERSION=true

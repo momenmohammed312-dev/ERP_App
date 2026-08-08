@@ -1,24 +1,36 @@
 // أداة لتحويل النص العربي إلى صورة قبل وضعه في الـPDF.
 //
-// المشكلة: مكتبة `pdf` ما بتدعـمshaping العربية — الحروف بتطلعة متقطعة
+// المشكلة: مكتبة `pdf` ما بتدعـم shaping العربية — الحروف بتطلعة متقطعة
 // واتجاه RTL مش مضبوط باستخدام `pw.Text` العادي.
 // الحل: نرسم النص بـ Flutter canvas (اللي بيدعم العربية الـproper) ونحوله
 // لـ PNG bytes، وبعدين نحطه كـ `pw.Image` في الـPDF.
 //
-// الطريقة دي مستوحاة من thermal_unicode_print / unified_esc_pos_printer /
-// printer_label اللي بيعملوا نفس الحاجة للطباعة الحرارية.
+// ملاحظة: تم إزالة _fontFamily المخصص عشان في بيئة الـRelease بيفشل التحميل
+// ويرجع fallback فارغ — font النظام الافتراضي بيدعم Arabic shaping صح.
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
-class ArabicTextRasterizer {
-  static const _fontFamily = 'NotoSansArabic';
+class RasterizedText {
+  final Uint8List bytes;
+  /// العرض الفعلي للصورة المولّدة بالنقاط (points) قبل الـpixelRatio
+  final double widthPts;
+  /// الارتفاع الفعلي للصورة المولّدة بالنقاط (points) قبل الـpixelRatio
+  final double heightPts;
 
-  /// يحوّل نص (عربي أو إنجليزي) إلى PNG bytes يقدر يدخل في PDF.
+  const RasterizedText({
+    required this.bytes,
+    required this.widthPts,
+    required this.heightPts,
+  });
+}
+
+class ArabicTextRasterizer {
+  /// يحوّل نص (عربي أو إنجليزي) إلى PNG bytes مع أبعاد الصورة الفعلية.
   ///
   /// [pixelRatio] يتحكم في جودة الصورة — 2.0 مناسب لطابعات الملصقات (203 DPI).
   /// [maxWidth] أقصى عرض بالنقاط (points) — لو النص أطول بيتكسر على سطر تاني.
-  static Future<Uint8List> render({
+  static Future<RasterizedText> render({
     required String text,
     double fontSize = 12,
     FontWeight fontWeight = FontWeight.normal,
@@ -35,7 +47,7 @@ class ArabicTextRasterizer {
           fontSize: fontSize,
           fontWeight: fontWeight,
           color: Colors.black,
-          fontFamily: _fontFamily,
+          // بدون fontFamily — يستخدم font النظام اللي بيدعم العربية صح في Windows
         ),
       ),
       textDirection: direction,
@@ -44,24 +56,31 @@ class ArabicTextRasterizer {
       ellipsis: '…',
     )..layout(maxWidth: maxWidth);
 
-    final w = (textPainter.width + padding * 2) * pixelRatio;
-    final h = (textPainter.height + padding * 2) * pixelRatio;
+    final widthPts = textPainter.width + padding * 2;
+    final heightPts = textPainter.height + padding * 2;
+
+    final wPx = (widthPts * pixelRatio).ceil();
+    final hPx = (heightPts * pixelRatio).ceil();
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-
     canvas.scale(pixelRatio);
 
+    // خلفية بيضاء
     canvas.drawRect(
-      Rect.fromLTWH(0, 0, w / pixelRatio, h / pixelRatio),
+      Rect.fromLTWH(0, 0, widthPts, heightPts),
       Paint()..color = Colors.white,
     );
 
     textPainter.paint(canvas, Offset(padding, padding));
 
     final picture = recorder.endRecording();
-    final image = await picture.toImage(w.ceil(), h.ceil());
+    final image = await picture.toImage(wPx, hPx);
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData!.buffer.asUint8List();
+    return RasterizedText(
+      bytes: byteData!.buffer.asUint8List(),
+      widthPts: widthPts,
+      heightPts: heightPts,
+    );
   }
 }

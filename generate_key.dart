@@ -1,11 +1,23 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:crypto/crypto.dart';
+
+const String secretKey = String.fromEnvironment(
+  'LICENSE_SECRET_KEY',
+  defaultValue: 'CHANGE_ME',
+);
 
 // Copying the encryption logic from the generator
 class Generator {
-  static const String _secretKey = 'POS-SaaS-2026-PROD-SECURE-K3Y-F0R-L1C3NS3!';
-
   static String generate(String deviceId) {
+    if (secretKey == 'CHANGE_ME') {
+      stderr.writeln(
+        "LICENSE_SECRET_KEY is 'CHANGE_ME'. "
+        "Run with: dart --define=LICENSE_SECRET_KEY=... generate_key.dart"
+      );
+      exit(1);
+    }
+
     final now = DateTime.now();
     final expiry = now.add(Duration(days: 365));
 
@@ -31,7 +43,7 @@ class Generator {
     final jsonString = jsonEncode(licenseData);
 
     // Manual encryption implementation for the script
-    final keyBytes = md5.convert(utf8.encode(_secretKey)).bytes;
+    final keyBytes = md5.convert(utf8.encode(secretKey)).bytes;
     // We don't have the 'encrypt' package in this bare script context, so I'll just use a direct calculation or a simple mock if I can't run it.
     // Actually, I should just use the existing file and run it if possible.
 

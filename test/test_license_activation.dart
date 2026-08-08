@@ -1,8 +1,22 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:crypto/crypto.dart';
+
+const String secretKey = String.fromEnvironment(
+  'LICENSE_SECRET_KEY',
+  defaultValue: 'CHANGE_ME',
+);
 
 // License activation script for testing
 void main() async {
+  if (secretKey == 'CHANGE_ME') {
+    stderr.writeln(
+      "LICENSE_SECRET_KEY is 'CHANGE_ME'. "
+      "Run with: dart --define=LICENSE_SECRET_KEY=... test/test_license_activation.dart"
+    );
+    exit(1);
+  }
+
   print('=================================');
   print('   LICENSE ACTIVATION FOR TESTING');
   print('=================================\n');
@@ -36,12 +50,10 @@ void main() async {
     'company_name': 'Test Company',
     'contact_email': 'test@example.com',
     'issue_date': DateTime.now().toIso8601String(),
-    'type': 'enterprise',
-  };
+   'type': 'enterprise',
+   };
 
-  const secretKey = 'POS-SaaS-2026-PROD-SECURE-K3Y-F0R-L1C3NS3!';
-
-  final jsonString = jsonEncode(licenseData);
+   final jsonString = jsonEncode(licenseData);
   final bytes = utf8.encode(jsonString);
   final encoded = base64.encode(bytes);
   final hmacBytes = utf8.encode(secretKey);

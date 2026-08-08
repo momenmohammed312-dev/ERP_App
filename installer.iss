@@ -56,6 +56,46 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 Type: filesandordirs; Name: "{app}\data"
 
 [Code]
+// Verifies that all required plugin DLLs exist next to the installed exe.
+// Mirrors the list used by the startup self-check in windows/runner/main.cpp.
+function VerifyInstalledFiles(): Boolean;
+var
+  RequiredDlls: array of String;
+  I: Integer;
+  AppDir: String;
+begin
+  Result := True;
+  AppDir := ExpandConstant('{app}');
+
+  RequiredDlls := [
+    'flutter_windows.dll',
+    'app_links_plugin.dll',
+    'connectivity_plus_plugin.dll',
+    'desktop_window_plugin.dll',
+    'flutter_secure_storage_windows_plugin.dll',
+    'permission_handler_windows_plugin.dll',
+    'platform_device_id_windows_plugin.dll',
+    'printing_plugin.dll',
+    'screen_retriever_windows_plugin.dll',
+    'share_plus_plugin.dll',
+    'sqlite3_flutter_libs_plugin.dll',
+    'url_launcher_windows_plugin.dll',
+    'window_manager_plugin.dll'
+  ];
+
+  for I := 0 to GetArrayLength(RequiredDlls) - 1 do
+  begin
+    if not FileExists(AppDir + '\' + RequiredDlls[I]) then
+    begin
+      Result := False;
+      Log('Missing required file after install: ' + RequiredDlls[I]);
+    end;
+  end;
+
+  if not FileExists(AppDir + '\{#MyAppExeName}') then
+    Result := False;
+end;
+
 function InitializeSetup(): Boolean;
 begin
   if not IsWin64 then
@@ -74,6 +114,16 @@ begin
     RegWriteStringValue(HKLM, 'SOFTWARE\{#MyAppName}', 'InstallPath', ExpandConstant('{app}'));
     RegWriteStringValue(HKLM, 'SOFTWARE\{#MyAppName}', 'Version', '{#MyAppVersion}');
     RegWriteStringValue(HKLM, 'SOFTWARE\{#MyAppName}', 'Publisher', '{#MyAppPublisher}');
+
+    // Verify all required plugin DLLs were actually installed.
+    // A missing DLL (e.g. connectivity_plus_plugin.dll) makes the app fail
+    // at the customer side, so detect it during install instead.
+    if not VerifyInstalledFiles then
+      MsgBox('تحذير: بعض ملفات البرنامج لم يتم تثبيتها بنجاح.' + #13#10 +
+             'Warning: some required program files were NOT installed correctly.' + #13#10 + #13#10 +
+             'يرجى إعادة تشغيل المثبّت، وإذا استمرت المشكلة قم بفحص إعدادات مضاد الفيروسات.' + #13#10 +
+             'Please run the installer again. If the problem persists, check your antivirus settings.',
+             mbError, MB_OK);
   end;
 end;
 

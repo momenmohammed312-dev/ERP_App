@@ -1,9 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 
-const String secretKey = 'CHANGE_ME';
+const String secretKey = String.fromEnvironment(
+  'LICENSE_SECRET_KEY',
+  defaultValue: 'CHANGE_ME',
+);
 
 String _encrypt(String plainText) {
   final keyBytes = md5.convert(utf8.encode(secretKey)).bytes;
@@ -23,6 +27,14 @@ String _generateSignature(String data) {
 }
 
 void main() {
+  if (secretKey == 'CHANGE_ME') {
+    stderr.writeln(
+      "LICENSE_SECRET_KEY is 'CHANGE_ME'. "
+      "Run with: dart --define=LICENSE_SECRET_KEY=... tools/gen_year_license_change_me.dart"
+    );
+    exit(1);
+  }
+
   final now = DateTime.now();
   final expiry = now.add(const Duration(days: 365));
 

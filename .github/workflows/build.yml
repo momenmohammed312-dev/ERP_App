@@ -21,8 +21,22 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Fail if secret key not configured
+        run: |
+          if "%LICENSE_SECRET_KEY%"=="CHANGE_ME" exit /b 1
+        shell: cmd
+
       - name: Build Windows Release
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=LICENSE_SECRET_KEY=${{ secrets.LICENSE_SECRET_KEY }} --dart-define=TRIAL_LICENSE_KEY=${{ secrets.TRIAL_LICENSE_KEY }}
+
+      - name: Verify build output (all plugin DLLs present)
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts/verify_windows_build.ps1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Verification FAILED - missing build outputs. Stopping before packaging."
+            exit 1
+          }
 
       - name: Create Installer
         run: iscc installer.iss

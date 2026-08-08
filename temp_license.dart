@@ -1,11 +1,22 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 
-const String secretKey = 'POS-SaaS-2026-PROD-SECURE-K3Y-F0R-L1C3NS3!';
+const String secretKey = String.fromEnvironment(
+  'LICENSE_SECRET_KEY',
+  defaultValue: 'CHANGE_ME',
+);
 
 String _encrypt(String plainText) {
+  if (secretKey == 'CHANGE_ME') {
+    stderr.writeln(
+      "LICENSE_SECRET_KEY is 'CHANGE_ME'. "
+      "Run with: dart --define=LICENSE_SECRET_KEY=... temp_license.dart"
+    );
+    exit(1);
+  }
   final keyBytes = md5.convert(utf8.encode(secretKey)).bytes;
   final key = encrypt_pkg.Key(Uint8List.fromList(keyBytes));
   final iv = encrypt_pkg.IV.fromLength(16);

@@ -4,7 +4,10 @@ import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 
 class POSLicenseGenerator {
-  static const String _secretKey = 'POS-SaaS-2026-PROD-SECURE-K3Y-F0R-L1C3NS3!';
+  static const String _secretKey = String.fromEnvironment(
+    'LICENSE_SECRET_KEY',
+    defaultValue: 'CHANGE_ME',
+  );
 
   /// Device-bound license (for specific hardware ID).
   static String generateLicenseKey({

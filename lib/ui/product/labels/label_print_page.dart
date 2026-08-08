@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:barcode_widget/barcode_widget.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/label_print_service.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
 
 class LabelPrintPage extends StatefulWidget {
@@ -22,12 +24,13 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   final _companyCtrl = TextEditingController();
   bool _showPrice = true;
   bool _loading = true;
-  String _selectedPreset = '50×30mm';
-  double _customWidth = 50;
-  double _customHeight = 30;
+  String _selectedPreset = '1.5×1.0in (38×25mm)';
+  double _customWidth = 38.1;
+  double _customHeight = 25.4;
   bool _customSize = false;
 
   static const _presets = {
+    '1.5×1.0in (38×25mm)': [38.1, 25.4],
     '50×30mm': [50.0, 30.0],
     '50×50mm': [50.0, 50.0],
     '70×40mm': [70.0, 40.0],
@@ -49,7 +52,12 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
       _products = products;
       for (final p in products) {
         _copies[p.id] = 1;
-        _barcodeCtrls[p.id] = TextEditingController(text: p.barcode ?? '');
+        String barcodeVal = p.barcode?.trim() ?? '';
+        if (barcodeVal.isEmpty) {
+          // توليد باركود تلقائي فريد يعتمد على معرف المنتج (مثلاً 10000000 + المعرف)
+          barcodeVal = '${10000000 + p.id}';
+        }
+        _barcodeCtrls[p.id] = TextEditingController(text: barcodeVal);
       }
       _loading = false;
     });
@@ -92,7 +100,69 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
       barcodeData[p.id] = _barcodeCtrls[p.id]?.text.trim() ?? '';
     }
 
+    // إظهار مؤشر التحميل أثناء التجهيز
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text('جاري تجهيز الملصقات للطباعة...'),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // حفظ الباركودات الجديدة أو المعدلة في قاعدة البيانات لتصبح قابلة للمسح والتعرف عليها في الكاشير
+      for (final p in selected) {
+        final inputBarcode = _barcodeCtrls[p.id]?.text.trim() ?? '';
+        if (inputBarcode.isNotEmpty && inputBarcode != p.barcode) {
+          final existing = await widget.db.productDao.getProductByBarcode(inputBarcode);
+          if (existing == null) {
+            await widget.db.productDao.updateProductBarcode(p.id, inputBarcode);
+          }
+        }
+      }
+
+      await LabelPrintService.printProductLabels(
+        products: selected,
+        copiesPerProduct: copies,
+        companyName: _companyCtrl.text,
+        showPrice: _showPrice,
+        barcodeData: barcodeData,
+        widthMm: _currentWidth,
+        heightMm: _currentHeight,
+      );
+      if (mounted) {
+        Navigator.of(context).pop(); // إغلاق مؤشر التحميل
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop(); // إغلاق مؤشر التحميل
+      }
+      debugPrint('Label print error: $e');
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('خطأ في الطباعة'),
+          content: Text('تعذر الطباعة. تأكد من توصيل الطابعة والمحاولة مرة أخرى.\n\n$e'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('حسنًا'),
+            ),
+          ],
+        ),
+      );
     }
+  }
 
   @override
   Widget build(BuildContext context) {

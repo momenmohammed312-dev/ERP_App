@@ -6,8 +6,10 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 
-// Copy these values from lib/config/license_config.dart
-const String secretKey = 'POS-SaaS-2026-PROD-SECURE-K3Y-F0R-L1C3NS3!';
+const String secretKey = String.fromEnvironment(
+  'LICENSE_SECRET_KEY',
+  defaultValue: 'CHANGE_ME',
+);
 
 // License duration configurations
 const Map<String, Map<String, dynamic>> licenseDurations = {
@@ -109,6 +111,14 @@ String _generateSignature(String data) {
 }
 
 void main(List<String> args) async {
+  if (secretKey == 'CHANGE_ME') {
+    stderr.writeln(
+      "LICENSE_SECRET_KEY is 'CHANGE_ME'. "
+      "Run with: dart --define=LICENSE_SECRET_KEY=... tools/license_generator.dart"
+    );
+    exit(1);
+  }
+
   // Support non-interactive mode: --trial
   final isAutoTrial = args.contains('--trial');
 

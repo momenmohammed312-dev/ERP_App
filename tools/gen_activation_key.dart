@@ -5,27 +5,32 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 
+const String secretKey = String.fromEnvironment(
+  'LICENSE_SECRET_KEY',
+  defaultValue: 'CHANGE_ME',
+);
+
 const String deviceFingerprint =
     '35fe7a40a81de4830f557fdf783b2f75ca9e9369942ad366306a8cf9dd568181';
 
-String _encrypt(String plainText, String secretKey) {
-  final keyBytes = md5.convert(utf8.encode(secretKey)).bytes;
-  final key = encrypt_pkg.Key(Uint8List.fromList(keyBytes));
+String _encrypt(String plainText, String key) {
+  final keyBytes = md5.convert(utf8.encode(key)).bytes;
+  final encKey = encrypt_pkg.Key(Uint8List.fromList(keyBytes));
   final iv = encrypt_pkg.IV(Uint8List(16));
   final encrypter = encrypt_pkg.Encrypter(
-    encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
+    encrypt_pkg.AES(encKey, mode: encrypt_pkg.AESMode.cbc),
   );
   final encrypted = encrypter.encrypt(plainText, iv: iv);
   return encrypted.base64;
 }
 
-String _signature(String data, String secretKey) {
-  final bytes = utf8.encode(data + secretKey);
+String _signature(String data, String key) {
+  final bytes = utf8.encode(data + key);
   final digest = sha256.convert(bytes);
   return digest.toString();
 }
 
-String generateKey(String secretKey, String device, String type, int days,
+String generateKey(String key, String device, String type, int days,
     List<String> features, int maxUsers) {
   final now = DateTime.now();
   final expiry = now.add(Duration(days: days));
@@ -42,14 +47,19 @@ String generateKey(String secretKey, String device, String type, int days,
     'version': '1.0',
   };
 
-  final encrypted = _encrypt(jsonEncode(data), secretKey);
-  return '$encrypted.${_signature(encrypted, secretKey)}';
+  final encrypted = _encrypt(jsonEncode(data), key);
+  return '$encrypted.${_signature(encrypted, key)}';
 }
 
 void main() {
-  const prodKey = 'POS-SaaS-2026-PROD-SECURE-K3Y-F0R-L1C3NS3!';
-  const defaultKey = 'CHANGE_ME';
-  const trialKey = 'CHANGE_ME';
+  if (secretKey == 'CHANGE_ME') {
+    stderr.writeln(
+      "LICENSE_SECRET_KEY is 'CHANGE_ME'. "
+      "Run with: dart --define=LICENSE_SECRET_KEY=... tools/gen_activation_key.dart"
+    );
+    exit(1);
+  }
+
   final allFeatures = [
     'cash_sales',
     'credit_sales',
@@ -66,29 +76,17 @@ void main() {
     'api_access',
   ];
 
-  print('===== ببصمة الجهاز الحالية =====');
+  print('===== بصمة الجهاز الحالية =====');
   print('Device: $deviceFingerprint\n');
 
-  // --- PROD key ---
-  final k1 = generateKey(prodKey, deviceFingerprint, 'professional', 365, allFeatures, 5);
-  print('--- Production key (POS-SaaS...) - Professional 1 year ---');
+  // Use unified secretKey for all variants
+  final k1 = generateKey(secretKey, deviceFingerprint, 'professional', 365, allFeatures, 5);
+  print('--- Production key - Professional 1 year ---');
   print(k1);
   print('');
 
-  // --- Default key ---
-  final k2 = generateKey(defaultKey, deviceFingerprint, 'professional', 365, allFeatures, 5);
-  print('--- Default key (CHANGE_ME) - Professional 1 year ---');
+  final k2 = generateKey(secretKey, 'UNBOUND', 'professional', 365, allFeatures, 5);
+  print('--- Floating (UNBOUND) - Production key - Professional 1 year ---');
   print(k2);
   print('');
-
-  // --- UNBOUND with prod key ---
-  final k3 = generateKey(prodKey, 'UNBOUND', 'professional', 365, allFeatures, 5);
-  print('--- Floating (UNBOUND) - Production key - Professional 1 year ---');
-  print(k3);
-  print('');
-
-  // --- UNBOUND with default key ---
-  final k4 = generateKey(defaultKey, 'UNBOUND', 'professional', 365, allFeatures, 5);
-  print('--- Floating (UNBOUND) - Default key (CHANGE_ME) - Professional 1 year ---');
-  print(k4);
 }

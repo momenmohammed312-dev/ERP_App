@@ -1,17 +1,22 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 
-const String secretKey = 'POS-SaaS-2026-PROD-SECURE-K3Y-F0R-L1C3NS3!';
+const String secretKey = String.fromEnvironment(
+  'LICENSE_SECRET_KEY',
+  defaultValue: 'CHANGE_ME',
+);
 
 String _encrypt(String plainText) {
   final keyBytes = md5.convert(utf8.encode(secretKey)).bytes;
   final key = encrypt_pkg.Key(Uint8List.fromList(keyBytes));
-  final iv = encrypt_pkg.IV(Uint8List(16));
+  final iv = encrypt_pkg.IV(Uint8List(16)); // 16 bytes of zeros
   final encrypter = encrypt_pkg.Encrypter(
     encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
   );
+
   final encrypted = encrypter.encrypt(plainText, iv: iv);
   return encrypted.base64;
 }
@@ -23,6 +28,14 @@ String _generateSignature(String data) {
 }
 
 void main() {
+  if (secretKey == 'CHANGE_ME') {
+    stderr.writeln(
+      "LICENSE_SECRET_KEY is 'CHANGE_ME'. "
+      "Run with: dart --define=LICENSE_SECRET_KEY=... tools/gen_year_license.dart"
+    );
+    exit(1);
+  }
+
   final now = DateTime.now();
   final expiry = now.add(const Duration(days: 365));
 
