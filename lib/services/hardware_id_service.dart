@@ -3,12 +3,10 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
-import 'package:platform_device_id/platform_device_id.dart';
 import '../core/utils/logger.dart';
 
 /// Generates a stable hardware fingerprint for the device.
-/// Uses Disk Serial (via PlatformDeviceId) as primary identifier,
-/// combined with device_info_plus for secondary signals.
+/// Uses device_info_plus signals combined into a stable identifier.
 class HardwareIdService {
   static String? _cachedId;
 
@@ -34,17 +32,7 @@ class HardwareIdService {
   static Future<String> _collectHardwareSignals() async {
     final parts = <String>[];
 
-    // 1. Disk Serial via PlatformDeviceId (most stable)
-    try {
-      final diskId = await PlatformDeviceId.getDeviceId;
-      if (diskId != null && diskId.isNotEmpty) {
-        parts.add('disk:$diskId');
-      }
-    } catch (e) {
-      AppLogger.w('PlatformDeviceId unavailable: $e');
-    }
-
-    // 2. Device info signals
+    // Device info signals
     if (!kIsWeb && Platform.isWindows) {
       try {
         final deviceInfo = DeviceInfoPlugin();
@@ -55,7 +43,7 @@ class HardwareIdService {
       } catch (e) {
         AppLogger.w('DeviceInfo unavailable: $e');
       }
-    } else if (Platform.isLinux) {
+    } else if (!kIsWeb && Platform.isLinux) {
       try {
         final deviceInfo = DeviceInfoPlugin();
         final linux = await deviceInfo.linuxInfo;
@@ -64,7 +52,7 @@ class HardwareIdService {
       } catch (e) {
         AppLogger.w('DeviceInfo unavailable: $e');
       }
-    } else if (Platform.isMacOS) {
+    } else if (!kIsWeb && Platform.isMacOS) {
       try {
         final deviceInfo = DeviceInfoPlugin();
         final mac = await deviceInfo.macOsInfo;
@@ -72,6 +60,25 @@ class HardwareIdService {
         parts.add('model:${mac.model}');
       } catch (e) {
         AppLogger.w('DeviceInfo unavailable: $e');
+      }
+    } else {
+      // Android / iOS / web fallback signals
+      try {
+        final deviceInfo = DeviceInfoPlugin();
+        final android = await deviceInfo.androidInfo;
+        parts.add('androidId:${android.id}');
+        parts.add('board:${android.board}');
+        parts.add('model:${android.model}');
+      } catch (e) {
+        AppLogger.w('AndroidInfo unavailable: $e');
+      }
+      try {
+        final deviceInfo = DeviceInfoPlugin();
+        final ios = await deviceInfo.iosInfo;
+        parts.add('identifier:${ios.identifierForVendor}');
+        parts.add('model:${ios.utsname.machine}');
+      } catch (e) {
+        AppLogger.w('IosInfo unavailable: $e');
       }
     }
 
