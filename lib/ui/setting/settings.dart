@@ -35,6 +35,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _footerController = TextEditingController();
   final _locationIdController = TextEditingController();
   String _lastSyncedText = 'لم تتم المزامنة بعد';
+  String _lastPeriodicRunText = 'لم تتم بعد';
   int _pendingCount = 0;
   bool _syncing = false;
 
@@ -69,6 +70,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
 
     _loadSyncState();
+
+    // Live-update the "آخر مزامنة تلقائية" label whenever the periodic timer
+    // fires, with no manual refresh or restart needed. Same syncServiceProvider
+    // mechanism the pending-count uses.
+    ref.read(syncServiceProvider).lastPeriodicRunAt.addListener(_onPeriodicRun);
+  }
+
+  void _onPeriodicRun() {
+    final last = ref.read(syncServiceProvider).lastPeriodicRunAt.value;
+    if (!mounted) return;
+    setState(() {
+      _lastPeriodicRunText = last != null
+          ? 'آخر مزامنة تلقائية: ${last.toLocal()}'
+          : 'لم تتم بعد';
+    });
   }
 
   Future<void> _loadSyncState() async {
@@ -93,6 +109,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _taxController.dispose();
     _footerController.dispose();
     _locationIdController.dispose();
+    ref.read(syncServiceProvider).lastPeriodicRunAt.removeListener(_onPeriodicRun);
     super.dispose();
   }
 
@@ -551,6 +568,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const Gap(10),
         Text(
           '$_lastSyncedText  —  $_pendingCount قيد الانتظار',
+          style: TextStyle(color: subTextColor, fontSize: 13),
+        ),
+        const Gap(4),
+        Text(
+          _lastPeriodicRunText,
           style: TextStyle(color: subTextColor, fontSize: 13),
         ),
       ],

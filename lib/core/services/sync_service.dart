@@ -40,6 +40,11 @@ class SyncService {
   Timer? _timer;
   bool _started = false;
 
+  /// Latest time the periodic timer fired and started a sync pass. Set inside
+  /// the `Timer.periodic` callback, so the settings UI can react live to
+  /// background syncs without a manual refresh.
+  final ValueNotifier<DateTime?> lastPeriodicRunAt = ValueNotifier<DateTime?>(null);
+
   static const String _supabaseUrl =
       String.fromEnvironment('SUPABASE_URL');
   static const String _supabaseAnonKey =
@@ -67,6 +72,7 @@ class SyncService {
   /// Initializes the Supabase client. Safe to call when unconfigured — the
   /// placeholder keeps the app from crashing, but nothing will ever sync.
   Future<void> initialize() async {
+    debugPrint('[SyncService] initialized, supabaseUrl configured: $_configured');
     await Supabase.initialize(
       url: _configured ? _supabaseUrl : _placeholderUrl,
       publishableKey: _configured ? _supabaseAnonKey : _placeholderAnonKey,
@@ -83,7 +89,11 @@ class SyncService {
     }
 
     final pending = await _queueDao.getPending(limit: 50);
-    if (pending.isEmpty) return const SyncSummary();
+    debugPrint('[SyncService] syncNow started, pending items: ${pending.length}');
+    if (pending.isEmpty) {
+      debugPrint('[SyncService] syncNow finished — synced: 0, failed: 0, skipped(offline): false');
+      return const SyncSummary();
+    }
 
     final locationId = await SettingsService.getDeviceLocationId();
     var synced = 0;
@@ -94,6 +104,7 @@ class SyncService {
       try {
         payload = jsonDecode(row.payloadJson) as Map<String, dynamic>;
       } catch (e) {
+        debugPrint('[SyncService] item failed — table: ${row.tableRef}, recordSyncId: ${row.recordSyncId}, error: $e');
         await _queueDao.markFailed(row.id, 'invalid json: $e');
         failed++;
         continue;
@@ -122,6 +133,7 @@ class SyncService {
         await _queueDao.markSynced(row.id);
         synced++;
       } catch (e) {
+        debugPrint('[SyncService] item failed — table: ${row.tableRef}, recordSyncId: ${row.recordSyncId}, error: $e');
         await _queueDao.markFailed(row.id, e.toString());
         failed++;
       }
@@ -130,6 +142,7 @@ class SyncService {
     if (synced > 0) {
       await SettingsService.setLastSyncedAt(DateTime.now());
     }
+    debugPrint('[SyncService] syncNow finished — synced: $synced, failed: $failed, skipped(offline): false');
     return SyncSummary(synced: synced, failed: failed);
   }
 
@@ -140,7 +153,10 @@ class SyncService {
   void startPeriodicSync({Duration interval = const Duration(minutes: 3)}) {
     if (_started || !_configured) return;
     _started = true;
+    debugPrint('[SyncService] periodic sync timer started, interval: 3 minutes');
     _timer ??= Timer.periodic(interval, (_) async {
+      debugPrint('[SyncService] periodic sync triggered at ${DateTime.now()}');
+      lastPeriodicRunAt.value = DateTime.now();
       try {
         await syncNow();
       } catch (e) {
