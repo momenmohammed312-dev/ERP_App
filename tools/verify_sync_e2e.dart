@@ -128,6 +128,156 @@ void main() {
     }
   });
 
+  test('VERIFICATION: stock movement delta decrements Supabase stock_levels', () async {
+    // Give the device a known location so the StockLevels row created by the
+    // RPC uses a location we can filter on. (syncNow() injects this id into
+    // every payload; the stock_delta RPC receives it as its `location_id`.
+    const testLocation = 'e2e-test-location';
+    SharedPreferences.setMockInitialValues({
+      'device_location_id': testLocation,
+    });
+
+    final testName = '__SYNC_STOCK_${DateTime.now().millisecondsSinceEpoch}__';
+    print('test row name: $testName');
+
+    // 1) Throwaway temp DB — never the real user database file.
+    final tempDir = Directory.systemTemp.createTempSync('sync_e2e_stock');
+    final db = AppDatabase(NativeDatabase(File('${tempDir.path}/sync_e2e_stock.sqlite')));
+    String? productSyncId; // hoisted so the finally-block cleanup can use it
+    try {
+      // 2) Product via the REAL ProductDao (stamps sync_id + enqueues rows).
+      final productId = await db.productDao.insertProduct(
+        ProductsCompanion.insert(
+          name: testName,
+          quantity: 10,
+          price: 5.0,
+          unit: const Value('kg'),
+        ),
+      );
+      final product = await db.productDao.getProductById(productId);
+      productSyncId = product!.syncId!;
+      final localProductSyncId = productSyncId;
+      print('local product inserted (id=$productId) sync_id=$localProductSyncId');
+
+      // 3) Real movement #1: sale of 5 units (negative delta) via the REAL
+      //    InventoryMovementDao → enqueues a stock_delta outbox row.
+      final now = DateTime.now();
+      await db.inventoryMovementDao.createMovementWithTimestamp(
+        productId: productId,
+        movementType: 'sale',
+        quantity: -5,
+        unitCost: 5.0,
+        totalValue: 25.0,
+        movementDate: now,
+        reference: 'REF-A',
+        referenceType: 'sale_invoice',
+        previousQuantity: 10,
+        newQuantity: 5,
+      );
+      final pendingIv = await db.syncQueueDao.getPendingCount();
+      expect(pendingIv, greaterThanOrEqualTo(2),
+          reason: 'product + movement must both be queued in sync_queue');
+
+      // 4) Real Supabase client + synchronous push.
+      await Supabase.initialize(url: _url, publishableKey: _anonKey);
+      final sync = SyncService(db);
+      await sync.initialize();
+      var summary = await sync.syncNow();
+      print('syncNow(1) summary: synced=${summary.synced} '
+          'failed=${summary.failed} skippedOffline=${summary.skippedOffline}');
+
+      // 5) Read the StockLevels row(s) the RPC wrote for this product/location.
+      final after5 = await Supabase.instance.client
+          .from('stock_levels')
+          .select()
+          .eq('product_sync_id', productSyncId);
+      print('stock_levels rows after -5 delta: ${after5.length}');
+      for (final row in after5) {
+        print('  stock_level: $row');
+      }
+      expect(after5, isNotEmpty,
+          reason: 'apply_stock_delta must upsert a stock_levels row');
+
+      final row5 = after5.firstWhere(
+        (r) => r['location_id'] == testLocation,
+        orElse: () => <String, dynamic>{},
+      );
+      expect(row5['location_id'], testLocation,
+          reason: 'the RPC must scope the row to the injected location_id');
+      final qty5 = row5['quantity'] as int;
+      print('stock_levels quantity after -5: $qty5');
+
+      // 6) Movement #2: sale of 2 more units, push again, read again.
+      await db.inventoryMovementDao.createMovementWithTimestamp(
+        productId: productId,
+        movementType: 'sale',
+        quantity: -2,
+        unitCost: 5.0,
+        totalValue: 10.0,
+        movementDate: now,
+        reference: 'REF-B',
+        referenceType: 'sale_invoice',
+        previousQuantity: 5,
+        newQuantity: 3,
+      );
+      summary = await sync.syncNow();
+      print('syncNow(2) summary: synced=${summary.synced} '
+          'failed=${summary.failed} skippedOffline=${summary.skippedOffline}');
+
+      final after2 = await Supabase.instance.client
+          .from('stock_levels')
+          .select()
+          .eq('product_sync_id', productSyncId);
+      final row2 = after2.firstWhere(
+        (r) => r['location_id'] == testLocation,
+        orElse: () => <String, dynamic>{},
+      );
+      final qty2 = row2['quantity'] as int;
+      print('stock_levels quantity after -2 more: $qty2');
+
+      // 7) Provable: each signed delta must decrement stock by exactly its
+      //    abs value. qty(-5 then -2) → drop must equal 2 for movement #2.
+      expect(qty5 - qty2, 2,
+          reason: 'second -2 stock delta must reduce stock_levels by exactly 2');
+      expect(summary.synced, greaterThanOrEqualTo(1),
+          reason: 'syncNow(2) must have pushed the second movement row');
+
+      print('VERIFICATION PASSED — stock_levels decremented by signed deltas');
+    } finally {
+      // 8) Cleanup: delete the stock_levels row for this product (best-effort,
+      //    anon may have no DELETE policy) + close local DB + remove temp dir.
+      final cleanupSyncId = productSyncId;
+      if (cleanupSyncId == null) {
+        print('WARNING: no productSyncId, skipping stock_levels cleanup');
+      } else {
+        try {
+          await Supabase.instance.client
+              .from('stock_levels')
+              .delete()
+              .eq('product_sync_id', cleanupSyncId);
+          final leftovers = await Supabase.instance.client
+              .from('stock_levels')
+              .select('product_sync_id')
+              .eq('product_sync_id', cleanupSyncId);
+          print('cleanup: stock_levels rows still present after delete = ${leftovers.length}');
+          if (leftovers.isNotEmpty) {
+            print('WARNING: stock_levels test row could not be removed from Supabase '
+                '(anon may have no DELETE policy) — remove manually via SQL: '
+                "DELETE FROM stock_levels WHERE product_sync_id = '$cleanupSyncId';");
+          }
+        } catch (e) {
+          print('WARNING: stock_levels cleanup delete failed: $e');
+        }
+      }
+      await db.close();
+      try {
+        tempDir.deleteSync(recursive: true);
+      } catch (e) {
+        print('WARNING: temp dir cleanup failed: $e');
+      }
+    }
+  });
+
   test('VERIFICATION: periodic timer fires on its own (no manual syncNow)', () async {
     SharedPreferences.setMockInitialValues({});
 

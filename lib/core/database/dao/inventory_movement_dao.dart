@@ -64,10 +64,13 @@ class InventoryMovementDao extends DatabaseAccessor<AppDatabase>
     return movementId;
   }
 
-  /// Enqueues a signed stock delta for sync. The payload matches the
-  /// `apply_stock_delta` Postgres RPC arguments (snake_case) and never includes
-  /// local snapshots like previous/new quantity. Failures are swallowed so the
-  /// local movement write always succeeds.
+/// Enqueues a signed stock delta for sync. The payload matches the
+   /// `apply_stock_delta` Postgres RPC arguments (snake_case) and never includes
+   /// local snapshots like previous/new quantity. `location_id` is intentionally
+   /// NOT set here: `SyncService.syncNow()` reads the device location id once
+   /// and adds `location_id` to every payload centrally (both upserts and the
+   /// `apply_stock_delta` RPC). Do not add it here or it will be set twice.
+   /// Failures are swallowed so the local movement write always succeeds.
   Future<void> _enqueueStockMovement(
     InventoryMovementsCompanion movement,
     int movementId,

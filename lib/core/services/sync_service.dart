@@ -117,7 +117,20 @@ class SyncService {
 
       try {
         if (row.operation == 'stock_delta') {
-          await Supabase.instance.client.rpc('apply_stock_delta', params: payload);
+          // The remote apply_stock_delta RPC renamed its params with a `p_`
+          // prefix (to avoid a 42702 collision against the stock_levels
+          // columns); PostgREST matches RPC args by name, so translate the
+          // outbox keys here — centrally, same as location_id. Don't move this
+          // back into the DAO payload maps.
+          final rpcParams = {
+            'p_product_sync_id': payload['product_sync_id'],
+            'p_location_id': payload['location_id'],
+            'p_quantity_delta': payload['quantity_delta'],
+            'p_movement_type': payload['movement_type'],
+            'p_reference': payload['reference'],
+            'p_movement_date': payload['movement_date'],
+          };
+          await Supabase.instance.client.rpc('apply_stock_delta', params: rpcParams);
         } else {
           final table = _tableNameMap[row.tableRef];
           if (table == null) {

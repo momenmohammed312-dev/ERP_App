@@ -101,3 +101,43 @@ BEGIN
     EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO anon, authenticated', sig);
   END IF;
 END $$;
+
+-- 5) stock_levels is written by apply_stock_delta and read back for stock
+--    reporting, so the anon/publishable key needs grants + RLS policies here
+--    too (same pattern as products/customers/invoices/invoice_items).
+GRANT SELECT, INSERT, UPDATE ON public.stock_levels TO anon, authenticated;
+
+ALTER TABLE public.stock_levels ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='stock_levels' AND policyname='sync_stock_levels_select') THEN
+    CREATE POLICY sync_stock_levels_select ON public.stock_levels FOR SELECT USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='stock_levels' AND policyname='sync_stock_levels_insert') THEN
+    CREATE POLICY sync_stock_levels_insert ON public.stock_levels FOR INSERT WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='stock_levels' AND policyname='sync_stock_levels_update') THEN
+    CREATE POLICY sync_stock_levels_update ON public.stock_levels FOR UPDATE USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+-- 6) stock_movements_log is written by apply_stock_delta and read back for
+--    movement history, so the anon/publishable key needs grants + RLS
+--    policies here too (same pattern as the other synced tables).
+GRANT SELECT, INSERT, UPDATE ON public.stock_movements_log TO anon, authenticated;
+
+ALTER TABLE public.stock_movements_log ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='stock_movements_log' AND policyname='sync_stock_movements_log_select') THEN
+    CREATE POLICY sync_stock_movements_log_select ON public.stock_movements_log FOR SELECT USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='stock_movements_log' AND policyname='sync_stock_movements_log_insert') THEN
+    CREATE POLICY sync_stock_movements_log_insert ON public.stock_movements_log FOR INSERT WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='stock_movements_log' AND policyname='sync_stock_movements_log_update') THEN
+    CREATE POLICY sync_stock_movements_log_update ON public.stock_movements_log FOR UPDATE USING (true) WITH CHECK (true);
+  END IF;
+END $$;
