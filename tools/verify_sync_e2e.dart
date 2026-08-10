@@ -454,6 +454,113 @@ void main() {
     }
   });
 
+  test('VERIFICATION: pulled invoice resolves customer name locally', () async {
+    SharedPreferences.setMockInitialValues({});
+    await Supabase.initialize(url: _url, publishableKey: _anonKey);
+
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final custName = '__SYNC_CUST_${ts}__';
+    final custId = const Uuid().v4();
+    final invSyncId = const Uuid().v4();
+    final invNumber = '__SYNC_INV_${ts}__';
+    print('remote customer: $custName (id=$custId)');
+    print('remote invoice: $invNumber (sync_id=$invSyncId)');
+
+    // 1) 'Device 1' created the customer directly in Supabase.
+    await Supabase.instance.client.from('customers').insert({
+      'sync_id': custId,
+      'location_id': 'e2e-test-location',
+      'name': custName,
+      'phone': '0100-SYNC',
+      'address': 'Test Address',
+      'opening_balance': 0,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    // 2) 'Device 1' created an invoice referencing that customer ONLY by
+    //    customer_sync_id — note there is NO customer_name field here, exactly
+    //    like a real sync payload (and like the remote invoices table).
+    try {
+      await Supabase.instance.client.from('invoices').insert({
+        'sync_id': invSyncId,
+        'invoice_number': invNumber,
+        'customer_sync_id': custId,
+        'location_id': 'e2e-test-location',
+        'total_amount': 150.0,
+        'paid_amount': 50.0,
+        'status': 'partial',
+        'invoice_date': DateTime.now().toUtc().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    } catch (e) {
+      print('WARNING: invoice insert failed: $e');
+      rethrow;
+    }
+
+    // 3) Fresh EMPTY DB = 'device 2'; pullNow() must bring down customer then
+    //    invoice, resolving the denormalized display fields from the local
+    //    Customers table (customers are always pulled before invoices).
+    final tempDir = Directory.systemTemp.createTempSync('sync_e2e_inv_cust');
+    final db = AppDatabase(NativeDatabase(File('${tempDir.path}/sync_e2e_inv_cust.sqlite')));
+    try {
+      final sync = SyncService(db);
+      await sync.initialize();
+      final pulled = await sync.pullNow();
+      print('pullNow summary: pulled=${pulled.pulled} '
+          'skipped=${pulled.skipped} failed=${pulled.failed}');
+
+      // 4) The customer itself must be local.
+      final localCustomer = await (db.select(db.customers)
+            ..where((c) => c.id.equals(custId)))
+          .getSingleOrNull();
+      expect(localCustomer, isNotNull,
+          reason: 'pulled invoice needs its customer row locally');
+      print('local customer pulled: ${localCustomer!.name}');
+
+      // 5) The invoice must carry the customer's REAL name/contact/address,
+      //    resolved from the local Customers table at pull time — not blank.
+      final localInvoice = await (db.select(db.invoices)
+            ..where((t) => t.syncId.equals(invSyncId)))
+          .getSingleOrNull();
+      expect(localInvoice, isNotNull,
+          reason: 'pullNow must bring the invoice into the fresh DB');
+      print('local invoice: customerName=${localInvoice!.customerName} '
+          'customerContact=${localInvoice.customerContact} '
+          'customerAddress=${localInvoice.customerAddress}');
+      expect(localInvoice.customerId, custId,
+          reason: 'customer FK (customer_sync_id) must round-trip');
+      expect(localInvoice.customerName, custName,
+          reason: 'pulled invoice must resolve the customer NAME locally');
+      expect(localInvoice.customerName!.isNotEmpty, isTrue,
+          reason: 'customerName must not be blank on a pulled invoice');
+      expect(localInvoice.customerContact, '0100-SYNC',
+          reason: 'pulled invoice must resolve customer CONTACT locally');
+      expect(localInvoice.customerAddress, 'Test Address',
+          reason: 'pulled invoice must resolve customer ADDRESS locally');
+
+      print('VERIFICATION PASSED — pulled invoice resolved customer display fields');
+    } finally {
+      // 6) Cleanup: delete both remote rows (best-effort; anon may have no
+      //    DELETE policy) + close local DB + remove temp dir.
+      for (final table in ['invoices', 'customers']) {
+        try {
+          await Supabase.instance.client
+              .from(table)
+              .delete()
+              .eq('sync_id', table == 'invoices' ? invSyncId : custId);
+        } catch (e) {
+          print('WARNING: cleanup delete failed on $table: $e');
+        }
+      }
+      await db.close();
+      try {
+        tempDir.deleteSync(recursive: true);
+      } catch (e) {
+        print('WARNING: temp dir cleanup failed: $e');
+      }
+    }
+  });
+
   test('VERIFICATION: periodic timer fires on its own (no manual syncNow)', () async {
     SharedPreferences.setMockInitialValues({});
 

@@ -141,10 +141,35 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
       return; // local row is newer — keep it.
     }
 
+    // Resolve the customer's display fields from the LOCAL Customers table at
+    // pull time. pullNow() always pulls customers before invoices, so the
+    // customer row is already local here. We deliberately do NOT read these
+    // names from the remote invoice row (there is no customer_name column on
+    // the Supabase invoices table) and do NOT add denormalized copies: that
+    // would create a second, staler copy of the name that drifts if the
+    // customer is renamed later. Fall back to null if the customer genuinely
+    // isn't found — same shape as a locally-created invoice whose customer
+    // was deleted there.
+    String? customerName;
+    String? customerContact;
+    String? customerAddress;
+    final custId = remoteRow['customer_sync_id'] as String?;
+    if (custId != null) {
+      final customer = await (select(attachedDatabase.customers)
+            ..where((c) => c.id.equals(custId)))
+          .getSingleOrNull();
+      customerName = customer?.name;
+      customerContact = customer?.phone;
+      customerAddress = customer?.address;
+    }
+
     final companion = InvoicesCompanion(
       syncId: Value(syncId),
       invoiceNumber: Value(remoteRow['invoice_number'] as String?),
-      customerId: Value(remoteRow['customer_sync_id'] as String?),
+      customerId: Value(custId),
+      customerName: Value(customerName),
+      customerContact: Value(customerContact),
+      customerAddress: Value(customerAddress),
       totalAmount: Value((remoteRow['total_amount'] as num?)?.toDouble() ?? 0),
       paidAmount: Value((remoteRow['paid_amount'] as num?)?.toDouble() ?? 0),
       status: Value(remoteRow['status'] as String? ?? 'pending'),
