@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -22,19 +22,38 @@ class SyncSummary {
   });
 }
 
+/// Result of a single `pullNow()` pass.
+class PullSummary {
+  final int pulled;
+  final int skipped;
+  final int failed;
+
+  const PullSummary({
+    this.pulled = 0,
+    this.skipped = 0,
+    this.failed = 0,
+  });
+}
+
 /// Local-first outbox synchronizer: reads pending rows from `sync_queue`
 /// (written by the DAOs) and pushes them to Supabase.
 ///
-///  • products / customers / invoices / invoice_items → `upsert` on `sync_id`
-///  • stock_movements (operation `stock_delta`) → `apply_stock_delta` RPC
+///  â€¢ products / customers / invoices / invoice_items â†’ `upsert` on `sync_id`
+///  â€¢ stock_movements (operation `stock_delta`) â†’ `apply_stock_delta` RPC
+///
+/// Pull (`pullNow`) reads the same Supabase tables back and writes rows into
+/// the local DB through the quiet `upsertFromRemote` DAO paths (which never
+/// re-enqueue), so a pulled row is never immediately pushed back up.
 ///
 /// Local writes are never blocked here; a failing row is just retried later
-/// (up to `retryCount`). Requires `--dart-define=SUPABASE_URL=…` and
-/// `--dart-define=SUPABASE_ANON_KEY=…` to be active.
+/// (up to `retryCount`). Requires `--dart-define=SUPABASE_URL=â€¦` and
+/// `--dart-define=SUPABASE_ANON_KEY=â€¦` to be active.
 class SyncService {
   SyncService(AppDatabase db, {SyncQueueDao? queueDao})
-      : _queueDao = queueDao ?? db.syncQueueDao;
+      : _db = db,
+        _queueDao = queueDao ?? db.syncQueueDao;
 
+  final AppDatabase _db;
   final SyncQueueDao _queueDao;
 
   Timer? _timer;
@@ -50,7 +69,7 @@ class SyncService {
   static const String _supabaseAnonKey =
       String.fromEnvironment('SUPABASE_ANON_KEY');
 
-  /// Placeholder used when no real credentials were passed — sync stays off.
+  /// Placeholder used when no real credentials were passed â€” sync stays off.
   static const String _placeholderUrl = 'https://YOUR_PROJECT.supabase.co';
   static const String _placeholderAnonKey = 'YOUR_ANON_KEY';
 
@@ -69,7 +88,7 @@ class SyncService {
       _supabaseAnonKey.isNotEmpty &&
       _supabaseAnonKey != _placeholderAnonKey;
 
-  /// Initializes the Supabase client. Safe to call when unconfigured — the
+  /// Initializes the Supabase client. Safe to call when unconfigured â€” the
   /// placeholder keeps the app from crashing, but nothing will ever sync.
   Future<void> initialize() async {
     debugPrint('[SyncService] initialized, supabaseUrl configured: $_configured');
@@ -91,7 +110,7 @@ class SyncService {
     final pending = await _queueDao.getPending(limit: 50);
     debugPrint('[SyncService] syncNow started, pending items: ${pending.length}');
     if (pending.isEmpty) {
-      debugPrint('[SyncService] syncNow finished — synced: 0, failed: 0, skipped(offline): false');
+      debugPrint('[SyncService] syncNow finished â€” synced: 0, failed: 0, skipped(offline): false');
       return const SyncSummary();
     }
 
@@ -104,7 +123,7 @@ class SyncService {
       try {
         payload = jsonDecode(row.payloadJson) as Map<String, dynamic>;
       } catch (e) {
-        debugPrint('[SyncService] item failed — table: ${row.tableRef}, recordSyncId: ${row.recordSyncId}, error: $e');
+        debugPrint('[SyncService] item failed â€” table: ${row.tableRef}, recordSyncId: ${row.recordSyncId}, error: $e');
         await _queueDao.markFailed(row.id, 'invalid json: $e');
         failed++;
         continue;
@@ -120,7 +139,7 @@ class SyncService {
           // The remote apply_stock_delta RPC renamed its params with a `p_`
           // prefix (to avoid a 42702 collision against the stock_levels
           // columns); PostgREST matches RPC args by name, so translate the
-          // outbox keys here — centrally, same as location_id. Don't move this
+          // outbox keys here â€” centrally, same as location_id. Don't move this
           // back into the DAO payload maps.
           final rpcParams = {
             'p_product_sync_id': payload['product_sync_id'],
@@ -146,7 +165,7 @@ class SyncService {
         await _queueDao.markSynced(row.id);
         synced++;
       } catch (e) {
-        debugPrint('[SyncService] item failed — table: ${row.tableRef}, recordSyncId: ${row.recordSyncId}, error: $e');
+        debugPrint('[SyncService] item failed â€” table: ${row.tableRef}, recordSyncId: ${row.recordSyncId}, error: $e');
         await _queueDao.markFailed(row.id, e.toString());
         failed++;
       }
@@ -155,14 +174,111 @@ class SyncService {
     if (synced > 0) {
       await SettingsService.setLastSyncedAt(DateTime.now());
     }
-    debugPrint('[SyncService] syncNow finished — synced: $synced, failed: $failed, skipped(offline): false');
+    debugPrint('[SyncService] syncNow finished â€” synced: $synced, failed: $failed, skipped(offline): false');
     return SyncSummary(synced: synced, failed: failed);
+  }
+
+  /// One pull pass: reads changes made on OTHER devices back from Supabase and
+  /// writes them into the local DB. Full-table pull for now (not incremental) â€”
+  /// the current fleet is a handful of devices, so simplicity wins over
+  /// efficiency. Rows land through the quiet `upsertFromRemote` DAO paths that
+  /// never re-enqueue, so a pull can never re-queue its own rows for push.
+  ///
+  /// Order matters: products â†’ customers â†’ invoices â†’ invoice_items, because
+  /// the invoice_item FK resolution (Phase 1) needs the parent invoice and
+  /// product rows to already be local. Each table is isolated in its own
+  /// try/catch so one table failing never aborts the rest.
+  Future<PullSummary> pullNow() async {
+    if (!_configured) {
+      return const PullSummary();
+    }
+    if (!await _isOnline()) {
+      return const PullSummary();
+    }
+
+    var pulled = 0;
+    var skipped = 0;
+    var failed = 0;
+
+    await _pullTable(
+      'products',
+      (row) async {
+        await _db.productDao.upsertFromRemote(row);
+        pulled++;
+      },
+      onError: () => failed++,
+    );
+
+    await _pullTable(
+      'customers',
+      (row) async {
+        await _db.customerDao.upsertFromRemote(row);
+        pulled++;
+      },
+      onError: () => failed++,
+    );
+
+    await _pullTable(
+      'invoices',
+      (row) async {
+        await _db.invoiceDao.upsertInvoiceFromRemote(row);
+        pulled++;
+      },
+      onError: () => failed++,
+    );
+
+    await _pullTable(
+      'invoice_items',
+      (row) async {
+        final written = await _db.invoiceDao.upsertInvoiceItemFromRemote(row);
+        if (written) {
+          pulled++;
+        } else {
+          skipped++;
+        }
+      },
+      onError: () => failed++,
+    );
+
+    debugPrint('[SyncService] pullNow finished â€” pulled: $pulled, skipped: $skipped, failed: $failed');
+    return PullSummary(pulled: pulled, skipped: skipped, failed: failed);
+  }
+
+  Future<void> _pullTable(
+    String tableRef,
+    Future<void> Function(Map<String, dynamic> row) write, {
+    required VoidCallback onError,
+  }) async {
+    try {
+      final remoteTable = _tableNameMap[tableRef];
+      if (remoteTable == null) {
+        debugPrint('[SyncService] pull $tableRef failed: unknown table');
+        onError();
+        return;
+      }
+      final rows = await Supabase.instance.client.from(remoteTable).select();
+      debugPrint('[SyncService] pull $tableRef started, remote rows: ${rows.length}');
+      for (final row in rows) {
+        try {
+          await write(row);
+        } catch (e) {
+          debugPrint(
+              '[SyncService] item failed â€” table: $tableRef, recordSyncId: ${row['sync_id']}, error: $e');
+          onError();
+        }
+      }
+    } catch (e) {
+      debugPrint('[SyncService] pull $tableRef failed: $e');
+      onError();
+    }
   }
 
   /// Number of rows waiting to be pushed (for the settings UI badge).
   Future<int> pendingCount() => _queueDao.getPendingCount();
 
-  /// Starts a background timer. Safe to call more than once.
+  /// Starts a background timer. Safe to call more than once. Each tick runs the
+  /// full push-then-pull cycle (same as the manual button), so eventually sync
+  /// is fully automatic without any user interaction.
   void startPeriodicSync({Duration interval = const Duration(minutes: 3)}) {
     if (_started || !_configured) return;
     _started = true;
@@ -172,6 +288,7 @@ class SyncService {
       lastPeriodicRunAt.value = DateTime.now();
       try {
         await syncNow();
+        await pullNow();
       } catch (e) {
         debugPrint('Periodic sync error: $e');
       }

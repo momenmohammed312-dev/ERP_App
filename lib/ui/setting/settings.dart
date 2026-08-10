@@ -590,7 +590,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _syncNow() async {
     setState(() => _syncing = true);
     try {
+      // Push local changes first, then pull remote ones — so this device's own
+      // pending rows go up before any conflicting remote rows come down.
       final summary = await ref.read(syncServiceProvider).syncNow();
+      final pullSummary = await ref.read(syncServiceProvider).pullNow();
       final lastSynced = await SettingsService.getLastSyncedAt();
       final pending = await ref.read(syncServiceProvider).pendingCount();
       if (!mounted) return;
@@ -602,11 +605,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       });
       final message = summary.skippedOffline
           ? 'لا يوجد اتصال بالإنترنت — لم تتم المزامنة'
-          : 'تمت المزامنة: ${summary.synced} بنجاح، ${summary.failed} فشلت';
+          : 'تم الرفع: ${summary.synced} | تم التحميل: ${pullSummary.pulled} | فشل: ${summary.failed + pullSummary.failed}';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: summary.failed > 0 ? Colors.orange : Colors.green,
+          backgroundColor: (summary.failed + pullSummary.failed) > 0
+              ? Colors.orange
+              : Colors.green,
         ),
       );
     } catch (e) {

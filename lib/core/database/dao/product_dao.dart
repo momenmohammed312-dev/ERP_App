@@ -71,6 +71,50 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     await _enqueueProduct(id, null, 'update');
   }
 
+  /// Writes a product row pulled from Supabase without re-enqueueing it for
+  /// push (the row already came from the remote, pushing it back is redundant).
+  /// Looks up an existing local row by `syncId` first: if found, updates it
+  /// only when the remote `updatedAt` is newer than the local one (last-write-
+  /// wins); if not found, inserts a new local row with a fresh local
+  /// autoincrement `id` but the same `syncId`.
+  Future<void> upsertFromRemote(Map<String, dynamic> remoteRow) async {
+    final syncId = remoteRow['sync_id'] as String?;
+    if (syncId == null || syncId.isEmpty) return;
+    final remoteUpdated =
+        DateTime.tryParse(remoteRow['updated_at'] as String? ?? '');
+    final existing = await (select(products)
+          ..where((t) => t.syncId.equals(syncId)))
+        .getSingleOrNull();
+
+    if (existing != null &&
+        existing.updatedAt != null &&
+        remoteUpdated != null &&
+        existing.updatedAt!.isAfter(remoteUpdated)) {
+      // Local row is newer — last-write-wins: do not overwrite.
+      return;
+    }
+
+    final companion = ProductsCompanion(
+      syncId: Value(syncId),
+      name: Value(remoteRow['name'] as String? ?? ''),
+      quantity: Value((remoteRow['quantity'] as num?)?.toInt() ?? 0),
+      price: Value((remoteRow['price'] as num?)?.toDouble() ?? 0),
+      unit: Value(remoteRow['unit'] as String?),
+      category: Value(remoteRow['category'] as String?),
+      barcode: Value(remoteRow['barcode'] as String?),
+      costPrice: Value((remoteRow['cost_price'] as num?)?.toDouble()),
+      status: Value(remoteRow['status'] as String?),
+      updatedAt: Value(remoteUpdated),
+    );
+
+    if (existing != null) {
+      await (update(products)..where((t) => t.id.equals(existing.id)))
+          .write(companion);
+    } else {
+      await into(products).insert(companion);
+    }
+  }
+
   /// Enqueues a product for sync. Re-reads the row to build a payload that only
   /// references Supabase columns (snake_case), never the local int `id`.
   /// Any failure here is caught so it never breaks the local write.

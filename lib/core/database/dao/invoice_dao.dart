@@ -119,6 +119,111 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
     await _enqueueInvoiceItem(syncId, invoiceLocalId, productLocalId, item);
   }
 
+  /// Writes an invoice pulled from Supabase without re-enqueueing it for push.
+  /// Looks up an existing local row by `syncId`: if found, updates it only when
+  /// the remote `updatedAt` is newer than the local one (last-write-wins); if
+  /// not found, inserts a new local row with the same `syncId`. `customerId` is
+  /// already a UUID text column, so the remote `customer_sync_id` maps straight
+  /// in — no FK remapping needed.
+  Future<void> upsertInvoiceFromRemote(Map<String, dynamic> remoteRow) async {
+    final syncId = remoteRow['sync_id'] as String?;
+    if (syncId == null || syncId.isEmpty) return;
+    final remoteUpdated =
+        DateTime.tryParse(remoteRow['updated_at'] as String? ?? '');
+    final existing = await (select(invoices)
+          ..where((t) => t.syncId.equals(syncId)))
+        .getSingleOrNull();
+
+    if (existing != null &&
+        existing.updatedAt != null &&
+        remoteUpdated != null &&
+        existing.updatedAt!.isAfter(remoteUpdated)) {
+      return; // local row is newer — keep it.
+    }
+
+    final companion = InvoicesCompanion(
+      syncId: Value(syncId),
+      invoiceNumber: Value(remoteRow['invoice_number'] as String?),
+      customerId: Value(remoteRow['customer_sync_id'] as String?),
+      totalAmount: Value((remoteRow['total_amount'] as num?)?.toDouble() ?? 0),
+      paidAmount: Value((remoteRow['paid_amount'] as num?)?.toDouble() ?? 0),
+      status: Value(remoteRow['status'] as String? ?? 'pending'),
+      date: Value(DateTime.tryParse(remoteRow['invoice_date'] as String? ?? '') ?? DateTime.now()),
+      updatedAt: Value(remoteUpdated),
+    );
+
+    if (existing != null) {
+      await (update(invoices)..where((t) => t.id.equals(existing.id)))
+          .write(companion);
+    } else {
+      await into(invoices).insert(companion);
+    }
+  }
+
+  /// Writes an invoice item pulled from Supabase without re-enqueueing it for
+  /// push. `InvoiceItems.invoiceId`/`productId` are LOCAL integer FKs, so the
+  /// remote UUIDs (`invoice_sync_id`/`product_sync_id`) must first be resolved
+  /// to local int ids. If either parent (invoice or product) has not been pulled
+  /// locally yet, the row is skipped — returns `false` — rather than inserting
+  /// a broken/null FK. Returns `true` when the row was written (or was a no-op
+  /// because the local copy is already newer).
+  Future<bool> upsertInvoiceItemFromRemote(Map<String, dynamic> remoteRow) async {
+    final syncId = remoteRow['sync_id'] as String?;
+    if (syncId == null || syncId.isEmpty) return false;
+
+    // Resolve remote UUIDs -> local integer FKs.
+    final invoiceSyncId = remoteRow['invoice_sync_id'] as String?;
+    final productSyncId = remoteRow['product_sync_id'] as String?;
+    int? invoiceLocalId;
+    int? productLocalId;
+    if (invoiceSyncId != null) {
+      final inv = await (select(invoices)
+            ..where((t) => t.syncId.equals(invoiceSyncId)))
+          .getSingleOrNull();
+      invoiceLocalId = inv?.id;
+    }
+    if (productSyncId != null) {
+      final product = await (select(attachedDatabase.products)
+            ..where((p) => p.syncId.equals(productSyncId)))
+          .getSingleOrNull();
+      productLocalId = product?.id;
+    }
+    if (invoiceLocalId == null || productLocalId == null) {
+      return false; // parent not pulled locally yet — skip, do not guess.
+    }
+
+    final remoteUpdated =
+        DateTime.tryParse(remoteRow['updated_at'] as String? ?? '');
+    final existing = await (select(invoiceItems)
+          ..where((t) => t.syncId.equals(syncId)))
+        .getSingleOrNull();
+
+    if (existing != null &&
+        existing.updatedAt != null &&
+        remoteUpdated != null &&
+        existing.updatedAt!.isAfter(remoteUpdated)) {
+      return true; // local row is newer — keep it.
+    }
+
+    final companion = InvoiceItemsCompanion(
+      syncId: Value(syncId),
+      invoiceId: Value(invoiceLocalId),
+      productId: Value(productLocalId),
+      quantity: Value((remoteRow['quantity'] as num?)?.toInt() ?? 1),
+      price: Value((remoteRow['price'] as num?)?.toDouble() ?? 0),
+      discount: Value((remoteRow['discount'] as num?)?.toDouble() ?? 0),
+      updatedAt: Value(remoteUpdated),
+    );
+
+    if (existing != null) {
+      await (update(invoiceItems)..where((t) => t.id.equals(existing.id)))
+          .write(companion);
+    } else {
+      await into(invoiceItems).insert(companion);
+    }
+    return true;
+  }
+
   /// Enqueues an invoice for sync. Only Supabase columns (snake_case) are sent;
   /// `customer_sync_id` is the customer UUID (never a local int id).
   Future<void> _enqueueInvoice(int localId, String operation) async {

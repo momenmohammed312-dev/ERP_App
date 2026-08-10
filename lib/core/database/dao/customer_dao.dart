@@ -102,6 +102,44 @@ class CustomerDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
+  /// Writes a customer row pulled from Supabase without re-enqueueing it for
+  /// push. `Customers.id` IS the UUID, so the remote `sync_id` maps directly to
+  /// the local `id` (there is no separate local integer id on this table).
+  /// Looks up the existing row by `id` first: if found, updates it only when
+  /// the remote `updatedAt` is newer than the local one (last-write-wins); if
+  /// not found, inserts a new local row with the same `id`.
+  Future<void> upsertFromRemote(Map<String, dynamic> remoteRow) async {
+    final syncId = remoteRow['sync_id'] as String?;
+    if (syncId == null || syncId.isEmpty) return;
+    final remoteUpdated =
+        DateTime.tryParse(remoteRow['updated_at'] as String? ?? '');
+    final existing = await getCustomerById(syncId);
+
+    if (existing != null &&
+        existing.updatedAt != null &&
+        remoteUpdated != null &&
+        existing.updatedAt!.isAfter(remoteUpdated)) {
+      // Local row is newer — last-write-wins: do not overwrite.
+      return;
+    }
+
+    final companion = CustomersCompanion(
+      id: Value(syncId),
+      name: Value(remoteRow['name'] as String? ?? ''),
+      phone: Value(remoteRow['phone'] as String?),
+      address: Value(remoteRow['address'] as String?),
+      openingBalance: Value((remoteRow['opening_balance'] as num?)?.toDouble() ?? 0),
+      updatedAt: Value(remoteUpdated),
+    );
+
+    if (existing != null) {
+      await (update(customers)..where((t) => t.id.equals(syncId)))
+          .write(companion);
+    } else {
+      await into(customers).insert(companion);
+    }
+  }
+
   /// Enqueues a customer for sync. Payload only contains Supabase columns
   /// (snake_case). Failures are swallowed so the local write always wins.
   Future<void> _enqueueCustomer(String syncId, String operation) async {

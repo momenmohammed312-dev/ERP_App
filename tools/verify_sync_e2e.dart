@@ -28,6 +28,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/sync_service.dart';
@@ -267,6 +268,181 @@ void main() {
           }
         } catch (e) {
           print('WARNING: stock_levels cleanup delete failed: $e');
+        }
+      }
+      await db.close();
+      try {
+        tempDir.deleteSync(recursive: true);
+      } catch (e) {
+        print('WARNING: temp dir cleanup failed: $e');
+      }
+    }
+  });
+
+  test('VERIFICATION: pullNow downloads rows into a fresh empty DB', () async {
+    SharedPreferences.setMockInitialValues({});
+    await Supabase.initialize(url: _url, publishableKey: _anonKey);
+
+    // 1) Simulate "device 1 already pushed this": insert the row straight into
+    //    Supabase with a recognizable name + a fresh sync_id.
+    final testName = '__SYNC_PULL_${DateTime.now().millisecondsSinceEpoch}__';
+    final remoteSyncId = const Uuid().v4();
+    final remoteUpdated = DateTime.now().toUtc().toIso8601String();
+    print('remote-authoritative row: $testName, sync_id=$remoteSyncId');
+    await Supabase.instance.client.from('products').insert({
+      'sync_id': remoteSyncId,
+      'location_id': 'e2e-test-location',
+      'name': testName,
+      'quantity': 42,
+      'price': 9.99,
+      'unit': 'kg',
+      'status': 'Active',
+      'updated_at': remoteUpdated,
+    });
+
+    final tempDir = Directory.systemTemp.createTempSync('sync_e2e_pull');
+    final db = AppDatabase(NativeDatabase(File('${tempDir.path}/sync_e2e_pull.sqlite')));
+    try {
+      // 2) Fresh EMPTY DB = "device 2, never seen this product".
+      final before = await db.productDao.getAllProducts();
+      expect(before, isEmpty,
+          reason: 'device-2 DB must start empty to prove a genuine pull');
+
+      // 3) pullNow() into it.
+      final sync = SyncService(db);
+      await sync.initialize();
+      final pulled = await sync.pullNow();
+      print('pullNow summary: pulled=${pulled.pulled} '
+          'skipped=${pulled.skipped} failed=${pulled.failed}');
+
+      // 4) The pulled row must now exist locally with matching values.
+      final local = await (db.select(db.products)
+            ..where((p) => p.syncId.equals(remoteSyncId)))
+          .getSingleOrNull();
+      print('local row after pull: $local');
+      expect(local, isNotNull,
+          reason: 'pullNow must write the remote row into the fresh DB');
+      expect(local!.syncId, remoteSyncId);
+      expect(local.name, testName);
+      expect(local.quantity, 42);
+      expect(local.price, 9.99);
+      expect(local.unit, 'kg');
+      expect(pulled.pulled, greaterThanOrEqualTo(1),
+          reason: 'pullNow must report at least one pulled row');
+
+      // 5) Proving it did NOT get re-enqueued for push (feedback-loop guard).
+      final reQueued = await db.syncQueueDao.getPendingCount();
+      print('sync_queue pending after pull: $reQueued');
+      expect(reQueued, 0,
+          reason: 'pulled rows must NOT be re-enqueued for push');
+
+      print('VERIFICATION PASSED — remote row pulled into fresh DB');
+    } finally {
+      // 6) Cleanup: delete the test row from Supabase (best-effort).
+      try {
+        await Supabase.instance.client
+            .from('products')
+            .delete()
+            .eq('sync_id', remoteSyncId);
+        final leftovers = await Supabase.instance.client
+            .from('products')
+            .select('sync_id')
+            .eq('sync_id', remoteSyncId);
+        print('cleanup: pull test rows still present = ${leftovers.length}');
+      } catch (e) {
+        print('WARNING: pull cleanup delete failed: $e');
+      }
+      await db.close();
+      try {
+        tempDir.deleteSync(recursive: true);
+      } catch (e) {
+        print('WARNING: temp dir cleanup failed: $e');
+      }
+    }
+  });
+
+  test('VERIFICATION: pullNow applies newer remote update (last-write-wins)', () async {
+    SharedPreferences.setMockInitialValues({});
+    await Supabase.initialize(url: _url, publishableKey: _anonKey);
+
+    final tempDir = Directory.systemTemp.createTempSync('sync_e2e_lww');
+    final db = AppDatabase(NativeDatabase(File('${tempDir.path}/sync_e2e_lww.sqlite')));
+    String? remoteSyncId; // hoisted for the finally-block cleanup
+    try {
+      // 1) Insert a product LOCALLY (device 1 creates it) → stamps a syncId.
+      final testName = '__SYNC_LWW_${DateTime.now().millisecondsSinceEpoch}__';
+      final insertedId = await db.productDao.insertProduct(
+        ProductsCompanion.insert(
+          name: testName,
+          quantity: 1,
+          price: 1.0,
+          unit: const Value('pcs'),
+        ),
+      );
+      final local = await db.productDao.getProductById(insertedId);
+      remoteSyncId = local!.syncId!;
+      print('local product inserted (id=$insertedId) sync_id=$remoteSyncId');
+
+      // 2) Push it up so the remote side has the row.
+      final sync = SyncService(db);
+      await sync.initialize();
+      var summary = await sync.syncNow();
+      print('initial syncNow summary: synced=${summary.synced} '
+          'failed=${summary.failed}');
+      expect(summary.synced, greaterThanOrEqualTo(1),
+          reason: 'initial local product must reach Supabase');
+
+      // 3) "Device 2 edits it": remote row gets a NEWER updated_at + new name.
+      final newerName = '${testName}_RENAMED_ON_DEVICE2';
+      final newerTime = DateTime.now().toUtc().add(const Duration(minutes: 5));
+      await Supabase.instance.client
+          .from('products')
+          .update({
+            'name': newerName,
+            'updated_at': newerTime.toIso8601String(),
+          })
+          .eq('sync_id', remoteSyncId);
+      print('remote updated_at set to (newer): $newerTime, name=$newerName');
+
+      // 4) pullNow — the local row is OLDER → it must adopt the remote values.
+      final pullSummary = await sync.pullNow();
+      print('pullNow summary: pulled=${pullSummary.pulled} '
+          'skipped=${pullSummary.skipped} failed=${pullSummary.failed}');
+      final afterPull = await db.productDao.getProductById(insertedId);
+      print('local name after pull: ${afterPull!.name}');
+      expect(afterPull.name, newerName,
+          reason: 'newer remote update must win over the older local copy');
+
+      // 5) Reverse: local is now the NEWER side (pull bumped its updatedAt to
+      //    the future). Set remote back to an OLD timestamp + old name, then
+      //    pull again — local must win this time (last-write-wins both ways).
+      final olderName = '${testName}_OLD_REMOTE';
+      final olderTime = DateTime.now().toUtc().subtract(const Duration(minutes: 10));
+      await Supabase.instance.client
+          .from('products')
+          .update({
+            'name': olderName,
+            'updated_at': olderTime.toIso8601String(),
+          })
+          .eq('sync_id', remoteSyncId);
+      await sync.pullNow();
+      final afterSecondPull = await db.productDao.getProductById(insertedId);
+      print('local name after stale-remote pull: ${afterSecondPull!.name}');
+      expect(afterSecondPull.name, newerName,
+          reason: 'stale remote (older updated_at) must NOT overwrite newer local');
+
+      print('VERIFICATION PASSED — last-write-wins honored in both directions');
+    } finally {
+      // 6) Cleanup remote test row (best-effort) + close local DB.
+      final cleanupSyncId = remoteSyncId;
+      if (cleanupSyncId != null) {
+        try {
+          await Supabase.instance.client
+              .from('products')
+              .delete()
+              .eq('sync_id', cleanupSyncId);
+        } catch (e) {
+          print('WARNING: LWW cleanup delete failed: $e');
         }
       }
       await db.close();
