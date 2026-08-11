@@ -823,7 +823,7 @@ class _OverviewPageContentState extends State<_OverviewPageContent> {
                       final status = invoice.isPaid == true ? 'مكتمل' : 'معلق';
                       final time = DateFormat(
                         'HH:mm',
-                      ).format(invoice.date ?? DateTime.now());
+                      ).format((invoice.date ?? DateTime.now()).toLocal());
 
                       return _buildTransactionRow(
                         invoiceNumber,

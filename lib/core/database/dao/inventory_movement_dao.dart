@@ -108,7 +108,7 @@ class InventoryMovementDao extends DatabaseAccessor<AppDatabase>
           'quantity_delta': quantityDelta,
           'movement_type': movementType,
           'reference': reference,
-          'movement_date': movementDate.toIso8601String(),
+          'movement_date': movementDate.toUtc().toIso8601String(),
         },
       );
     } catch (e) {

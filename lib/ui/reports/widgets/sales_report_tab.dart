@@ -157,7 +157,7 @@ class _SalesReportTabState extends State<SalesReportTab> {
           'customerName': invoice.customerName ?? 'عميل غير محدد',
           'totalAmount': invoice.totalAmount,
           'paidAmount': invoice.paidAmount,
-          'date': DateFormat('yyyy-MM-dd HH:mm').format(invoice.date),
+          'date': DateFormat('yyyy-MM-dd HH:mm').format(invoice.date.toLocal()),
           'status': invoice.status,
         });
       }
@@ -329,7 +329,7 @@ class _SalesReportTabState extends State<SalesReportTab> {
           'اسم العميل': invoice.customerName ?? 'عميل غير محدد',
           'المبلغ الإجمالي': invoice.totalAmount,
           'المدفوع': invoice.paidAmount,
-          'التاريخ': DateFormat('yyyy-MM-dd HH:mm').format(invoice.date),
+          'التاريخ': DateFormat('yyyy-MM-dd HH:mm').format(invoice.date.toLocal()),
           'الحالة': invoice.status,
         });
       }
@@ -699,7 +699,7 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
             ),
             const SizedBox(height: 4),
             Text(
-              DateFormat('yyyy-MM-dd HH:mm').format(widget.invoice.date),
+              DateFormat('yyyy-MM-dd HH:mm').format(widget.invoice.date.toLocal()),
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ],

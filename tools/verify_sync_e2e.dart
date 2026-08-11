@@ -561,6 +561,142 @@ void main() {
     }
   });
 
+  test('VERIFICATION: invoice date round-trips UTC and survives pull', () async {
+    SharedPreferences.setMockInitialValues({
+      'device_location_id': 'e2e-test-location',
+    });
+    await Supabase.initialize(url: _url, publishableKey: _anonKey);
+
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final invNumber = '__SYNC_TZ_$ts';
+    String? invSyncId; // hoisted for the finally-block cleanup
+
+    // 1) The EXACT bug repro: a local invoice whose date is a plain local
+    //    DateTime (isUtc == false). Push must send it as UTC so the instant
+    //    survives; pull must store it as UTC so display needs .toLocal().
+    final localInvoiceDate = DateTime(2026, 8, 11, 15, 1, 30);
+    print('local invoice date (device-1 view): $localInvoiceDate '
+        'isUtc=${localInvoiceDate.isUtc}');
+    expect(localInvoiceDate.isUtc, isFalse,
+        reason: 'precondition: the app creates local (non-UTC) dates');
+
+    final tempDir = Directory.systemTemp.createTempSync('sync_e2e_tz');
+    final db = AppDatabase(NativeDatabase(File('${tempDir.path}/sync_e2e_tz.sqlite')));
+    try {
+      // 2) Create the invoice via the REAL InvoiceDao (stamps syncId + enqueues).
+      await db.invoiceDao.insertInvoice(
+        InvoicesCompanion.insert(
+          invoiceNumber: Value(invNumber),
+          customerName: const Value('عميل نقدي'),
+          paymentMethod: const Value('cash'),
+          totalAmount: const Value(100.0),
+          paidAmount: const Value(100.0),
+          status: const Value('paid'),
+          date: Value(localInvoiceDate),
+        ),
+      );
+      final local = await db.invoiceDao.getInvoiceByNumber(invNumber);
+      invSyncId = local!.syncId;
+      final invSyncIdLocal = invSyncId!;
+      print('local invoice inserted sync_id=$invSyncIdLocal '
+          'date=${local.date} isUtc=${local.date.isUtc}');
+
+      // 3) Push it up.
+      final sync = SyncService(db);
+      await sync.initialize();
+      final summary = await sync.syncNow();
+      print('syncNow summary: synced=${summary.synced} failed=${summary.failed}');
+      expect(summary.synced, greaterThanOrEqualTo(1),
+          reason: 'local invoice must reach Supabase');
+
+      // 4) Read the remote invoice_date (timestamptz, UTC ISO with offset) and
+      //    prove the instant round-trips: parse -> toLocal() == localInvoiceDate.
+      final remoteRows = await Supabase.instance.client
+          .from('invoices')
+          .select('invoice_date')
+          .eq('invoice_number', invNumber);
+      expect(remoteRows, isNotEmpty,
+          reason: 'pushed invoice must exist remotely');
+      final remoteRaw = remoteRows.first['invoice_date'] as String;
+      final remoteParsed = DateTime.tryParse(remoteRaw);
+      expect(remoteParsed, isNotNull,
+          reason: 'remote invoice_date must be a parseable timestamp');
+      final remoteLocal = remoteParsed!.toLocal();
+      print('remote invoice_date raw: $remoteRaw');
+      print('remote parsed UTC: $remoteParsed  -> toLocal: $remoteLocal');
+      expect(remoteParsed.isUtc, isTrue,
+          reason: 'timestamptz must come back as an explicit UTC value');
+      expect(
+        remoteLocal.difference(localInvoiceDate).inSeconds.abs() <= 1,
+        isTrue,
+        reason: 'instant must survive push: remote.toLocal() must equal the '
+            'original local invoice date',
+      );
+
+      // 5) 'Device 2' = a FRESH empty DB. pullNow must store the date so the
+      //    instant survives and .toLocal() reproduces the original local time.
+      //    NOTE: drift stores DateTime as local wall-clock (the isUtc flag is
+      //    not preserved across storage), so the assertion here is on the
+      //    instant, not on the flag — that is the display contract.
+      final tempDir2 = Directory.systemTemp.createTempSync('sync_e2e_tz_pull');
+      final db2 = AppDatabase(
+          NativeDatabase(File('${tempDir2.path}/sync_e2e_tz_pull.sqlite')));
+      try {
+        final sync2 = SyncService(db2);
+        await sync2.initialize();
+        final pulled = await sync2.pullNow();
+        print('pullNow(device2) summary: pulled=${pulled.pulled} '
+            'skipped=${pulled.skipped} failed=${pulled.failed}');
+
+        final local2 = await (db2.select(db2.invoices)
+              ..where((t) => t.syncId.equals(invSyncIdLocal)))
+            .getSingleOrNull();
+        expect(local2, isNotNull,
+            reason: 'device 2 must pull the invoice down');
+        print('device-2 stored date: ${local2!.date} isUtc=${local2.date.isUtc}');
+        expect(
+          local2.date.toLocal().difference(localInvoiceDate).inSeconds.abs() <= 1,
+          isTrue,
+          reason: 'instant must survive pull: stored date .toLocal() must equal '
+              'the original local invoice date',
+        );
+      } finally {
+        await db2.close();
+        try {
+          tempDir2.deleteSync(recursive: true);
+        } catch (e) {
+          print('WARNING: temp dir2 cleanup failed: $e');
+        }
+      }
+
+      print('VERIFICATION PASSED — invoice date is UTC on the wire & on pull');
+    } finally {
+      // 6) Cleanup: delete the remote invoice row (best-effort) + close DBs.
+      final cleanupSyncId = invSyncId;
+      if (cleanupSyncId != null) {
+        try {
+          await Supabase.instance.client
+              .from('invoices')
+              .delete()
+              .eq('sync_id', cleanupSyncId);
+          final leftovers = await Supabase.instance.client
+              .from('invoices')
+              .select('sync_id')
+              .eq('sync_id', cleanupSyncId);
+          print('cleanup: invoice rows still present = ${leftovers.length}');
+        } catch (e) {
+          print('WARNING: timezone cleanup delete failed: $e');
+        }
+      }
+      await db.close();
+      try {
+        tempDir.deleteSync(recursive: true);
+      } catch (e) {
+        print('WARNING: temp dir cleanup failed: $e');
+      }
+    }
+  });
+
   test('VERIFICATION: periodic timer fires on its own (no manual syncNow)', () async {
     SharedPreferences.setMockInitialValues({});
 

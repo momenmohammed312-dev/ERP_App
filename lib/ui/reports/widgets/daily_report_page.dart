@@ -42,9 +42,9 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
 
       final Map<String, List<dynamic>> invoicesByDate = {};
       for (final inv in allInvoices) {
-        final dateStr = DateFormat('yyyy-MM-dd').format(inv.date);
+        final dateStr = DateFormat('yyyy-MM-dd').format(inv.date.toLocal());
         // تجاهل الفواتير بتاريخ غير صالح (قبل 2000)
-        if (inv.date.year < 2000) continue;
+        if (inv.date.toLocal().year < 2000) continue;
         invoicesByDate.putIfAbsent(dateStr, () => []).add(inv);
       }
 

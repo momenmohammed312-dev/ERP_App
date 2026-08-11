@@ -87,7 +87,7 @@ class PrinterService {
         remainingAmount: invoice['remainingAmount'],
         paymentMethod: paymentMethod,
         receiptNumber: invoice['id']?.toString() ?? '1',
-        date: invoice['date'] ?? DateTime.now(),
+        date: (invoice['date'] as DateTime?)?.toLocal() ?? DateTime.now(),
         customerName: invoice['customerName'] ?? 'عميل نقدي',
         printer: printer,
       );
@@ -152,7 +152,7 @@ class PrinterService {
                         style: _getTextStyle(fontSize: 12),
                       ),
                       pw.Text(
-                        'Date: ${DateFormat('yyyy-MM-dd HH:mm').format(invoice['date'])}',
+                        'Date: ${DateFormat('yyyy-MM-dd HH:mm').format((invoice['date'] as DateTime).toLocal())}',
                         style: _getTextStyle(fontSize: 12),
                       ),
                     ],
@@ -1358,7 +1358,7 @@ class PrinterService {
         customerPhone: invoice['customerPhone'] ?? 'N/A',
         customerZipCode: '',
         customerState: '',
-        invoiceDate: invoice['date'] ?? DateTime.now(),
+        invoiceDate: (invoice['date'] as DateTime?)?.toLocal() ?? DateTime.now(),
         subtotal: (invoice['totalAmount'] ?? 0.0).toDouble(),
         isCreditAccount: paymentMethod.toLowerCase() != 'cash',
         previousBalance: 0.0,

@@ -173,7 +173,7 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
       totalAmount: Value((remoteRow['total_amount'] as num?)?.toDouble() ?? 0),
       paidAmount: Value((remoteRow['paid_amount'] as num?)?.toDouble() ?? 0),
       status: Value(remoteRow['status'] as String? ?? 'pending'),
-      date: Value(DateTime.tryParse(remoteRow['invoice_date'] as String? ?? '') ?? DateTime.now()),
+      date: Value(DateTime.tryParse(remoteRow['invoice_date'] as String? ?? '') ?? DateTime.now().toUtc()),
       updatedAt: Value(remoteUpdated),
     );
 
@@ -268,8 +268,8 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
           'total_amount': inv.totalAmount,
           'paid_amount': inv.paidAmount,
           'status': inv.status,
-          'invoice_date': inv.date.toIso8601String(),
-          'updated_at': (inv.updatedAt ?? DateTime.now()).toIso8601String(),
+          'invoice_date': inv.date.toUtc().toIso8601String(),
+          'updated_at': (inv.updatedAt ?? DateTime.now()).toUtc().toIso8601String(),
         },
       );
     } catch (e) {
@@ -326,7 +326,7 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
           'quantity': qty,
           'price': price,
           'discount': discount,
-          'updated_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
         },
       );
     } catch (e) {

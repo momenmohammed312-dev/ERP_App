@@ -368,7 +368,7 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       subtitle: Text(
-                        'فاتورة #${invoice.invoiceNumber ?? invoice.id} | تاريخ: ${DateFormat('yyyy/MM/dd HH:mm').format(invoice.date)} | العميل: ${invoice.customerName ?? "عميل نقدي"}',
+                        'فاتورة #${invoice.invoiceNumber ?? invoice.id} | تاريخ: ${DateFormat('yyyy/MM/dd HH:mm').format(invoice.date.toLocal())} | العميل: ${invoice.customerName ?? "عميل نقدي"}',
                       ),
                       trailing: Column(
                         mainAxisAlignment: MainAxisAlignment.center,

@@ -306,7 +306,7 @@ class UnifiedPrintService {
                       style: pw.TextStyle(font: arabicFont),
                     ),
                     pw.Text(
-                      'التاريخ: ${DateFormat('yyyy/MM/dd').format(invoiceData.invoice.invoiceDate)}',
+                      'التاريخ: ${DateFormat('yyyy/MM/dd').format(invoiceData.invoice.invoiceDate.toLocal())}',
                       style: pw.TextStyle(font: arabicFont),
                     ),
                     pw.Text(

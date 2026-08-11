@@ -304,7 +304,7 @@ class ExportService {
             decoration: const pw.BoxDecoration(color: PdfColors.white),
             children: [
               _cell(row.invoiceNumber),
-              _cell(DateFormat('yyyy/MM/dd').format(row.date)),
+              _cell(DateFormat('yyyy/MM/dd').format(row.date.toLocal())),
               _cell(row.customerName),
               _cell(
                 row.productNames,
@@ -1251,7 +1251,7 @@ class ExportService {
         'العميل': invoice.customerName?.isNotEmpty == true
             ? invoice.customerName!
             : 'عميل غير محدد',
-        'التاريخ': DateFormat('yyyy/MM/dd').format(invoice.date),
+        'التاريخ': DateFormat('yyyy/MM/dd').format(invoice.date.toLocal()),
         'الإجمالي': invoice.totalAmount.isNaN ? 0.0 : invoice.totalAmount,
         'المدفوع': invoice.paidAmount.isNaN ? 0.0 : invoice.paidAmount,
         'المتبقي':

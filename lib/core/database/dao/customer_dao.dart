@@ -156,7 +156,7 @@ class CustomerDao extends DatabaseAccessor<AppDatabase>
           'phone': customer.phone,
           'address': customer.address,
           'opening_balance': customer.openingBalance,
-          'updated_at': (customer.updatedAt ?? DateTime.now()).toIso8601String(),
+          'updated_at': (customer.updatedAt ?? DateTime.now()).toUtc().toIso8601String(),
         },
       );
     } catch (e) {

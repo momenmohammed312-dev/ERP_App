@@ -137,7 +137,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
           'barcode': p.barcode,
           'cost_price': p.costPrice,
           'status': p.status,
-          'updated_at': (p.updatedAt ?? DateTime.now()).toIso8601String(),
+          'updated_at': (p.updatedAt ?? DateTime.now()).toUtc().toIso8601String(),
         },
       );
     } catch (e) {

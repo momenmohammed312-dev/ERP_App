@@ -499,7 +499,9 @@ class _DayManagementScreenState extends ConsumerState<DayManagementScreen>
                               ),
                               title: Text(transaction['description'] ?? ''),
                               subtitle: Text(
-                                DateFormat('HH:mm').format(transaction['date']),
+                                DateFormat('HH:mm').format(
+                                  (transaction['date'] as DateTime).toLocal(),
+                                ),
                               ),
                               trailing: Text(
                                 '${transaction['amount']?.toStringAsFixed(2) ?? '0.00'} ج.م',
