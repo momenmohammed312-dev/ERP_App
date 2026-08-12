@@ -28,6 +28,15 @@ class CustomerDao extends DatabaseAccessor<AppDatabase>
     )..orderBy([(t) => OrderingTerm.asc(t.name)])).watch();
   }
 
+  /// Watch only active (non soft-deleted) customers, sorted by name.
+  /// Used by the customer UI so soft-deleted customers disappear from the list.
+  Stream<List<Customer>> watchActiveCustomers() {
+    return (select(customers)
+          ..where((t) => t.isActive.equals(true))
+          ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+        .watch();
+  }
+
   /// Get all customers (Legacy method)
   Future<List<Customer>> getAllCustomers() => select(customers).get();
 

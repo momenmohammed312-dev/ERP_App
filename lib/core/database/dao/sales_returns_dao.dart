@@ -54,6 +54,10 @@ class SalesReturnsDao extends DatabaseAccessor<AppDatabase>
             ..where((t) => t.returnId.equals(returnId)))
           .get();
 
+  /// الحصول على مرتجع بواسطة المعرف
+  Future<SalesReturn?> getReturnById(int id) =>
+      (select(salesReturns)..where((t) => t.id.equals(id))).getSingleOrNull();
+
   /// إجمالي قيمة المرتجعات في فترة زمنية
   Future<double> getTotalReturnsByDateRange(
     DateTime start,

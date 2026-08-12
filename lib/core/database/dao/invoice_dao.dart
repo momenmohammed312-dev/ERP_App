@@ -22,6 +22,10 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
     )..where((t) => t.invoiceNumber.equals(number))).getSingleOrNull();
   }
 
+  Future<Invoice?> getInvoiceById(int id) {
+    return (select(invoices)..where((t) => t.id.equals(id))).getSingleOrNull();
+  }
+
   Stream<List<Invoice>> watchAllInvoices() => select(invoices).watch();
 
   Future<int> insertInvoice(InvoicesCompanion invoice) async {
@@ -91,6 +95,12 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
       invoiceItems,
     )..where((item) => item.invoiceId.equals(invoiceId))).get();
   }
+
+  /// Delete all line items of an invoice. Used by the atomic edit flow which
+  /// reverses the original items and re-inserts the edited ones.
+  Future<int> deleteInvoiceItemsByInvoice(int invoiceId) =>
+      (delete(invoiceItems)..where((item) => item.invoiceId.equals(invoiceId)))
+          .go();
 
   Future insertInvoiceItem(Insertable<InvoiceItem> item) async {
     final syncId = const Uuid().v4();

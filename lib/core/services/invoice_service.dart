@@ -252,6 +252,239 @@ class InvoiceService {
     await _db.invoiceDao.deleteInvoice(invoice);
   }
 
+  /// Atomically edits an existing invoice while preserving its id and number.
+  ///
+  /// Strategy (mirrors [createInvoice] to avoid fragile delta math):
+  /// 1. Reverse the original impact: restore stock, reverse shipment counts,
+  ///    delete the original ledger rows + line items for this invoice.
+  /// 2. Re-apply the edited items: decrement stock, insert items, update
+  ///    shipment counts/commission, update the invoice totals row, and write
+  ///    fresh ledger rows (sale + payment + supplier commission).
+  ///
+  /// Everything runs inside a single Drift transaction so it either fully
+  /// succeeds or fully rolls back — no partial/corrupted state.
+  Future<Invoice> editInvoice({
+    required int invoiceId,
+    required String? customerId,
+    required String customerName,
+    String? customerContact,
+    String? customerAddress,
+    required String paymentMethod,
+    required double totalAmount,
+    required double paidAmount,
+    double cashAmount = 0,
+    double cardAmount = 0,
+    double creditAmount = 0,
+    required String status,
+    required List<InvoiceItemParams> items,
+    int? primaryShipmentId,
+  }) async {
+    final original = await getInvoiceById(invoiceId);
+    if (original == null) throw Exception('الفاتورة غير موجودة');
+    if (original.status == 'voided') {
+      throw Exception('لا يمكن تعديل فاتورة ملغاة');
+    }
+
+    // Guard: do not edit an invoice that already has returns — that would
+    // double-count stock/ledger. User must reverse the return first.
+    final returns = await _db.salesReturnsDao.getReturnsForInvoice(invoiceId);
+    if (returns.isNotEmpty) {
+      throw Exception('لا يمكن تعديل فاتورة عليها مرتجعات مسجلة');
+    }
+
+    final actualInvoiceNumber = original.invoiceNumber ?? 'INV$invoiceId';
+    final rand = Random.secure();
+
+    return _db.transaction(() async {
+      final originalItems = await _db.invoiceDao.getItemsByInvoiceId(invoiceId);
+
+      // 1a. Reverse original stock + shipment counts.
+      for (final item in originalItems) {
+        final product = await _db.productDao.getProductById(item.productId);
+        if (product != null) {
+          await _db.productDao.updateProduct(
+            product.copyWith(quantity: product.quantity + item.quantity),
+          );
+        }
+        if (item.shipmentId != null) {
+          final shipment =
+              await _db.vegetableShipmentDao.getById(item.shipmentId!);
+          if (shipment != null) {
+            await _db.vegetableShipmentDao.updateShipment(
+              shipment.copyWith(
+                barnikaSoldCount:
+                    (shipment.barnikaSoldCount - item.quantity).clamp(0, 1 << 62),
+                barnikaRemainingCount:
+                    shipment.barnikaRemainingCount + item.quantity,
+              ),
+            );
+          }
+        }
+      }
+
+      // 1b. Reverse original ledger rows + line items for this invoice.
+      await _db.ledgerDao
+          .deleteTransactionsByReceiptNumber('INV$invoiceId');
+      await _db.invoiceDao.deleteInvoiceItemsByInvoice(invoiceId);
+
+      // 2a. Re-apply edited items.
+      final supplierCommissions = <int, _SupplierCommissionAccumulator>{};
+      for (final item in items) {
+        final product = await _db.productDao.getProductById(item.productId);
+        if (product == null) {
+          throw Exception('المنتج غير موجود (ID: ${item.productId})');
+        }
+
+        final newQty = product.quantity - item.quantity;
+        await _db.productDao.updateProduct(
+          product.copyWith(quantity: newQty < 0 ? 0 : newQty),
+        );
+
+        var itemCommission = item.commission;
+        if (item.shipmentId != null && itemCommission == 0) {
+          final shipment =
+              await _db.vegetableShipmentDao.getById(item.shipmentId!);
+          if (shipment != null &&
+              shipment.pricingMode == ShipmentPricingMode.commission &&
+              shipment.commissionPercentage != null) {
+            itemCommission = ShipmentPricingService.calculateCommission(
+              item.price * item.quantity,
+              shipment.commissionPercentage!,
+            );
+          }
+        }
+
+        await _db.invoiceDao.insertInvoiceItem(
+          InvoiceItemsCompanion(
+            invoiceId: Value(invoiceId),
+            productId: Value(item.productId),
+            quantity: Value(item.quantity),
+            ctn: Value(item.ctn),
+            price: Value(item.price),
+            discount: Value(item.discount),
+            commission: Value(itemCommission),
+            unitCostAtTime: Value(item.unitCostAtTime),
+            shipmentId: Value(item.shipmentId),
+          ),
+        );
+
+        if (item.shipmentId != null) {
+          final shipment =
+              await _db.vegetableShipmentDao.getById(item.shipmentId!);
+          if (shipment == null) {
+            throw Exception('الشحنة #${item.shipmentId} غير موجودة');
+          }
+          final newSold = shipment.barnikaSoldCount + item.quantity;
+          final newRemaining = shipment.barnikaRemainingCount - item.quantity;
+          if (newRemaining < 0) {
+            throw Exception(
+              'الشحنة #${item.shipmentId} لا تحتوي على كمية كافية '
+              '(متبقي: ${shipment.barnikaRemainingCount}, مطلوب: ${item.quantity})',
+            );
+          }
+          await _db.vegetableShipmentDao.updateShipment(
+            shipment.copyWith(
+              barnikaSoldCount: newSold,
+              barnikaRemainingCount: newRemaining,
+            ),
+          );
+          if (itemCommission > 0) {
+            supplierCommissions
+                .putIfAbsent(
+                  item.shipmentId!,
+                  () => _SupplierCommissionAccumulator(shipment.supplierId),
+                )
+                .add(item.price * item.quantity, itemCommission);
+          }
+        }
+      }
+
+      // 2b. Update invoice header totals.
+      await _db.invoiceDao.updateInvoice(
+        InvoicesCompanion(
+          id: Value(invoiceId),
+          invoiceNumber: Value(actualInvoiceNumber),
+          customerId: Value(customerId),
+          customerName: Value(customerName),
+          customerContact: Value(customerContact ?? ''),
+          customerAddress: Value(customerAddress ?? ''),
+          paymentMethod: Value(paymentMethod),
+          totalAmount: Value(totalAmount),
+          paidAmount: Value(paidAmount),
+          cashAmount: Value(cashAmount),
+          cardAmount: Value(cardAmount),
+          creditAmount: Value(creditAmount),
+          status: Value(status),
+          shipmentId: Value(primaryShipmentId),
+        ),
+      );
+
+      // 2c. Fresh ledger rows for a credit customer.
+      final desc = 'بيع #$actualInvoiceNumber';
+      if (customerId != null &&
+          customerId != 'cash' &&
+          customerId.isNotEmpty) {
+        await _db.ledgerDao.insertTransaction(
+          LedgerTransactionsCompanion.insert(
+            id:
+                '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_sale',
+            entityType: 'Customer',
+            refId: customerId,
+            date: DateTime.now(),
+            description: desc,
+            debit: Value(totalAmount),
+            credit: const Value(0.0),
+            origin: 'sale',
+            paymentMethod: Value(paymentMethod),
+            receiptNumber: Value('INV$invoiceId'),
+          ),
+        );
+
+        if (paidAmount > 0) {
+          await _db.ledgerDao.insertTransaction(
+            LedgerTransactionsCompanion.insert(
+              id:
+                  '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_pay',
+              entityType: 'Customer',
+              refId: customerId,
+              date: DateTime.now(),
+              description: 'دفع #$actualInvoiceNumber',
+              debit: const Value(0.0),
+              credit: Value(paidAmount),
+              origin: 'payment',
+              paymentMethod: Value(paymentMethod),
+              receiptNumber: Value('INV$invoiceId'),
+            ),
+          );
+        }
+      }
+
+      // 2d. Supplier commission ledger entries.
+      for (final entry in supplierCommissions.entries) {
+        final acc = entry.value;
+        final supplierDue = acc.sellAmount - acc.commissionAmount;
+        await _db.ledgerDao.insertTransaction(
+          LedgerTransactionsCompanion.insert(
+            id:
+                '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_supplier',
+            entityType: 'Supplier',
+            refId: acc.supplierId,
+            date: DateTime.now(),
+            description: 'عمولة بيع #$actualInvoiceNumber',
+            debit: Value(supplierDue),
+            credit: const Value(0.0),
+            origin: 'sale',
+            receiptNumber: Value('INV$invoiceId'),
+          ),
+        );
+      }
+
+      final updated = await getInvoiceById(invoiceId);
+      if (updated == null) throw Exception('فشل في تحديث الفاتورة');
+      return updated;
+    });
+  }
+
   Future<void> voidInvoice(int invoiceId, String reason, String voidedBy) async {
     await _db.invoiceDao.voidInvoice(invoiceId, reason, voidedBy);
   }

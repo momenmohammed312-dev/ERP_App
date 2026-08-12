@@ -39,7 +39,7 @@ class _CustomerTransactionsWidgetState
     return Padding(
       padding: const EdgeInsets.all(20),
       child: StreamBuilder<List<Customer>>(
-        stream: widget.db.customerDao.watchAllCustomers(),
+        stream: widget.db.customerDao.watchActiveCustomers(),
         builder: (context, snapshot) {
           final slivers = <Widget>[
             SliverToBoxAdapter(child: CustomersSummaryWidget(db: widget.db)),
@@ -238,6 +238,10 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
         db: widget.db,
         transaction: transaction,
         entityType: 'Customer',
+        onChanged: () {
+          _loadRecentTransactions();
+          setState(() {});
+        },
       ),
     );
   }

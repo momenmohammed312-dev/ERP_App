@@ -86,6 +86,34 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
     ledgerTransactions,
   )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
 
+  /// Update an existing ledger transaction by its primary key (id).
+  Future<int> updateTransaction(LedgerTransactionsCompanion transaction) {
+    return (update(ledgerTransactions)
+          ..where((tbl) => tbl.id.equals(transaction.id.value)))
+        .write(transaction);
+  }
+
+  /// Delete a ledger transaction by its primary key (id).
+  Future<int> deleteTransaction(String id) =>
+      (delete(ledgerTransactions)..where((tbl) => tbl.id.equals(id))).go();
+
+  /// Fetch all ledger transactions that share a given receipt number
+  /// (e.g. all rows linked to invoice 'INV123').
+  Future<List<LedgerTransaction>> getTransactionsByReceiptNumber(
+    String receiptNumber,
+  ) =>
+      (select(ledgerTransactions)
+            ..where((tbl) => tbl.receiptNumber.equals(receiptNumber)))
+          .get();
+
+  /// Delete every ledger transaction linked to a receipt number.
+  /// Used to fully reverse an invoice's impact (sale + payment + commission)
+  /// before re-applying the edited version. Wrapped in a caller transaction.
+  Future<int> deleteTransactionsByReceiptNumber(String receiptNumber) =>
+      (delete(ledgerTransactions)
+            ..where((tbl) => tbl.receiptNumber.equals(receiptNumber)))
+          .go();
+
   Future<double> getRunningBalance(
     String entityType,
     String refId, {

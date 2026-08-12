@@ -5,7 +5,10 @@ import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/ui/customer/edit_payment_dialog.dart';
 import 'package:pos_offline_desktop/ui/customer/services/enhanced_customer_statement_generator.dart';
+import 'package:pos_offline_desktop/ui/invoice/edit_invoice_page.dart';
+import 'package:pos_offline_desktop/ui/widgets/invoice_items_table.dart';
 
 class CustomerStatementScreen extends ConsumerStatefulWidget {
   final Customer customer;
@@ -16,20 +19,46 @@ class CustomerStatementScreen extends ConsumerStatefulWidget {
       _CustomerStatementScreenState();
 }
 
+class _StatementRowData {
+  final LedgerTransaction tx;
+  final double balance;
+  _StatementRowData({required this.tx, required this.balance});
+}
+
 class _CustomerStatementScreenState
     extends ConsumerState<CustomerStatementScreen> {
   DateTime _fromDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _toDate = DateTime.now();
-  List<LedgerTransaction> _transactions = [];
+  List<_StatementRowData> _rows = [];
   double _openingBalance = 0.0;
   bool _isLoading = true;
   bool _isExporting = false;
   bool _isDetailed = true;
 
+  // Summary
+  double _totalPurchases = 0;
+  double _totalPayments = 0;
+  double _totalReturns = 0;
+  double _totalDiscount = 0;
+  int _invoiceCount = 0;
+
+  // Filters
+  String _filterType = 'all'; // all | sale | payment | reversal
+  final TextEditingController _searchController = TextEditingController();
+
+  final _nf = NumberFormat('#,##0.00');
+  static final _invReceipt = RegExp(r'^INV(\d+)$');
+
   @override
   void initState() {
     super.initState();
     _loadStatement();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadStatement() async {
@@ -48,11 +77,68 @@ class _CustomerStatementScreenState
       upToDate: _fromDate.subtract(const Duration(seconds: 1)),
     );
 
+    double purchases = 0;
+    double payments = 0;
+    double returns = 0;
+    double discounts = 0;
+    int invoices = 0;
+
+    for (final tx in txs) {
+      if (tx.origin == 'sale') {
+        purchases += tx.debit;
+        invoices++;
+        if (tx.receiptNumber != null) {
+          final m = _invReceipt.firstMatch(tx.receiptNumber!);
+          if (m != null) {
+            final id = int.tryParse(m.group(1) ?? '');
+            if (id != null) {
+              final items =
+                  await db.invoiceDao.getItemsWithProductsByInvoice(id);
+              for (final it in items) {
+                discounts += it.$1.discount;
+              }
+            }
+          }
+        }
+      } else if (tx.origin == 'payment') {
+        payments += tx.credit;
+      } else if (tx.origin == 'reversal') {
+        returns += tx.credit;
+      }
+    }
+
+    double running = prevBalance;
+    final rows = <_StatementRowData>[];
+    for (final tx in txs) {
+      running += tx.debit - tx.credit;
+      rows.add(_StatementRowData(tx: tx, balance: running));
+    }
+
     setState(() {
-      _transactions = txs;
+      _rows = rows;
       _openingBalance = prevBalance;
+      _totalPurchases = purchases;
+      _totalPayments = payments;
+      _totalReturns = returns;
+      _totalDiscount = discounts;
+      _invoiceCount = invoices;
       _isLoading = false;
     });
+  }
+
+  List<_StatementRowData> get _filteredRows {
+    final q = _searchController.text.trim().toLowerCase();
+    return _rows.where((r) {
+      final tx = r.tx;
+      if (_filterType == 'sale' && tx.origin != 'sale') return false;
+      if (_filterType == 'payment' && tx.origin != 'payment') return false;
+      if (_filterType == 'reversal' && tx.origin != 'reversal') return false;
+      if (q.isNotEmpty) {
+        final hay = '${tx.description} ${tx.receiptNumber ?? ''}'.toLowerCase();
+        if (!hay.contains(q)) return false;
+      }
+      return true;
+    }).toList();
   }
 
   Future<void> _exportPdf() async {
@@ -103,7 +189,9 @@ class _CustomerStatementScreenState
     final subTextColor = isDark ? const Color(0xFF8B949E) : Colors.black54;
     final goldColor = const Color(0xFFC9A84C);
 
-    double runningBalance = _openingBalance;
+    final finalBalance = _rows.isEmpty
+        ? _openingBalance
+        : _rows.last.balance;
 
     return Directionality(
       textDirection: ui.TextDirection.rtl,
@@ -142,14 +230,16 @@ class _CustomerStatementScreenState
         body: Column(
           children: [
             _buildCustomerInfo(cardBg, textColor, subTextColor, goldColor),
+            _buildSummaryCards(cardBg, textColor, subTextColor, goldColor),
             _buildDateFilter(cardBg, textColor, goldColor),
+            _buildFilters(cardBg, textColor, goldColor),
             _buildStatementToggle(cardBg, textColor, goldColor),
             _buildOpeningBalance(cardBg, textColor, goldColor),
             _buildTableHeader(textColor, goldColor),
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : _transactions.isEmpty
+                  : _filteredRows.isEmpty
                       ? Center(
                           child: Text(
                             'لا توجد معاملات في هذه الفترة',
@@ -157,22 +247,23 @@ class _CustomerStatementScreenState
                           ),
                         )
                       : ListView.builder(
-                          itemCount: _transactions.length,
+                          itemCount: _filteredRows.length,
                           itemBuilder: (context, index) {
-                            final tx = _transactions[index];
-                            runningBalance += (tx.debit - tx.credit);
-                            return _buildTransactionRow(
-                              tx,
-                              runningBalance,
-                              textColor,
-                              subTextColor,
-                              isDark,
+                            final row = _filteredRows[index];
+                            return _StatementRow(
+                              db: ref.read(appDatabaseProvider),
+                              data: row,
+                              textColor: textColor,
+                              subTextColor: subTextColor,
+                              isDark: isDark,
+                              goldColor: goldColor,
+                              onChanged: _loadStatement,
                             );
                           },
                         ),
             ),
             _buildFooter(
-              runningBalance,
+              finalBalance,
               textColor,
               goldColor,
               cardBg,
@@ -180,6 +271,88 @@ class _CustomerStatementScreenState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _summaryCard(
+    String label,
+    double value,
+    Color color,
+    Color cardBg,
+    Color textColor,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.7)),
+          ),
+          const Gap(4),
+          Text(
+            '${_nf.format(value)} ج.م',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCards(
+    Color cardBg,
+    Color textColor,
+    Color subTextColor,
+    Color goldColor,
+  ) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          SizedBox(
+            width: 150,
+            child: _summaryCard('الرصيد الافتتاحي', _openingBalance,
+                goldColor, cardBg, textColor),
+          ),
+          SizedBox(
+            width: 150,
+            child: _summaryCard('إجمالي المشتريات', _totalPurchases,
+                Colors.redAccent, cardBg, textColor),
+          ),
+          SizedBox(
+            width: 150,
+            child: _summaryCard('المدفوعات', _totalPayments, Colors.green,
+                cardBg, textColor),
+          ),
+          SizedBox(
+            width: 150,
+            child: _summaryCard('المرتجعات', _totalReturns, Colors.orange,
+                cardBg, textColor),
+          ),
+          SizedBox(
+            width: 150,
+            child: _summaryCard(
+                'الخصومات', _totalDiscount, Colors.purple, cardBg, textColor),
+          ),
+          SizedBox(
+            width: 150,
+            child: _summaryCard('عدد الفواتير', _invoiceCount.toDouble(),
+                Colors.blue, cardBg, textColor),
+          ),
+        ],
       ),
     );
   }
@@ -225,8 +398,33 @@ class _CustomerStatementScreenState
                     widget.customer.phone!,
                     style: TextStyle(fontSize: 12, color: subTextColor),
                   ),
+                if (widget.customer.address != null &&
+                    widget.customer.address!.isNotEmpty)
+                  Text(
+                    widget.customer.address!,
+                    style: TextStyle(fontSize: 11, color: subTextColor),
+                  ),
               ],
             ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'الرصيد الحالي',
+                style: TextStyle(fontSize: 11, color: subTextColor),
+              ),
+              Text(
+                '${_nf.format(_rows.isEmpty ? _openingBalance : _rows.last.balance)} ج.م',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: (_rows.isEmpty ? _openingBalance : _rows.last.balance) > 0
+                      ? Colors.redAccent
+                      : Colors.green,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -290,6 +488,48 @@ class _CustomerStatementScreenState
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFilters(Color cardBg, Color textColor, Color goldColor) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: goldColor.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'بحث برقم المرجع أو البيان',
+                prefixIcon:
+                    const Icon(Icons.search, size: 18),
+                border: InputBorder.none,
+                isDense: true,
+              ),
+              style: TextStyle(color: textColor, fontSize: 13),
+            ),
+          ),
+          const Gap(8),
+          DropdownButton<String>(
+            value: _filterType,
+            underline: const SizedBox.shrink(),
+            items: const [
+              DropdownMenuItem(value: 'all', child: Text('الكل')),
+              DropdownMenuItem(value: 'sale', child: Text('فواتير')),
+              DropdownMenuItem(value: 'payment', child: Text('مدفوعات')),
+              DropdownMenuItem(value: 'reversal', child: Text('مرتجعات')),
+            ],
+            onChanged: (v) => setState(() => _filterType = v!),
+          ),
+        ],
       ),
     );
   }
@@ -421,7 +661,7 @@ class _CustomerStatementScreenState
           Expanded(
             flex: 2,
             child: Text(
-              'قيمة المشتريات',
+              'المشتريات',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.redAccent,
@@ -432,7 +672,7 @@ class _CustomerStatementScreenState
           Expanded(
             flex: 2,
             child: Text(
-              'قيمة المدفوعات',
+              'المدفوعات',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.green,
@@ -456,81 +696,6 @@ class _CustomerStatementScreenState
     );
   }
 
-  Widget _buildTransactionRow(
-    LedgerTransaction tx,
-    double currentBalance,
-    Color textColor,
-    Color subTextColor,
-    bool isDark,
-  ) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF161B22) : Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: const Color(0xFF30363D).withValues(alpha: 0.3),
-            width: 0.5,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              DateFormat('MM/dd HH:mm').format(tx.date),
-              style: TextStyle(fontSize: 11, color: subTextColor),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(
-              tx.description,
-              style: TextStyle(fontSize: 12, color: textColor),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              tx.debit > 0 ? tx.debit.toStringAsFixed(2) : '-',
-              style: TextStyle(
-                color: Colors.redAccent,
-                fontWeight:
-                    tx.debit > 0 ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              tx.credit > 0 ? tx.credit.toStringAsFixed(2) : '-',
-              style: TextStyle(
-                color: Colors.green,
-                fontWeight:
-                    tx.credit > 0 ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              currentBalance.toStringAsFixed(2),
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: currentBalance > 0
-                    ? Colors.redAccent
-                    : (currentBalance < 0 ? Colors.green : textColor),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFooter(
     double finalBalance,
     Color textColor,
@@ -544,8 +709,7 @@ class _CustomerStatementScreenState
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius:
-            const BorderRadius.vertical(bottom: Radius.circular(8)),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
         border: Border.all(color: goldColor.withValues(alpha: 0.15)),
         boxShadow: [
           BoxShadow(
@@ -596,5 +760,373 @@ class _CustomerStatementScreenState
         ],
       ),
     );
+  }
+}
+
+class _StatementRow extends StatefulWidget {
+  final AppDatabase db;
+  final _StatementRowData data;
+  final Color textColor;
+  final Color subTextColor;
+  final bool isDark;
+  final Color goldColor;
+  final VoidCallback onChanged;
+
+  const _StatementRow({
+    required this.db,
+    required this.data,
+    required this.textColor,
+    required this.subTextColor,
+    required this.isDark,
+    required this.goldColor,
+    required this.onChanged,
+  });
+
+  @override
+  State<_StatementRow> createState() => _StatementRowState();
+}
+
+class _StatementRowState extends State<_StatementRow> {
+  bool _expanded = false;
+  bool _isLoadingDetails = false;
+  List<InvoiceItemDisplayModel> _items = [];
+  List<SalesReturnItem> _returnItems = [];
+  SalesReturn? _returnHeader;
+
+  bool get _isSale => widget.data.tx.origin == 'sale';
+  bool get _isPayment => widget.data.tx.origin == 'payment';
+  bool get _isReturn => widget.data.tx.origin == 'reversal';
+
+  int? get _invoiceId {
+    final rn = widget.data.tx.receiptNumber;
+    if (rn == null) return null;
+    final m = RegExp(r'^INV(\d+)$').firstMatch(rn);
+    return m != null ? int.tryParse(m.group(1) ?? '') : null;
+  }
+
+  int? get _returnId {
+    final rn = widget.data.tx.receiptNumber;
+    if (rn == null) return null;
+    final m = RegExp(r'^RET(\d+)$').firstMatch(rn);
+    return m != null ? int.tryParse(m.group(1) ?? '') : null;
+  }
+
+  Future<void> _loadDetails() async {
+    if (_isLoadingDetails) return;
+    setState(() => _isLoadingDetails = true);
+    try {
+      if (_isSale && _invoiceId != null) {
+        final items = await widget.db.invoiceDao
+            .getItemsWithProductsByInvoice(_invoiceId!);
+        setState(() {
+          _items = items.map((e) {
+            final item = e.$1;
+            final product = e.$2;
+            return InvoiceItemDisplayModel(
+              productName: product?.name ?? 'منتج ${item.productId}',
+              quantity: item.quantity.toDouble(),
+              unitPrice:
+                  item.quantity > 0 ? item.price / item.quantity : item.price,
+              total: item.price,
+              unit: product?.unit,
+            );
+          }).toList();
+        });
+      } else if (_isReturn && _returnId != null) {
+        final header =
+            await widget.db.salesReturnsDao.getReturnById(_returnId!);
+        final items =
+            await widget.db.salesReturnsDao.getItemsForReturn(_returnId!);
+        setState(() {
+          _returnHeader = header;
+          _returnItems = items;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading row details: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingDetails = false);
+    }
+  }
+
+  void _toggle() {
+    setState(() => _expanded = !_expanded);
+    if (_expanded) _loadDetails();
+  }
+
+  void _editInvoice() {
+    if (_invoiceId == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditInvoicePage(
+          db: widget.db,
+          invoiceId: _invoiceId!,
+          onSaved: () {
+            widget.onChanged();
+            if (context.mounted) Navigator.pop(context);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _editPayment() {
+    showDialog(
+      context: context,
+      builder: (ctx) => EditPaymentDialog(
+        db: widget.db,
+        transaction: widget.data.tx,
+        onSaved: widget.onChanged,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tx = widget.data.tx;
+    final amount = tx.debit > 0 ? tx.debit : tx.credit;
+    final isDebitRow = tx.debit > 0;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+      color: widget.isDark ? const Color(0xFF161B22) : Colors.white,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: _toggle,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      DateFormat('MM/dd HH:mm').format(tx.date),
+                      style: TextStyle(fontSize: 11, color: widget.subTextColor),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      tx.description,
+                      style: TextStyle(fontSize: 12, color: widget.textColor),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      tx.debit > 0 ? tx.debit.toStringAsFixed(2) : '-',
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontWeight: tx.debit > 0
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      tx.credit > 0 ? tx.credit.toStringAsFixed(2) : '-',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: tx.credit > 0
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      widget.data.balance.toStringAsFixed(2),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: widget.data.balance > 0
+                            ? Colors.redAccent
+                            : (widget.data.balance < 0
+                                ? Colors.green
+                                : widget.textColor),
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: widget.subTextColor,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded)
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: widget.goldColor.withValues(alpha: 0.2),
+                  ),
+                ),
+              ),
+              child: _buildExpandedContent(amount, isDebitRow),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpandedContent(double amount, bool isDebitRow) {
+    if (_isLoadingDetails) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final children = <Widget>[];
+
+    if (_isSale) {
+      children.add(
+        _detailRow('نوع المعاملة', 'فاتورة بيع', Colors.redAccent),
+      );
+      if (_items.isEmpty) {
+        children.add(const Text('لا توجد تفاصيل أصناف'));
+      } else {
+        children.add(InvoiceItemsTable(items: _items));
+      }
+      children.add(
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _editInvoice,
+            icon: const Icon(Icons.edit_note, size: 18),
+            label: const Text('تعديل الفاتورة'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.blue,
+            ),
+          ),
+        ),
+      );
+    } else if (_isPayment) {
+      children.add(_detailRow(
+        'طريقة الدفع',
+        _paymentMethodLabel(widget.data.tx.paymentMethod),
+        Colors.green,
+      ));
+      children.add(_detailRow(
+        'المبلغ',
+        '${amount.toStringAsFixed(2)} ج.م',
+        Colors.green,
+      ));
+      if (widget.data.tx.receiptNumber != null) {
+        children
+            .add(_detailRow('المرجع', widget.data.tx.receiptNumber!, Colors.grey));
+      }
+      children.add(
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _editPayment,
+            icon: const Icon(Icons.edit, size: 18),
+            label: const Text('تعديل الدفعة'),
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.blue),
+          ),
+        ),
+      );
+    } else if (_isReturn) {
+      children.add(_detailRow('نوع المعاملة', 'مرتجع', Colors.orange));
+      if (_returnHeader != null) {
+        children.add(_detailRow(
+          'رقم المرتجع',
+          _returnHeader!.returnNumber,
+          Colors.orange,
+        ));
+        children.add(_detailRow(
+          'السبب',
+          _returnHeader!.returnReason,
+          Colors.orange,
+        ));
+      }
+      if (_returnItems.isEmpty) {
+        children.add(const Text('لا توجد تفاصيل أصناف مرتجعة'));
+      } else {
+        children.add(
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('الصنف')),
+                DataColumn(label: Text('الكمية')),
+                DataColumn(label: Text('سعر الوحدة')),
+                DataColumn(label: Text('الإجمالي')),
+              ],
+              rows: _returnItems
+                  .map(
+                    (it) => DataRow(
+                      cells: [
+                        DataCell(Text(it.productName)),
+                        DataCell(Text('${it.quantity}')),
+                        DataCell(Text(it.unitPrice.toStringAsFixed(2))),
+                        DataCell(Text(it.totalPrice.toStringAsFixed(2))),
+                      ],
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+        );
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  Widget _detailRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 12, color: widget.subTextColor),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 13, color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _paymentMethodLabel(String? method) {
+    switch (method) {
+      case 'cash':
+        return 'نقدي';
+      case 'credit':
+        return 'آجل';
+      case 'visa':
+      case 'card':
+        return 'بطاقة';
+      case 'bank':
+        return 'بنك';
+      case 'instapay':
+        return 'انستاباي';
+      case 'wallet':
+        return 'محفظة';
+      default:
+        return method ?? 'غير محدد';
+    }
   }
 }
