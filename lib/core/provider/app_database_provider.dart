@@ -10,6 +10,7 @@ import '../services/invoice_service.dart';
 import '../services/shipment_allocation_service.dart';
 import '../../services/staff_management_service.dart';
 import '../database/dao/attendance_device_dao.dart';
+import '../../services/attendance/attendance_calculation_engine.dart';
 import '../../services/attendance/attendance_sync_service.dart';
 import '../services/sync_service.dart';
 
@@ -45,7 +46,9 @@ final invoiceServiceProvider = Provider<InvoiceService>((ref) {
   return InvoiceService(db);
 });
 
-final shipmentAllocationServiceProvider = Provider<ShipmentAllocationService>((ref) {
+final shipmentAllocationServiceProvider = Provider<ShipmentAllocationService>((
+  ref,
+) {
   final db = ref.watch(appDatabaseProvider);
   return ShipmentAllocationService(
     db.vegetableShipmentDao,
@@ -61,7 +64,12 @@ final attendanceDeviceDaoProvider = Provider<AttendanceDeviceDao>((ref) {
 final attendanceSyncServiceProvider = Provider<AttendanceSyncService>((ref) {
   final deviceDao = ref.watch(attendanceDeviceDaoProvider);
   final db = ref.watch(appDatabaseProvider);
-  return AttendanceSyncService(deviceDao, db.staffManagementDao);
+  final engine = AttendanceCalculationEngine(
+    db,
+    deviceDao,
+    db.staffManagementDao,
+  );
+  return AttendanceSyncService(deviceDao, db.staffManagementDao, engine);
 });
 
 final syncServiceProvider = Provider<SyncService>((ref) {

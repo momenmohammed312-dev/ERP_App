@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
@@ -80,10 +79,6 @@ class License {
     final hmac = Hmac(sha256, key);
     final digest = hmac.convert(bytes);
     return base64Encode(digest.bytes);
-  }
-
-  static Future<String> _getHardwareId() async {
-    return await HardwareIdService.getHardwareId();
   }
 
   Map<String, dynamic> toJson() => {
@@ -205,16 +200,26 @@ class LicenseManager {
       final decryptedJson = _decrypt(encryptedData);
       final licenseData = jsonDecode(decryptedJson) as Map<String, dynamic>;
 
-      // Hardware binding
+      // Hardware binding with tolerant matching
       final currentFingerprint = await generateDeviceFingerprint();
+      final currentComponents = await HardwareIdService.getHardwareComponents();
       final savedDevice = licenseData['device'];
 
       if (savedDevice == 'UNBOUND' || savedDevice.isEmpty) {
         licenseData['device'] = currentFingerprint;
-      } else if (savedDevice != currentFingerprint) {
-        return LicenseValidationResult.invalid(
-          'هذا الترخيص مُفعَّل على جهاز آخر',
+      } else {
+        // Try tolerant matching first
+        final isSameDevice = await HardwareIdService.isSameDeviceTolerant(
+          savedDevice,
+          null, // No saved components in license key itself
         );
+        
+        if (!isSameDevice) {
+          // Hard mismatch - this is a different device
+          return LicenseValidationResult.invalid(
+            'هذا الترخيص مُفعَّل على جهاز آخر',
+          );
+        }
       }
 
       // Expiry check
@@ -300,10 +305,12 @@ class LicenseManager {
       if (freshData == null) {
         // First run or update — create and save fresh data
         final now = DateTime.now();
+        final currentComponents = await HardwareIdService.getHardwareComponents();
         final newData = SecureLicenseData.create(
           firstRunDate: now,
           hardwareId: hardwareId,
           appVersion: _currentAppVersion,
+          hardwareComponents: currentComponents.toJson(),
         );
         await SecureLicenseStorage.write(newData);
         // Also save to SharedPreferences for migration
@@ -322,10 +329,53 @@ class LicenseManager {
         );
       }
 
-      // Hardware binding check
-      if (freshData.hardwareId.isNotEmpty && freshData.hardwareId != hardwareId) {
-        AppLogger.w('Hardware mismatch — free version bound to different device');
-        return null;
+      // Hardware binding check with grace period
+      if (freshData.hardwareId.isNotEmpty) {
+        final currentComponents = await HardwareIdService.getHardwareComponents();
+        final savedComponents = freshData.lastHardwareComponents != null
+            ? HardwareComponents.fromJson(freshData.lastHardwareComponents!)
+            : null;
+        
+        final isSameDevice = await HardwareIdService.isSameDeviceTolerant(
+          freshData.hardwareId,
+          savedComponents,
+        );
+        
+        if (!isSameDevice) {
+          // Increment mismatch counter
+          final newMismatchCount = freshData.hardwareMismatchCount + 1;
+          AppLogger.w(
+            'Hardware mismatch — free version bound to different device '
+            '(mismatch count: $newMismatchCount)'
+          );
+          
+          if (newMismatchCount >= 2) {
+            // Second consecutive mismatch - block
+            AppLogger.e('Hardware mismatch persisted - blocking free version');
+            return null;
+          } else {
+            // First mismatch - update counter and allow grace launch
+            final updatedData = freshData.copyWith(
+              hardwareMismatchCount: newMismatchCount,
+              lastMismatchTime: DateTime.now(),
+              lastHardwareComponents: currentComponents.toJson(),
+            );
+            await SecureLicenseStorage.write(updatedData);
+            AppLogger.w('First hardware mismatch - grace launch allowed, user should reactivate');
+            // Allow this launch but log warning
+          }
+        } else {
+          // Match successful - reset mismatch counter
+          if (freshData.hardwareMismatchCount > 0) {
+            final updatedData = freshData.copyWith(
+              hardwareMismatchCount: 0,
+              lastMismatchTime: null,
+              lastHardwareComponents: currentComponents.toJson(),
+            );
+            await SecureLicenseStorage.write(updatedData);
+            AppLogger.i('Hardware match confirmed - mismatch counter reset');
+          }
+        }
       }
 
       final expiry = freshData.firstRunDate.add(Duration(days: _freeTrialDays));
@@ -351,11 +401,54 @@ class LicenseManager {
       if (secureData != null && secureData.licenseJson != null) {
         final license = License.fromJson(secureData.licenseJson!);
 
-        // Hardware binding check
+        // Hardware binding check with grace period
         final currentHwId = await HardwareIdService.getHardwareId();
-        if (secureData.hardwareId.isNotEmpty && secureData.hardwareId != currentHwId) {
-          AppLogger.w('Hardware mismatch — license bound to different device');
-          return null;
+        final currentComponents = await HardwareIdService.getHardwareComponents();
+        final savedComponents = secureData.lastHardwareComponents != null
+            ? HardwareComponents.fromJson(secureData.lastHardwareComponents!)
+            : null;
+        
+        if (secureData.hardwareId.isNotEmpty) {
+          final isSameDevice = await HardwareIdService.isSameDeviceTolerant(
+            secureData.hardwareId,
+            savedComponents,
+          );
+          
+          if (!isSameDevice) {
+            // Increment mismatch counter
+            final newMismatchCount = secureData.hardwareMismatchCount + 1;
+            AppLogger.w(
+              'Hardware mismatch — license bound to different device '
+              '(mismatch count: $newMismatchCount)'
+            );
+            
+            if (newMismatchCount >= 2) {
+              // Second consecutive mismatch - block
+              AppLogger.e('Hardware mismatch persisted - blocking paid license');
+              return null;
+            } else {
+              // First mismatch - update counter and allow grace launch
+              final updatedData = secureData.copyWith(
+                hardwareMismatchCount: newMismatchCount,
+                lastMismatchTime: DateTime.now(),
+                lastHardwareComponents: currentComponents.toJson(),
+              );
+              await SecureLicenseStorage.write(updatedData);
+              AppLogger.w('First hardware mismatch - grace launch allowed, user should reactivate');
+              // Allow this launch but log warning
+            }
+          } else {
+            // Match successful - reset mismatch counter
+            if (secureData.hardwareMismatchCount > 0) {
+              final updatedData = secureData.copyWith(
+                hardwareMismatchCount: 0,
+                lastMismatchTime: null,
+                lastHardwareComponents: currentComponents.toJson(),
+              );
+              await SecureLicenseStorage.write(updatedData);
+              AppLogger.i('Hardware match confirmed - mismatch counter reset');
+            }
+          }
         }
 
         // Update session tracking
@@ -444,6 +537,7 @@ class LicenseManager {
   Future<void> _saveLicenseSecure(License license) async {
     final existing = await SecureLicenseStorage.read();
     final hardwareId = await HardwareIdService.getHardwareId();
+    final currentComponents = await HardwareIdService.getHardwareComponents();
 
     final data = SecureLicenseData(
       firstRunDate: existing?.firstRunDate ?? DateTime.now(),
@@ -452,6 +546,10 @@ class LicenseManager {
       lastCheckTime: DateTime.now(),
       sessionElapsedMs: existing?.sessionElapsedMs ?? 0,
       installCount: (existing?.installCount ?? 0) + 1,
+      lastHardwareComponents: currentComponents.toJson(),
+      // Reset mismatch counter on successful activation
+      hardwareMismatchCount: 0,
+      lastMismatchTime: null,
     );
 
     await SecureLicenseStorage.write(data);
@@ -483,41 +581,25 @@ class LicenseManager {
   // MIGRATION FROM SHARED PREFERENCES
   // ════════════════════════════════════════════════════════════════════
 
-  Future<DateTime?> _getFirstRunDate() async {
-    // Try secure storage first
-    final secureData = await SecureLicenseStorage.read();
-    if (secureData != null) return secureData.firstRunDate;
-
-    // Fallback to SharedPreferences
-    final prefs = await SharedPreferences.getInstance();
-    final dateStr = prefs.getString(_firstRunKey);
-    if (dateStr == null) return null;
-
-    final date = DateTime.tryParse(dateStr);
-    if (date != null) {
-      // Migrate to secure storage
-      final hwId = await HardwareIdService.getHardwareId();
-      final newData = SecureLicenseData.create(
-        firstRunDate: date,
-        hardwareId: hwId,
-      );
-      await SecureLicenseStorage.write(newData);
-    }
-    return date;
-  }
-
   Future<void> _saveFirstRunDate(DateTime date) async {
     final hwId = await HardwareIdService.getHardwareId();
+    final currentComponents = await HardwareIdService.getHardwareComponents();
     final existing = await SecureLicenseStorage.read();
 
     if (existing != null) {
       // Update existing
-      await SecureLicenseStorage.write(existing.copyWith(firstRunDate: date));
+      await SecureLicenseStorage.write(
+        existing.copyWith(
+          firstRunDate: date,
+          lastHardwareComponents: currentComponents.toJson(),
+        )
+      );
     } else {
       // Create new
       await SecureLicenseStorage.write(SecureLicenseData.create(
         firstRunDate: date,
         hardwareId: hwId,
+        hardwareComponents: currentComponents.toJson(),
       ));
     }
 

@@ -1,0 +1,56 @@
+;*** BEGIN **********************************************************
+;**                                                                **
+;** Automatically generated on: Fri Aug 07 10:53:04 2026           **
+;**                                                                **
+;** MakeCAB Version: 5.00                                 **
+;**                                                                **
+;*** BEGIN **********************************************************
+[disk list]
+1,Disk 1
+2,Disk 2
+3,Disk 3
+4,Disk 4
+5,Disk 5
+6,Disk 6
+7,Disk 7
+8,Disk 8
+9,Disk 9
+10,Disk 10
+11,Disk 11
+12,Disk 12
+13,Disk 13
+14,Disk 14
+15,Disk 15
+16,Disk 16
+17,Disk 17
+18,Disk 18
+19,Disk 19
+[cabinet list]
+1,1,POS_Factory_Setup_v2.3.0.exe
+2,2,POS_Factory_Setup_v2.3.0.exe
+3,3,POS_Factory_Setup_v2.3.0.exe
+4,4,POS_Factory_Setup_v2.3.0.exe
+5,5,POS_Factory_Setup_v2.3.0.exe
+6,6,POS_Factory_Setup_v2.3.0.exe
+7,7,POS_Factory_Setup_v2.3.0.exe
+8,8,POS_Factory_Setup_v2.3.0.exe
+9,9,POS_Factory_Setup_v2.3.0.exe
+10,10,POS_Factory_Setup_v2.3.0.exe
+11,11,POS_Factory_Setup_v2.3.0.exe
+12,12,POS_Factory_Setup_v2.3.0.exe
+13,13,POS_Factory_Setup_v2.3.0.exe
+14,14,POS_Factory_Setup_v2.3.0.exe
+15,15,POS_Factory_Setup_v2.3.0.exe
+16,16,POS_Factory_Setup_v2.3.0.exe
+17,17,POS_Factory_Setup_v2.3.0.exe
+18,18,POS_Factory_Setup_v2.3.0.exe
+19,19,POS_Factory_Setup_v2.3.0.exe
+[file list]
+1,1,install.bat,4624
+1,1,pos_factory_package.zip,22707416
+16,16,vc_redist.x64.exe,4716614
+;*** END ************************************************************
+;**                                                                **
+;** Automatically generated on: Fri Aug 07 10:53:04 2026           **
+;**                                                                **
+;*** END ************************************************************

@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/staff_management_dao.dart';
+import 'attendance_calculation_engine.dart';
 import 'attendance_source.dart';
 import 'tcp_ip_attendance_source.dart';
 
@@ -29,7 +30,8 @@ class SyncResult {
 class AttendanceSyncService {
   final AttendanceDeviceDao _deviceDao;
   final StaffManagementDao _staffDao;
-  
+  final AttendanceCalculationEngine _engine;
+
   /// Prevents concurrent syncs for the same device
   final Set<int> _syncingDevices = {};
 
@@ -37,7 +39,7 @@ class AttendanceSyncService {
   Timer? _autoSyncTimer;
   bool _isAutoSyncEnabled = false;
 
-  AttendanceSyncService(this._deviceDao, this._staffDao);
+  AttendanceSyncService(this._deviceDao, this._staffDao, this._engine);
 
   /// Whether auto-sync is currently running
   bool get isAutoSyncEnabled => _isAutoSyncEnabled;
@@ -71,7 +73,10 @@ class AttendanceSyncService {
   }
 
   /// Triggers a sync for a specific device
-  Future<void> syncDevice(BiometricDevice device, {String triggeredBy = 'manual'}) async {
+  Future<void> syncDevice(
+    BiometricDevice device, {
+    String triggeredBy = 'manual',
+  }) async {
     // Prevent concurrent syncs for the same device
     if (_syncingDevices.contains(device.id)) {
       return;
@@ -100,7 +105,9 @@ class AttendanceSyncService {
         // 1. Instantiate the correct source based on connection type
         if (device.connectionType == 'tcp_ip') {
           if (device.ipAddress == null || device.port == null) {
-            throw Exception('IP Address and Port are required for TCP/IP devices');
+            throw Exception(
+              'IP Address and Port are required for TCP/IP devices',
+            );
           }
           source = TcpIpAttendanceSource(
             ipAddress: device.ipAddress!,
@@ -108,7 +115,9 @@ class AttendanceSyncService {
             authToken: device.authToken,
           );
         } else {
-          throw Exception('Unsupported connection type: ${device.connectionType}');
+          throw Exception(
+            'Unsupported connection type: ${device.connectionType}',
+          );
         }
 
         // 2. Connect
@@ -124,11 +133,13 @@ class AttendanceSyncService {
         // 4. Ingest raw events
         for (final event in events) {
           // Generate Dedup Hash: sha256(deviceId + externalUserId + eventTime)
-          final hashStr = '${device.id}_${event.externalUserId}_${event.eventTime.toIso8601String()}';
+          final hashStr =
+              '${device.id}_${event.externalUserId}_${event.eventTime.toIso8601String()}';
           final dedupHash = sha256.convert(utf8.encode(hashStr)).toString();
 
           // Truncate rawPayload to prevent database bloat
-          final rawPayload = event.rawPayload != null && event.rawPayload!.length > 10000
+          final rawPayload =
+              event.rawPayload != null && event.rawPayload!.length > 10000
               ? event.rawPayload!.substring(0, 10000)
               : event.rawPayload;
 
@@ -151,23 +162,26 @@ class AttendanceSyncService {
         }
 
         // 5. Process pending events (Matching & Heuristics)
-        final processResult = await _processPendingEvents(device.id);
+        final processResult = await processPendingEvents(device.id);
         matched = processResult.matched;
         unmatched = processResult.unmatched;
 
         // Update device lastSync status
-        await _deviceDao.updateDevice(device.copyWith(
-          lastSyncAt: Value(DateTime.now()),
-          lastSyncStatus: Value('success'),
-          lastSyncError: const Value(null),
-        ));
-
+        await _deviceDao.updateDevice(
+          device.copyWith(
+            lastSyncAt: Value(DateTime.now()),
+            lastSyncStatus: Value('success'),
+            lastSyncError: const Value(null),
+          ),
+        );
       } catch (e) {
         error = e.toString();
-        await _deviceDao.updateDevice(device.copyWith(
-          lastSyncStatus: Value('failed'),
-          lastSyncError: Value(error),
-        ));
+        await _deviceDao.updateDevice(
+          device.copyWith(
+            lastSyncStatus: Value('failed'),
+            lastSyncError: Value(error),
+          ),
+        );
       } finally {
         // Always disconnect the source
         try {
@@ -177,15 +191,17 @@ class AttendanceSyncService {
         // Update sync log
         final currentLog = await _deviceDao.getSyncLogById(logId);
         if (currentLog != null) {
-          await _deviceDao.updateSyncLog(currentLog.copyWith(
-            finishedAt: Value(DateTime.now()),
-            status: error == null ? 'success' : 'failed',
-            eventsFetched: fetched,
-            eventsMatched: matched,
-            eventsUnmatched: unmatched,
-            eventsDuplicate: duplicate,
-            errorMessage: Value(error),
-          ));
+          await _deviceDao.updateSyncLog(
+            currentLog.copyWith(
+              finishedAt: Value(DateTime.now()),
+              status: error == null ? 'success' : 'failed',
+              eventsFetched: fetched,
+              eventsMatched: matched,
+              eventsUnmatched: unmatched,
+              eventsDuplicate: duplicate,
+              errorMessage: Value(error),
+            ),
+          );
         }
       }
     } finally {
@@ -194,8 +210,10 @@ class AttendanceSyncService {
   }
 
   /// Processes raw events for a specific device, matches them to staff, and creates attendance records.
-  Future<SyncResult> _processPendingEvents(int deviceId) async {
-    final pendingEvents = await _deviceDao.getUnprocessedEventsForDevice(deviceId);
+  Future<SyncResult> processPendingEvents(int deviceId) async {
+    final pendingEvents = await _deviceDao.getUnprocessedEventsForDevice(
+      deviceId,
+    );
 
     // Sort chronologically
     pendingEvents.sort((a, b) => a.eventTime.compareTo(b.eventTime));
@@ -205,46 +223,61 @@ class AttendanceSyncService {
 
     for (final rawEvent in pendingEvents) {
       // Find staff mapping
-      final mapping = await _deviceDao.getMappingByExternalId(deviceId, rawEvent.externalUserId);
-      
+      final mapping = await _deviceDao.getMappingByExternalId(
+        deviceId,
+        rawEvent.externalUserId,
+      );
+
       if (mapping == null) {
         // Mark as unmatched
-        await _deviceDao.updateRawEvent(rawEvent.copyWith(
-          status: 'unmatched',
-          processedAt: Value(DateTime.now()),
-        ));
+        await _deviceDao.updateRawEvent(
+          rawEvent.copyWith(
+            status: 'unmatched',
+            processedAt: Value(DateTime.now()),
+          ),
+        );
         unmatched++;
         continue;
       }
 
       final staffId = mapping.staffId;
-      
+
       // Update raw event with matched staff
-      var updatedEvent = rawEvent.copyWith(
-        matchedStaffId: Value(staffId),
-      );
+      var updatedEvent = rawEvent.copyWith(matchedStaffId: Value(staffId));
 
       // --- Heuristic: First event of day = check-in, Next event = check-out ---
       // Get today's attendance for this staff
-      final date = DateTime(rawEvent.eventTime.year, rawEvent.eventTime.month, rawEvent.eventTime.day);
+      final date = DateTime(
+        rawEvent.eventTime.year,
+        rawEvent.eventTime.month,
+        rawEvent.eventTime.day,
+      );
       final nextDay = date.add(const Duration(days: 1));
-      
-      final attendanceRecords = await _staffDao.getAttendanceByStaff(staffId, startDate: date, endDate: nextDay);
-      
+
+      final attendanceRecords = await _staffDao.getAttendanceByStaff(
+        staffId,
+        startDate: date,
+        endDate: nextDay,
+      );
+
       // Filter strictly to today's date (compare date components only)
       final todayRecords = attendanceRecords.where((a) {
         final aDate = DateTime(a.date.year, a.date.month, a.date.day);
         return aDate == date;
       }).toList();
-      
+
       Attendance? resultingAttendance;
 
       if (todayRecords.isEmpty) {
-        // No attendance today -> This is a check-in
+        // No attendance today -> This is a check-in (حساب الحالة بنفس محرك المسار اليدوي)
+        final status = await _engine.processCheckIn(
+          staffId,
+          checkInTime: rawEvent.eventTime,
+        );
         final companion = AttendanceTableCompanion.insert(
           staffId: staffId,
           date: date,
-          status: 'present',
+          status: status,
           checkInTime: Value(rawEvent.eventTime),
           source: const Value('device'),
           sourceDeviceId: Value(deviceId),
@@ -263,13 +296,28 @@ class AttendanceSyncService {
         // Attendance exists -> Update check-out
         final currentRecord = todayRecords.first;
         // Only update if checkout is null OR if this event is LATER than existing checkout
-        if (currentRecord.checkOutTime == null || rawEvent.eventTime.isAfter(currentRecord.checkOutTime!)) {
-           final updatedRecord = currentRecord.copyWith(
-             checkOutTime: Value(rawEvent.eventTime),
-             updatedAt: DateTime.now(),
-           );
-           await _staffDao.updateAttendance(updatedRecord);
-           resultingAttendance = updatedRecord;
+        if (currentRecord.checkOutTime == null ||
+            rawEvent.eventTime.isAfter(currentRecord.checkOutTime!)) {
+          // حساب ساعات العمل والأوفرتايم بنفس منطق مسار الحضور اليدوي
+          final checkInTime = currentRecord.checkInTime;
+          final result = checkInTime != null
+              ? await _engine.processCheckOut(
+                  staffId,
+                  checkInTime: checkInTime,
+                  checkOutTime: rawEvent.eventTime,
+                )
+              : null;
+          final updatedRecord = currentRecord.copyWith(
+            checkOutTime: Value(rawEvent.eventTime),
+            workingHours: result == null
+                ? const Value(null)
+                : Value(result.workingHours),
+            overtimeHours: result?.overtimeHours ?? currentRecord.overtimeHours,
+            status: result?.status ?? currentRecord.status,
+            updatedAt: DateTime.now(),
+          );
+          await _staffDao.updateAttendance(updatedRecord);
+          resultingAttendance = updatedRecord;
         } else {
           resultingAttendance = currentRecord;
         }

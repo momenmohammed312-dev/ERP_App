@@ -3,13 +3,13 @@
   "licenseType": "Basic",
   "duration": "Daily",
   "maxUsers": 1,
-  "issueDate": "2026-02-03T13:33:52.972903",
-  "expiryDate": "2026-02-04T13:33:52.972903",
+  "issueDate": "2026-08-09T19:05:31.887440",
+  "expiryDate": "2026-08-10T19:05:31.887440",
   "features": [
     "products",
     "sales",
     "reports"
   ],
-  "signature": "TEST_SIGNATURE_1770118432982",
+  "signature": "TEST_SIGNATURE_1786291531891",
   "version": "2.0.0"
 }

@@ -161,6 +161,11 @@ class SecureLicenseData {
   final int sessionElapsedMs;
   final int installCount;
   final String? appVersion;
+  
+  // Hardware mismatch tracking for grace period
+  final int hardwareMismatchCount;
+  final DateTime? lastMismatchTime;
+  final Map<String, dynamic>? lastHardwareComponents; // Stored as JSON for HardwareComponents
 
   SecureLicenseData({
     required this.firstRunDate,
@@ -170,6 +175,9 @@ class SecureLicenseData {
     this.sessionElapsedMs = 0,
     this.installCount = 1,
     this.appVersion,
+    this.hardwareMismatchCount = 0,
+    this.lastMismatchTime,
+    this.lastHardwareComponents,
   });
 
   /// Create a fresh entry for first run.
@@ -178,6 +186,7 @@ class SecureLicenseData {
     required String hardwareId,
     Map<String, dynamic>? licenseJson,
     String? appVersion,
+    Map<String, dynamic>? hardwareComponents,
   }) {
     return SecureLicenseData(
       firstRunDate: firstRunDate,
@@ -187,6 +196,8 @@ class SecureLicenseData {
       sessionElapsedMs: 0,
       installCount: 1,
       appVersion: appVersion,
+      hardwareMismatchCount: 0,
+      lastHardwareComponents: hardwareComponents,
     );
   }
 
@@ -198,6 +209,9 @@ class SecureLicenseData {
     'session_elapsed_ms': sessionElapsedMs,
     'install_count': installCount,
     'app_version': appVersion,
+    'hardware_mismatch_count': hardwareMismatchCount,
+    if (lastMismatchTime != null) 'last_mismatch_time': lastMismatchTime!.toIso8601String(),
+    if (lastHardwareComponents != null) 'last_hardware_components': lastHardwareComponents,
   };
 
   factory SecureLicenseData.fromJson(Map<String, dynamic> json) {
@@ -209,6 +223,11 @@ class SecureLicenseData {
       sessionElapsedMs: json['session_elapsed_ms'] ?? 0,
       installCount: json['install_count'] ?? 1,
       appVersion: json['app_version'] as String?,
+      hardwareMismatchCount: json['hardware_mismatch_count'] ?? 0,
+      lastMismatchTime: json['last_mismatch_time'] != null 
+          ? DateTime.tryParse(json['last_mismatch_time']) 
+          : null,
+      lastHardwareComponents: json['last_hardware_components'] as Map<String, dynamic>?,
     );
   }
 
@@ -222,6 +241,10 @@ class SecureLicenseData {
     int? installCount,
     String? appVersion,
     bool clearLicense = false,
+    int? hardwareMismatchCount,
+    DateTime? lastMismatchTime,
+    Map<String, dynamic>? lastHardwareComponents,
+    bool clearMismatch = false,
   }) {
     return SecureLicenseData(
       firstRunDate: firstRunDate ?? this.firstRunDate,
@@ -231,6 +254,9 @@ class SecureLicenseData {
       sessionElapsedMs: sessionElapsedMs ?? this.sessionElapsedMs,
       installCount: installCount ?? this.installCount,
       appVersion: appVersion ?? this.appVersion,
+      hardwareMismatchCount: clearMismatch ? 0 : (hardwareMismatchCount ?? this.hardwareMismatchCount),
+      lastMismatchTime: clearMismatch ? null : (lastMismatchTime ?? this.lastMismatchTime),
+      lastHardwareComponents: clearMismatch ? null : (lastHardwareComponents ?? this.lastHardwareComponents),
     );
   }
 }

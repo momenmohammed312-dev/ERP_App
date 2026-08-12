@@ -1,0 +1,12 @@
+.OPTION EXPLICIT
+.Set CabinetNameTemplate=POS_Factory_Setup_v2.3.0.exe
+.Set DiskDirectoryTemplate=CDROM
+.Set CompressionType=MSZIP
+.Set MaxCabinetSize=0
+.Set UniqueFiles=on
+.Set Cabinet=on
+.Set DiskDirectory1=G:\development\POS-Offline-Desktop-main\installer
+
+install.bat
+pos_factory_package.zip
+vc_redist.x64.exe

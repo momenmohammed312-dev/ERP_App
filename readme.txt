@@ -1,9 +1,37 @@
-# Professional POS System v2.0
+# Professional POS System v2.3.0
 
 ## 🎯 Welcome
 
-Thank you for choosing Professional POS System v2.0! This comprehensive point-of-sale solution 
+Thank you for choosing Professional POS System v2.3.0! This comprehensive point-of-sale solution 
 is designed specifically for businesses in Egypt and the Middle East.
+
+---
+
+## 🆕 WHAT'S NEW IN v2.3.0
+
+### ✨ Multi-Device Sync (Local-First → Supabase)
+- **Real-time synchronization** across multiple devices in the same store
+- **Offline-first architecture**: works without internet, syncs when online
+- **Conflict resolution**: automatic merge with manual override for complex cases
+- **Supabase backend**: secure cloud storage with row-level security
+
+### 🎁 Free 1-Year License for All Users
+- **Professional tier features** unlocked for 365 days
+- **999 max users** — unlimited for any business size
+- **All modules included**: POS, Inventory, Customers, Suppliers, Accounting, Payroll, Reports, and more
+- **No credit card required** — activate with your device ID
+
+### 🔧 Technical Improvements
+- **Hardware fingerprint fix**: stable device ID using motherboard + disk serials (no more RAM-based changes)
+- **Timezone handling**: correct Cairo/Africa time for all transactions and reports
+- **License system**: AES-256 + HMAC-SHA256 encryption, device-bound or unbound options
+- **Performance**: faster startup, reduced memory footprint
+
+### 🐛 Bug Fixes
+- Fixed sync conflicts causing duplicate invoices
+- Fixed timezone drift in daily reports
+- Fixed license activation on fresh Windows installs
+- Fixed backup/restore on Arabic Windows
 
 ---
 
@@ -239,9 +267,9 @@ and provide the tools you need to grow your business.
 
 ---
 
-*Version: 2.0*  
-*Last Updated: February 2026*  
-*© 2026 Your Company. All rights reserved.*
+*Version: 2.3.0*  
+*Last Updated: August 2026*  
+*© 2026 MO2 Systems. All rights reserved.*
 
 For the latest updates and resources:
 📧 support@yourcompany.com  

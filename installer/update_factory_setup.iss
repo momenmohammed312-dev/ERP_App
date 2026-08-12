@@ -68,8 +68,6 @@ Source: "..\build\windows\x64\runner\Release\sqlite3_flutter_libs_plugin.dll"; D
 Source: "..\build\windows\x64\runner\Release\desktop_window_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\x64\runner\Release\flutter_secure_storage_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\x64\runner\Release\pdfium.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\build\windows\x64\runner\Release\permission_handler_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\build\windows\x64\runner\Release\platform_device_id_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\x64\runner\Release\printing_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\x64\runner\Release\screen_retriever_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\x64\runner\Release\share_plus_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
@@ -145,8 +143,6 @@ begin
     'connectivity_plus_plugin.dll',
     'desktop_window_plugin.dll',
     'flutter_secure_storage_windows_plugin.dll',
-    'permission_handler_windows_plugin.dll',
-    'platform_device_id_windows_plugin.dll',
     'printing_plugin.dll',
     'screen_retriever_windows_plugin.dll',
     'share_plus_plugin.dll',

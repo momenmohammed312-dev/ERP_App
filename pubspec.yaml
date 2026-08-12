@@ -3,7 +3,7 @@ description: "A new Flutter project."
 
 publish_to: 'none'
 
-version: 2.2.0+4
+version: 2.3.0+1
 
 environment:
   sdk: ^3.8.1
@@ -22,7 +22,7 @@ dependencies:
   path_provider: ^2.1.5
   path: ^1.9.1
   excel: ^4.0.6
-  permission_handler: ^12.0.0+1
+  # permission_handler: ^12.0.0+1 # Temporarily disabled for Android build
   file_picker: ^10.1.2
   number_to_words: ^1.0.0
   go_router: ^16.0.0
@@ -129,3 +129,4 @@ flutter_launcher_icons:
 
 dependency_overrides:
   sqlite3: 2.9.0
+  sqlite3_flutter_libs: 0.5.41

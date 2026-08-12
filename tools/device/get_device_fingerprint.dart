@@ -13,7 +13,7 @@ void main() async {
       fingerprint =
           '${windowsInfo.computerName}-'
           '${windowsInfo.numberOfCores}-'
-          '${windowsInfo.systemMemoryInMegabytes}';
+          '${windowsInfo.deviceId}';
     } else if (Platform.isLinux) {
       final linuxInfo = await deviceInfo.linuxInfo;
       fingerprint =

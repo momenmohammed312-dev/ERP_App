@@ -2,7 +2,7 @@
 ; Professional installer for Windows
 
 #define MyAppName "Professional POS System"
-#define MyAppVersion "2.2.0"
+#define MyAppVersion "2.3.0"
 #define MyAppPublisher "MO2 Systems"
 #define MyAppURL "https://mo2-systems.com"
 #define MyAppExeName "pos_offline_desktop.exe"
@@ -21,7 +21,7 @@ AllowNoIcons=yes
 LicenseFile=license.txt
 InfoBeforeFile=readme.txt
 OutputDir=installer_output
-OutputBaseFilename=POS_System_v2.2.0_Setup
+OutputBaseFilename=POS_System_v2.3.0_Setup
 SetupIconFile=assets\logo\app_logo.ico
 Compression=lzma
 SolidCompression=yes
@@ -73,8 +73,6 @@ begin
     'connectivity_plus_plugin.dll',
     'desktop_window_plugin.dll',
     'flutter_secure_storage_windows_plugin.dll',
-    'permission_handler_windows_plugin.dll',
-    'platform_device_id_windows_plugin.dll',
     'printing_plugin.dll',
     'screen_retriever_windows_plugin.dll',
     'share_plus_plugin.dll',

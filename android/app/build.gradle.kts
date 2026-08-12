@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.yourcompany.posapp"
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

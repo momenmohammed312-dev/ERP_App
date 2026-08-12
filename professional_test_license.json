@@ -3,8 +3,8 @@
   "licenseType": "Professional",
   "duration": "Monthly",
   "maxUsers": 5,
-  "issueDate": "2026-02-03T13:33:52.983904",
-  "expiryDate": "2026-03-05T13:33:52.983904",
+  "issueDate": "2026-08-09T19:05:31.892710",
+  "expiryDate": "2026-09-08T19:05:31.892710",
   "features": [
     "products",
     "sales",
@@ -14,6 +14,6 @@
     "backup",
     "purchases"
   ],
-  "signature": "TEST_SIGNATURE_1770118432983",
+  "signature": "TEST_SIGNATURE_1786291531892",
   "version": "2.0.0"
 }

@@ -3,8 +3,8 @@
   "licenseType": "Standard",
   "duration": "Weekly",
   "maxUsers": 3,
-  "issueDate": "2026-02-03T13:33:52.983904",
-  "expiryDate": "2026-02-10T13:33:52.983904",
+  "issueDate": "2026-08-09T19:05:31.892486",
+  "expiryDate": "2026-08-16T19:05:31.892486",
   "features": [
     "products",
     "sales",
@@ -12,6 +12,6 @@
     "customers",
     "backup"
   ],
-  "signature": "TEST_SIGNATURE_1770118432983",
+  "signature": "TEST_SIGNATURE_1786291531892",
   "version": "2.0.0"
 }

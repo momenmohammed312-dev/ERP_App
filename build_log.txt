@@ -1,0 +1,10 @@
+﻿Building Windows application...                                 
+flutter : Nuget.exe not found, trying to download or use cached version.
+At line:1 char:1
++ flutter build windows --release 2>&1 | Out-File -Encoding utf8 build_ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Nuget.exe not f...cached version.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Building Windows application...                                   174.5s
+ΓêÜ Built build\windows\x64\runner\Release\pos_offline_desktop.exe
