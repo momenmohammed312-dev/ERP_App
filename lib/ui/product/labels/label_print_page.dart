@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:barcode_widget/barcode_widget.dart';
-import 'package:drift/drift.dart' show Value;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/label_print_service.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
+import 'package:pos_offline_desktop/core/services/windows_printer_paper_size.dart';
 
 class LabelPrintPage extends StatefulWidget {
   final AppDatabase db;
@@ -24,6 +24,8 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   final _companyCtrl = TextEditingController();
   bool _showPrice = true;
   bool _loading = true;
+  String? _detectedPrinter;
+  String? _detectedSizeText;
   String _selectedPreset = '1.5×1.0in (38×25mm)';
   double _customWidth = 38.1;
   double _customHeight = 25.4;
@@ -33,6 +35,9 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
     '1.5×1.0in (38×25mm)': [38.1, 25.4],
     '50×30mm': [50.0, 30.0],
     '50×50mm': [50.0, 50.0],
+    '58×30mm': [58.0, 30.0],
+    '58×40mm': [58.0, 40.0],
+    '58×50mm': [58.0, 50.0],
     '70×40mm': [70.0, 40.0],
     '70×50mm': [70.0, 50.0],
   };
@@ -60,6 +65,29 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
         _barcodeCtrls[p.id] = TextEditingController(text: barcodeVal);
       }
       _loading = false;
+    });
+
+    // قراءة مقاس الورق من برينتر الويندوز تلقائياً — أي مقاس يضبطه
+    // المستخدم في إعدادات الطباعة يتبعه التطبيق مباشرة بدون تدخل.
+    await _applyWindowsPrinterSize();
+  }
+
+  /// يقرأ مقاس الورق من برينتر الويندوز الافتراضي ويطبقه على الملصقات.
+  /// يطبَّق تلقائياً لو المقاس مقاس لصاقة (العرض بين 20 و 100 مم)
+  /// حتى لا يخطف مقاس A4 أو أي مقاس ورق عادي بالغلط.
+  Future<void> _applyWindowsPrinterSize() async {
+    final size = await WindowsPrinterPaperSize.detect();
+    if (!mounted || size == null) return;
+    final isLabelSize =
+        size.widthMm >= 20 && size.widthMm <= 100 && size.heightMm > 0;
+    if (!isLabelSize) return;
+    setState(() {
+      _detectedPrinter = size.printerName;
+      _detectedSizeText =
+          '${size.widthMm.toStringAsFixed(1)}×${size.heightMm.toStringAsFixed(1)} مم';
+      _customSize = true;
+      _customWidth = size.widthMm;
+      _customHeight = size.heightMm;
     });
   }
 
@@ -94,11 +122,66 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
     if (selected.isEmpty) return;
 
     final copies = <int, int>{};
+
+    // فحص تعارضات الباركود قبل الطباعة: لو الكود مستخدم بالفعل لمنتج آخر
+    // نمنع طباعة كود خاطئ على الملصق (الكود مش هيتحفظ ولا هيتطبع).
+    final conflictedIds = <int>{};
+    final newBarcodes = <int, String>{};
+    for (final p in selected) {
+      final inputBarcode = _barcodeCtrls[p.id]?.text.trim() ?? '';
+      if (inputBarcode.isEmpty || inputBarcode == p.barcode?.trim()) continue;
+      final existing = await widget.db.productDao.getProductByBarcode(
+        inputBarcode,
+      );
+      if (existing != null && existing.id != p.id) {
+        conflictedIds.add(p.id);
+      } else {
+        newBarcodes[p.id] = inputBarcode;
+      }
+    }
+
+    if (!mounted) return;
+    if (conflictedIds.isNotEmpty) {
+      final conflictsText = conflictedIds.map((id) {
+        final p = selected.firstWhere((x) => x.id == id);
+        return '«${p.name}» → كود ${_barcodeCtrls[id]?.text.trim()}';
+      }).join('\n');
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('تعارض في الباركود'),
+            content: Text(
+              'الباركودات التالية مستخدمة بالفعل لمنتجات أخرى ولن تُطبع على الملصقات:\n\n$conflictsText\n\nهل تريد الاستمرار؟',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('إلغاء'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('استمرار'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (proceed != true || !mounted) return;
+    }
+
     final barcodeData = <int, String>{};
     for (final p in selected) {
       copies[p.id] = _copies[p.id] ?? 1;
-      barcodeData[p.id] = _barcodeCtrls[p.id]?.text.trim() ?? '';
+      barcodeData[p.id] = conflictedIds.contains(p.id)
+          ? ''
+          : (_barcodeCtrls[p.id]?.text.trim() ?? '');
     }
+
+    // إعادة قراءة مقاس الويندوز عند الطباعة حتى لو اتغير بعد فتح الصفحة.
+    await _applyWindowsPrinterSize();
+    if (!mounted) return;
 
     // إظهار مؤشر التحميل أثناء التجهيز
     showDialog<void>(
@@ -120,14 +203,8 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
 
     try {
       // حفظ الباركودات الجديدة أو المعدلة في قاعدة البيانات لتصبح قابلة للمسح والتعرف عليها في الكاشير
-      for (final p in selected) {
-        final inputBarcode = _barcodeCtrls[p.id]?.text.trim() ?? '';
-        if (inputBarcode.isNotEmpty && inputBarcode != p.barcode) {
-          final existing = await widget.db.productDao.getProductByBarcode(inputBarcode);
-          if (existing == null) {
-            await widget.db.productDao.updateProductBarcode(p.id, inputBarcode);
-          }
-        }
+      for (final e in newBarcodes.entries) {
+        await widget.db.productDao.updateProductBarcode(e.key, e.value);
       }
 
       await LabelPrintService.printProductLabels(
@@ -273,6 +350,18 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
                   ),
                 ),
               ],
+            ),
+          ],
+          if (_detectedPrinter != null) ...[
+            const Gap(4),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'البرينتر: $_detectedPrinter — $_detectedSizeText (تلقائي)',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.primary),
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
           const Gap(16),

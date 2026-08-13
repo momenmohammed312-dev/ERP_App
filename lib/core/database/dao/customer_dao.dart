@@ -56,16 +56,22 @@ class CustomerDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// Find an active (non soft-deleted) customer by exact name.
+  /// Soft-deleted customers are ignored so their names can be reused.
+  Future<Customer?> getActiveCustomerByName(String name) {
+    return (select(customers)
+          ..where(
+            (t) => t.isActive.equals(true) & t.name.equals(name),
+          ))
+        .getSingleOrNull();
+  }
+
   // ===== WRITE =====
 
   /// Insert a new customer with duplicate name check
   Future<int> insertCustomer(CustomersCompanion customer) async {
     try {
-      // Check for duplicate name
-      final existing = await (select(
-        customers,
-      )..where((t) => t.name.equals(customer.name.value))).getSingleOrNull();
-
+      final existing = await getActiveCustomerByName(customer.name.value);
       if (existing != null) {
         throw Exception('العميل موجود بالفعل');
       }

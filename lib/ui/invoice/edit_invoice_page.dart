@@ -660,8 +660,13 @@ class _ProductPickerState extends State<_ProductPicker> {
 
   @override
   Widget build(BuildContext context) {
+    final q = _query.toLowerCase();
     final filtered = widget.products
-        .where((p) => p.name.toLowerCase().contains(_query.toLowerCase()))
+        .where(
+          (p) =>
+              p.name.toLowerCase().contains(q) ||
+              (p.barcode?.toLowerCase().contains(q) ?? false),
+        )
         .toList();
     return AlertDialog(
       title: const Text('اختر صنفاً'),

@@ -1516,11 +1516,14 @@ class _InventoryPageContentState extends State<_InventoryPageContent> {
           ? allProducts
           : allProducts.where((p) => p.category == _selectedCategory).toList();
 
-      // Filter by search query
+      // Filter by search query (name or barcode)
       if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
         filteredProducts = filteredProducts
             .where(
-              (p) => p.name.toLowerCase().contains(_searchQuery.toLowerCase()),
+              (p) =>
+                  p.name.toLowerCase().contains(q) ||
+                  (p.barcode?.toLowerCase().contains(q) ?? false),
             )
             .toList();
       }

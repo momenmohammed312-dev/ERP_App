@@ -51,11 +51,14 @@ class _ProductContainerState extends State<ProductContainer> {
     );
   }
 
-  // Search function to filter the products
+  // Search function to filter the products (by name or barcode)
   void _searchProducts(String query) {
+    final q = query.toLowerCase();
     final filtered = products
         .where(
-          (product) => product.name.toLowerCase().contains(query.toLowerCase()),
+          (product) =>
+              product.name.toLowerCase().contains(q) ||
+              (product.barcode?.toLowerCase().contains(q) ?? false),
         )
         .toList();
 

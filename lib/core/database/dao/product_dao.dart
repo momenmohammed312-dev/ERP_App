@@ -166,14 +166,18 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     }
   }
 
-  /// Search products by name or SKU/code using LIKE.
+  /// Search products by name or barcode using LIKE.
   Future<List<Product>> searchProducts(String query) {
     final q = query.trim();
     if (q.isEmpty) return getAllProducts();
 
     return (select(products)
-      ..where((p) => (p.status.equals('Deleted').not() | p.status.isNull()) & p.name.like('%$q%'))
-    ).get();
+      ..where(
+        (p) =>
+            (p.status.equals('Deleted').not() | p.status.isNull()) &
+            (p.name.like('%$q%') | p.barcode.like('%$q%')),
+      ))
+        .get();
   }
 
   /// Get products by category
@@ -225,7 +229,9 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     }
 
     if (searchQuery != null && searchQuery.isNotEmpty) {
-      query = query..where((p) => p.name.like('%$searchQuery%'));
+      query = query..where(
+        (p) => p.name.like('%$searchQuery%') | p.barcode.like('%$searchQuery%'),
+      );
     }
 
     return query.get();

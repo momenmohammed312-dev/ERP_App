@@ -24,7 +24,6 @@ import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
-import 'package:pos_offline_desktop/core/services/shipment_allocation_service.dart';
 import 'package:pos_offline_desktop/core/services/shipment_pricing_service.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/shipment_picker_dialog.dart';
 
@@ -188,7 +187,7 @@ class _EnhancedNewInvoicePageState
 
       // Load data
       final products = await widget.db.productDao.getAllProducts();
-      final customers = await widget.db.customerDao.getAllCustomers();
+      final customers = await widget.db.customerDao.getAllActiveCustomers();
 
       // Generate invoice number
       _invoiceNumber = '${DateTime.now().millisecondsSinceEpoch}';
