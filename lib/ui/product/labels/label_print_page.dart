@@ -30,6 +30,9 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   double _customWidth = 38.1;
   double _customHeight = 25.4;
   bool _customSize = false;
+  // لو المستخدم اختار مقاس يدويًا (preset أو مخصص) — يبقى اختياره هو المعتمد
+  // وقراءة مقاس الويندوز التلقائية ماتتغلبش عليه.
+  bool _manualSize = false;
 
   static const _presets = {
     '1.5×1.0in (38×25mm)': [38.1, 25.4],
@@ -53,9 +56,21 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
     _companyCtrl.text = company;
 
     final products = await widget.db.productDao.getAllProducts();
+    // لو فيه منتجات قديمة لسه مالهاش باركود محفوظ — نولّد ونحفظ لها باركود
+    // فورًا (نفس معادلة إضافة المنتج 10000000 + المعرف) عشان الكود اللي
+    // بيظهر هنا يبقى هو نفسه اللي بيتسجل في المنتجات وقابل للبحث والمسح.
+    for (final p in products) {
+      if ((p.barcode?.trim() ?? '').isEmpty) {
+        await widget.db.productDao
+            .updateProductBarcode(p.id, '${10000000 + p.id}');
+      }
+    }
+
+    // إعادة قراءة المنتجات بعد التوليد حتى تظهر الباركودات المحفوظة
+    final updatedProducts = await widget.db.productDao.getAllProducts();
     setState(() {
-      _products = products;
-      for (final p in products) {
+      _products = updatedProducts;
+      for (final p in updatedProducts) {
         _copies[p.id] = 1;
         String barcodeVal = p.barcode?.trim() ?? '';
         if (barcodeVal.isEmpty) {
@@ -75,7 +90,10 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   /// يقرأ مقاس الورق من برينتر الويندوز الافتراضي ويطبقه على الملصقات.
   /// يطبَّق تلقائياً لو المقاس مقاس لصاقة (العرض بين 20 و 100 مم)
   /// حتى لا يخطف مقاس A4 أو أي مقاس ورق عادي بالغلط.
+  /// اختيار المستخدم اليدوي دائمًا له الأولوية — التلقائي يشتغل بس
+  /// لو مفيش اختيار يدوي (المرة الأولى أو عند إعادة فتح الصفحة).
   Future<void> _applyWindowsPrinterSize() async {
+    if (_manualSize) return;
     final size = await WindowsPrinterPaperSize.detect();
     if (!mounted || size == null) return;
     final isLabelSize =
@@ -310,6 +328,7 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
                 onSelected: (_) => setState(() {
                   _customSize = false;
                   _selectedPreset = preset;
+                  _manualSize = true;
                 }),
               );
             }).toList(),
@@ -318,7 +337,10 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
           ChoiceChip(
             label: const Text('مخصص'),
             selected: _customSize,
-            onSelected: (_) => setState(() => _customSize = true),
+            onSelected: (_) => setState(() {
+              _customSize = true;
+              _manualSize = true;
+            }),
           ),
           if (_customSize) ...[
             const Gap(8),
@@ -333,7 +355,12 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
                     ),
                     keyboardType: TextInputType.number,
                     controller: TextEditingController(text: _customWidth.toString()),
-                    onChanged: (v) => _customWidth = double.tryParse(v) ?? 50,
+                    onChanged: (v) {
+                      setState(() {
+                        _customWidth = double.tryParse(v) ?? 50;
+                        _manualSize = true;
+                      });
+                    },
                   ),
                 ),
                 const Gap(8),
@@ -346,7 +373,12 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
                     ),
                     keyboardType: TextInputType.number,
                     controller: TextEditingController(text: _customHeight.toString()),
-                    onChanged: (v) => _customHeight = double.tryParse(v) ?? 30,
+                    onChanged: (v) {
+                      setState(() {
+                        _customHeight = double.tryParse(v) ?? 30;
+                        _manualSize = true;
+                      });
+                    },
                   ),
                 ),
               ],

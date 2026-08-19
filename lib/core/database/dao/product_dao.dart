@@ -20,6 +20,11 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   /// Inserts a product, stamps it with a fresh `syncId` + createdAt/updatedAt,
   /// and queues an 'insert' sync entry. The local write always succeeds even if
   /// enqueueing fails.
+  ///
+  /// لو المنتج اتعمل من غير باركود — بنولّد له باركود فريد تلقائيًا
+  /// (10000000 + المعرف) وبنحفظه فورًا في قاعدة البيانات، عشان يبقى
+  /// قابل للبحث في المنتجات والمسح في الكاشير من أول لحظة — نفس الكود
+  /// اللي بيظهر في صفحة طباعة الملصقات.
   Future<int> insertProduct(Insertable<Product> product) async {
     final syncId = const Uuid().v4();
     final now = DateTime.now();
@@ -38,6 +43,21 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
       );
     }
     final insertedId = await into(products).insert(decorated);
+
+    final rawBarcode = product is ProductsCompanion
+        ? product.barcode.value
+        : product is Product
+            ? product.barcode
+            : null;
+    if (rawBarcode == null || rawBarcode.trim().isEmpty) {
+      // نكتب الباركود مباشرة (من غير enqueue منفصل) — وبعدين enqueue الـinsert
+      // هيقرأ الصف كامل فياخد الباركود المتولد في الـpayload.
+      await (update(products)..where((p) => p.id.equals(insertedId)))
+          .write(
+            ProductsCompanion(barcode: Value('${10000000 + insertedId}')),
+          );
+    }
+
     await _enqueueProduct(insertedId, syncId, 'insert');
     return insertedId;
   }

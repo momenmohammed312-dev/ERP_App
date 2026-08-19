@@ -78,5 +78,38 @@ void main() {
       expect(product, isNotNull);
       expect(product!.name, 'جزر');
     });
+
+    test('insert without barcode auto-generates and persists one', () async {
+      final id = await database.productDao.insertProduct(
+        ProductsCompanion.insert(name: 'طماطم', quantity: 50, price: 20),
+      );
+
+      // نفس معادلة صفحة الملصقات: 10000000 + معرف المنتج
+      final generated = await database.productDao.getProductById(id);
+      expect(generated, isNotNull);
+      expect(generated!.barcode, '${10000000 + id}');
+
+      // يجب أن يظهر في البحث بنفس الكود فورًا (بعد الفورم مباشرة)
+      final results = await database.productDao.searchProducts('$id');
+      expect(results.any((p) => p.id == id), isTrue);
+
+      final byCode = await database.productDao.getProductByBarcode('${10000000 + id}');
+      expect(byCode, isNotNull);
+      expect(byCode!.id, id);
+    });
+
+    test('insert with explicit barcode keeps it unchanged', () async {
+      final id = await database.productDao.insertProduct(
+        ProductsCompanion.insert(
+          name: 'خيار',
+          quantity: 30,
+          price: 15,
+          barcode: const Value('ABC-123'),
+        ),
+      );
+
+      final product = await database.productDao.getProductById(id);
+      expect(product!.barcode, 'ABC-123');
+    });
   });
 }
