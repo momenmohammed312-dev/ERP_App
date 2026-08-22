@@ -222,22 +222,34 @@ class AttendanceSyncService {
     int unmatched = 0;
 
     for (final rawEvent in pendingEvents) {
-      // Find staff mapping
-      final mapping = await _deviceDao.getMappingByExternalId(
+      // Find staff mapping — لو مفيش ربط، أنشئ موظف تلقائي من الجهاز
+      var mapping = await _deviceDao.getMappingByExternalId(
         deviceId,
         rawEvent.externalUserId,
       );
 
       if (mapping == null) {
-        // Mark as unmatched
-        await _deviceDao.updateRawEvent(
-          rawEvent.copyWith(
-            status: 'unmatched',
-            processedAt: Value(DateTime.now()),
-          ),
-        );
-        unmatched++;
-        continue;
+        try {
+          final newStaffId = await _autoCreateStaffForExternalId(
+            deviceId,
+            rawEvent.externalUserId,
+          );
+          mapping = await _deviceDao.getMappingByExternalId(
+            deviceId,
+            rawEvent.externalUserId,
+          );
+          if (mapping == null) throw Exception('mapping not created');
+        } catch (e) {
+          await _deviceDao.updateRawEvent(
+            rawEvent.copyWith(
+              status: 'unmatched',
+              errorMessage: Value('فشل الإنشاء التلقائي: $e'),
+              processedAt: Value(DateTime.now()),
+            ),
+          );
+          unmatched++;
+          continue;
+        }
       }
 
       final staffId = mapping.staffId;
@@ -358,5 +370,53 @@ class AttendanceSyncService {
       unmatched: unmatched,
       duplicate: 0,
     );
+  }
+
+  /// ينشئ موظف جديد تلقائياً من بصمة الجهاز ويربطه مباشرة.
+  /// الاسم الافتراضي "موظف {externalId}" ويمكن تعديله لاحقاً من إدارة الموظفين.
+  Future<String> _autoCreateStaffForExternalId(
+    int deviceId,
+    String externalUserId,
+  ) async {
+    final existing = await _deviceDao.getMappingByExternalId(
+      deviceId,
+      externalUserId,
+    );
+    if (existing != null) return existing.staffId;
+
+    final allStaff = await _staffDao.getAllStaff();
+    int maxId = 0;
+    for (final s in allStaff) {
+      final n = int.tryParse(s.staffId.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      if (n > maxId) maxId = n;
+    }
+    final newStaffId = 'STAFF${(maxId + 1).toString().padLeft(4, '0')}';
+    final now = DateTime.now();
+
+    await _staffDao.addStaff(
+      StaffTableCompanion.insert(
+        staffId: newStaffId,
+        name: 'موظف $externalUserId',
+        position: 'موظف',
+        employmentType: 'full_time',
+        basicSalary: 0,
+        hireDate: now,
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    await _deviceDao.addMapping(
+      StaffBiometricMappingsCompanion.insert(
+        staffId: newStaffId,
+        deviceId: deviceId,
+        externalUserId: externalUserId,
+        enrollmentStatus: 'enrolled',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    return newStaffId;
   }
 }

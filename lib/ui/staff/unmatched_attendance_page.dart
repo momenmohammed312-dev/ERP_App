@@ -47,6 +47,63 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
     _loadData();
   }
 
+  Future<void> _autoCreateAllUnmatched() async {
+    if (_unmatchedEvents.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('إنشاء تلقائي لكل الغير مطابقين'),
+        content: Text('سيتم إنشاء ${_unmatchedEvents.map((e) => e.externalUserId).toSet().length} موظف/موظفين جديد وتحويل كل الحركات لحضور. متأكد؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إنشاء')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    final deviceDao = ref.read(attendanceDeviceDaoProvider);
+    final staffDao = ref.read(appDatabaseProvider).staffManagementDao;
+    final distinctIds = _unmatchedEvents.map((e) => e.externalUserId).toSet();
+    final deviceIds = _unmatchedEvents.map((e) => e.deviceId).toSet();
+
+    for (final extId in distinctIds) {
+      // استخدم أول جهاز ظهر به هذا الـ externalId
+      final sample = _unmatchedEvents.firstWhere((e) => e.externalUserId == extId);
+      var mapping = await deviceDao.getMappingByExternalId(sample.deviceId, extId);
+      if (mapping != null) continue;
+      final allStaff = await staffDao.getAllStaff();
+      int maxN = 0;
+      for (final s in allStaff) {
+        final n = int.tryParse(s.staffId.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+        if (n > maxN) maxN = n;
+      }
+      final newStaffId = 'STAFF${(maxN + 1).toString().padLeft(4, '0')}';
+      final now = DateTime.now();
+      await staffDao.addStaff(StaffTableCompanion.insert(
+        staffId: newStaffId, name: 'موظف $extId', position: 'موظف',
+        employmentType: 'full_time', basicSalary: 0, hireDate: now, status: 'active', createdAt: now, updatedAt: now,
+      ));
+      await deviceDao.addMapping(StaffBiometricMappingsCompanion.insert(
+        staffId: newStaffId, deviceId: sample.deviceId, externalUserId: extId, enrollmentStatus: 'enrolled', createdAt: now, updatedAt: now,
+      ));
+    }
+
+    // أعد جدولة الحركات كـ pending لتتم معالجتها
+    for (final e in _unmatchedEvents) {
+      await deviceDao.updateRawEvent(e.copyWith(status: 'pending', processedAt: const Value(null), matchedStaffId: const Value(null)));
+    }
+    // شغّل المعالجة لكل جهاز
+    final syncService = ref.read(attendanceSyncServiceProvider);
+    for (final dId in deviceIds) {
+      await syncService.processPendingEvents(dId);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإنشاء التلقائي ومعالجة الحضور'), backgroundColor: Colors.green));
+    }
+    _loadData();
+  }
+
   Future<void> _assignToStaff(AttendanceRawEvent event) async {
     Staff? selectedStaff;
 
@@ -145,6 +202,14 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
       child: Scaffold(
         appBar: AppBar(
           title: const Text('حركات الحضور غير المتطابقة'),
+          actions: [
+            if (_unmatchedEvents.isNotEmpty)
+              TextButton.icon(
+                icon: const Icon(Icons.auto_fix_high, color: Colors.white),
+                label: const Text('إنشاء تلقائي للكل', style: TextStyle(color: Colors.white)),
+                onPressed: _autoCreateAllUnmatched,
+              ),
+          ],
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
