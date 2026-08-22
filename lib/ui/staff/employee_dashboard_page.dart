@@ -48,6 +48,13 @@ class _EmployeeDashboardPageState
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
+    // تصفير العدادات قبل إعادة التحميل — عشان لو اليوم مفيش حالات "حاضر" مثلاً مايفضلش رقم قديم
+    _presentToday = 0;
+    _absentToday = 0;
+    _lateToday = 0;
+    _onLeaveToday = 0;
+    _pendingVacations = 0;
+    _pendingAdvancesTotal = 0;
     try {
       final allStaff = await _dao.getAllStaff();
       _activeStaff = allStaff.where((s) => s.isActive).length;
