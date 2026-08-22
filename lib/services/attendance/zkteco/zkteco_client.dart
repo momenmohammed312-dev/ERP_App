@@ -49,20 +49,26 @@ class ZKTecoClient {
       _sessionId = 0;
       _replyId = 0;
 
-      // 1. Send CMD_CONNECT (1000)
+      // 1. Send CMD_CONNECT (1000) — الجهاز قد يرجع 2005 Unauthorized لو له CommKey
       final reply = await _sendCommand(ZkCommand.cmdConnect);
-      if (reply == null || !reply.isSuccess) {
+      if (reply == null) {
         await disconnect();
         return false;
       }
-
+      // 2000=OK أو 2005=يحتاج مصادقة — في الحالتين بناخد sessionId ونكمل للمصادقة
+      if (!reply.isSuccess && reply.command != ZkCommand.ackUnauthorized) {
+        await disconnect();
+        return false;
+      }
       _sessionId = reply.sessionId;
       _replyId = reply.replyId;
       _isConnected = true;
 
-      // 2. Authenticate if CommKey is provided (> 0)
-      if (commKey > 0) {
-        final authSuccess = await _authenticate(commKey);
+      // 2. لو الجهاز طلب مصادقة (2005) أو فيه CommKey مدخل — نعمل AUTH
+      if (reply.command == ZkCommand.ackUnauthorized || commKey > 0) {
+        // لو التوكن 0 والجهاز طالب كلمة سر — جرّب 0 أولاً، لو فشل هيرجع false ويظهر للعميل
+        final keyToTry = commKey;
+        final authSuccess = await _authenticate(keyToTry);
         if (!authSuccess) {
           await disconnect();
           return false;
