@@ -165,7 +165,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 54;
+  int get schemaVersion => 55;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -266,6 +266,11 @@ class AppDatabase extends _$AppDatabase {
       // 4p. Schema v54 — sync_queue.device_name (enqueue-time device marker)
       if (from < 54) {
         await _runV54Migrations(m);
+      }
+
+      // 4q. Schema v55 — staff biometric index
+      if (from < 55) {
+        await _runV55Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -1820,6 +1825,25 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(54, 'sync_queue_device_name', 'completed');
     } catch (e) {
       await _logMigrationStep(54, 'sync_queue_device_name', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> _runV55Migrations(Migrator m) async {
+    await _logMigrationStep(55, 'biometric_mapping_index', 'started');
+    try {
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_staff_biometric_mapping_device_user '
+          'ON staff_biometric_mappings(device_id, external_user_id)',
+        );
+        log('v55: Created index idx_staff_biometric_mapping_device_user');
+      } catch (e) {
+        log('v55: Index creation warning: $e');
+      }
+      await _logMigrationStep(55, 'biometric_mapping_index', 'completed');
+    } catch (e) {
+      await _logMigrationStep(55, 'biometric_mapping_index', 'failed', error: e.toString());
       rethrow;
     }
   }

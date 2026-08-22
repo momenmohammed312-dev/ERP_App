@@ -64,6 +64,11 @@ class StaffBiometricMappings extends Table {
   DateTimeColumn get createdAt => dateTime()();
 
   DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {deviceId, externalUserId},
+  ];
 }
 
 /// Unprocessed events as received from a device, before normalization/matching

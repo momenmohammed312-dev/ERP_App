@@ -9,7 +9,7 @@ import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart
 import 'package:pos_offline_desktop/core/database/dao/staff_management_dao.dart';
 import 'attendance_calculation_engine.dart';
 import 'attendance_source.dart';
-import 'tcp_ip_attendance_source.dart';
+import 'zkteco_tcp_attendance_source.dart';
 
 class SyncResult {
   final int fetched;
@@ -109,7 +109,7 @@ class AttendanceSyncService {
               'IP Address and Port are required for TCP/IP devices',
             );
           }
-          source = TcpIpAttendanceSource(
+          source = ZKTecoTcpAttendanceSource(
             ipAddress: device.ipAddress!,
             port: device.port!,
             authToken: device.authToken,
@@ -241,6 +241,25 @@ class AttendanceSyncService {
       }
 
       final staffId = mapping.staffId;
+      final staff = await _staffDao.getStaffById(staffId);
+
+      // Verify that staff is active and not terminated
+      if (staff == null || !staff.isActive || staff.status != 'active') {
+        await _deviceDao.updateRawEvent(
+          rawEvent.copyWith(
+            matchedStaffId: Value(staffId),
+            status: 'unmatched',
+            errorMessage: Value(
+              staff == null
+                  ? 'Staff record not found: $staffId'
+                  : 'Staff is inactive or terminated (${staff.status})',
+            ),
+            processedAt: Value(DateTime.now()),
+          ),
+        );
+        unmatched++;
+        continue;
+      }
 
       // Update raw event with matched staff
       var updatedEvent = rawEvent.copyWith(matchedStaffId: Value(staffId));

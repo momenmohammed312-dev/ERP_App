@@ -4,7 +4,7 @@ import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
-import '../../services/staff_management_service_simple.dart';
+import '../../services/staff_management_service.dart';
 import 'staff_form_page.dart';
 import 'staff_details_page.dart';
 import 'attendance_page.dart';
@@ -40,7 +40,7 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
   Future<void> _initializeService() async {
     final db = ref.read(appDatabaseProvider);
     _dao = StaffManagementDao(db);
-    _service = StaffManagementService(_dao);
+    _service = StaffManagementService(_dao, db);
   }
 
   @override

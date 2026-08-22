@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
@@ -19,6 +20,7 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   List<Product> _products = [];
   final Map<int, bool> _selected = {};
   final Map<int, int> _copies = {};
+  final Map<int, TextEditingController> _copyCtrls = {};
   final Map<int, TextEditingController> _barcodeCtrls = {};
 
   final _companyCtrl = TextEditingController();
@@ -72,6 +74,8 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
       _products = updatedProducts;
       for (final p in updatedProducts) {
         _copies[p.id] = 1;
+        _copyCtrls[p.id]?.dispose();
+        _copyCtrls[p.id] = TextEditingController(text: '1');
         String barcodeVal = p.barcode?.trim() ?? '';
         if (barcodeVal.isEmpty) {
           // توليد باركود تلقائي فريد يعتمد على معرف المنتج (مثلاً 10000000 + المعرف)
@@ -115,6 +119,9 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
     for (final c in _barcodeCtrls.values) {
       c.dispose();
     }
+    for (final c in _copyCtrls.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -131,6 +138,18 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
       final allSelected = _products.every((p) => _selected[p.id] == true);
       for (final p in _products) {
         _selected[p.id] = !allSelected;
+      }
+    });
+  }
+
+  /// تعيين عدد النسخ لمنتج — يمنع القيم الأقل من 1 ويزامن حقل الكتابة.
+  void _setCopies(int productId, int value) {
+    final v = value < 1 ? 1 : value;
+    setState(() {
+      _copies[productId] = v;
+      final ctrl = _copyCtrls[productId];
+      if (ctrl != null && ctrl.text != '$v') {
+        ctrl.text = '$v';
       }
     });
   }
@@ -547,14 +566,32 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
                                 IconButton(
                                   icon: const Icon(Icons.remove_circle_outline, size: 20),
                                   onPressed: (_copies[p.id] ?? 1) > 1
-                                      ? () => setState(() => _copies[p.id] = (_copies[p.id] ?? 1) - 1)
+                                      ? () => _setCopies(p.id, (_copies[p.id] ?? 1) - 1)
                                       : null,
                                 ),
-                                Text('${_copies[p.id] ?? 1}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                                // حقل يسمح بكتابة العدد مباشرة (مثلاً 500) بدل الضغط المتكرر
+                                SizedBox(
+                                  width: 52,
+                                  child: TextField(
+                                    controller: _copyCtrls[p.id],
+                                    textAlign: TextAlign.center,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                    decoration: const InputDecoration(
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                      contentPadding:
+                                          EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                                    ),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold, fontSize: 12),
+                                    onChanged: (v) =>
+                                        _setCopies(p.id, int.tryParse(v) ?? 1),
+                                  ),
+                                ),
                                 IconButton(
                                   icon: const Icon(Icons.add_circle_outline, size: 20),
-                                  onPressed: () => setState(() => _copies[p.id] = (_copies[p.id] ?? 1) + 1),
+                                  onPressed: () => _setCopies(p.id, (_copies[p.id] ?? 1) + 1),
                                 ),
                               ],
                             ),

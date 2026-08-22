@@ -1,5 +1,3 @@
-import 'package:pos_offline_desktop/core/database/app_database.dart';
-
 enum AttendanceSourceStatus {
   idle,
   connecting,

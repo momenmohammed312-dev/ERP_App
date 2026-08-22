@@ -6,6 +6,9 @@ import 'package:pos_offline_desktop/widgets/permission_guard.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 
+import 'package:pos_offline_desktop/services/attendance/attendance_source.dart';
+import 'package:pos_offline_desktop/services/attendance/zkteco_tcp_attendance_source.dart';
+
 class BiometricEnrollmentPage extends ConsumerStatefulWidget {
   final Staff staff;
 
@@ -50,47 +53,125 @@ class _BiometricEnrollmentPageState extends ConsumerState<BiometricEnrollmentPag
     BiometricDevice? selectedDevice = _devices.first;
     final externalIdController = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    bool isFetchingDeviceUsers = false;
+    List<DeviceEnrolledUser> fetchedUsers = [];
     
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text('إضافة بصمة للموظف'),
-              content: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<BiometricDevice>(
-                      value: selectedDevice,
-                      items: _devices.map((d) => DropdownMenuItem(value: d, child: Text(d.name))).toList(),
-                      onChanged: (v) => setState(() => selectedDevice = v),
-                      decoration: const InputDecoration(labelText: 'الجهاز'),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: externalIdController,
-                      decoration: const InputDecoration(
-                        labelText: 'الرقم التعريفي في الجهاز (External ID)',
-                        hintText: 'مثال: 1001',
+              content: SizedBox(
+                width: 450,
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<BiometricDevice>(
+                        value: selectedDevice,
+                        items: _devices.map((d) => DropdownMenuItem(value: d, child: Text(d.name))).toList(),
+                        onChanged: (v) => setDialogState(() {
+                          selectedDevice = v;
+                          fetchedUsers.clear();
+                        }),
+                        decoration: const InputDecoration(labelText: 'الجهاز'),
                       ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9_]')),
-                        LengthLimitingTextInputFormatter(50),
+                      const SizedBox(height: 12),
+                      if (selectedDevice?.connectionType == 'tcp_ip' &&
+                          selectedDevice?.ipAddress != null &&
+                          selectedDevice?.port != null)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            icon: isFetchingDeviceUsers
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.download, size: 18),
+                            label: const Text('جلب قائمة المستخدمين من الجهاز'),
+                            onPressed: isFetchingDeviceUsers
+                                ? null
+                                : () async {
+                                    setDialogState(() => isFetchingDeviceUsers = true);
+                                    try {
+                                      final source = ZKTecoTcpAttendanceSource(
+                                        ipAddress: selectedDevice!.ipAddress!,
+                                        port: selectedDevice!.port!,
+                                        authToken: selectedDevice!.authToken,
+                                        timeout: const Duration(seconds: 6),
+                                      );
+                                      final connected = await source.connect();
+                                      if (!connected) throw Exception('تعذر الاتصال بالجهاز');
+                                      final users = await source.fetchEnrolledUsers();
+                                      await source.disconnect();
+                                      setDialogState(() {
+                                        fetchedUsers = users;
+                                        isFetchingDeviceUsers = false;
+                                      });
+                                    } catch (e) {
+                                      setDialogState(() => isFetchingDeviceUsers = false);
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('فشل جلب المستخدمين: $e'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                          ),
+                        ),
+                      if (fetchedUsers.isNotEmpty) ...[
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(
+                            labelText: 'اختر مستخدماً من الجهاز',
+                          ),
+                          items: fetchedUsers
+                              .map(
+                                (u) => DropdownMenuItem(
+                                  value: u.externalUserId,
+                                  child: Text('${u.name ?? "User"} (ID: ${u.externalUserId})'),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setDialogState(() {
+                                externalIdController.text = val;
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 12),
                       ],
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'الرقم التعريفي مطلوب';
-                        }
-                        if (value.length > 50) {
-                          return 'الرقم التعريفي طويل جداً (حد أقصى 50 حرف)';
-                        }
-                        return null;
-                      },
-                    ),
-                  ],
+                      TextFormField(
+                        controller: externalIdController,
+                        decoration: const InputDecoration(
+                          labelText: 'الرقم التعريفي في الجهاز (External ID)',
+                          hintText: 'مثال: 1001',
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9_]')),
+                          LengthLimitingTextInputFormatter(50),
+                        ],
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'الرقم التعريفي مطلوب';
+                          }
+                          if (value.length > 50) {
+                            return 'الرقم التعريفي طويل جداً (حد أقصى 50 حرف)';
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
               actions: [

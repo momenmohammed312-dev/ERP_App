@@ -119,6 +119,7 @@ class LicenseManager {
   static const String _secretKey = LicenseConfig.secretKey;
   static const String _firstRunKey = 'free_version_first_run';
   static const int _freeTrialDays = 36500; // 100 years
+  static const int _trialDurationDays = 7; // مدة النسخة التجريبية: 7 أيام
 
   // Singleton
   static final LicenseManager _instance = LicenseManager._internal();
@@ -506,7 +507,7 @@ class LicenseManager {
       final key = generateLicenseKey(
         deviceFingerprint: 'UNBOUND',
         type: LicenseType.trial,
-        validityDays: _freeTrialDays,
+        validityDays: _trialDurationDays,
         features: List<String>.from(LicenseConfig.availableFeatures),
         companyName: 'Trial',
         contactEmail: '',

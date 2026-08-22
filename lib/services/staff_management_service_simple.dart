@@ -6,6 +6,9 @@ import '../core/database/dao/staff_management_dao.dart';
 import '../core/models/user_model.dart';
 import '../core/services/validation/permission_validator.dart';
 
+@Deprecated(
+  'Deprecated in favor of lib/services/staff_management_service.dart. Do not use.',
+)
 class StaffManagementService {
   final StaffManagementDao _dao;
 

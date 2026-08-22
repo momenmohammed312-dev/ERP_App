@@ -43,7 +43,8 @@ class AttendanceDeviceDao extends DatabaseAccessor<AppDatabase>
       (select(staffBiometricMappings)
             ..where((m) =>
                 m.deviceId.equals(deviceId) &
-                m.externalUserId.equals(externalUserId)))
+                m.externalUserId.equals(externalUserId) &
+                m.enrollmentStatus.equals('enrolled')))
           .getSingleOrNull();
 
   Future<int> addMapping(StaffBiometricMappingsCompanion entry) =>

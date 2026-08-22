@@ -175,11 +175,12 @@ class StaffManagementService {
   }) async {
     // Calculate smart status if engine is available
     String status = 'present';
-    if (_db != null) {
+    final db = _db;
+    if (db != null) {
       try {
         final engine = AttendanceCalculationEngine(
-          _db!,
-          _db!.attendanceDeviceDao,
+          db,
+          db.attendanceDeviceDao,
           _dao,
         );
         status = await engine.processCheckIn(staffId);
@@ -210,12 +211,13 @@ class StaffManagementService {
     double? workingHours;
     double? overtimeHours;
     String? status;
+    final db = _db;
 
-    if (_db != null) {
+    if (db != null) {
       try {
         final engine = AttendanceCalculationEngine(
-          _db!,
-          _db!.attendanceDeviceDao,
+          db,
+          db.attendanceDeviceDao,
           _dao,
         );
 
@@ -508,18 +510,40 @@ class StaffManagementService {
       periodEnd,
     );
 
-    // Get advances to deduct
+    // Get advances to deduct (approved or paid advances, respecting installments)
     final advances = await _dao.getAdvancesByStaff(staffId);
-    final approvedAdvances = advances.where(
-      (a) => a.status == 'approved' && a.paymentDate == null,
-    );
-    final totalAdvances = approvedAdvances.fold<double>(
-      0,
-      (sum, a) => sum + a.amount,
-    );
+    final eligibleAdvances = advances.where(
+      (a) => (a.status == 'approved' || a.status == 'paid'),
+    ).toList();
+
+    double totalAdvances = 0.0;
+    for (final a in eligibleAdvances) {
+      if (a.installmentMonths != null &&
+          a.installmentMonths! > 1 &&
+          a.monthlyDeduction != null &&
+          a.monthlyDeduction! > 0) {
+        totalAdvances += a.monthlyDeduction!;
+      } else {
+        totalAdvances += a.amount;
+      }
+    }
 
     // Get rewards and penalties for the period
     final db = _dao.attachedDatabase;
+
+    // Check if payroll was already calculated or paid for this period
+    final existingPayroll = await (db.select(db.payrollTable)
+      ..where((t) => t.staffId.equals(staffId) & t.payrollPeriod.equals(payrollPeriod))
+    ).getSingleOrNull();
+
+    if (existingPayroll != null) {
+      if (existingPayroll.status == 'paid') {
+        throw Exception('تم صرف راتب هذه الفترة بالفعل ولا يمكن إعادة احتسابه');
+      }
+      // Remove old calculated record so fresh calculations replace it cleanly
+      await (db.delete(db.payrollTable)..where((t) => t.id.equals(existingPayroll.id))).go();
+    }
+
     final allRewardsPenalties = await (db.select(db.rewardsPenalties)
       ..where((t) => t.staffId.equals(staffId) & t.status.equals('active'))
     ).get();
