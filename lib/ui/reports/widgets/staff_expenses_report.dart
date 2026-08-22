@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/export_service.dart';
 
 class StaffExpensesReport extends StatefulWidget {
   final AppDatabase db;
@@ -17,6 +18,8 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
   List<_SalaryEntry> _salaryEntries = [];
   Map<String, String> _staffMap = {};
   String? _errorMessage;
+  int _currentTabIndex = 0;
+  final ExportService _exportService = ExportService();
 
   @override
   void initState() {
@@ -118,6 +121,92 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
   double get _totalSalaries =>
       _salaryEntries.fold(0.0, (sum, e) => sum + e.amount);
 
+  // ── طباعة ──────────────────────────────────────────────
+  Future<void> _printCurrentTab() async {
+    if (_currentTabIndex == 0) {
+      await _printAdvances(all: true);
+    } else {
+      await _printSalaries(all: true);
+    }
+  }
+
+  Future<void> _printAdvances({bool all = true, StaffAdvance? single}) async {
+    try {
+      final list = single != null ? [single] : _advances;
+      if (list.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('لا توجد سلف للطباعة')),
+          );
+        }
+        return;
+      }
+      final data = list.map((a) {
+        final name = _staffMap[a.staffId] ?? 'غير معروف';
+        final statusText = a.status == 'paid'
+            ? 'مدفوع'
+            : a.status == 'approved'
+                ? 'موافق عليه'
+                : a.status == 'rejected'
+                    ? 'مرفوض'
+                    : 'معلق';
+        return {
+          'name': name,
+          'amount': a.amount.toStringAsFixed(2),
+          'date': DateFormat('yyyy/MM/dd').format(a.requestDate),
+          'status': statusText,
+          'reason': a.reason ?? '-',
+        };
+      }).toList();
+      await _exportService.exportToPDF(
+        title: single != null ? 'إيصال سلفة' : 'تقرير السلف',
+        data: data,
+        headers: const ['الموظف', 'المبلغ', 'التاريخ', 'الحالة'],
+        columns: const ['name', 'amount', 'date', 'status'],
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل في الطباعة: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _printSalaries({bool all = true, _SalaryEntry? single}) async {
+    try {
+      final list = single != null ? [single] : _salaryEntries;
+      if (list.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('لا توجد مرتبات للطباعة')),
+          );
+        }
+        return;
+      }
+      final data = list.map((e) {
+        return {
+          'name': e.staffName,
+          'amount': e.amount.toStringAsFixed(2),
+          'date': DateFormat('yyyy/MM/dd').format(e.date),
+          'period': e.period.isEmpty ? '-' : e.period,
+        };
+      }).toList();
+      await _exportService.exportToPDF(
+        title: single != null ? 'إيصال مرتب' : 'تقرير المرتبات المصروفة',
+        data: data,
+        headers: const ['الموظف', 'المبلغ', 'التاريخ', 'الفترة'],
+        columns: const ['name', 'amount', 'date', 'period'],
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل في الطباعة: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -132,6 +221,11 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
         backgroundColor: bgColor,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.print, color: Colors.orange),
+            onPressed: _printCurrentTab,
+            tooltip: 'طباعة التبويب الحالي',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
@@ -326,12 +420,20 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                 DefaultTabController(
                   length: 2,
                   child: Expanded(
-                    child: Column(
+                    child: Builder(builder: (context) {
+                      final tabController = DefaultTabController.of(context);
+                      tabController.addListener(() {
+                        if (!tabController.indexIsChanging) {
+                          setState(() => _currentTabIndex = tabController.index);
+                        }
+                      });
+                      return Column(
                       children: [
                       TabBar(
                         labelColor: Colors.orange,
                         unselectedLabelColor: textColor.withValues(alpha: 0.5),
                         indicatorColor: Colors.orange,
+                        onTap: (i) => setState(() => _currentTabIndex = i),
                         tabs: const [
                           Tab(text: 'السلف', icon: Icon(Icons.payments, size: 18)),
                           Tab(text: 'المرتبات', icon: Icon(Icons.receipt_long, size: 18)),
@@ -391,16 +493,26 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                                                 Text(advance.reason!, style: TextStyle(color: textColor.withValues(alpha: 0.5), fontSize: 11)),
                                             ],
                                           ),
-                                          trailing: Column(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                          trailing: Row(
+                                            mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              Text('${advance.amount.toStringAsFixed(2)} ج.م', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 15)),
-                                              const SizedBox(height: 4),
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                                                child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                                              IconButton(
+                                                icon: const Icon(Icons.print, size: 20, color: Colors.orange),
+                                                tooltip: 'طباعة السلفة',
+                                                onPressed: () => _printAdvances(single: advance),
+                                              ),
+                                              Column(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                crossAxisAlignment: CrossAxisAlignment.end,
+                                                children: [
+                                                  Text('${advance.amount.toStringAsFixed(2)} ج.م', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 15)),
+                                                  const SizedBox(height: 4),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                    decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                                                    child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                                                  ),
+                                                ],
                                               ),
                                             ],
                                           ),
@@ -447,7 +559,17 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                                                 Text('الفترة: ${entry.period}', style: TextStyle(color: textColor.withValues(alpha: 0.4), fontSize: 11)),
                                             ],
                                           ),
-                                          trailing: Text('${entry.amount.toStringAsFixed(2)} ج.م', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 15)),
+                                          trailing: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              IconButton(
+                                                icon: const Icon(Icons.print, size: 20, color: Colors.orange),
+                                                tooltip: 'طباعة المرتب',
+                                                onPressed: () => _printSalaries(single: entry),
+                                              ),
+                                              Text('${entry.amount.toStringAsFixed(2)} ج.م', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 15)),
+                                            ],
+                                          ),
                                         ),
                                       );
                                     },
@@ -456,11 +578,12 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                         ),
                       ),
                     ],
+                      );
+                    }),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
     );
   }
 }
