@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
+import '../../core/provider/auth_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
 import '../../core/models/user_model.dart';
 import '../../widgets/permission_guard.dart';
 import 'package:intl/intl.dart';
 import 'manual_override_dialog.dart';
+import 'services/staff_attendance_report_generator.dart';
 
 class AttendancePage extends ConsumerStatefulWidget {
   final Staff staff;
@@ -20,6 +22,24 @@ class AttendancePage extends ConsumerStatefulWidget {
 class _AttendancePageState extends ConsumerState<AttendancePage> {
   List<Attendance> _attendanceList = [];
   bool _isLoading = true;
+  DateTime? _filterStart;
+  DateTime? _filterEnd;
+  double _latePerHour = 0; // مضاعف
+  double _earlyPerHour = 0; // مضاعف
+  double _absencePerDay = 0;
+  int _grace = 15;
+  String _workStart = '09:00';
+  String _workEnd = '17:00';
+
+  List<Attendance> get _filteredList {
+    if (_filterStart == null || _filterEnd == null) return _attendanceList;
+    return _attendanceList.where((r) {
+      final d = DateTime(r.date.year, r.date.month, r.date.day);
+      final s = DateTime(_filterStart!.year, _filterStart!.month, _filterStart!.day);
+      final e = DateTime(_filterEnd!.year, _filterEnd!.month, _filterEnd!.day);
+      return !d.isBefore(s) && !d.isAfter(e);
+    }).toList();
+  }
 
   @override
   void initState() {
@@ -33,6 +53,18 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     final dao = StaffManagementDao(db);
     try {
       final attendance = await dao.getAttendanceByStaff(widget.staff.staffId);
+      // تحميل إعدادات الخصم للملخص
+      try {
+        final settings = await db.select(db.attendanceSettings).get();
+        for (final s in settings) {
+          if (s.settingKey == 'late_penalty_per_hour') _latePerHour = double.tryParse(s.settingValue) ?? 0;
+          if (s.settingKey == 'early_leave_penalty_per_hour') _earlyPerHour = double.tryParse(s.settingValue) ?? 0;
+          if (s.settingKey == 'absence_penalty_amount') _absencePerDay = double.tryParse(s.settingValue) ?? 0;
+          if (s.settingKey == 'grace_period_minutes') _grace = int.tryParse(s.settingValue) ?? 15;
+          if (s.settingKey == 'default_work_start') _workStart = s.settingValue;
+          if (s.settingKey == 'default_work_end') _workEnd = s.settingValue;
+        }
+      } catch (_) {}
       setState(() {
         _attendanceList = attendance.reversed.toList();
         _isLoading = false;
@@ -43,6 +75,95 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('خطأ في تحميل سجل الحضور')));
+    }
+  }
+
+  Future<void> _pickFilterRange() async {
+    final now = DateTime.now();
+    final first = await showDatePicker(context: context, initialDate: _filterStart ?? now, firstDate: DateTime(2020), lastDate: DateTime(2030));
+    if (first == null) return;
+    if (!mounted) return;
+    final last = await showDatePicker(context: context, initialDate: _filterEnd ?? first, firstDate: first, lastDate: DateTime(2030));
+    if (last == null) return;
+    setState(() {
+      _filterStart = first;
+      _filterEnd = last;
+    });
+  }
+
+  Future<void> _editRecord(Attendance record) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => ManualOverrideDialog(staff: widget.staff),
+    );
+    if (result == true) _loadAttendance();
+  }
+
+  Future<void> _deleteDayRecord(Attendance record) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف سجل الحضور'),
+        content: Text(
+          'متأكد إنك عايز تمسح سجل يوم ${DateFormat('yyyy/MM/dd', 'ar').format(record.date)} كلّه؟',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _isChecking = true);
+    try {
+      final service = ref.read(staffManagementServiceProvider);
+      final user = ref.read(authProvider);
+      await service.deleteAttendanceDay(
+        user,
+        widget.staff.staffId,
+        record.date,
+      );
+      await _loadAttendance();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم حذف سجل اليوم'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل حذف السجل: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isChecking = false);
+    }
+  }
+
+  Future<void> _printReport() async {
+    final db = ref.read(appDatabaseProvider);
+    final list = _filteredList;
+    if (list.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يوجد بيانات للطباعة')));
+      return;
+    }
+    try {
+      await StaffAttendanceReportGenerator.generateAndPrint(db: db, staff: widget.staff, records: list, startDate: _filterStart, endDate: _filterEnd);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ طباعة: $e')));
     }
   }
 
@@ -139,7 +260,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                     ),
                     const Divider(),
                     DropdownButtonFormField<String>(
-                      value: selStatus,
+                      initialValue: selStatus,
                       decoration: const InputDecoration(
                         labelText: 'الحالة',
                         border: OutlineInputBorder(),
@@ -182,8 +303,25 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                 child: const Text('إلغاء'),
               ),
               ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   if (formKey.currentState!.validate()) {
+                    final service = ref.read(staffManagementServiceProvider);
+                    final alreadyRecorded = await service.hasAttendanceOnDate(
+                      widget.staff.staffId,
+                      date,
+                    );
+                    if (!ctx.mounted) return;
+                    if (alreadyRecorded) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'مينفعش تسجيل يدوي مكرر لنفس اليوم — عشان تعدّل يوم متسجل استخدم (تعديل مراقب)',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
                     Navigator.pop(ctx, {
                       'date': date,
                       'checkIn': inTime,
@@ -276,8 +414,19 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     setState(() => _isChecking = true);
     try {
       final service = ref.read(staffManagementServiceProvider);
-      await service.recordCheckIn(widget.staff.staffId, source: 'manual');
+      final recorded = await service.recordCheckInTodayOnce(
+        widget.staff.staffId,
+      );
       if (!mounted) return;
+      if (!recorded) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('مينفعش تسجيل حضور تاني لنفس اليوم، اتسجل من قبل'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
       await _loadAttendance();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -392,17 +541,73 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
             ),
           ),
+          const SizedBox(width: 4),
+          ElevatedButton.icon(
+            onPressed: _printReport,
+            icon: const Icon(Icons.print, size: 18),
+            label: const Text('طباعة التقرير'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12)),
+          ),
           const SizedBox(width: 8),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _attendanceList.isEmpty
-          ? _buildEmptyState()
-          : _buildAttendanceList(),
+          : Column(children: [
+              _buildFilterBar(),
+              _buildSummaryCards(),
+              Expanded(child: _filteredList.isEmpty ? _buildEmptyState() : _buildAttendanceList()),
+            ]),
       ),
     );
   }
+
+  Widget _buildFilterBar() {
+    final hasFilter = _filterStart != null && _filterEnd != null;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(children: [
+        ElevatedButton.icon(onPressed: _pickFilterRange, icon: const Icon(Icons.date_range, size: 16), label: Text(hasFilter ? '${DateFormat('yyyy/MM/dd').format(_filterStart!)} - ${DateFormat('yyyy/MM/dd').format(_filterEnd!)}' : 'اختيار الفترة')),
+        const SizedBox(width: 8),
+        if (hasFilter) TextButton(onPressed: () => setState(() { _filterStart = null; _filterEnd = null; }), child: const Text('مسح الفلتر')),
+        const Spacer(),
+        Text('${_filteredList.length} سجل', style: TextStyle(color: Colors.grey[600])),
+      ]),
+    );
+  }
+
+  Widget _buildSummaryCards() {
+    final list = _filteredList;
+    final absent = list.where((r) => r.status == 'absent').length;
+    final lateCount = list.where((r) => r.status == 'late').length;
+    int totalLateMin = 0;
+    int totalEarlyMin = 0;
+    int sMin = 540; int eMin = 1020;
+    try { final p = _workStart.split(':'); sMin = (int.tryParse(p[0]) ?? 9)*60 + (int.tryParse(p[1]) ?? 0); } catch(_){}
+    try { final p = _workEnd.split(':'); eMin = (int.tryParse(p[0]) ?? 17)*60 + (int.tryParse(p[1]) ?? 0); } catch(_){}
+    final gEnd = sMin + _grace;
+    for (final r in list) {
+      if (r.status == 'late' && r.checkInTime != null) { final ci = r.checkInTime!.hour*60 + r.checkInTime!.minute; if (ci > gEnd) totalLateMin += ci - gEnd; }
+      if (r.checkOutTime != null) { final co = r.checkOutTime!.hour*60 + r.checkOutTime!.minute; if (co < eMin) totalEarlyMin += eMin - co; }
+    }
+    final hourly = widget.staff.hourlyRate ?? (widget.staff.basicSalary / 160.0);
+    double lateDed = _latePerHour > 0 ? (totalLateMin/60.0) * hourly * _latePerHour : 0;
+    double earlyDed = _earlyPerHour > 0 ? (totalEarlyMin/60.0) * hourly * _earlyPerHour : 0;
+    double absDed = absent * _absencePerDay;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(children: [
+        Expanded(child: _summaryCard('غياب', '$absent يوم', Icons.person_off, Colors.red)),
+        const SizedBox(width: 8),
+        Expanded(child: _summaryCard('تأخير', '${totalLateMin ~/ 60}س ${totalLateMin % 60}د ($lateCount)', Icons.timer, Colors.amber)),
+        const SizedBox(width: 8),
+        Expanded(child: _summaryCard('بدري', '${totalEarlyMin ~/ 60}س ${totalEarlyMin % 60}د', Icons.logout, Colors.deepOrange)),
+        const SizedBox(width: 8),
+        Expanded(child: _summaryCard('خصومات', '${(lateDed+earlyDed+absDed).toStringAsFixed(0)} ج.م', Icons.money_off, Colors.orange)),
+      ]),
+    );
+  }
+  Widget _summaryCard(String t, String v, IconData ic, Color c) => Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(children: [Icon(ic, color: c, size: 20), const SizedBox(height: 4), Text(t, style: TextStyle(color: Colors.grey[600], fontSize: 12)), Text(v, style: const TextStyle(fontWeight: FontWeight.bold))])));
 
   Widget _buildEmptyState() {
     return Center(
@@ -421,11 +626,12 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
   }
 
   Widget _buildAttendanceList() {
+    final list = _filteredList;
     return ListView.builder(
       padding: const EdgeInsets.all(16.0),
-      itemCount: _attendanceList.length,
+      itemCount: list.length,
       itemBuilder: (context, index) {
-        final record = _attendanceList[index];
+        final record = list[index];
         return _buildAttendanceCard(record);
       },
     );
@@ -498,6 +704,16 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                 _buildTimeInfo(Icons.login, 'حضور', record.checkInTime),
                 const Spacer(),
                 _buildTimeInfo(Icons.logout, 'انصراف', record.checkOutTime),
+                IconButton(icon: const Icon(Icons.edit, size: 18), tooltip: 'تعديل', onPressed: () => _editRecord(record)),
+                PermissionGuard(
+                  permission: Permission.manageAttendance,
+                  showUpgradePrompt: false,
+                  child: IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    tooltip: 'حذف سجل اليوم',
+                    onPressed: () => _deleteDayRecord(record),
+                  ),
+                ),
               ],
             ),
           ],

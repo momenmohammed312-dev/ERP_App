@@ -28,8 +28,11 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
 
   // Grace & penalties
   int _gracePeriodMinutes = 15;
-  double _latePenaltyAmount = 0;
-  double _absencePenaltyAmount = 0;
+  double _latePenaltyAmount = 0; // Legacy or per-instance
+  double _latePenaltyPerHour = 0; // خصم التأخير لكل ساعة تأخير
+  double _absencePenaltyAmount = 0; // غرامة يوم الغياب (مبلغ ثابت)
+  double _absenceMultiplier = 1.0; // مضاعف خصم يوم الغياب (1 = يوم، 1.5 = يوم ونص)
+  double _earlyPenaltyPerHour = 0; // مضاعف خصم الانصراف المبكر لكل ساعة
   double _overtimeRateMultiplier = 1.5;
   double _overtimeThresholdHours = 8;
 
@@ -65,8 +68,14 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             _gracePeriodMinutes = int.tryParse(s.settingValue) ?? 15;
           case 'late_penalty_amount':
             _latePenaltyAmount = double.tryParse(s.settingValue) ?? 0;
+          case 'late_penalty_per_hour':
+            _latePenaltyPerHour = double.tryParse(s.settingValue) ?? 0;
           case 'absence_penalty_amount':
             _absencePenaltyAmount = double.tryParse(s.settingValue) ?? 0;
+          case 'absence_penalty_days_multiplier':
+            _absenceMultiplier = double.tryParse(s.settingValue) ?? 1.0;
+          case 'early_leave_penalty_per_hour':
+            _earlyPenaltyPerHour = double.tryParse(s.settingValue) ?? 0;
           case 'overtime_rate_multiplier':
             _overtimeRateMultiplier = double.tryParse(s.settingValue) ?? 1.5;
           case 'overtime_threshold_hours':
@@ -104,7 +113,10 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         'default_weekend': _weekendDay,
         'grace_period_minutes': _gracePeriodMinutes.toString(),
         'late_penalty_amount': _latePenaltyAmount.toString(),
+        'late_penalty_per_hour': _latePenaltyPerHour.toString(),
         'absence_penalty_amount': _absencePenaltyAmount.toString(),
+        'absence_penalty_days_multiplier': _absenceMultiplier.toString(),
+        'early_leave_penalty_per_hour': _earlyPenaltyPerHour.toString(),
         'overtime_rate_multiplier': _overtimeRateMultiplier.toString(),
         'overtime_threshold_hours': _overtimeThresholdHours.toString(),
       };
@@ -419,6 +431,50 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         ),
         const Divider(height: 1),
         ListTile(
+          title: const Text('مضاعف خصم التأخير لكل ساعة'),
+          subtitle: Text(_latePenaltyPerHour > 0 ? 'x${_latePenaltyPerHour.toStringAsFixed(1)} — ساعة تأخير = ${_latePenaltyPerHour}x أجر الساعة' : 'بدون احتساب بالساعة'),
+          trailing: const Icon(Icons.timer_outlined),
+          onTap: () async {
+            final controller = TextEditingController(
+              text: _latePenaltyPerHour > 0 ? _latePenaltyPerHour.toString() : '',
+            );
+            final result = await showDialog<double>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('مضاعف خصم التأخير لكل ساعة'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      hintText: '1.5 = ساعة ونص',
+                      suffixText: 'x',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, children: [
+                    ActionChip(label: const Text('1x'), onPressed: () => Navigator.pop(ctx, 1.0)),
+                    ActionChip(label: const Text('1.5x'), onPressed: () => Navigator.pop(ctx, 1.5)),
+                    ActionChip(label: const Text('2x'), onPressed: () => Navigator.pop(ctx, 2.0)),
+                  ]),
+                ]),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(
+                    onPressed: () {
+                      final val = double.tryParse(controller.text) ?? 0;
+                      Navigator.pop(ctx, val);
+                    },
+                    child: const Text('موافق'),
+                  ),
+                ],
+              ),
+            );
+            if (result != null) setState(() => _latePenaltyPerHour = result);
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
           title: const Text('غرامة الغياب'),
           subtitle: Text(_absencePenaltyAmount > 0 ? '${_absencePenaltyAmount.toStringAsFixed(0)} ج.م' : 'بدون غرامة'),
           trailing: const Icon(Icons.money_off),
@@ -451,6 +507,64 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
               ),
             );
             if (result != null) setState(() => _absencePenaltyAmount = result);
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('مضاعف خصم الغياب (أيام)'),
+          subtitle: Text('x${_absenceMultiplier.toStringAsFixed(1)} يوم${_absenceMultiplier > 1 ? ' — مثال: يوم غياب = ${(_absenceMultiplier).toStringAsFixed(1)} يوم خصم' : ''}'),
+          trailing: const Icon(Icons.calendar_today),
+          onTap: () async {
+            final controller = TextEditingController(text: _absenceMultiplier.toString());
+            final result = await showDialog<double>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('مضاعف خصم الغياب'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(controller: controller, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '1 = يوم بيوم', suffixText: 'x')),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, children: [
+                    ActionChip(label: const Text('1x'), onPressed: () => Navigator.pop(ctx, 1.0)),
+                    ActionChip(label: const Text('1.5x'), onPressed: () => Navigator.pop(ctx, 1.5)),
+                    ActionChip(label: const Text('2x'), onPressed: () => Navigator.pop(ctx, 2.0)),
+                  ]),
+                ]),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(onPressed: () { final v = double.tryParse(controller.text); if (v != null && v >= 0) Navigator.pop(ctx, v); }, child: const Text('موافق')),
+                ],
+              ),
+            );
+            if (result != null) setState(() => _absenceMultiplier = result);
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('مضاعف خصم الانصراف المبكر لكل ساعة'),
+          subtitle: Text(_earlyPenaltyPerHour > 0 ? 'x${_earlyPenaltyPerHour.toStringAsFixed(1)} — ساعة بدري = ${_earlyPenaltyPerHour}x أجر الساعة' : 'بدون خصم للانصراف المبكر'),
+          trailing: const Icon(Icons.logout),
+          onTap: () async {
+            final controller = TextEditingController(text: _earlyPenaltyPerHour > 0 ? _earlyPenaltyPerHour.toString() : '');
+            final result = await showDialog<double>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('مضاعف خصم الانصراف المبكر'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(controller: controller, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '1 = ساعة بساعة، 1.5 = ساعة ونص', suffixText: 'x')),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, children: [
+                    ActionChip(label: const Text('1x'), onPressed: () => Navigator.pop(ctx, 1.0)),
+                    ActionChip(label: const Text('1.5x'), onPressed: () => Navigator.pop(ctx, 1.5)),
+                    ActionChip(label: const Text('2x'), onPressed: () => Navigator.pop(ctx, 2.0)),
+                  ]),
+                ]),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(onPressed: () { final v = double.tryParse(controller.text) ?? 0; Navigator.pop(ctx, v); }, child: const Text('موافق')),
+                ],
+              ),
+            );
+            if (result != null) setState(() => _earlyPenaltyPerHour = result);
           },
         ),
         const Divider(height: 1),

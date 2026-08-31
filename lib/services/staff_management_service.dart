@@ -261,6 +261,33 @@ class StaffManagementService {
     );
   }
 
+  /// Returns true if an attendance record already exists for the given day
+  Future<bool> hasAttendanceOnDate(String staffId, DateTime date) async {
+    final records = await _dao.getAttendanceOnDate(staffId, date);
+    return records.isNotEmpty;
+  }
+
+  /// Manual check-in that refuses duplicates: returns true if recorded,
+  /// false if a record already exists for today (nothing written).
+  /// Used by the manual UI only; the device sync path keeps its own upsert flow.
+  Future<bool> recordCheckInTodayOnce(String staffId) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (await hasAttendanceOnDate(staffId, today)) return false;
+    await recordCheckIn(staffId, source: 'manual');
+    return true;
+  }
+
+  /// Deletes all attendance records of a staff member for a specific day
+  Future<void> deleteAttendanceDay(
+    User? user,
+    String staffId,
+    DateTime date,
+  ) async {
+    PermissionValidator.requirePermission(user, Permission.manageAttendance, 'حذف سجل حضور');
+    await _dao.deleteAttendanceByDate(staffId, date);
+  }
+
   Future<void> recordManualOverride(
     User? user,
     String staffId, {
@@ -374,6 +401,18 @@ class StaffManagementService {
     int lateDays = 0;
     double totalHours = 0.0;
     double totalOvertime = 0.0;
+    int totalLateMinutes = 0;
+    int totalEarlyMinutes = 0;
+
+    // لجمع دقائق التأخير/انصراف مبكر نحتاج جدول العمل
+    ScheduleConfig? schedule;
+    final db = _db;
+    if (db != null) {
+      try {
+        final engine = AttendanceCalculationEngine(db, db.attendanceDeviceDao, _dao);
+        schedule = await engine.getScheduleForStaff(staffId);
+      } catch (_) {}
+    }
 
     for (final record in attendanceRecords) {
       switch (record.status) {
@@ -389,7 +428,24 @@ class StaffManagementService {
         case 'late':
           lateDays++;
           presentDays++; // Late counts as present
+          // احتساب دقائق التأخير الفعلية بعد فترة السماح
+          if (record.checkInTime != null && schedule != null) {
+            final ciMin = record.checkInTime!.hour * 60 + record.checkInTime!.minute;
+            final graceEnd = schedule.workStartMinutesSinceMidnight + schedule.gracePeriodMinutes;
+            if (ciMin > graceEnd) totalLateMinutes += ciMin - graceEnd;
+          }
           break;
+        case 'early_leave':
+          lateDays++; // يُحسب كحضور مع تأخير/بدري
+          presentDays++;
+          break;
+      }
+
+      // انصراف مبكر: يحسب لأي سجل فيه checkOut قبل نهاية الدوام
+      if (record.checkOutTime != null && schedule != null) {
+        final coMin = record.checkOutTime!.hour * 60 + record.checkOutTime!.minute;
+        final endMin = schedule.workEndMinutesSinceMidnight;
+        if (coMin < endMin) totalEarlyMinutes += endMin - coMin;
       }
 
       totalHours += record.workingHours ?? 0.0;
@@ -404,6 +460,8 @@ class StaffManagementService {
       lateDays: lateDays,
       totalHours: totalHours,
       totalOvertime: totalOvertime,
+      totalLateMinutes: totalLateMinutes,
+      totalEarlyMinutes: totalEarlyMinutes,
     );
   }
 
@@ -566,8 +624,56 @@ class StaffManagementService {
       }
     }
 
-    // Calculate payroll
     final basicSalary = staff.basicSalary;
+    // Auto penalties from attendance settings — يطبق على كل بصمة/حضور محسوب مسبقاً
+    // يدعم: late بالساعات (per_hour) أو بالمرة (legacy per late), وغياب بمبلغ ثابت أو مضاعف يوم
+    try {
+      final latePerHourRow = await (db.select(db.attendanceSettings)
+            ..where((t) => t.settingKey.equals('late_penalty_per_hour')))
+          .getSingleOrNull();
+      final lateAmountRow = await (db.select(db.attendanceSettings)
+            ..where((t) => t.settingKey.equals('late_penalty_amount')))
+          .getSingleOrNull();
+      final absenceRow = await (db.select(db.attendanceSettings)
+            ..where((t) => t.settingKey.equals('absence_penalty_amount')))
+          .getSingleOrNull();
+      final absenceMultRow = await (db.select(db.attendanceSettings)
+            ..where((t) => t.settingKey.equals('absence_penalty_days_multiplier')))
+          .getSingleOrNull();
+      final latePerHour = double.tryParse(latePerHourRow?.settingValue ?? '0') ?? 0;
+      final latePerOccurrence = double.tryParse(lateAmountRow?.settingValue ?? '0') ?? 0;
+      final absencePerDay = double.tryParse(absenceRow?.settingValue ?? '0') ?? 0;
+      final absenceMult = double.tryParse(absenceMultRow?.settingValue ?? '1') ?? 1.0;
+      final earlyRow = await (db.select(db.attendanceSettings)
+            ..where((t) => t.settingKey.equals('early_leave_penalty_per_hour')))
+          .getSingleOrNull();
+      final earlyPerHour = double.tryParse(earlyRow?.settingValue ?? '0') ?? 0;
+
+      double autoLatePenalty = 0;
+      final hourlyRate = staff.hourlyRate ?? (basicSalary / 160.0);
+      if (latePerHour > 0 && attendanceSummary.totalLateHours > 0) {
+        // latePerHour الآن مضاعف (1.5 = ساعة ونص) وليس مبلغ
+        autoLatePenalty = attendanceSummary.totalLateHours * hourlyRate * latePerHour;
+      } else if (latePerOccurrence > 0) {
+        autoLatePenalty = attendanceSummary.lateDays * latePerOccurrence;
+      }
+      double autoAbsencePenalty = 0;
+      if (absencePerDay > 0) {
+        autoAbsencePenalty = attendanceSummary.absentDays * absencePerDay;
+      } else if (absenceMult != 1.0 || absenceMult > 0) {
+        final daily = basicSalary / 30.0;
+        autoAbsencePenalty = attendanceSummary.absentDays * daily * absenceMult;
+      }
+      double autoEarlyPenalty = 0;
+      if (earlyPerHour > 0 && attendanceSummary.totalEarlyHours > 0) {
+        autoEarlyPenalty = attendanceSummary.totalEarlyHours * hourlyRate * earlyPerHour;
+      }
+      penaltiesTotal += autoLatePenalty + autoAbsencePenalty + autoEarlyPenalty;
+    } catch (_) {
+      // لو جدول الإعدادات غير موجود أو فشل القراءة — تجاهل الخصم التلقائي
+    }
+
+    // Calculate payroll (basicSalary already defined)
     final overtimePay =
         attendanceSummary.totalOvertime *
         (staff.hourlyRate ?? basicSalary / 160);
@@ -801,6 +907,8 @@ class AttendanceSummary {
   final int lateDays;
   final double totalHours;
   final double totalOvertime;
+  final int totalLateMinutes;
+  final int totalEarlyMinutes;
 
   AttendanceSummary({
     required this.totalDays,
@@ -810,7 +918,12 @@ class AttendanceSummary {
     required this.lateDays,
     required this.totalHours,
     required this.totalOvertime,
+    this.totalLateMinutes = 0,
+    this.totalEarlyMinutes = 0,
   });
+
+  double get totalLateHours => totalLateMinutes / 60.0;
+  double get totalEarlyHours => totalEarlyMinutes / 60.0;
 
   double get attendanceRate => totalDays > 0 ? presentDays / totalDays : 0.0;
 

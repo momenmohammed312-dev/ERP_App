@@ -7,6 +7,7 @@ import '../../core/database/dao/staff_management_dao.dart';
 import '../../core/utils/currency_helper.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../services/staff_management_service.dart';
+import 'services/staff_payroll_statement_generator.dart';
 
 class PayrollPage extends ConsumerStatefulWidget {
   final Staff staff;
@@ -55,11 +56,35 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
           : _payrollHistory.isEmpty
           ? _buildEmptyState()
           : _buildPayrollList(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _calculatePayroll,
-        backgroundColor: Colors.blue[700],
-        tooltip: 'احتساب مرتب',
-        child: const Icon(Icons.calculate, color: Colors.white),
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (_payrollHistory.isNotEmpty) ...[
+            FloatingActionButton.extended(
+              heroTag: 'print_payroll',
+              onPressed: () {
+                final db = ref.read(appDatabaseProvider);
+                StaffPayrollStatementGenerator.generateAndPrint(
+                  context: context,
+                  db: db,
+                  staff: widget.staff,
+                  payrollRecords: _payrollHistory,
+                );
+              },
+              backgroundColor: Colors.teal,
+              icon: const Icon(Icons.print, color: Colors.white),
+              label: const Text('طباعة كشف المرتب', style: TextStyle(color: Colors.white)),
+            ),
+            const SizedBox(width: 12),
+          ],
+          FloatingActionButton(
+            heroTag: 'calc_payroll',
+            onPressed: _calculatePayroll,
+            backgroundColor: Colors.blue[700],
+            tooltip: 'احتساب مرتب',
+            child: const Icon(Icons.calculate, color: Colors.white),
+          ),
+        ],
       ),
     );
   }

@@ -9,6 +9,7 @@ import 'staff_form_page.dart';
 import 'staff_details_page.dart';
 import 'attendance_page.dart';
 import 'employee_dashboard_page.dart';
+import 'historical_attendance_import_page.dart';
 
 class StaffListPage extends ConsumerStatefulWidget {
   const StaffListPage({super.key});
@@ -100,6 +101,19 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
         foregroundColor: textColor,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const HistoricalAttendanceImportPage(),
+                ),
+              );
+              _loadStaff();
+            },
+            tooltip: 'استيراد حضور تاريخي',
+          ),
           IconButton(
             icon: const Icon(Icons.dashboard),
             onPressed: () {

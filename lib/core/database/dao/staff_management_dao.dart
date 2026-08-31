@@ -86,6 +86,33 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
       (select(attendanceTable)..where((a) => a.id.equals(id)))
           .getSingleOrNull();
 
+  /// Returns all attendance records for a staff member on a specific day
+  Future<List<Attendance>> getAttendanceOnDate(
+    String staffId,
+    DateTime date,
+  ) async {
+    final day = DateTime(date.year, date.month, date.day);
+    final nextDay = day.add(const Duration(days: 1));
+    final records = await (select(attendanceTable)
+          ..where((a) => a.staffId.equals(staffId))
+          ..where((a) => a.date.isBetweenValues(day, nextDay)))
+        .get();
+    return records
+        .where((a) => DateTime(a.date.year, a.date.month, a.date.day) == day)
+        .toList();
+  }
+
+  /// Deletes all attendance records for a staff member on a specific day.
+  /// Returns the number of deleted rows.
+  Future<int> deleteAttendanceByDate(String staffId, DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    final nextDay = day.add(const Duration(days: 1));
+    return (delete(attendanceTable)
+          ..where((a) => a.staffId.equals(staffId))
+          ..where((a) => a.date.isBetweenValues(day, nextDay)))
+        .go();
+  }
+
   Future<void> updateAttendance(Attendance entry) =>
       update(attendanceTable).replace(entry);
 

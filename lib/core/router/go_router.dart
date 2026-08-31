@@ -22,6 +22,7 @@ import 'package:pos_offline_desktop/ui/empty_barnika/empty_barnika_screen.dart';
 import 'package:pos_offline_desktop/ui/day/day_management_screen.dart';
 import 'package:pos_offline_desktop/ui/customer/customer_debt_list_screen.dart';
 import 'package:pos_offline_desktop/ui/import/excel_import_screen.dart';
+import 'package:pos_offline_desktop/ui/staff/historical_attendance_import_page.dart';
 
 final firstRunCompleteProvider = FutureProvider<bool>((ref) async {
   return SettingsService.isFirstRunComplete();
@@ -130,6 +131,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/excel-import',
         builder: (context, state) => ExcelImportScreen(db: db),
+      ),
+      GoRoute(
+        path: '/historical-attendance-import',
+        builder: (context, state) => const HistoricalAttendanceImportPage(),
       ),
       GoRoute(
         path: '/shipments/:id',

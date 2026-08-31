@@ -7,6 +7,7 @@ import '../../core/database/dao/staff_management_dao.dart';
 import '../../core/utils/currency_helper.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../services/staff_management_service.dart';
+import 'services/staff_advance_statement_generator.dart';
 import 'package:intl/intl.dart';
 
 class AdvancesPage extends ConsumerStatefulWidget {
@@ -57,11 +58,35 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
           : _advances.isEmpty
           ? _buildEmptyState()
           : _buildAdvancesList(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _requestAdvance,
-        backgroundColor: Colors.teal,
-        tooltip: 'طلب سلفة',
-        child: const Icon(Icons.add, color: Colors.white),
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (_advances.isNotEmpty) ...[
+            FloatingActionButton.extended(
+              heroTag: 'print_advances',
+              onPressed: () {
+                final db = ref.read(appDatabaseProvider);
+                StaffAdvanceStatementGenerator.generateAndPrint(
+                  context: context,
+                  db: db,
+                  staff: widget.staff,
+                  advanceRecords: _advances,
+                );
+              },
+              backgroundColor: Colors.blue[700],
+              icon: const Icon(Icons.print, color: Colors.white),
+              label: const Text('طباعة كشف السلف', style: TextStyle(color: Colors.white)),
+            ),
+            const SizedBox(width: 12),
+          ],
+          FloatingActionButton(
+            heroTag: 'req_advance',
+            onPressed: _requestAdvance,
+            backgroundColor: Colors.teal,
+            tooltip: 'طلب سلفة',
+            child: const Icon(Icons.add, color: Colors.white),
+          ),
+        ],
       ),
     );
   }
