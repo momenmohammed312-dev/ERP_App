@@ -7,6 +7,7 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/core/utils/app_utils.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
+import 'package:pos_offline_desktop/ui/supplier/supplier_statement_screen.dart';
 
 class SuppliersWidget extends ConsumerWidget {
   final AppDatabase db;
@@ -763,6 +764,21 @@ class _SupplierCard extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+                const Gap(12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => SupplierStatementScreen(supplier: supplier)),
+                      );
+                    },
+                    icon: const Icon(Icons.receipt_long),
+                    label: const Text('كشف حساب مفصل (زي العميل)'),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC9A84C), foregroundColor: Colors.black),
+                  ),
                 ),
               ],
             ),

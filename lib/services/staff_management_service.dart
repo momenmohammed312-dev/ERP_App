@@ -288,6 +288,32 @@ class StaffManagementService {
     await _dao.deleteAttendanceByDate(staffId, date);
   }
 
+  /// Deletes all imported attendance for a staff (source='import') — لإزالة الدوبلر
+  Future<int> deleteImportedForStaff(User? user, String staffId) async {
+    PermissionValidator.requirePermission(user, Permission.manageAttendance, 'حذف حضور مستورد');
+    return await _dao.deleteAttendanceByStaffAndSource(staffId, 'import');
+  }
+
+  /// حذف نهائي للموظف وكل سجلاته (حضور، سلف، رواتب، إجازات، جزاءات) — لإزالة الاسم من كل السجلات
+  Future<void> deleteStaffCompletely(User? user, String staffId) async {
+    PermissionValidator.requirePermission(user, Permission.editEmployee, 'حذف موظف');
+    final db = _dao.attachedDatabase;
+    await db.transaction(() async {
+      await _dao.deleteStaff(staffId);
+      await (db.delete(db.attendanceTable)..where((t) => t.staffId.equals(staffId))).go();
+      await (db.delete(db.staffAdvances)..where((t) => t.staffId.equals(staffId))).go();
+      await (db.delete(db.payrollTable)..where((t) => t.staffId.equals(staffId))).go();
+      await (db.delete(db.vacations)..where((t) => t.staffId.equals(staffId))).go();
+      await (db.delete(db.rewardsPenalties)..where((t) => t.staffId.equals(staffId))).go();
+      await (db.delete(db.performanceReviews)..where((t) => t.staffId.equals(staffId))).go();
+      await (db.delete(db.staffDocuments)..where((t) => t.staffId.equals(staffId))).go();
+      // بصمة
+      try {
+        await (db.delete(db.staffBiometricMappings)..where((t) => t.staffId.equals(staffId))).go();
+      } catch (_) {}
+    });
+  }
+
   Future<void> recordManualOverride(
     User? user,
     String staffId, {
@@ -316,11 +342,7 @@ class StaffManagementService {
       updatedAt: DateTime.now(),
     );
 
-    // If an entry already exists for this date, we should update it, otherwise add.
-    // For simplicity, we can rely on DAO's logic or implement an upsert here if needed.
-    // Assuming adding a new attendance log or updating the existing one:
-    final existing = await _dao.getAttendanceByStaff(staffId, startDate: date, endDate: date.add(const Duration(days: 1)));
-    final todayRecords = existing.where((a) => a.date == date).toList();
+    final todayRecords = await _dao.getAttendanceOnDate(staffId, date);
 
     if (todayRecords.isNotEmpty) {
       final updated = todayRecords.first.copyWith(
@@ -361,12 +383,7 @@ class StaffManagementService {
       updatedAt: DateTime.now(),
     );
 
-    final existing = await _dao.getAttendanceByStaff(
-      staffId,
-      startDate: date,
-      endDate: date.add(const Duration(days: 1)),
-    );
-    final todayRecords = existing.where((a) => a.date == date).toList();
+    final todayRecords = await _dao.getAttendanceOnDate(staffId, date);
 
     if (todayRecords.isNotEmpty) {
       final updated = todayRecords.first.copyWith(

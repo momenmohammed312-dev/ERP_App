@@ -29,6 +29,7 @@ class _ProductFormState extends State<ProductForm> {
   late TextEditingController cartonPriceCtrl;
   String selectedStatus = 'Active';
   bool isBarneka = false;
+  String? selectedProductType; // null = standard, 'raw_material' | 'semi_finished' | 'finished_product'
 
   @override
   void initState() {
@@ -57,6 +58,7 @@ class _ProductFormState extends State<ProductForm> {
     );
     selectedStatus = widget.product?.status ?? 'Active';
     isBarneka = widget.product?.barneka ?? false;
+    selectedProductType = widget.product?.productType;
   }
 
   @override
@@ -133,6 +135,7 @@ class _ProductFormState extends State<ProductForm> {
               cartonPrice: Value(newCartonPrice),
               status: Value(selectedStatus),
               barneka: Value(isBarneka),
+              productType: Value(selectedProductType),
             ),
           );
         } else {
@@ -151,6 +154,7 @@ class _ProductFormState extends State<ProductForm> {
             cartonPrice: Value(newCartonPrice),
             status: Value(selectedStatus),
             barneka: isBarneka,
+            productType: Value(selectedProductType),
           );
           
           await widget.db.productDao.updateProduct(updatedProduct);
@@ -403,6 +407,39 @@ class _ProductFormState extends State<ProductForm> {
                         selectedStatus = value;
                       });
                     }
+                  },
+                ),
+                const Gap(16),
+                DropdownButtonFormField<String?>(
+                  initialValue: selectedProductType,
+                  decoration: const InputDecoration(
+                    labelText: 'نوع المنتج',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.factory),
+                    helperText: 'يحدد هل المنتج مادة خام أم منتج تام للتصنيع',
+                  ),
+                  items: const [
+                    DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('عادي / للبيع المباشر'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'raw_material',
+                      child: Text('مادة خام'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'semi_finished',
+                      child: Text('نصف مصنع'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'finished_product',
+                      child: Text('منتج تام (مُصنع)'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      selectedProductType = value;
+                    });
                   },
                 ),
                 const Gap(16),

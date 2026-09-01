@@ -23,6 +23,10 @@ import 'package:pos_offline_desktop/ui/day/day_management_screen.dart';
 import 'package:pos_offline_desktop/ui/customer/customer_debt_list_screen.dart';
 import 'package:pos_offline_desktop/ui/import/excel_import_screen.dart';
 import 'package:pos_offline_desktop/ui/staff/historical_attendance_import_page.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/bom_list_screen.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/mo_list_screen.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/mo_detail_screen.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/reports/manufacturing_reports_screen.dart';
 
 final firstRunCompleteProvider = FutureProvider<bool>((ref) async {
   return SettingsService.isFirstRunComplete();
@@ -142,6 +146,25 @@ final routerProvider = Provider<GoRouter>((ref) {
           final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
           return ShipmentDetailScreen(db: db, shipmentId: id);
         },
+      ),
+      GoRoute(
+        path: '/manufacturing/bom',
+        builder: (context, state) => BomListScreen(db: db),
+      ),
+      GoRoute(
+        path: '/manufacturing/orders',
+        builder: (context, state) => MoListScreen(db: db),
+      ),
+      GoRoute(
+        path: '/manufacturing/orders/:id',
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+          return MoDetailScreen(db: db, orderId: id);
+        },
+      ),
+      GoRoute(
+        path: '/manufacturing/reports',
+        builder: (context, state) => ManufacturingReportsScreen(db: db),
       ),
     ],
   );

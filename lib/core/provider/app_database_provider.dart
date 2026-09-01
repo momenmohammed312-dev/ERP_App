@@ -69,7 +69,11 @@ final attendanceSyncServiceProvider = Provider<AttendanceSyncService>((ref) {
     deviceDao,
     db.staffManagementDao,
   );
-  return AttendanceSyncService(deviceDao, db.staffManagementDao, engine);
+  final service = AttendanceSyncService(deviceDao, db.staffManagementDao, engine);
+  // حل جذري: مزامنة تلقائية في الخلفية كل دقيقتين — لا تتأثر بانقطاع النت (الـ LAN يعمل محلياً)
+  service.startAutoSync(interval: const Duration(minutes: 2));
+  ref.onDispose(() => service.stopAutoSync());
+  return service;
 });
 
 final syncServiceProvider = Provider<SyncService>((ref) {

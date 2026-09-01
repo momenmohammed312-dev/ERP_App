@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'zkteco_models.dart';
 import 'zkteco_packet_codec.dart';
 
-/// Client implementation for communicating with ZKTeco Standalone biometric terminals over TCP/IP
+/// Minimal ZKTeco client for K50 Pro — only what attendance sync needs
 class ZKTecoClient {
   final String host;
   final int port;
@@ -24,406 +24,193 @@ class ZKTecoClient {
     required this.host,
     this.port = 4370,
     this.commKey = 0,
-    this.timeout = const Duration(seconds: 8),
+    this.timeout = const Duration(seconds: 15),
   });
 
   bool get isConnected => _isConnected;
   int get sessionId => _sessionId;
 
-  /// Connects to the ZKTeco terminal over TCP and initiates session handshake
-  Future<bool> connect() async {
-    await disconnect();
+  String? _lastError;
+  String? get lastError => _lastError;
 
+  Future<bool> connect() async {
+    _lastError = null;
+    const maxAttempts = 3;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        if (await _connectOnce()) return true;
+        if (_lastError != null && _lastError!.contains('CommKey')) return false;
+      } catch (e) {
+        _lastError = e.toString();
+      }
+      if (attempt < maxAttempts) {
+        await disconnect();
+        await Future.delayed(Duration(milliseconds: 800 * attempt));
+      }
+    }
+    await disconnect();
+    return false;
+  }
+
+  Future<bool> _connectOnce() async {
+    await disconnect();
     try {
       _socket = await Socket.connect(host, port, timeout: timeout);
       _socket!.setOption(SocketOption.tcpNoDelay, true);
       _recvBuffer.clear();
-      _sockSub?.cancel();
-      _sockSub = _socket!.listen(
-        (chunk) => _recvBuffer.addAll(chunk),
-        onError: (_) {},
-        onDone: () {},
-        cancelOnError: false,
-      );
-
+      await _sockSub?.cancel();
+      _sockSub = _socket!.listen((c) => _recvBuffer.addAll(c), onError: (_) {}, onDone: () {}, cancelOnError: false);
       _sessionId = 0;
       _replyId = 0;
-
-      // 1. Send CMD_CONNECT (1000) — الجهاز قد يرجع 2005 Unauthorized لو له CommKey
       final reply = await _sendCommand(ZkCommand.cmdConnect);
       if (reply == null) {
+        _lastError = 'انتهت مهلة الاتصال (timeout ${timeout.inSeconds}ث) — الشبكة غير مستقرة أو الجهاز مشغول';
         await disconnect();
         return false;
       }
-      // 2000=OK أو 2005=يحتاج مصادقة — في الحالتين بناخد sessionId ونكمل للمصادقة
       if (!reply.isSuccess && reply.command != ZkCommand.ackUnauthorized) {
+        _lastError = 'الجهاز رفض الاتصال (code ${reply.command})';
         await disconnect();
         return false;
       }
       _sessionId = reply.sessionId;
       _replyId = reply.replyId;
       _isConnected = true;
-
-      // 2. لو الجهاز طلب مصادقة (2005) أو فيه CommKey مدخل — نعمل AUTH
+      // لا نعتمد على CommKey — نحاول المصادقة لكن لا نفشل الاتصال لو رفضها
+      // بعض أجهزة K50 ترد 2005 حتى مع key=0 لكنها تسمح بسحب الحضور بدون مصادقة
       if (reply.command == ZkCommand.ackUnauthorized || commKey > 0) {
-        // لو التوكن 0 والجهاز طالب كلمة سر — جرّب 0 أولاً، لو فشل هيرجع false ويظهر للعميل
-        final keyToTry = commKey;
-        final authSuccess = await _authenticate(keyToTry);
-        if (!authSuccess) {
-          await disconnect();
-          return false;
+        final authOk = await _authenticate(commKey);
+        if (!authOk) {
+          // تحذير فقط، نكمل — السحب قد ينجح بدونها
+          _lastError = null; // لا نعتبره فشل اتصال
+        } else {
+          _lastError = null;
         }
+        // حتى لو فشلت المصادقة، نترك isConnected=true ونجرب سحب البيانات
+      } else {
+        _lastError = null;
       }
-
       return true;
     } catch (e) {
+      _lastError = 'خطأ شبكة: $e';
       await disconnect();
       return false;
     }
   }
 
-  /// Disconnects from the terminal and frees socket resources
   Future<void> disconnect() async {
     if (_isConnected && _socket != null) {
-      try {
-        await _sendCommand(ZkCommand.cmdDisconnect);
-      } catch (_) {}
+      try { await _sendCommand(ZkCommand.cmdDisconnect); } catch (_) {}
     }
-    try {
-      await _sockSub?.cancel();
-    } catch (_) {}
+    try { await _sockSub?.cancel(); } catch (_) {}
     _sockSub = null;
     _recvBuffer.clear();
-    try {
-      await _socket?.close();
-    } catch (_) {}
+    try { await _socket?.close(); } catch (_) {}
     _socket = null;
     _isConnected = false;
     _sessionId = 0;
     _replyId = 0;
   }
 
-  /// Authenticates with the device using Communication Key
+  /// Single correct ZKTeco scramble: bit-reverse(key) + sessionId
   Future<bool> _authenticate(int key) async {
-    // Scramble comm key
-    int scrambled = 0;
+    int reversed = 0;
     for (int i = 0; i < 32; i++) {
       if ((key & (1 << i)) != 0) {
-        scrambled = (scrambled << 1) | 1;
+        reversed = (reversed << 1) | 1;
       } else {
-        scrambled = (scrambled << 1);
+        reversed = (reversed << 1);
       }
     }
-    scrambled += _sessionId;
-
-    final payload = ByteData(4);
-    payload.setUint32(0, scrambled, Endian.little);
-
-    final reply = await _sendCommand(
-      ZkCommand.cmdAuth,
-      payload: payload.buffer.asUint8List(),
-    );
+    final scrambled = reversed + _sessionId;
+    final payload = ByteData(4)..setUint32(0, scrambled, Endian.little);
+    final reply = await _sendCommand(ZkCommand.cmdAuth, payload: payload.buffer.asUint8List());
     return reply != null && reply.isSuccess;
   }
 
-  /// Fetches terminal hardware and firmware details
+  /// Minimal device info — used only for connection test
   Future<ZkDeviceInfo> getDeviceInfo() async {
     _ensureConnected();
-
     String? version;
-    String? name;
-    String? sn;
-    String? platform;
     DateTime? deviceTime;
-
-    // Get Firmware Version
     try {
-      final reply = await _sendCommand(ZkCommand.cmdVersion);
-      if (reply != null && reply.payload.isNotEmpty) {
-        version = _cleanString(reply.payload);
+      final r = await _sendCommand(ZkCommand.cmdVersion);
+      if (r != null && r.payload.isNotEmpty) version = _cleanString(r.payload);
+    } catch (_) {}
+    try {
+      final r = await _sendCommand(ZkCommand.cmdGetTime);
+      if (r != null && r.payload.length >= 4) {
+        final raw = ByteData.sublistView(r.payload, 0, 4).getUint32(0, Endian.little);
+        deviceTime = ZkPacketCodec.decodeZkTimestamp(raw);
       }
     } catch (_) {}
-
-    // Get Device Time
-    try {
-      final reply = await _sendCommand(ZkCommand.cmdGetTime);
-      if (reply != null && reply.payload.length >= 4) {
-        final rawTime = ByteData.sublistView(reply.payload, 0, 4)
-            .getUint32(0, Endian.little);
-        deviceTime = ZkPacketCodec.decodeZkTimestamp(rawTime);
-      }
-    } catch (_) {}
-
-    // Get Serial Number
-    try {
-      sn = await getOption('~SerialNumber');
-    } catch (_) {}
-
-    // Get Platform
-    try {
-      platform = await getOption('~Platform');
-    } catch (_) {}
-
-    // Get Device Name
-    try {
-      name = await getOption('~DeviceName') ?? await getOption('DeviceName');
-    } catch (_) {}
-
-    return ZkDeviceInfo(
-      firmwareVersion: version,
-      deviceName: name,
-      serialNumber: sn,
-      platform: platform,
-      deviceTime: deviceTime,
-    );
+    return ZkDeviceInfo(firmwareVersion: version, deviceTime: deviceTime);
   }
 
-  /// Reads a specific configuration parameter from the device
-  Future<String?> getOption(String optionName) async {
+  Future<bool> setDeviceTime(DateTime dt) async {
     _ensureConnected();
-    final payload = Uint8List.fromList(utf8.encode('$optionName\x00'));
-    final reply = await _sendCommand(ZkCommand.cmdGetOption, payload: payload);
-    if (reply != null && reply.payload.isNotEmpty) {
-      final str = _cleanString(reply.payload);
-      if (str.startsWith('$optionName=')) {
-        return str.substring('$optionName='.length).trim();
-      }
-      return str.trim();
-    }
-    return null;
+    final encoded = ZkPacketCodec.encodeZkTimestamp(dt);
+    final payload = ByteData(4)..setUint32(0, encoded, Endian.little);
+    final reply = await _sendCommand(ZkCommand.cmdSetTime, payload: payload.buffer.asUint8List());
+    return reply != null && reply.isSuccess;
   }
 
-  /// Fetches all users registered on the terminal
   Future<List<ZkUser>> getUsers() async {
     _ensureConnected();
-
-    final data = await _fetchDataCommand(
-      command: ZkCommand.cmdUserTempRrq,
-      payload: Uint8List.fromList([0x05]), // 0x05 = fetch user info
-    );
-
+    final data = await _fetchDataCommand(command: ZkCommand.cmdUserTempRrq, payload: Uint8List.fromList([0x05]));
     if (data.isEmpty) return [];
-
     final users = <ZkUser>[];
-
-    // Try 72-byte SSR format first (Modern ZK format)
     if (data.length >= 72 && data.length % 72 == 0) {
-      for (int offset = 0; offset + 72 <= data.length; offset += 72) {
-        final chunk = Uint8List.sublistView(data, offset, offset + 72);
-        final user = _parse72ByteUser(chunk);
-        if (user != null) users.add(user);
-      }
-    } else if (data.length >= 28 && data.length % 28 == 0) {
-      // 28-byte legacy format
-      for (int offset = 0; offset + 28 <= data.length; offset += 28) {
-        final chunk = Uint8List.sublistView(data, offset, offset + 28);
-        final user = _parse28ByteUser(chunk);
-        if (user != null) users.add(user);
-      }
-    } else {
-      // Best-effort adaptive parser
-      int offset = 0;
-      while (offset + 72 <= data.length) {
-        final chunk = Uint8List.sublistView(data, offset, offset + 72);
-        final user = _parse72ByteUser(chunk);
-        if (user != null && user.userId.isNotEmpty) {
-          users.add(user);
-          offset += 72;
-        } else {
-          offset += 28;
-        }
+      for (int off = 0; off + 72 <= data.length; off += 72) {
+        final u = _parse72ByteUser(Uint8List.sublistView(data, off, off+72));
+        if (u != null) users.add(u);
       }
     }
-
     return users;
   }
 
-  /// Fetches attendance records from terminal (optionally filtered by date)
   Future<List<ZkAttendanceRecord>> getAttendanceRecords({DateTime? since}) async {
     _ensureConnected();
-
-    final data = await _fetchDataCommand(
-      command: ZkCommand.cmdAttLogRrq,
-    );
-
+    var data = await _fetchDataCommand(command: ZkCommand.cmdAttLogRrq);
     if (data.isEmpty) return [];
-
+    // K50 Pro sometimes prefixes 4-byte totalSize; skip it if present
+    if (data.length % 40 == 4) {
+      final possibleSize = ByteData.sublistView(data, 0, 4).getUint32(0, Endian.little);
+      if (possibleSize == data.length - 4) data = Uint8List.sublistView(data, 4);
+    }
     final records = <ZkAttendanceRecord>[];
-
-    // 1. Try 40-byte SSR attendance log record (Modern ZK format)
     if (data.length >= 40 && data.length % 40 == 0) {
       for (int offset = 0; offset + 40 <= data.length; offset += 40) {
         final chunk = Uint8List.sublistView(data, offset, offset + 40);
-        final record = _parse40ByteAttendance(chunk);
-        if (record != null) {
-          if (since == null || record.timestamp.isAfter(since)) {
-            records.add(record);
-          }
-        }
+        final rec = _parse40ByteAttendance(chunk);
+        if (rec != null && (since == null || rec.timestamp.isAfter(since))) records.add(rec);
       }
     } else if (data.length >= 8 && (data.length % 8 == 0 || data.length % 16 == 0)) {
-      // Legacy 8 or 16-byte record
-      final recordSize = (data.length % 16 == 0) ? 16 : 8;
-      for (int offset = 0; offset + recordSize <= data.length; offset += recordSize) {
-        final chunk = Uint8List.sublistView(data, offset, offset + recordSize);
-        final record = _parseLegacyAttendance(chunk);
-        if (record != null) {
-          if (since == null || record.timestamp.isAfter(since)) {
-            records.add(record);
-          }
-        }
+      final rs = (data.length % 16 == 0) ? 16 : 8;
+      for (int offset = 0; offset + rs <= data.length; offset += rs) {
+        final chunk = Uint8List.sublistView(data, offset, offset + rs);
+        final rec = _parseLegacyAttendance(chunk);
+        if (rec != null && (since == null || rec.timestamp.isAfter(since))) records.add(rec);
       }
     } else {
-      // Adaptive chunk scanning
       for (int offset = 0; offset + 40 <= data.length; offset += 40) {
         final chunk = Uint8List.sublistView(data, offset, offset + 40);
-        final record = _parse40ByteAttendance(chunk);
-        if (record != null && record.userId.isNotEmpty) {
-          if (since == null || record.timestamp.isAfter(since)) {
-            records.add(record);
-          }
-        }
+        final rec = _parse40ByteAttendance(chunk);
+        if (rec != null && (since == null || rec.timestamp.isAfter(since))) records.add(rec);
       }
     }
-
-    // Sort chronologically
     records.sort((a, b) => a.timestamp.compareTo(b.timestamp));
     return records;
   }
 
-  /// Disables terminal input (useful during batch downloads to prevent race conditions)
-  Future<bool> disableDevice() async {
-    _ensureConnected();
-    final reply = await _sendCommand(ZkCommand.cmdDisableDevice);
-    return reply != null && reply.isSuccess;
-  }
-
-  /// Re-enables terminal input
-  Future<bool> enableDevice() async {
-    _ensureConnected();
-    final reply = await _sendCommand(ZkCommand.cmdEnableDevice);
-    return reply != null && reply.isSuccess;
-  }
-
-  // --- Parsing Helpers ---
-
-  ZkUser? _parse72ByteUser(Uint8List bytes) {
-    if (bytes.length < 72) return null;
-    final view = ByteData.sublistView(bytes);
-
-    final uid = view.getUint16(0, Endian.little);
-    final role = bytes[2];
-    final password = _extractNullTerminatedString(bytes.sublist(3, 11));
-    final name = _extractNullTerminatedString(bytes.sublist(11, 35));
-    final card = _extractNullTerminatedString(bytes.sublist(35, 40));
-    final userId = _extractNullTerminatedString(bytes.sublist(48, 72));
-
-    if (userId.isEmpty && uid == 0) return null;
-
-    return ZkUser(
-      uid: uid,
-      userId: userId.isNotEmpty ? userId : uid.toString(),
-      name: name.isNotEmpty ? name : 'User $userId',
-      password: password.isNotEmpty ? password : null,
-      card: card.isNotEmpty ? card : null,
-      role: role,
-      enabled: bytes[7] != 0, // In standard SSR, bit 0 determines enabled
-    );
-  }
-
-  ZkUser? _parse28ByteUser(Uint8List bytes) {
-    if (bytes.length < 28) return null;
-    final view = ByteData.sublistView(bytes);
-
-    final uid = view.getUint16(0, Endian.little);
-    final role = view.getUint16(2, Endian.little);
-    final password = _extractNullTerminatedString(bytes.sublist(4, 12));
-    final name = _extractNullTerminatedString(bytes.sublist(12, 20));
-    final card = view.getUint32(20, Endian.little).toString();
-
-    if (uid == 0) return null;
-
-    return ZkUser(
-      uid: uid,
-      userId: uid.toString(),
-      name: name.isNotEmpty ? name : 'User $uid',
-      password: password.isNotEmpty ? password : null,
-      card: card != '0' ? card : null,
-      role: role,
-    );
-  }
-
-  ZkAttendanceRecord? _parse40ByteAttendance(Uint8List bytes) {
-    if (bytes.length < 40) return null;
-    final view = ByteData.sublistView(bytes);
-
-    // Format: userId (24 bytes at offset 0 or offset 4)
-    String userId = _extractNullTerminatedString(bytes.sublist(0, 24));
-    if (userId.isEmpty) {
-      userId = _extractNullTerminatedString(bytes.sublist(4, 28));
-    }
-
-    final status = bytes[26] < 10 ? bytes[26] : bytes[30];
-    final verifyType = bytes[27] < 20 ? bytes[27] : bytes[31];
-
-    // Timestamp is 32-bit packed integer around offset 32 or 36
-    int rawTime = view.getUint32(bytes.length >= 36 ? 32 : 28, Endian.little);
-    DateTime time = ZkPacketCodec.decodeZkTimestamp(rawTime);
-
-    if (time.year < 2000 || time.year > 2099) {
-      // Try offset 36
-      if (bytes.length >= 40) {
-        rawTime = view.getUint32(36, Endian.little);
-        time = ZkPacketCodec.decodeZkTimestamp(rawTime);
-      }
-    }
-
-    if (userId.isEmpty && time.year < 2000) return null;
-
-    return ZkAttendanceRecord(
-      userId: userId,
-      timestamp: time,
-      status: status,
-      verifyType: verifyType,
-    );
-  }
-
-  ZkAttendanceRecord? _parseLegacyAttendance(Uint8List bytes) {
-    if (bytes.length < 8) return null;
-    final view = ByteData.sublistView(bytes);
-
-    final uid = view.getUint16(0, Endian.little);
-    final status = bytes[2];
-    final verifyType = bytes[3];
-    final rawTime = view.getUint32(4, Endian.little);
-    final time = ZkPacketCodec.decodeZkTimestamp(rawTime);
-
-    if (uid == 0) return null;
-
-    return ZkAttendanceRecord(
-      userId: uid.toString(),
-      timestamp: time,
-      status: status,
-      verifyType: verifyType,
-    );
-  }
-
-  // --- Socket Communication Core ---
+  // --- Core ---
 
   Future<ZkPacket?> _sendCommand(int command, {Uint8List? payload}) async {
     if (_socket == null) return null;
-
     _replyId = (_replyId + 1) & 0xFFFF;
-    final encodedPacket = ZkPacketCodec.encodeTcpPacket(
-      command: command,
-      sessionId: _sessionId,
-      replyId: _replyId,
-      payload: payload,
-    );
-
-    _socket!.add(encodedPacket);
+    final pkt = ZkPacketCodec.encodeTcpPacket(command: command, sessionId: _sessionId, replyId: _replyId, payload: payload);
+    _socket!.add(pkt);
     await _socket!.flush();
-
     return await _receivePacket();
   }
 
@@ -431,89 +218,112 @@ class ZKTecoClient {
     if (_socket == null) return null;
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
-      if (_recvBuffer.length >= 16) {
-        final expectedLen = ByteData.sublistView(
-          Uint8List.fromList(_recvBuffer),
-          4,
-          8,
-        ).getUint32(0, Endian.little);
-        final totalLen = 8 + expectedLen;
-        if (_recvBuffer.length >= totalLen) {
-          final raw = Uint8List.fromList(_recvBuffer.sublist(0, totalLen));
-          _recvBuffer.removeRange(0, totalLen);
-          return ZkPacketCodec.decodeTcpPacket(raw);
+      if (_recvBuffer.length >= 8) {
+        int magicOffset = -1;
+        for (int i = 0; i <= _recvBuffer.length - 4; i++) {
+          if (_recvBuffer[i] == 0x50 && _recvBuffer[i+1] == 0x50 && _recvBuffer[i+2] == 0x82 && _recvBuffer[i+3] == 0x7D) { magicOffset = i; break; }
+        }
+        if (magicOffset > 0) _recvBuffer.removeRange(0, magicOffset);
+        if (_recvBuffer.length >= 8 && _recvBuffer[0]==0x50 && _recvBuffer[1]==0x50) {
+          final expectedLen = ByteData.sublistView(Uint8List.fromList(_recvBuffer), 4, 8).getUint32(0, Endian.little);
+          final totalLen = 8 + expectedLen;
+          if (_recvBuffer.length >= totalLen) {
+            final raw = Uint8List.fromList(_recvBuffer.sublist(0, totalLen));
+            _recvBuffer.removeRange(0, totalLen);
+            return ZkPacketCodec.decodeTcpPacket(raw);
+          }
         }
       }
-      // لو الجهاز لسه هيبعت — نستنى شوية ونفحص تاني، لحد ما يوصل الوقت
-      await Future.delayed(const Duration(milliseconds: 10));
+      await Future.delayed(const Duration(milliseconds: 20));
       if (_socket == null) return null;
     }
     return null;
   }
 
-  /// Sends a data command and reads all chunked data packets until completion
-  Future<Uint8List> _fetchDataCommand({
-    required int command,
-    Uint8List? payload,
-  }) async {
+  Future<Uint8List> _fetchDataCommand({required int command, Uint8List? payload}) async {
     final firstReply = await _sendCommand(command, payload: payload);
     if (firstReply == null) return Uint8List(0);
-
-    // Case 1: Data fits directly in the first response
-    if (firstReply.command == ZkCommand.ackData) {
-      return firstReply.payload;
-    }
-
-    // Case 2: CMD_PREPARE_DATA (Streamed multi-packet data transmission)
+    if (firstReply.command == ZkCommand.ackData) return firstReply.payload;
     if (firstReply.command == ZkCommand.cmdPrepareData) {
-      final totalSize = firstReply.payload.length >= 4
-          ? ByteData.sublistView(firstReply.payload, 0, 4)
-              .getUint32(0, Endian.little)
-          : 0;
-
-      final accumulatedData = <int>[];
-
-      while (accumulatedData.length < totalSize) {
-        final dataPacket = await _receivePacket();
-        if (dataPacket == null) break;
-
-        if (dataPacket.command == ZkCommand.cmdData ||
-            dataPacket.command == ZkCommand.ackData) {
-          accumulatedData.addAll(dataPacket.payload);
-        } else if (dataPacket.command == ZkCommand.ackOk) {
-          break;
-        }
+      final totalSize = firstReply.payload.length >= 4 ? ByteData.sublistView(firstReply.payload, 0, 4).getUint32(0, Endian.little) : 0;
+      final acc = <int>[];
+      while (acc.length < totalSize) {
+        final p = await _receivePacket();
+        if (p == null) break;
+        if (p.command == ZkCommand.cmdData || p.command == ZkCommand.ackData) acc.addAll(p.payload);
+        else if (p.command == ZkCommand.ackOk) break;
       }
-
-      // Free buffer on device
       await _sendCommand(ZkCommand.cmdFreeData);
-      return Uint8List.fromList(accumulatedData);
+      return Uint8List.fromList(acc);
     }
-
-    if (firstReply.isSuccess && firstReply.payload.isNotEmpty) {
-      return firstReply.payload;
-    }
-
+    if (firstReply.isSuccess && firstReply.payload.isNotEmpty) return firstReply.payload;
     return Uint8List(0);
   }
 
   void _ensureConnected() {
-    if (!_isConnected || _socket == null) {
-      throw StateError('ZKTeco client is not connected');
-    }
+    if (!_isConnected || _socket == null) throw StateError('ZKTeco client is not connected');
   }
 
-  String _cleanString(Uint8List bytes) {
-    try {
-      return _extractNullTerminatedString(bytes);
-    } catch (_) {
-      return latin1.decode(bytes).trim();
-    }
+  String _cleanString(Uint8List b) {
+    try { return _extractNullTerminatedString(b); } catch (_) { return latin1.decode(b).trim(); }
   }
 
   String _extractNullTerminatedString(Uint8List bytes) {
     int end = bytes.indexOf(0);
     if (end == -1) end = bytes.length;
     return utf8.decode(bytes.sublist(0, end), allowMalformed: true).trim();
+  }
+
+  ZkUser? _parse72ByteUser(Uint8List bytes) {
+    if (bytes.length < 72) return null;
+    final view = ByteData.sublistView(bytes);
+    final uid = view.getUint16(0, Endian.little);
+    final role = bytes[2];
+    final name = _extractNullTerminatedString(bytes.sublist(11, 35));
+    final userId = _extractNullTerminatedString(bytes.sublist(48, 72));
+    if (userId.isEmpty && uid == 0) return null;
+    return ZkUser(uid: uid, userId: userId.isNotEmpty ? userId : uid.toString(), name: name.isNotEmpty ? name : 'User $userId', role: role);
+  }
+
+  ZkAttendanceRecord? _parse40ByteAttendance(Uint8List bytes) {
+    if (bytes.length < 40) return null;
+    final view = ByteData.sublistView(bytes);
+    // K50 Pro: uid at 0 (2 bytes), userId string at 2, fallback to 0
+    String userId = _extractNullTerminatedString(bytes.sublist(2, 26));
+    if (userId.isEmpty || userId.codeUnitAt(0) < 0x20) {
+      userId = _extractNullTerminatedString(bytes.sublist(0, 24));
+    }
+    if (userId.isEmpty) userId = _extractNullTerminatedString(bytes.sublist(4, 28));
+    // Clean non-printable prefix
+    userId = userId.replaceAll(RegExp(r'[^\x20-\x7E]'), '').trim();
+    if (userId.isEmpty) {
+      final uid = view.getUint16(0, Endian.little);
+      if (uid != 0) userId = uid.toString();
+    }
+    // Try multiple timestamp offsets for K50 variability
+    DateTime? time;
+    for (final off in [27, 28, 29, 32, 36, 26]) {
+      if (off + 4 > bytes.length) continue;
+      final raw = view.getUint32(off, Endian.little);
+      final dt = ZkPacketCodec.decodeZkTimestamp(raw);
+      if (dt.year >= 2020 && dt.year <= 2027) { time = dt; break; }
+    }
+    time ??= ZkPacketCodec.decodeZkTimestamp(view.getUint32(32, Endian.little));
+    final status = bytes[26] < 10 ? bytes[26] : (bytes.length > 30 ? bytes[30] : 0);
+    final verifyType = bytes[27] < 20 ? bytes[27] : (bytes.length > 31 ? bytes[31] : 1);
+    if (userId.isEmpty && (time.year < 2000 || time.year > 2099)) return null;
+    return ZkAttendanceRecord(userId: userId, timestamp: time, status: status, verifyType: verifyType);
+  }
+
+  ZkAttendanceRecord? _parseLegacyAttendance(Uint8List bytes) {
+    if (bytes.length < 8) return null;
+    final view = ByteData.sublistView(bytes);
+    final uid = view.getUint16(0, Endian.little);
+    final status = bytes[2];
+    final verifyType = bytes[3];
+    final rawTime = view.getUint32(4, Endian.little);
+    final time = ZkPacketCodec.decodeZkTimestamp(rawTime);
+    if (uid == 0) return null;
+    return ZkAttendanceRecord(userId: uid.toString(), timestamp: time, status: status, verifyType: verifyType);
   }
 }

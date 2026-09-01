@@ -32,13 +32,16 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
   String _workEnd = '17:00';
 
   List<Attendance> get _filteredList {
-    if (_filterStart == null || _filterEnd == null) return _attendanceList;
-    return _attendanceList.where((r) {
-      final d = DateTime(r.date.year, r.date.month, r.date.day);
-      final s = DateTime(_filterStart!.year, _filterStart!.month, _filterStart!.day);
-      final e = DateTime(_filterEnd!.year, _filterEnd!.month, _filterEnd!.day);
-      return !d.isBefore(s) && !d.isAfter(e);
-    }).toList();
+    final base = (_filterStart == null || _filterEnd == null)
+        ? _attendanceList
+        : _attendanceList.where((r) {
+            final d = DateTime(r.date.year, r.date.month, r.date.day);
+            final s = DateTime(_filterStart!.year, _filterStart!.month, _filterStart!.day);
+            final e = DateTime(_filterEnd!.year, _filterEnd!.month, _filterEnd!.day);
+            return !d.isBefore(s) && !d.isAfter(e);
+          }).toList();
+    base.sort((a, b) => b.date.compareTo(a.date));
+    return base;
   }
 
   @override
@@ -65,8 +68,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
           if (s.settingKey == 'default_work_end') _workEnd = s.settingValue;
         }
       } catch (_) {}
+      attendance.sort((a, b) => b.date.compareTo(a.date));
       setState(() {
-        _attendanceList = attendance.reversed.toList();
+        _attendanceList = attendance;
         _isLoading = false;
       });
     } catch (e) {
@@ -97,6 +101,33 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       builder: (_) => ManualOverrideDialog(staff: widget.staff),
     );
     if (result == true) _loadAttendance();
+  }
+
+  Future<void> _deleteAllImported() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف كل الحضور المستورد'),
+        content: Text('متأكد تحذف كل سجلات ${widget.staff.name} المستوردة (source=import)؟ سيتم حذف أغسطس كله المستورد فقط.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white), child: const Text('حذف الكل')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _isChecking = true);
+    try {
+      final service = ref.read(staffManagementServiceProvider);
+      final user = ref.read(authProvider);
+      final count = await service.deleteImportedForStaff(user, widget.staff.staffId);
+      await _loadAttendance();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف $count سجل مستورد'), backgroundColor: Colors.green));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل الحذف: $e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isChecking = false);
+    }
   }
 
   Future<void> _deleteDayRecord(Attendance record) async {
@@ -571,6 +602,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
         const SizedBox(width: 8),
         if (hasFilter) TextButton(onPressed: () => setState(() { _filterStart = null; _filterEnd = null; }), child: const Text('مسح الفلتر')),
         const Spacer(),
+        IconButton(icon: const Icon(Icons.delete_sweep, color: Colors.red), tooltip: 'حذف كل المستورد لهذا الموظف', onPressed: _deleteAllImported),
         Text('${_filteredList.length} سجل', style: TextStyle(color: Colors.grey[600])),
       ]),
     );

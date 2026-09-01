@@ -15,4 +15,8 @@ class AppFeatures {
   /// Vegetable flavor day-close settlement view (net cash, variance,
   /// settlement entry) inside CloseDayDialog.
   static bool get hasDaySettlement => flavor == Flavor.vegetable;
+
+  /// Manufacturing / BOM / Material management (Phase 1+).
+  /// Always-on for now; gate via settings/tier later if needed.
+  static bool get hasManufacturing => true;
 }

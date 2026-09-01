@@ -14,11 +14,14 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
   @override
   AttendanceSourceStatus get status => _status;
 
+  String? _lastError;
+  String? get lastError => _lastError ?? _client.lastError;
+
   ZKTecoTcpAttendanceSource({
     required this.ipAddress,
     required this.port,
     this.authToken,
-    Duration timeout = const Duration(seconds: 8),
+    Duration timeout = const Duration(seconds: 15),
   })  : _client = ZKTecoClient(
           host: ipAddress,
           port: port,
@@ -30,6 +33,7 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
   @override
   Future<bool> connect() async {
     _status = AttendanceSourceStatus.connecting;
+    _lastError = null;
     try {
       final success = await _client.connect();
       if (success) {
@@ -37,10 +41,12 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
         return true;
       } else {
         _status = AttendanceSourceStatus.error;
+        _lastError = _client.lastError ?? 'فشل الاتصال بالجهاز $ipAddress:$port (تحقق من الشبكة وفقد الحزم)';
         return false;
       }
-    } catch (_) {
+    } catch (e) {
       _status = AttendanceSourceStatus.error;
+      _lastError = e.toString();
       return false;
     }
   }
@@ -77,21 +83,8 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
   }
 
   @override
-  Future<List<DeviceEnrolledUser>> fetchEnrolledUsers() async {
-    try {
-      final users = await _client.getUsers();
-      return users.map((u) {
-        return DeviceEnrolledUser(
-          externalUserId: u.userId,
-          name: u.name,
-          cardNumber: u.card,
-        );
-      }).toList();
-    } catch (_) {
-      return [];
-    }
-  }
+  Future<List<DeviceEnrolledUser>> fetchEnrolledUsers() async => [];
 
-  /// Direct access to device info (Firmware, serial number, device time)
   Future<ZkDeviceInfo> getDeviceInfo() => _client.getDeviceInfo();
+  Future<bool> setDeviceTime(DateTime dt) => _client.setDeviceTime(dt);
 }

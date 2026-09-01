@@ -59,10 +59,16 @@ import 'package:pos_offline_desktop/core/database/tables/attendance_settings_tab
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/empty_barnika_tracking_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/sync_queue_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_cost_components_table.dart';
 import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/sync_queue_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/vegetable_shipment_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/empty_barnika_tracking_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/bom_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/manufacturing_cost_component_dao.dart';
 import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
@@ -127,6 +133,10 @@ part 'app_database.g.dart';
     VegetableShipments,
     EmptyBarnikaTracking,
     SyncQueue,
+    BillOfMaterials,
+    BomItems,
+    ManufacturingOrders,
+    ManufacturingCostComponents,
   ],
   daos: [
     ProductDao,
@@ -155,6 +165,9 @@ part 'app_database.g.dart';
     VegetableShipmentDao,
     EmptyBarnikaTrackingDao,
     SyncQueueDao,
+    BomDao,
+    ManufacturingOrderDao,
+    ManufacturingCostComponentDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -165,7 +178,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 55;
+  int get schemaVersion => 56;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -271,6 +284,11 @@ class AppDatabase extends _$AppDatabase {
       // 4q. Schema v55 — staff biometric index
       if (from < 55) {
         await _runV55Migrations(m);
+      }
+
+      // 4r. Schema v56 — manufacturing foundation (Phase 1: productType)
+      if (from < 56) {
+        await _runV56Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -1348,6 +1366,7 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'products', 'column': 'cost_price',   'type': 'REAL'},
       {'table': 'products', 'column': 'min_stock_level', 'type': 'INTEGER DEFAULT 0'},
       {'table': 'products', 'column': 'barneka', 'type': 'INTEGER NOT NULL DEFAULT 0'},
+      {'table': 'products', 'column': 'product_type', 'type': 'TEXT'},
       {'table': 'invoice_items', 'column': 'discount', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'commission', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'unit_cost_at_time', 'type': 'REAL'},
@@ -1397,6 +1416,7 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'products', 'column': 'cost_price', 'type': 'REAL'},
       {'table': 'products', 'column': 'min_stock_level', 'type': 'INTEGER DEFAULT 0'},
       {'table': 'products', 'column': 'barneka', 'type': 'INTEGER NOT NULL DEFAULT 0'},
+      {'table': 'products', 'column': 'product_type', 'type': 'TEXT'},
       {'table': 'invoices', 'column': 'customer_id', 'type': 'TEXT'},
       {'table': 'invoices', 'column': 'total_amount', 'type': 'REAL DEFAULT 0.0'},
       {'table': 'invoices', 'column': 'paid_amount', 'type': 'REAL DEFAULT 0.0'},
@@ -1844,6 +1864,50 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(55, 'biometric_mapping_index', 'completed');
     } catch (e) {
       await _logMigrationStep(55, 'biometric_mapping_index', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v56 — Manufacturing foundation (Phase 1: productType only).
+  /// Purely additive: one nullable column, no data rewrite.
+  /// Manufacturing foundation: productType + BOM tables.
+  /// Purely additive, safe to re-run.
+  Future<void> _runV56Migrations(Migrator m) async {
+    await _logMigrationStep(56, 'manufacturing_foundation', 'started');
+    try {
+      try {
+        await customStatement('ALTER TABLE products ADD COLUMN product_type TEXT');
+        log('v56: Added products.product_type column');
+      } catch (e) {
+        log('v56: products.product_type likely already exists: $e');
+      }
+      try {
+        await m.createTable(billOfMaterials);
+        log('v56: Created bill_of_materials table');
+      } catch (e) {
+        log('v56: bill_of_materials likely already exists: $e');
+      }
+      try {
+        await m.createTable(bomItems);
+        log('v56: Created bom_items table');
+      } catch (e) {
+        log('v56: bom_items likely already exists: $e');
+      }
+      try {
+        await m.createTable(manufacturingOrders);
+        log('v56: Created manufacturing_orders table');
+      } catch (e) {
+        log('v56: manufacturing_orders likely already exists: $e');
+      }
+      try {
+        await m.createTable(manufacturingCostComponents);
+        log('v56: Created manufacturing_cost_components table');
+      } catch (e) {
+        log('v56: manufacturing_cost_components likely already exists: $e');
+      }
+      await _logMigrationStep(56, 'manufacturing_foundation', 'completed');
+    } catch (e) {
+      await _logMigrationStep(56, 'manufacturing_foundation', 'failed', error: e.toString());
       rethrow;
     }
   }

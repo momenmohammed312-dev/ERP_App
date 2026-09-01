@@ -44,8 +44,8 @@ class AttendanceSyncService {
   /// Whether auto-sync is currently running
   bool get isAutoSyncEnabled => _isAutoSyncEnabled;
 
-  /// Starts periodic auto-sync for all active devices
-  void startAutoSync({Duration interval = const Duration(minutes: 5)}) {
+  /// Starts periodic auto-sync for all active devices — يعمل في الخلفية حتى مع Wi-Fi/نت متقطع
+  void startAutoSync({Duration interval = const Duration(minutes: 2)}) {
     stopAutoSync();
     _isAutoSyncEnabled = true;
     _autoSyncTimer = Timer.periodic(interval, (_) async {
@@ -120,11 +120,28 @@ class AttendanceSyncService {
           );
         }
 
-        // 2. Connect
+        // 2. Connect — مع تمرير السبب الحقيقي (packet loss / CommKey / timeout)
         final connected = await source.connect();
         if (!connected) {
-          throw Exception('Failed to connect to device');
+          String detail = 'فشل الاتصال بالجهاز ${device.ipAddress}:${device.port}';
+          if (source is ZKTecoTcpAttendanceSource && source.lastError != null) {
+            detail = source.lastError!;
+          }
+          throw Exception(detail);
         }
+
+        // مزامنة وقت الجهاز إذا انحرف أكثر من دقيقتين (سبب 8:10 → 8:18)
+        try {
+          if (source is ZKTecoTcpAttendanceSource) {
+            final info = await (source as ZKTecoTcpAttendanceSource).getDeviceInfo();
+            if (info.deviceTime != null) {
+              final drift = DateTime.now().difference(info.deviceTime!).abs();
+              if (drift > const Duration(minutes: 2)) {
+                await (source as ZKTecoTcpAttendanceSource).setDeviceTime(DateTime.now());
+              }
+            }
+          }
+        } catch (_) {}
 
         // 3. Fetch events (passing lastSyncAt as an optimization hint)
         final events = await source.fetchEvents(since: device.lastSyncAt);
@@ -273,25 +290,35 @@ class AttendanceSyncService {
         continue;
       }
 
-      // Update raw event with matched staff
       var updatedEvent = rawEvent.copyWith(matchedStaffId: Value(staffId));
 
-      // --- Heuristic: First event of day = check-in, Next event = check-out ---
-      // Get today's attendance for this staff
-      final date = DateTime(
-        rawEvent.eventTime.year,
-        rawEvent.eventTime.month,
-        rawEvent.eventTime.day,
-      );
+      final date = DateTime(rawEvent.eventTime.year, rawEvent.eventTime.month, rawEvent.eventTime.day);
+
+      // حل جذري لانصراف 5 صباحاً: بصمة 00:00-04:00 تُحسب لليوم السابق إذا له حضور مفتوح
+      if (rawEvent.eventTime.hour < 4) {
+        final prevDate = date.subtract(const Duration(days: 1));
+        final prevRecords = await _staffDao.getAttendanceOnDate(staffId, prevDate);
+        final openPrev = prevRecords.where((a) => a.checkOutTime == null && a.checkInTime != null).toList();
+        if (openPrev.isNotEmpty) {
+          final prevRec = openPrev.first;
+          final result = await _engine.processCheckOut(staffId, checkInTime: prevRec.checkInTime!, checkOutTime: rawEvent.eventTime);
+          final updatedPrev = prevRec.copyWith(
+            checkOutTime: Value(rawEvent.eventTime),
+            workingHours: Value(result.workingHours),
+            overtimeHours: result.overtimeHours,
+            status: result.status,
+            updatedAt: DateTime.now(),
+          );
+          await _staffDao.updateAttendance(updatedPrev);
+          updatedEvent = updatedEvent.copyWith(status: 'matched', resultingAttendanceId: Value(updatedPrev.id), processedAt: Value(DateTime.now()));
+          await _deviceDao.updateRawEvent(updatedEvent);
+          matched++;
+          continue;
+        }
+      }
+
       final nextDay = date.add(const Duration(days: 1));
-
-      final attendanceRecords = await _staffDao.getAttendanceByStaff(
-        staffId,
-        startDate: date,
-        endDate: nextDay,
-      );
-
-      // Filter strictly to today's date (compare date components only)
+      final attendanceRecords = await _staffDao.getAttendanceByStaff(staffId, startDate: date, endDate: nextDay);
       final todayRecords = attendanceRecords.where((a) {
         final aDate = DateTime(a.date.year, a.date.month, a.date.day);
         return aDate == date;

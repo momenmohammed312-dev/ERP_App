@@ -116,6 +116,12 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
   Future<void> updateAttendance(Attendance entry) =>
       update(attendanceTable).replace(entry);
 
+  Future<void> deleteAttendance(int id) =>
+      (delete(attendanceTable)..where((a) => a.id.equals(id))).go();
+
+  Future<int> deleteAttendanceByStaffAndSource(String staffId, String source) =>
+      (delete(attendanceTable)..where((a) => a.staffId.equals(staffId) & a.source.equals(source))).go();
+
   Future<void> checkIn(
     String staffId, {
     String? location,

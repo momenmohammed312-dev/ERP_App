@@ -141,6 +141,12 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
+          if (widget.staff != null)
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.redAccent),
+              tooltip: 'حذف الموظف',
+              onPressed: _isLoading ? null : _deleteStaff,
+            ),
           TextButton(
             onPressed: _isLoading ? null : _saveForm,
             child: _isLoading
@@ -625,6 +631,34 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       setState(() {
         _contractEndDate = picked;
       });
+    }
+  }
+
+  Future<void> _deleteStaff() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تأكيد الحذف'),
+        content: Text('هل أنت متأكد من حذف الموظف "${widget.staff!.name}" نهائيا؟ لا يمكن التراجع.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _isLoading = true);
+    try {
+      final user = ref.read(authProvider);
+      await _service.deleteStaffCompletely(user, widget.staff!.staffId);
+      if (mounted) {
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموظف'), backgroundColor: Colors.green));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل الحذف: $e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

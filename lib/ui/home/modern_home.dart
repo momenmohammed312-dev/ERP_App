@@ -262,6 +262,37 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                         context.push('/excel-import');
                       },
                     ),
+                  // ── Manufacturing ──
+                  if (AppFeatures.hasManufacturing)
+                    _buildLauncherButton(
+                      context,
+                      'وصفات التصنيع',
+                      Icons.receipt_long,
+                      Colors.teal.shade600,
+                      () {
+                        context.push('/manufacturing/bom');
+                      },
+                    ),
+                  if (AppFeatures.hasManufacturing)
+                    _buildLauncherButton(
+                      context,
+                      'أوامر التصنيع',
+                      Icons.precision_manufacturing,
+                      Colors.indigo,
+                      () {
+                        context.push('/manufacturing/orders');
+                      },
+                    ),
+                  if (AppFeatures.hasManufacturing)
+                    _buildLauncherButton(
+                      context,
+                      'تقارير التصنيع',
+                      Icons.assessment,
+                      Colors.deepOrange,
+                      () {
+                        context.push('/manufacturing/reports');
+                      },
+                    ),
 
                 ],
               ),

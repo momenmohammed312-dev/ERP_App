@@ -154,6 +154,37 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
           ),
         );
 
+        // Phase 6: Audit trail — log purchase movement in InventoryMovements (first real usage parity with manufacturing)
+        // Purely additive, does not affect purchase totals or balances.
+        try {
+          final now = DateTime.now();
+          await into(db.inventoryMovements).insert(
+            InventoryMovementsCompanion.insert(
+              productId: productId,
+              movementType: 'purchase',
+              quantity: quantity,
+              unitCost: unitPrice,
+              totalValue: quantity * unitPrice,
+              movementDate: purchaseDate,
+              reference: invoiceNumber,
+              referenceType: 'purchase_invoice',
+              previousQuantity: originalStock,
+              newQuantity: newStock,
+              performedBy: const Value.absent(),
+              notes: Value('شراء فاتورة $invoiceNumber من مورد ${supplierId ?? ''}'),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+        } catch (e) {
+          // Non-fatal — purchase itself already succeeded inside the same transaction,
+          // but a movement logging failure should not abort the whole purchase.
+          // Drift will still roll back if we throw, so we catch and log.
+          // For strict atomicity, rethrow if you want purchase to fail on movement failure.
+          // ignore: avoid_print
+          print('Purchase inventory movement logging failed for product $productId: $e');
+        }
+
         // Insert purchase item
         await into(purchaseItems).insert(
           PurchaseItemsCompanion.insert(
