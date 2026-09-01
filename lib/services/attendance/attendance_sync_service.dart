@@ -133,11 +133,11 @@ class AttendanceSyncService {
         // مزامنة وقت الجهاز إذا انحرف أكثر من دقيقتين (سبب 8:10 → 8:18)
         try {
           if (source is ZKTecoTcpAttendanceSource) {
-            final info = await (source as ZKTecoTcpAttendanceSource).getDeviceInfo();
+            final info = await source.getDeviceInfo();
             if (info.deviceTime != null) {
               final drift = DateTime.now().difference(info.deviceTime!).abs();
               if (drift > const Duration(minutes: 2)) {
-                await (source as ZKTecoTcpAttendanceSource).setDeviceTime(DateTime.now());
+                await source.setDeviceTime(DateTime.now());
               }
             }
           }

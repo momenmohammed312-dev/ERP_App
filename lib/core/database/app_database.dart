@@ -62,6 +62,9 @@ import 'package:pos_offline_desktop/core/database/tables/sync_queue_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_tables.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_cost_components_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/accounts_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/journal_entries_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/journal_lines_table.dart';
 import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/sync_queue_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/vegetable_shipment_dao.dart';
@@ -69,6 +72,8 @@ import 'package:pos_offline_desktop/core/database/dao/empty_barnika_tracking_dao
 import 'package:pos_offline_desktop/core/database/dao/bom_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_cost_component_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/accounts_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/journal_dao.dart';
 import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
