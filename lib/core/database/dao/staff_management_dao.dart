@@ -122,6 +122,16 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
   Future<int> deleteAttendanceByStaffAndSource(String staffId, String source) =>
       (delete(attendanceTable)..where((a) => a.staffId.equals(staffId) & a.source.equals(source))).go();
 
+  /// يحذف كل حضور لموظف في فترة محددة (أي مصدر) — لفك التعارض قبل إعادة الاستيراد
+  Future<int> deleteAttendanceByStaffInRange(String staffId, DateTime start, DateTime end) {
+    final s = DateTime(start.year, start.month, start.day);
+    final e = DateTime(end.year, end.month, end.day).add(const Duration(days: 1));
+    return (delete(attendanceTable)
+          ..where((a) => a.staffId.equals(staffId))
+          ..where((a) => a.date.isBetweenValues(s, e)))
+        .go();
+  }
+
   /// يحذف سجلات الغياب التلقائية المستقبلية (بعد اليوم) — إصلاح لمشكلة توليد غياب لآخر الشهر مقدماً
   Future<int> deleteFutureAutoAbsences() {
     final tomorrow = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day).add(const Duration(days: 1));

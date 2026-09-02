@@ -1034,23 +1034,31 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       final ci = r.checkInTime!.hour*60 + r.checkInTime!.minute;
       return ci > gEnd;
     }
-    int deductAllowed(int actual, Attendance r) {
+    int excessMin(int actual, Attendance r) {
       if (!r.excused) return actual;
       final allowed = (r.excusedHours * 60).round();
       if (allowed <= 0) return 0;
       final res = actual - allowed;
       return res < 0 ? 0 : res;
     }
+    int excusedUsedMin(int actual, Attendance r) {
+      if (!r.excused) return 0;
+      final allowed = (r.excusedHours * 60).round();
+      if (allowed <= 0) return 0;
+      return actual < allowed ? actual : allowed;
+    }
     final lateCount = list.where(isLateEffective).length;
     int totalLateMin = 0;
     int totalEarlyMin = 0;
+    int totalLateExcusedMin = 0;
+    int totalEarlyExcusedMin = 0;
     for (final r in list) {
-      if (isLateEffective(r) && r.checkInTime != null) { final ci = r.checkInTime!.hour*60 + r.checkInTime!.minute; if (ci > gEnd) totalLateMin += deductAllowed(ci - gEnd, r); }
-      if (r.checkOutTime != null && (!r.excused || r.excusedHours > 0)) { final co = r.checkOutTime!.hour*60 + r.checkOutTime!.minute; if (co < eMin) totalEarlyMin += deductAllowed(eMin - co, r); }
+      if (isLateEffective(r) && r.checkInTime != null) { final ci = r.checkInTime!.hour*60 + r.checkInTime!.minute; if (ci > gEnd) { final actual = ci - gEnd; totalLateMin += excessMin(actual, r); totalLateExcusedMin += excusedUsedMin(actual, r); } }
+      if (r.checkOutTime != null && (!r.excused || r.excusedHours > 0)) { final co = r.checkOutTime!.hour*60 + r.checkOutTime!.minute; if (co < eMin) { final actual = eMin - co; totalEarlyMin += excessMin(actual, r); totalEarlyExcusedMin += excusedUsedMin(actual, r); } }
     }
     final hourly = widget.staff.hourlyRate ?? (widget.staff.basicSalary / 30 / 8);
-    double lateDed = _latePerHour > 0 ? (totalLateMin/60.0) * hourly * _latePerHour : 0;
-    double earlyDed = _earlyPerHour > 0 ? (totalEarlyMin/60.0) * hourly * _earlyPerHour : 0;
+    double lateDed = _latePerHour > 0 ? (totalLateMin/60.0) * hourly * _latePerHour + (totalLateExcusedMin/60.0) * hourly : (totalLateExcusedMin/60.0) * hourly;
+    double earlyDed = _earlyPerHour > 0 ? (totalEarlyMin/60.0) * hourly * _earlyPerHour + (totalEarlyExcusedMin/60.0) * hourly : (totalEarlyExcusedMin/60.0) * hourly;
     double absDed = absent * _absencePerDay * _absenceMultiplier;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

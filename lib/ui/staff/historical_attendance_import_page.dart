@@ -141,6 +141,30 @@ class _HistoricalAttendanceImportPageState extends ConsumerState<HistoricalAtten
             ElevatedButton.icon(onPressed: _importing ? null : _runImport, icon: _importing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.cloud_download), label: Text(_importing ? 'جاري الاستيراد...' : 'تأكيد وتنفيذ الاستيراد'), style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), backgroundColor: Colors.teal, foregroundColor: Colors.white)),
           ],
           Card(
+            color: Colors.red.shade900.withValues(alpha: 0.3),
+            child: ListTile(
+              leading: const Icon(Icons.delete_forever, color: Colors.redAccent),
+              title: const Text('حذف كل حضور الشهر المختار (لفك التعارض)'),
+              subtitle: Text('يمسح كل سجلات ${_selectedMonth.year}/${_selectedMonth.month.toString().padLeft(2,'0')} لكل الموظفين (أي مصدر) ثم أعد الاستيراد', style: const TextStyle(fontSize: 11)),
+              trailing: ElevatedButton(
+                onPressed: () async {
+                  final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: const Text('تأكيد الحذف'), content: Text('متأكد تمسح كل حضور ${_selectedMonth.year}/${_selectedMonth.month} لكل الموظفين؟ (سيزيل التعارض)'), actions: [TextButton(onPressed: ()=>Navigator.pop(ctx,false), child: const Text('إلغاء')), ElevatedButton(onPressed: ()=>Navigator.pop(ctx,true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: const Text('حذف الفترة'))]));
+                  if (ok != true) return;
+                  final db = ref.read(appDatabaseProvider);
+                  final start = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
+                  final end = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0);
+                  int total = 0;
+                  for (final s in await db.staffManagementDao.getAllStaff()) {
+                    total += await db.staffManagementDao.deleteAttendanceByStaffInRange(s.staffId, start, end);
+                  }
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف $total سجل للفترة'), backgroundColor: Colors.orange));
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                child: const Text('حذف الفترة'),
+              ),
+            ),
+          ),
+          Card(
             child: ListTile(
               leading: const Icon(Icons.event_available, color: Colors.orange),
               title: const Text('إصلاح الجمعة المستوردة كـ غياب'),

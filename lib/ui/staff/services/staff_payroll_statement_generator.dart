@@ -140,31 +140,39 @@ class StaffPayrollStatementGenerator {
         }
         return false;
       }
-      // الخصم التناسبي بالساعة: يخصم ساعات الإذن المسموح من دقائق المخالفة
-      int deductAllowed(int actualMinutes, Attendance a) {
-        if (!a.excused) return actualMinutes; // بدون إذن — يخصم كله
+      int excessMin(int actualMinutes, Attendance a) {
+        if (!a.excused) return actualMinutes;
         final allowed = (a.excusedHours * 60).round();
-        if (allowed <= 0) return 0; // بإذن بلا ساعات — لا خصم
+        if (allowed <= 0) return 0;
         final r = actualMinutes - allowed;
         return r < 0 ? 0 : r;
       }
+      int excusedUsedMin(int actualMinutes, Attendance a) {
+        if (!a.excused) return 0;
+        final allowed = (a.excusedHours * 60).round();
+        if (allowed <= 0) return 0;
+        return actualMinutes < allowed ? actualMinutes : allowed;
+      }
+      int lateExcusedMin = 0; int earlyExcusedMin = 0;
       for (final a in atts) {
         if (isLateAtt(a) && a.checkInTime != null) {
           final ci = a.checkInTime!.hour*60 + a.checkInTime!.minute;
-          if (ci > gEnd) lateMin += deductAllowed(ci - gEnd, a);
+          if (ci > gEnd) { final actual = ci - gEnd; lateMin += excessMin(actual, a); lateExcusedMin += excusedUsedMin(actual, a); }
         }
         if (a.checkOutTime != null && (!a.excused || a.excusedHours > 0)) {
           final co = a.checkOutTime!.hour*60 + a.checkOutTime!.minute;
-          if (co < eMin) earlyMin += deductAllowed(eMin - co, a);
+          if (co < eMin) { final actual = eMin - co; earlyMin += excessMin(actual, a); earlyExcusedMin += excusedUsedMin(actual, a); }
         }
       }
-      // الحساب الحقيقي للخصم = ساعات × سعر الساعة × المضاعف
+      // الحساب: ساعات الإذن 1x + الزيادة lateMult/earlyMult (مثال 2س إذن + 8س زيادة = 2*1 + 8*1.5)
       final hourly = staff.hourlyRate ?? (staff.basicSalary / 30 / 8);
       final daily = staff.basicSalary / 30;
-      final lateDed = lateMult > 0 ? (lateMin / 60.0) * hourly * lateMult : 0;
-      final earlyDed = earlyMult > 0 ? (earlyMin / 60.0) * hourly * earlyMult : 0;
+      final lateDed = (lateMin / 60.0) * hourly * (lateMult > 0 ? lateMult : 0) + (lateExcusedMin / 60.0) * hourly;
+      final earlyDed = (earlyMin / 60.0) * hourly * (earlyMult > 0 ? earlyMult : 0) + (earlyExcusedMin / 60.0) * hourly;
+      final lateExcusedDed = (lateExcusedMin / 60.0) * hourly;
+      final earlyExcusedDed = (earlyExcusedMin / 60.0) * hourly;
       final absentDed = absencePerDay > 0 ? p.absentDays * absencePerDay : p.absentDays * daily * absenceMult;
-      payrollDetails[p.id] = {'lateMin': lateMin, 'earlyMin': earlyMin, 'lateDed': lateDed, 'earlyDed': earlyDed, 'absentDed': absentDed};
+      payrollDetails[p.id] = {'lateMin': lateMin, 'earlyMin': earlyMin, 'lateExcusedMin': lateExcusedMin, 'earlyExcusedMin': earlyExcusedMin, 'lateDed': lateDed, 'earlyDed': earlyDed, 'lateExcusedDed': lateExcusedDed, 'earlyExcusedDed': earlyExcusedDed, 'absentDed': absentDed};
     }
 
     pdf.addPage(
@@ -274,17 +282,32 @@ class StaffPayrollStatementGenerator {
                 final d = payrollDetails[p.id] ?? {'lateMin':0,'earlyMin':0,'lateDed':0.0,'earlyDed':0.0,'absentDed':0.0};
                 final lateMin = d['lateMin'] as int;
                 final earlyMin = d['earlyMin'] as int;
-                final lateDed = (d['lateDed'] as double?) ?? p.penaltiesTotal;
-                final earlyDed = (d['earlyDed'] as double?) ?? 0;
+                final lateExcusedMin = (d['lateExcusedMin'] as int?) ?? 0;
+                final earlyExcusedMin = (d['earlyExcusedMin'] as int?) ?? 0;
+                final lateExcusedDed = (d['lateExcusedDed'] as double?) ?? 0;
+                final earlyExcusedDed = (d['earlyExcusedDed'] as double?) ?? 0;
+                final lateDedExcess = (d['lateDed'] as double? ?? 0) - lateExcusedDed;
+                final earlyDedExcess = (d['earlyDed'] as double? ?? 0) - earlyExcusedDed;
                 final absentDed = (d['absentDed'] as double?) ?? p.absentDays * (p.basicSalary/30);
                 if (p.absentDays > 0) rows.add([_b('غياب'), _b('${p.absentDays} يوم'), _b(absentDed.toStringAsFixed(2)), _b('غياب بدون إذن')]);
+                if (lateExcusedMin > 0) {
+                  final h = (lateExcusedMin/60).toStringAsFixed(1);
+                  rows.add([_b('تأخير بإذن'), _b('${h} س'), _b(lateExcusedDed.toStringAsFixed(2)), _b('إذن ساعة بساعة (1.0×)')]);
+                }
                 if (lateMin > 0) {
                   final h = (lateMin/60).toStringAsFixed(1);
-                  rows.add([_b('تأخير'), _b('${h} س'), _b(lateDed.toStringAsFixed(2)), _b('تأخير بعد السماح')]);
+                  rows.add([_b('تأخير'), _b('${h} س'), _b(lateDedExcess.toStringAsFixed(2)), _b('تأخير بعد السماح (1.5×)')]);
+                } else if ((d['lateDed'] as double? ?? 0) > 0 && lateExcusedMin==0) {
+                  // حالة قديمة بلا تفصيل
+                  rows.add([_b('تأخير'), _b('${(lateMin/60).toStringAsFixed(1)} س'), _b((d['lateDed'] as double).toStringAsFixed(2)), _b('تأخير بعد السماح')]);
+                }
+                if (earlyExcusedMin > 0) {
+                  final h = (earlyExcusedMin/60).toStringAsFixed(1);
+                  rows.add([_b('انصراف بإذن'), _b('${h} س'), _b(earlyExcusedDed.toStringAsFixed(2)), _b('إذن ساعة بساعة (1.0×)')]);
                 }
                 if (earlyMin > 0) {
                   final h = (earlyMin/60).toStringAsFixed(1);
-                  rows.add([_b('انصراف مبكر'), _b('${h} س'), _b(earlyDed.toStringAsFixed(2)), _b('خروج قبل نهاية الدوام')]);
+                  rows.add([_b('انصراف مبكر'), _b('${h} س'), _b(earlyDedExcess.toStringAsFixed(2)), _b('خروج قبل نهاية الدوام (1.5×)')]);
                 }
                 // أي جزاءات يدوية (مكافآت/جزاءات مسجلة من rewards_penalties) مش متغطاة بالتفاصيل أعلاه
                 final covered = absentDed + lateDed + earlyDed;

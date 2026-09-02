@@ -294,6 +294,12 @@ class StaffManagementService {
     return await _dao.deleteAttendanceByStaffAndSource(staffId, 'import');
   }
 
+  /// يحذف كل حضور لموظف في فترة (أي مصدر) — لفك التعارض مع auto_generated/manual
+  Future<int> deleteAttendanceForPeriod(User? user, String staffId, DateTime start, DateTime end) async {
+    PermissionValidator.requirePermission(user, Permission.manageAttendance, 'حذف حضور فترة');
+    return await _dao.deleteAttendanceByStaffInRange(staffId, start, end);
+  }
+
   /// حذف نهائي للموظف وكل سجلاته (حضور، سلف، رواتب، إجازات، جزاءات) — لإزالة الاسم من كل السجلات
   Future<void> deleteStaffCompletely(User? user, String staffId) async {
     PermissionValidator.requirePermission(user, Permission.editEmployee, 'حذف موظف');

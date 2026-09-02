@@ -95,41 +95,51 @@ if (!staff.useDefaultSchedule) {
       }
       return false;
     }
-    // يخصم ساعات الإذن المسموح من دقائق المخالفة (الفرق فوق المسموح فقط يُخصم)
-    int deductAllowed(int actualMinutes, Attendance r) {
-      if (!r.excused) return actualMinutes; // بدون إذن — يخصم كله
+    int excessMin(int actualMinutes, Attendance r) {
+      if (!r.excused) return actualMinutes;
       final allowed = (r.excusedHours * 60).round();
-      if (allowed <= 0) return 0; // بإذن بلا ساعات — لا خصم
+      if (allowed <= 0) return 0;
       final res = actualMinutes - allowed;
       return res < 0 ? 0 : res;
+    }
+    int excusedUsedMin(int actualMinutes, Attendance r) {
+      if (!r.excused) return 0;
+      final allowed = (r.excusedHours * 60).round();
+      if (allowed <= 0) return 0;
+      return actualMinutes < allowed ? actualMinutes : allowed;
     }
     int absent = records.where((r) => r.status == 'absent').length;
     int lateCount = records.where(isLateEff).length;
     int totalLateMin = 0;
     int totalEarlyMin = 0;
+    int totalLateExcusedMin = 0;
+    int totalEarlyExcusedMin = 0;
     for (final r in records) {
       if (isLateEff(r) && r.checkInTime != null) {
         final ci = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
-        if (ci > graceEnd) totalLateMin += deductAllowed(ci - graceEnd, r);
+        if (ci > graceEnd) { final actual = ci - graceEnd; totalLateMin += excessMin(actual, r); totalLateExcusedMin += excusedUsedMin(actual, r); }
       }
       if (r.checkOutTime != null && (!r.excused || r.excusedHours > 0)) {
         final co = r.checkOutTime!.hour * 60 + r.checkOutTime!.minute;
-        if (co < endMin) totalEarlyMin += deductAllowed(endMin - co, r);
+        if (co < endMin) { final actual = endMin - co; totalEarlyMin += excessMin(actual, r); totalEarlyExcusedMin += excusedUsedMin(actual, r); }
       }
     }
     double totalLateHours = totalLateMin / 60.0;
     double totalEarlyHours = totalEarlyMin / 60.0;
+    double totalLateExcusedHours = totalLateExcusedMin / 60.0;
+    double totalEarlyExcusedHours = totalEarlyExcusedMin / 60.0;
     double lateDeduction = 0;
     if (lateMult > 0) {
-      lateDeduction = totalLateHours * hourly * lateMult;
+      lateDeduction = totalLateHours * hourly * lateMult + totalLateExcusedHours * hourly;
     } else {
       try {
         final r = await (db.select(db.attendanceSettings)..where((t) => t.settingKey.equals('late_penalty_amount'))).getSingleOrNull();
         final amt = double.tryParse(r?.settingValue ?? '0') ?? 0;
-        if (amt > 0) lateDeduction = lateCount * amt;
-      } catch (_) {}
+        if (amt > 0) lateDeduction = lateCount * amt + totalLateExcusedHours * hourly;
+        else lateDeduction = totalLateExcusedHours * hourly;
+      } catch (_) { lateDeduction = totalLateExcusedHours * hourly; }
     }
-    double earlyDeduction = earlyMult > 0 ? totalEarlyHours * hourly * earlyMult : 0;
+    double earlyDeduction = earlyMult > 0 ? totalEarlyHours * hourly * earlyMult + totalEarlyExcusedHours * hourly : totalEarlyExcusedHours * hourly;
     double absenceDeduction = absencePerDay > 0 ? absent * absencePerDay * absenceMultiplier : absent * (staff.basicSalary / 30) * absenceMultiplier;
     double totalDeduction = lateDeduction + earlyDeduction + absenceDeduction;
     double totalHours = records.fold(0.0, (s, r) => s + (r.workingHours ?? 0));
