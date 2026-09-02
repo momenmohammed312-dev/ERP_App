@@ -46,17 +46,36 @@ class _ParsedTime {
 
 class HistoricalAttendanceImportService {
   final AppDatabase db;
+  int _breakMinutes = 60;
   HistoricalAttendanceImportService(this.db);
 
+  /// يقرأ عدد دقائق الراحة من الإعدادات (افتراضي 60)
+  Future<void> _loadBreakMinutes() async {
+    try {
+      final settings = await db.select(db.attendanceSettings).get();
+      for (final s in settings) {
+        if (s.settingKey == 'break_minutes') {
+          _breakMinutes = int.tryParse(s.settingValue) ?? 60;
+          return;
+        }
+      }
+    } catch (_) {}
+  }
+
   Map<String, Staff?> matchSheetsToStaff(List<String> sheetNames, List<Staff> staffList) {
-    final map = <String, Staff>{};
+    final mapByName = <String, Staff>{};
+    final mapById = <String, Staff>{};
     for (final s in staffList) {
-      map[s.name.trim()] = s;
+      mapByName[s.name.trim().toLowerCase()] = s;
+      mapById[s.staffId.trim().toLowerCase()] = s;
+      mapById[s.staffId.replaceAll(RegExp(r'[^0-9]'), '').toLowerCase()] = s;
     }
     final result = <String, Staff?>{};
     for (final sheet in sheetNames) {
       final trimmed = sheet.trim();
-      result[sheet] = map[trimmed];
+      final key = trimmed.toLowerCase();
+      // جرب مطابقة الاسم أولاً، ثم ID، ثم الرقم فقط (لحالة شيت باسم "1" وموظف STAFF0001)
+      result[sheet] = mapByName[key] ?? mapById[key] ?? mapByName[trimmed] ?? mapById[trimmed];
     }
     return result;
   }
@@ -97,6 +116,19 @@ class HistoricalAttendanceImportService {
   DateTime? parseDateCell(dynamic value) {
     if (value == null) return null;
     if (value is DateTime) return DateTime(value.year, value.month, value.day);
+    if (value is double) {
+      // Excel date as number (days since 1899-12-30)
+      final base = DateTime(1899, 12, 30);
+      final days = value.floor();
+      final frac = value - days;
+      final dt = base.add(Duration(days: days, milliseconds: (frac * 86400000).round()));
+      return DateTime(dt.year, dt.month, dt.day);
+    }
+    if (value is int) {
+      final base = DateTime(1899, 12, 30);
+      final dt = base.add(Duration(days: value));
+      return DateTime(dt.year, dt.month, dt.day);
+    }
     final str = value.toString().trim();
     if (str.isEmpty) return null;
     try {
@@ -141,16 +173,23 @@ class HistoricalAttendanceImportService {
       DateTime? checkOut;
       if (p.hasTime) checkIn = DateTime(date.year, date.month, date.day, p.h!, p.m!, p.s ?? 0);
       if (q.hasTime) {
-        int h = q.h!;
-        if (h >= 1 && h <= 11) h += 12;
-        checkOut = DateTime(date.year, date.month, date.day, h, q.m!, q.s ?? 0);
+        checkOut = DateTime(date.year, date.month, date.day, q.h!, q.m!, q.s ?? 0);
       }
       String status = 'present';
-      if (p.isAbsent && q.isAbsent) status = 'absent';
+      if (p.isAbsent && q.isAbsent) {
+        // الجمعة إجازة تلقائية — لا تُحسب غياب
+        final dow = date.weekday % 7; // Sun=0
+        if (dow == 5) status = 'leave'; else status = 'absent';
+      }
       double? workingHours;
       if (checkIn != null && checkOut != null) {
         final diff = checkOut.difference(checkIn).inMinutes / 60.0;
-        if (diff >= 0 && diff < 24) workingHours = diff;
+        if (diff >= 0 && diff < 24) {
+          // خصم ساعة الراحة (افتراضي 60 دقيقة) من ساعات العمل
+          final brk = _breakMinutes;
+          final net = diff - (brk / 60.0);
+          workingHours = net < 0 ? 0 : net;
+        }
       }
       return RowParseResult(rowIndex: excelRow, date: date, checkInTime: checkIn, checkOutTime: checkOut, workingHours: workingHours, status: status, error: error, rawPresence: presVal?.toString() ?? '', rawCheckout: outVal?.toString() ?? '');
     }
@@ -189,6 +228,31 @@ class HistoricalAttendanceImportService {
     int parseErrors = 0;
     final errors = <String>[];
 
+    // تحميل إعدادات الدوام لتحديد حالة التأخير عند الاستيراد
+    String workStartStr = '09:00';
+    int grace = 15;
+    try {
+      final settings = await db.select(db.attendanceSettings).get();
+      for (final s in settings) {
+        if (s.settingKey == 'default_work_start') workStartStr = s.settingValue;
+        if (s.settingKey == 'grace_period_minutes') grace = int.tryParse(s.settingValue) ?? 15;
+      }
+    } catch (_) {}
+    int workStartMin = 9 * 60;
+    try {
+      final p = workStartStr.split(':');
+      workStartMin = (int.tryParse(p[0]) ?? 9) * 60 + (int.tryParse(p[1]) ?? 0);
+    } catch (_) {}
+    final graceEnd = workStartMin + grace;
+
+    String resolveStatus(RowParseResult r) {
+      if (r.status != 'present') return r.status;
+      if (r.checkInTime == null) return r.status;
+      final ciMin = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
+      if (ciMin > graceEnd) return 'late';
+      return 'present';
+    }
+
     for (final r in rows) {
       if (r.date == null) {
         parseErrors++;
@@ -207,7 +271,25 @@ class HistoricalAttendanceImportService {
       if (existing.isNotEmpty) {
         final hasImport = existing.any((e) => e.source == 'import');
         if (hasImport) {
-          skipped++;
+          final importRec = existing.firstWhere((e) => e.source == 'import');
+          final effStatus = resolveStatus(r);
+          final sameCheckIn = importRec.checkInTime == r.checkInTime;
+          final sameCheckOut = importRec.checkOutTime == r.checkOutTime;
+          final sameStatus = importRec.status == effStatus;
+          if (sameCheckIn && sameCheckOut && sameStatus) {
+            skipped++;
+          } else {
+            await (db.update(db.attendanceTable)..where((t) => t.id.equals(importRec.id))).write(
+              AttendanceTableCompanion(
+                checkInTime: drift.Value(r.checkInTime),
+                checkOutTime: drift.Value(r.checkOutTime),
+                workingHours: drift.Value(r.workingHours),
+                status: drift.Value(effStatus),
+                updatedAt: drift.Value(DateTime.now()),
+              ),
+            );
+            imported++;
+          }
         } else {
           conflicts++;
           errors.add('صف ${r.rowIndex} (${r.date}): تعارض — يوجد سجل حضور مصدره ${existing.first.source} لنفس التاريخ');
@@ -218,7 +300,7 @@ class HistoricalAttendanceImportService {
       await db.into(db.attendanceTable).insert(AttendanceTableCompanion.insert(
         staffId: staff.staffId,
         date: dateOnly,
-        status: r.status,
+        status: resolveStatus(r),
         checkInTime: drift.Value(r.checkInTime),
         checkOutTime: drift.Value(r.checkOutTime),
         workingHours: drift.Value(r.workingHours),
@@ -232,7 +314,57 @@ class HistoricalAttendanceImportService {
     return SheetImportReport(sheetName: sheetName, staff: staff, imported: imported, skippedExists: skipped, conflicts: conflicts, parseErrors: parseErrors, errors: errors);
   }
 
+  /// إصلاح سجلات الجمعة المستوردة قديماً كـ غياب → تحويلها لـ إجازة
+  Future<int> fixFridayAbsents() async {
+    final all = await db.select(db.attendanceTable).get();
+    int fixed = 0;
+    for (final r in all) {
+      if (r.status == 'absent' && r.source == 'import' && r.date.weekday % 7 == 5) {
+        await (db.update(db.attendanceTable)..where((t) => t.id.equals(r.id))).write(
+          AttendanceTableCompanion(status: const drift.Value('leave'), updatedAt: drift.Value(DateTime.now())),
+        );
+        fixed++;
+      }
+    }
+    return fixed;
+  }
+
+  /// إصلاح الحضور المستورد المحسوب خطأً كـ present رغم التأخير — يعيد حساب late بناءً على إعدادات الدوام
+  Future<int> fixLateStatusForImported() async {
+    String workStartStr = '09:00';
+    int grace = 15;
+    try {
+      final settings = await db.select(db.attendanceSettings).get();
+      for (final s in settings) {
+        if (s.settingKey == 'default_work_start') workStartStr = s.settingValue;
+        if (s.settingKey == 'grace_period_minutes') grace = int.tryParse(s.settingValue) ?? 15;
+      }
+    } catch (_) {}
+    int workStartMin = 9 * 60;
+    try {
+      final p = workStartStr.split(':');
+      workStartMin = (int.tryParse(p[0]) ?? 9) * 60 + (int.tryParse(p[1]) ?? 0);
+    } catch (_) {}
+    final graceEnd = workStartMin + grace;
+
+    final all = await db.select(db.attendanceTable).get();
+    int fixed = 0;
+    for (final r in all) {
+      if (r.status == 'present' && r.checkInTime != null) {
+        final ciMin = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
+        if (ciMin > graceEnd) {
+          await (db.update(db.attendanceTable)..where((t) => t.id.equals(r.id))).write(
+            AttendanceTableCompanion(status: const drift.Value('late'), updatedAt: drift.Value(DateTime.now())),
+          );
+          fixed++;
+        }
+      }
+    }
+    return fixed;
+  }
+
   Future<List<SheetImportReport>> importFromExcel(Excel excel) async {
+    await _loadBreakMinutes();
     final staffList = await db.staffManagementDao.getAllStaff();
     final sheetNames = excel.tables.keys.toList();
     final match = matchSheetsToStaff(sheetNames, staffList);

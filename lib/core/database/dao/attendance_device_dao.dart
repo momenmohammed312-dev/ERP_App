@@ -47,6 +47,8 @@ class AttendanceDeviceDao extends DatabaseAccessor<AppDatabase>
                 m.enrollmentStatus.equals('enrolled')))
           .getSingleOrNull();
 
+  Future<List<StaffBiometricMapping>> getAllMappings() => select(staffBiometricMappings).get();
+
   Future<int> addMapping(StaffBiometricMappingsCompanion entry) =>
       into(staffBiometricMappings).insert(entry);
 

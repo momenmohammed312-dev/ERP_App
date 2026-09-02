@@ -8,8 +8,9 @@ import 'package:intl/intl.dart';
 
 class ManualOverrideDialog extends ConsumerStatefulWidget {
   final Staff staff;
+  final Attendance? existingRecord;
 
-  const ManualOverrideDialog({super.key, required this.staff});
+  const ManualOverrideDialog({super.key, required this.staff, this.existingRecord});
 
   @override
   ConsumerState<ManualOverrideDialog> createState() => _ManualOverrideDialogState();
@@ -25,6 +26,19 @@ class _ManualOverrideDialogState extends ConsumerState<ManualOverrideDialog> {
   String _status = 'present';
   
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final r = widget.existingRecord;
+    if (r != null) {
+      _selectedDate = r.date;
+      _status = r.status;
+      if (r.checkInTime != null) _checkInTime = TimeOfDay.fromDateTime(r.checkInTime!);
+      if (r.checkOutTime != null) _checkOutTime = TimeOfDay.fromDateTime(r.checkOutTime!);
+      _notesController.text = r.notes ?? '';
+    }
+  }
 
   Future<void> _submit() async {
     if (_reasonController.text.trim().isEmpty) {

@@ -197,6 +197,7 @@ class _StaffDetailsPageState extends State<StaffDetailsPage>
           _buildInfoSection('المعلومات الشخصية', [
             _buildInfoRow('الاسم الكامل', widget.staff.name),
             _buildInfoRow('الرقم الوظيفي', widget.staff.staffId),
+            _buildInfoRow('ID البصمة', 'يُعرض في نموذج التعديل'),
             _buildInfoRow(
               'الرقم القومي',
               widget.staff.nationalId ?? 'غير محدد',

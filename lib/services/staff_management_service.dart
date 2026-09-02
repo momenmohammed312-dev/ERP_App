@@ -370,13 +370,22 @@ class StaffManagementService {
     String? notes,
     String source = 'manual',
   }) async {
+    // خصم ساعة الراحة من ساعات العمل المحسوبة يدوياً (من 8 لـ5 = 8 ساعات)
+    var finalWorkingHours = workingHours;
+    if (finalWorkingHours != null && checkOutTime != null && checkInTime != null) {
+      final breakMinutes = await _getBreakMinutes();
+      final breakHrs = breakMinutes / 60.0;
+      final raw = checkOutTime.difference(checkInTime).inMinutes / 60.0;
+      final computed = raw - breakHrs;
+      finalWorkingHours = computed < 0 ? 0 : computed;
+    }
     final entry = AttendanceTableCompanion.insert(
       staffId: staffId,
       date: date,
       status: status,
       checkInTime: Value(checkInTime),
       checkOutTime: Value(checkOutTime),
-      workingHours: Value(workingHours),
+      workingHours: Value(finalWorkingHours),
       notes: Value(notes),
       source: Value(source),
       createdAt: DateTime.now(),
@@ -390,7 +399,7 @@ class StaffManagementService {
         status: status,
         checkInTime: Value(checkInTime),
         checkOutTime: Value(checkOutTime),
-        workingHours: Value(workingHours),
+        workingHours: Value(finalWorkingHours),
         notes: Value(notes),
         source: Value(source),
         updatedAt: DateTime.now(),
@@ -399,6 +408,104 @@ class StaffManagementService {
     } else {
       await _dao.addAttendance(entry);
     }
+  }
+
+  /// يقرأ عدد دقائق الراحة من الإعدادات (افتراضي 60 دقيقة = ساعة)
+  Future<int> _getBreakMinutes() async {
+    final db = _db;
+    if (db != null) {
+      try {
+        final settings = await db.select(db.attendanceSettings).get();
+        for (final s in settings) {
+          if (s.settingKey == 'break_minutes') {
+            return int.tryParse(s.settingValue) ?? 60;
+          }
+        }
+      } catch (_) {}
+    }
+    return 60;
+  }
+
+  /// Mark a specific day with a permission (إذن):
+  /// - [permissionType] == 'leave': إجازة كاملة (لا يُحسب غياب) — السلوك القديم
+  /// - == 'late': إذن حضور متأخر
+  /// - == 'early': إذن انصراف مبكر
+  /// [excused] = true → لا خصم على التأخير/الانصراف المبكر، false → يُخصم بالساعة
+  /// [excusedHours] = عدد ساعات الإذن المسموح بيها (للخصم التناسبي: الفرق فوق المسموح فقط يُخصم)
+  Future<void> markLeaveDay(
+    String staffId,
+    DateTime date, {
+    String? notes,
+    String source = 'manual',
+    String permissionType = 'leave',
+    bool excused = false,
+    double excusedHours = 0,
+  }) async {
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    final existing = await _dao.getAttendanceOnDate(staffId, dateOnly);
+
+    final String status;
+    if (permissionType == 'late') {
+      status = 'late';
+    } else if (permissionType == 'early') {
+      status = 'early_leave';
+    } else {
+      status = 'leave';
+    }
+
+    if (existing.isNotEmpty) {
+      final clearTimes = status == 'leave';
+      final rec = existing.first.copyWith(
+        status: status,
+        excused: excused,
+        excusedHours: excusedHours,
+        // الإجازة الكاملة بتمسح الأوقات، أما التأخير/الانصراف يحتفظ بالأوقات
+        checkInTime: clearTimes ? const Value(null) : Value(existing.first.checkInTime),
+        checkOutTime: clearTimes ? const Value(null) : Value(existing.first.checkOutTime),
+        workingHours: clearTimes ? const Value(null) : Value(existing.first.workingHours),
+        notes: Value(notes),
+        source: Value(source),
+        updatedAt: DateTime.now(),
+      );
+      await _dao.updateAttendance(rec);
+    } else {
+      await _dao.addAttendance(AttendanceTableCompanion.insert(
+        staffId: staffId,
+        date: dateOnly,
+        status: status,
+        excused: Value(excused),
+        excusedHours: Value(excusedHours),
+        notes: Value(notes),
+        source: Value(source),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ));
+    }
+  }
+
+  /// إلغاء الإذن ليوم واحد — يرجع excused=false و excusedHours=0
+  Future<void> clearExcusedDay(String staffId, DateTime date) async {
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    final existing = await _dao.getAttendanceOnDate(staffId, dateOnly);
+    if (existing.isEmpty) return;
+    final rec = existing.first.copyWith(excused: false, excusedHours: 0, updatedAt: DateTime.now());
+    await _dao.updateAttendance(rec);
+  }
+
+  /// إلغاء الإذن لفترة — يرجع كل الأيام في الفترة إلى بدون إذن
+  Future<int> clearExcusedPeriod(String staffId, DateTime from, DateTime to) async {
+    final start = DateTime(from.year, from.month, from.day);
+    final end = DateTime(to.year, to.month, to.day);
+    int count = 0;
+    for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      final existing = await _dao.getAttendanceOnDate(staffId, d);
+      if (existing.isEmpty) continue;
+      if (!existing.first.excused && existing.first.excusedHours == 0) continue;
+      final rec = existing.first.copyWith(excused: false, excusedHours: 0, updatedAt: DateTime.now());
+      await _dao.updateAttendance(rec);
+      count++;
+    }
+    return count;
   }
 
   Future<AttendanceSummary> getAttendanceSummary(
@@ -420,6 +527,8 @@ class StaffManagementService {
     double totalOvertime = 0.0;
     int totalLateMinutes = 0;
     int totalEarlyMinutes = 0;
+    int totalLateExcusedMinutes = 0;
+    int totalEarlyExcusedMinutes = 0;
 
     // لجمع دقائق التأخير/انصراف مبكر نحتاج جدول العمل
     ScheduleConfig? schedule;
@@ -431,10 +540,50 @@ class StaffManagementService {
       } catch (_) {}
     }
 
+    bool isLateByTime(Attendance r) {
+      if (r.checkInTime == null || schedule == null) return false;
+      if (r.excused && r.excusedHours <= 0) return false; // بإذن كامل — لا يُحسب تأخير
+      final ciMin = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
+      final graceEnd = schedule.workStartMinutesSinceMidnight + schedule.gracePeriodMinutes;
+      return ciMin > graceEnd;
+    }
+
+    // يخصم ساعات الإذن المسموح (excusedHours) من الدقائق الفعلية للمخالفة —
+    // المطلوب حالياً: ساعات الإذن نفسها تُخصم بسعر عادي (1x) + الزيادة بخصم مضاعف
+    // لذا نحسب الاثنين منفصلين: excusedUsed (يُخصم 1x) و excess (يُخصم بمضاعف)
+    int _excessMinutes(int actualMinutes, Attendance r) {
+      if (!r.excused) return actualMinutes; // بدون إذن — كله excess
+      final allowedMinutes = (r.excusedHours * 60).round();
+      if (allowedMinutes <= 0) return 0; // بإذن كامل بلا ساعات — لا excess
+      final result = actualMinutes - allowedMinutes;
+      return result < 0 ? 0 : result;
+    }
+
+    int _excusedUsedMinutes(int actualMinutes, Attendance r) {
+      if (!r.excused) return 0; // بدون إذن — لا يوجد جزء مأذون
+      final allowedMinutes = (r.excusedHours * 60).round();
+      if (allowedMinutes <= 0) return 0; // بإذن كامل بلا ساعات محددة — مجاني بالكامل
+      return actualMinutes < allowedMinutes ? actualMinutes : allowedMinutes;
+    }
+
     for (final record in attendanceRecords) {
+      // تحديد التأخير دفاعياً من الوقت حتى لو status مخزون خطأً كـ present (استيراد قديم)
+      final effectiveIsLate = (record.status == 'late' || (record.status == 'present' && isLateByTime(record)));
       switch (record.status) {
         case 'present':
-          presentDays++;
+          if (effectiveIsLate) {
+            lateDays++;
+            presentDays++;
+            final ciMin = record.checkInTime!.hour * 60 + record.checkInTime!.minute;
+            final graceEnd = schedule!.workStartMinutesSinceMidnight + schedule.gracePeriodMinutes;
+            if (ciMin > graceEnd) {
+              final actual = ciMin - graceEnd;
+              totalLateMinutes += _excessMinutes(actual, record);
+              totalLateExcusedMinutes += _excusedUsedMinutes(actual, record);
+            }
+          } else {
+            presentDays++;
+          }
           break;
         case 'absent':
           absentDays++;
@@ -443,26 +592,48 @@ class StaffManagementService {
           leaveDays++;
           break;
         case 'late':
-          lateDays++;
           presentDays++; // Late counts as present
-          // احتساب دقائق التأخير الفعلية بعد فترة السماح
+          // احتساب دقائق التأخير الفعلية بعد فترة السماح — ساعات الإذن تُخصم 1x والزيادة بمضاعف
           if (record.checkInTime != null && schedule != null) {
-            final ciMin = record.checkInTime!.hour * 60 + record.checkInTime!.minute;
-            final graceEnd = schedule.workStartMinutesSinceMidnight + schedule.gracePeriodMinutes;
-            if (ciMin > graceEnd) totalLateMinutes += ciMin - graceEnd;
+            if (record.excused && record.excusedHours <= 0) {
+              // بإذن كامل مجاني — لا يُحسب lateDays ولا خصم
+            } else {
+              lateDays++;
+              final ciMin = record.checkInTime!.hour * 60 + record.checkInTime!.minute;
+              final graceEnd = schedule.workStartMinutesSinceMidnight + schedule.gracePeriodMinutes;
+              if (ciMin > graceEnd) {
+                final actual = ciMin - graceEnd;
+                totalLateMinutes += _excessMinutes(actual, record);
+                totalLateExcusedMinutes += _excusedUsedMinutes(actual, record);
+              }
+            }
           }
           break;
         case 'early_leave':
-          lateDays++; // يُحسب كحضور مع تأخير/بدري
-          presentDays++;
+          if (!record.excused && record.checkInTime != null && record.checkOutTime != null && schedule != null) {
+            // تحقق من كونه بدري فعلياً (checkOut قبل نهاية الدوام)
+            final coMin = record.checkOutTime!.hour * 60 + record.checkOutTime!.minute;
+            final endMin = schedule.workEndMinutesSinceMidnight;
+            if (coMin < endMin) lateDays++;
+          }
+          presentDays++; // يُحسب كحضور مع بدري (بإذن = بدون خصم)
           break;
       }
 
-      // انصراف مبكر: يحسب لأي سجل فيه checkOut قبل نهاية الدوام
+      // انصراف مبكر: يحسب لأي سجل فيه checkOut قبل نهاية الدوام — ساعات الإذن 1x والزيادة بمضاعف
       if (record.checkOutTime != null && schedule != null) {
         final coMin = record.checkOutTime!.hour * 60 + record.checkOutTime!.minute;
         final endMin = schedule.workEndMinutesSinceMidnight;
-        if (coMin < endMin) totalEarlyMinutes += endMin - coMin;
+        if (coMin < endMin) {
+          final actual = endMin - coMin;
+          // even if excused fully with 0 hours, both helpers return 0 correctly
+          if (record.excused && record.excusedHours <= 0) {
+            // بإذن كامل مجاني — لا شيء يُخصم
+          } else {
+            totalEarlyMinutes += _excessMinutes(actual, record);
+            totalEarlyExcusedMinutes += _excusedUsedMinutes(actual, record);
+          }
+        }
       }
 
       totalHours += record.workingHours ?? 0.0;
@@ -479,6 +650,8 @@ class StaffManagementService {
       totalOvertime: totalOvertime,
       totalLateMinutes: totalLateMinutes,
       totalEarlyMinutes: totalEarlyMinutes,
+      totalLateExcusedMinutes: totalLateExcusedMinutes,
+      totalEarlyExcusedMinutes: totalEarlyExcusedMinutes,
     );
   }
 
@@ -568,6 +741,16 @@ class StaffManagementService {
     );
   }
 
+  Future<void> approveAdvance(User? user, int advanceId) async {
+    PermissionValidator.requirePermission(user, Permission.manageSalaries, 'اعتماد سلفة');
+    await _dao.approveAdvance(advanceId, user?.fullName ?? 'admin');
+  }
+
+  Future<void> rejectAdvance(User? user, int advanceId, String reason) async {
+    PermissionValidator.requirePermission(user, Permission.manageSalaries, 'رفض سلفة');
+    await _dao.rejectAdvance(advanceId, user?.fullName ?? 'admin', reason);
+  }
+
   // PAYROLL MANAGEMENT
 
   Future<void> calculatePayroll(User? user, String staffId, String payrollPeriod) async {
@@ -578,6 +761,21 @@ class StaffManagementService {
     final periodStart = _getPeriodStart(payrollPeriod);
     final periodEnd = _getPeriodEnd(payrollPeriod);
 
+    // توليد الغياب تلقائياً لكل يوم في الفترة قبل الحساب — يحترم الجمعة/الإجازة
+    // مهم: لا نولّد غياب لأيام مستقبلية (بعد اليوم) — وإلا يظهر غياب 30 يوم مقدماً كما في الصورة
+    final dbForAbsence = _dao.attachedDatabase;
+    try {
+      // تنظيف غياب مستقبلي قديم اتولد بالغلط قبل الإصلاح
+      try { await _dao.deleteFutureAutoAbsences(); } catch (_) {}
+      final engine = AttendanceCalculationEngine(dbForAbsence, dbForAbsence.attendanceDeviceDao, _dao);
+      final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+      final effectiveEnd = periodEnd.isAfter(today) ? today : periodEnd;
+      for (var d = DateTime(periodStart.year, periodStart.month, periodStart.day);
+          !d.isAfter(DateTime(effectiveEnd.year, effectiveEnd.month, effectiveEnd.day));
+          d = d.add(const Duration(days: 1))) {
+        await engine.generateAbsencesForDate(d);
+      }
+    } catch (_) {}
     // Get attendance data
     final attendanceSummary = await getAttendanceSummary(
       staffId,
@@ -642,6 +840,17 @@ class StaffManagementService {
     }
 
     final basicSalary = staff.basicSalary;
+    int workingDaysInPeriod = 0;
+    try {
+      final engTmp = AttendanceCalculationEngine(db, db.attendanceDeviceDao, _dao);
+      for (var d = DateTime(periodStart.year, periodStart.month, periodStart.day);
+          !d.isAfter(DateTime(periodEnd.year, periodEnd.month, periodEnd.day));
+          d = d.add(const Duration(days: 1))) {
+        final sched = await engTmp.getScheduleForStaff(staffId);
+        if (engTmp.isWorkDay(d, sched)) workingDaysInPeriod++;
+      }
+    } catch (_) {}
+    if (workingDaysInPeriod == 0) workingDaysInPeriod = 30;
     // Auto penalties from attendance settings — يطبق على كل بصمة/حضور محسوب مسبقاً
     // يدعم: late بالساعات (per_hour) أو بالمرة (legacy per late), وغياب بمبلغ ثابت أو مضاعف يوم
     try {
@@ -667,12 +876,17 @@ class StaffManagementService {
       final earlyPerHour = double.tryParse(earlyRow?.settingValue ?? '0') ?? 0;
 
       double autoLatePenalty = 0;
-      final hourlyRate = staff.hourlyRate ?? (basicSalary / 160.0);
+      final hourlyRate = staff.hourlyRate ?? (basicSalary / 30 / 8);
+      // ساعات الإذن المأذونة تُخصم بسعر عادي (1x) + الزيادة بمضاعف — مثال 3س تأخير وإذن 2س = 2س*1x + 1س*1.5x
+      final excusedLateDeduction = attendanceSummary.totalLateExcusedHours * hourlyRate;
       if (latePerHour > 0 && attendanceSummary.totalLateHours > 0) {
         // latePerHour الآن مضاعف (1.5 = ساعة ونص) وليس مبلغ
-        autoLatePenalty = attendanceSummary.totalLateHours * hourlyRate * latePerHour;
+        autoLatePenalty = attendanceSummary.totalLateHours * hourlyRate * latePerHour + excusedLateDeduction;
       } else if (latePerOccurrence > 0) {
-        autoLatePenalty = attendanceSummary.lateDays * latePerOccurrence;
+        autoLatePenalty = attendanceSummary.lateDays * latePerOccurrence + excusedLateDeduction;
+      } else {
+        // حتى بدون مضاعف، ساعات الإذن نفسها تُخصم كغياب جزئي بسعر عادي
+        autoLatePenalty = excusedLateDeduction;
       }
       double autoAbsencePenalty = 0;
       if (absencePerDay > 0) {
@@ -682,18 +896,27 @@ class StaffManagementService {
         autoAbsencePenalty = attendanceSummary.absentDays * daily * absenceMult;
       }
       double autoEarlyPenalty = 0;
+      final excusedEarlyDeduction = attendanceSummary.totalEarlyExcusedHours * hourlyRate;
       if (earlyPerHour > 0 && attendanceSummary.totalEarlyHours > 0) {
-        autoEarlyPenalty = attendanceSummary.totalEarlyHours * hourlyRate * earlyPerHour;
+        autoEarlyPenalty = attendanceSummary.totalEarlyHours * hourlyRate * earlyPerHour + excusedEarlyDeduction;
+      } else {
+        autoEarlyPenalty = excusedEarlyDeduction;
       }
       penaltiesTotal += autoLatePenalty + autoAbsencePenalty + autoEarlyPenalty;
     } catch (_) {
       // لو جدول الإعدادات غير موجود أو فشل القراءة — تجاهل الخصم التلقائي
     }
 
-    // Calculate payroll (basicSalary already defined)
+    // Calculate payroll (basicSalary already defined) — workingDaysInPeriod محسوب مسبقاً
+    // الوقت الإضافي يُحسب بمضاعف من الإعدادات (1.5x افتراضياً)
+    final otMultiplierRow = await (db.select(db.attendanceSettings)
+          ..where((t) => t.settingKey.equals('overtime_rate_multiplier')))
+        .getSingleOrNull();
+    final overtimeMultiplier =
+        double.tryParse(otMultiplierRow?.settingValue ?? '1.5') ?? 1.5;
+    final hourlyRateForOT = staff.hourlyRate ?? basicSalary / 30 / 8;
     final overtimePay =
-        attendanceSummary.totalOvertime *
-        (staff.hourlyRate ?? basicSalary / 160);
+        attendanceSummary.totalOvertime * hourlyRateForOT * overtimeMultiplier;
 
     final deductions = totalAdvances + penaltiesTotal;
 
@@ -707,13 +930,13 @@ class StaffManagementService {
             periodEnd: periodEnd,
             basicSalary: basicSalary,
             overtimeHours: Value(attendanceSummary.totalOvertime),
-            overtimeRate: Value(staff.hourlyRate ?? basicSalary / 160),
+            overtimeRate: Value(hourlyRateForOT * overtimeMultiplier),
             overtimePay: Value(overtimePay),
             allowances: Value(allowancesTotal),
             deductions: Value(deductions),
             advances: Value(totalAdvances),
             netSalary: netSalary,
-            workingDays: Value(attendanceSummary.totalDays),
+            workingDays: Value(workingDaysInPeriod),
             presentDays: Value(attendanceSummary.presentDays),
             absentDays: Value(attendanceSummary.absentDays),
             leaveDays: Value(attendanceSummary.leaveDays),
@@ -926,6 +1149,8 @@ class AttendanceSummary {
   final double totalOvertime;
   final int totalLateMinutes;
   final int totalEarlyMinutes;
+  final int totalLateExcusedMinutes;
+  final int totalEarlyExcusedMinutes;
 
   AttendanceSummary({
     required this.totalDays,
@@ -937,10 +1162,14 @@ class AttendanceSummary {
     required this.totalOvertime,
     this.totalLateMinutes = 0,
     this.totalEarlyMinutes = 0,
+    this.totalLateExcusedMinutes = 0,
+    this.totalEarlyExcusedMinutes = 0,
   });
 
   double get totalLateHours => totalLateMinutes / 60.0;
   double get totalEarlyHours => totalEarlyMinutes / 60.0;
+  double get totalLateExcusedHours => totalLateExcusedMinutes / 60.0;
+  double get totalEarlyExcusedHours => totalEarlyExcusedMinutes / 60.0;
 
   double get attendanceRate => totalDays > 0 ? presentDays / totalDays : 0.0;
 

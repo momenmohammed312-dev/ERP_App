@@ -52,8 +52,8 @@ class AccountingService {
       sourceId: sourceId,
       createdBy: createdBy,
       lines: [
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: debitAccountId, debit: Value(revenueAmount), credit: const Value(0)),
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: revenueAccountId, debit: const Value(0), credit: Value(revenueAmount)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: debitAccountId, debit: Value(revenueAmount), credit: const Value(0)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: revenueAccountId, debit: const Value(0), credit: Value(revenueAmount)),
       ],
     );
   }
@@ -75,8 +75,8 @@ class AccountingService {
       sourceId: sourceId,
       createdBy: createdBy,
       lines: [
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: cogsAccountId, debit: Value(cogsAmount), credit: const Value(0)),
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: inventoryAccountId, debit: const Value(0), credit: Value(cogsAmount)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: cogsAccountId, debit: Value(cogsAmount), credit: const Value(0)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: inventoryAccountId, debit: const Value(0), credit: Value(cogsAmount)),
       ],
     );
   }
@@ -97,8 +97,8 @@ class AccountingService {
       sourceId: sourceId,
       createdBy: createdBy,
       lines: [
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: cashOrBankAccountId, debit: Value(amount), credit: const Value(0)),
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: arAccountId, debit: const Value(0), credit: Value(amount)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: cashOrBankAccountId, debit: Value(amount), credit: const Value(0)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: arAccountId, debit: const Value(0), credit: Value(amount)),
       ],
     );
   }
@@ -122,8 +122,8 @@ class AccountingService {
       sourceId: sourceId,
       createdBy: createdBy,
       lines: [
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: inventoryAccountId, debit: Value(totalAmount), credit: const Value(0)),
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: creditAccountId, debit: const Value(0), credit: Value(totalAmount)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: inventoryAccountId, debit: Value(totalAmount), credit: const Value(0)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: creditAccountId, debit: const Value(0), credit: Value(totalAmount)),
       ],
     );
   }
@@ -147,8 +147,8 @@ class AccountingService {
       sourceId: sourceId,
       createdBy: createdBy,
       lines: [
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: expenseAccountId, debit: Value(amount), credit: const Value(0)),
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: creditAccountId, debit: const Value(0), credit: Value(amount)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: expenseAccountId, debit: Value(amount), credit: const Value(0)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: creditAccountId, debit: const Value(0), credit: Value(amount)),
       ],
     );
   }
@@ -171,8 +171,8 @@ class AccountingService {
       sourceId: sourceId,
       createdBy: createdBy,
       lines: [
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: salesReturnsAccountId, debit: Value(amount), credit: const Value(0)),
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: debitAccountId, debit: const Value(0), credit: Value(amount)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: salesReturnsAccountId, debit: Value(amount), credit: const Value(0)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: debitAccountId, debit: const Value(0), credit: Value(amount)),
       ],
     );
   }
@@ -195,8 +195,8 @@ class AccountingService {
       sourceId: sourceId,
       createdBy: createdBy,
       lines: [
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: cashOrBankAccountId, debit: Value(amount), credit: const Value(0)),
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: capitalAccountId, debit: const Value(0), credit: Value(amount)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: cashOrBankAccountId, debit: Value(amount), credit: const Value(0)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: capitalAccountId, debit: const Value(0), credit: Value(amount)),
       ],
     );
   }
@@ -217,8 +217,8 @@ class AccountingService {
       sourceId: sourceId,
       createdBy: createdBy,
       lines: [
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: drawingsAccountId, debit: Value(amount), credit: const Value(0)),
-        JournalLinesCompanion.insert(journalEntryId: '', accountId: cashOrBankAccountId, debit: const Value(0), credit: Value(amount)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: drawingsAccountId, debit: Value(amount), credit: const Value(0)),
+        JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: cashOrBankAccountId, debit: const Value(0), credit: Value(amount)),
       ],
     );
   }

@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:developer';
 import 'package:drift/drift.dart' hide Column;
+import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/accounting_service.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
 import 'package:pos_offline_desktop/ui/invoice/widgets/day_closed_dialog.dart';
@@ -281,64 +283,116 @@ class _EnhancedPurchaseInvoicePageState
     }
 
     try {
-      // Create purchase invoice
-      final purchaseInvoice = PurchasesCompanion.insert(
-        id: _invoiceNumber!,
-        invoiceNumber: _invoiceNumber!,
-        description: 'فاتورة مشتريات من ${_selectedSupplier!.name}',
-        totalAmount: _grandTotal,
-        purchaseDate: DateTime.now(),
-        createdAt: DateTime.now(),
-        supplierId: Value(_selectedSupplier!.id),
-        paidAmount: Value(_paidAmount),
-        paymentMethod: Value(_paymentMethod.name),
-        status: Value('completed'),
-      );
-
-      await widget.db.into(widget.db.purchases).insert(purchaseInvoice);
-
-      // Add purchase items
-      for (final entry in _productEntries) {
-        await widget.db
-            .into(widget.db.purchaseItems)
-            .insert(
-              PurchaseItemsCompanion.insert(
-                id: '${_invoiceNumber}_${entry.product!.id}',
-                purchaseId: _invoiceNumber!,
-                productId: entry.product!.id.toString(),
-                quantity: entry.quantity,
-                unitPrice: entry.unitPrice,
-                totalPrice: entry.lineTotal,
-                unit: entry.product!.unit ?? 'قطعة',
-                createdAt: DateTime.now(),
-              ),
-            );
-
-        // Update inventory - INCREASE stock for purchases
-        final currentProduct = entry.product!;
-        final updatedProduct = currentProduct.copyWith(
-          quantity: currentProduct.quantity + entry.quantity,
+      await widget.db.transaction(() async {
+        // Create purchase invoice
+        final purchaseInvoice = PurchasesCompanion.insert(
+          id: _invoiceNumber!,
+          invoiceNumber: _invoiceNumber!,
+          description: 'فاتورة مشتريات من ${_selectedSupplier!.name}',
+          totalAmount: _grandTotal,
+          purchaseDate: DateTime.now(),
+          createdAt: DateTime.now(),
+          supplierId: Value(_selectedSupplier!.id),
+          paidAmount: Value(_paidAmount),
+          paymentMethod: Value(_paymentMethod.name),
+          status: Value('completed'),
         );
-        await widget.db.productDao.updateProduct(updatedProduct);
-      }
 
-      // Add to supplier ledger if credit purchase
-      if (_paymentMethod != PaymentMethod.cash && _remainingAmount > 0) {
-        await widget.db.ledgerDao.insertTransaction(
-          LedgerTransactionsCompanion.insert(
-            id: '${_invoiceNumber}_ledger',
-            entityType: 'Supplier',
-            refId: _selectedSupplier!.id,
+        await widget.db.into(widget.db.purchases).insert(purchaseInvoice);
+
+        // Add purchase items + update inventory
+        for (final entry in _productEntries) {
+          await widget.db
+              .into(widget.db.purchaseItems)
+              .insert(
+                PurchaseItemsCompanion.insert(
+                  id: '${_invoiceNumber}_${entry.product!.id}',
+                  purchaseId: _invoiceNumber!,
+                  productId: entry.product!.id.toString(),
+                  quantity: entry.quantity,
+                  unitPrice: entry.unitPrice,
+                  totalPrice: entry.lineTotal,
+                  unit: entry.product!.unit ?? 'قطعة',
+                  createdAt: DateTime.now(),
+                ),
+              );
+
+          final currentProduct = entry.product!;
+          final updatedProduct = currentProduct.copyWith(
+            quantity: currentProduct.quantity + entry.quantity,
+          );
+          await widget.db.productDao.updateProduct(updatedProduct);
+        }
+
+        // Supplier subledger (unchanged)
+        if (_paymentMethod != PaymentMethod.cash && _remainingAmount > 0) {
+          await widget.db.ledgerDao.insertTransaction(
+            LedgerTransactionsCompanion.insert(
+              id: '${_invoiceNumber}_ledger',
+              entityType: 'Supplier',
+              refId: _selectedSupplier!.id,
+              date: DateTime.now(),
+              description: 'شراء آجل: فاتورة $_invoiceNumber',
+              debit: const Value(0.0),
+              credit: Value(_remainingAmount),
+              origin: 'purchase',
+            ),
+          );
+        }
+
+        // ── Headless Accounting: Journal (Phase 3) ──
+        final accounting = AccountingService(widget.db);
+        Future<String> accId(String code) async {
+          final a = await widget.db.accountsDao.getByCode(code);
+          if (a == null) throw Exception('Account $code not found — v57 migration missing');
+          return a.id;
+        }
+
+        final inventoryId = await accId('1200');
+        final cashId = await accId('1000');
+        final bankId = await accId('1010');
+        final apId = await accId('2000');
+        final isCash = _paymentMethod == PaymentMethod.cash;
+        final cashOrBankId = isCash ? cashId : bankId;
+
+        if (!isCash && _remainingAmount > 0 && _paidAmount > 0) {
+          // Partial: Debit Inventory total, Credit AP remaining + Credit Cash/Bank paid
+          await widget.db.journalDao.insertBalancedEntry(
+            postingKey: 'purchase:PUR$_invoiceNumber',
             date: DateTime.now(),
-            description: 'شراء آجل: فاتورة $_invoiceNumber',
-            debit: const Value(0.0),
-            credit: Value(_remainingAmount),
-            origin: 'purchase',
-          ),
-        );
-      }
+            description: 'مشتريات فاتورة $_invoiceNumber من ${_selectedSupplier!.name}',
+            sourceType: 'purchase',
+            sourceId: _invoiceNumber!,
+            lines: [
+              JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: inventoryId, debit: Value(_grandTotal), credit: const Value(0)),
+              JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: apId, debit: const Value(0), credit: Value(_remainingAmount)),
+              JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: cashOrBankId, debit: const Value(0), credit: Value(_paidAmount)),
+            ],
+          );
+        } else if (!isCash && _remainingAmount > 0) {
+          // Fully credit
+          await accounting.postPurchase(
+            sourceId: _invoiceNumber!,
+            date: DateTime.now(),
+            totalAmount: _grandTotal,
+            inventoryAccountId: inventoryId,
+            creditAccountId: apId,
+            description: 'مشتريات فاتورة $_invoiceNumber من ${_selectedSupplier!.name}',
+          );
+        } else {
+          // Fully cash (or cash-like)
+          await accounting.postPurchase(
+            sourceId: _invoiceNumber!,
+            date: DateTime.now(),
+            totalAmount: _grandTotal,
+            inventoryAccountId: inventoryId,
+            creditAccountId: cashOrBankId,
+            description: 'مشتريات فاتورة $_invoiceNumber من ${_selectedSupplier!.name}',
+          );
+        }
+      });
 
-      // Print invoice
+      // Print invoice (outside transaction)
       await _printPurchaseInvoice();
 
       // Reset form

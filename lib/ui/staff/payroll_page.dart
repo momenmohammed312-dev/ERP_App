@@ -22,6 +22,7 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
   late StaffManagementDao _dao;
   List<Payroll> _payrollHistory = [];
   bool _isLoading = true;
+  bool _isCalculating = false;
 
   @override
   void initState() {
@@ -160,12 +161,23 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                 'بدلات ومكافآت',
                 CurrencyHelper.formatCurrency(payroll.allowances),
               ),
-            if (payroll.deductions > 0)
+            if (payroll.deductions > 0) ...[
               _buildPayrollDetailRow(
                 'استقطاعات وسلف',
                 '- ${CurrencyHelper.formatCurrency(payroll.deductions)}',
                 color: Colors.red,
               ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red.withValues(alpha: 0.2))),
+                child: Column(children: [
+                  if (payroll.absentDays > 0) _buildPayrollDetailRow('غياب (${payroll.absentDays} يوم)', '- ${CurrencyHelper.formatCurrency(payroll.absentDays * (payroll.basicSalary / 30))}', color: Colors.red),
+                  if (payroll.overtimeHours > 0) _buildPayrollDetailRow('تأخير/بدري (${payroll.overtimeHours.toStringAsFixed(1)} س)', '- ${CurrencyHelper.formatCurrency(payroll.deductions - payroll.advances)}', color: Colors.orange),
+                  if (payroll.advances > 0) _buildPayrollDetailRow('سلف', '- ${CurrencyHelper.formatCurrency(payroll.advances)}', color: Colors.deepOrange),
+                ]),
+              ),
+            ],
             const Divider(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -188,7 +200,14 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (payroll.status == 'calculated')
+                  if (payroll.status == 'calculated') ...[
+                    OutlinedButton.icon(
+                      onPressed: () => _deletePayroll(payroll),
+                      icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                      label: const Text('حذف', style: TextStyle(color: Colors.red)),
+                      style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
+                    ),
+                    const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () => _approvePayroll(payroll),
                       icon: const Icon(Icons.verified, size: 18),
@@ -198,6 +217,7 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                         foregroundColor: Colors.white,
                       ),
                     ),
+                  ],
                   if (payroll.status == 'approved')
                     ElevatedButton.icon(
                       onPressed: () => _markPaid(payroll),
@@ -256,6 +276,29 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
         return 'تم الصرف';
       default:
         return status;
+    }
+  }
+
+  Future<void> _deletePayroll(Payroll payroll) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف المرتب'),
+        content: Text('هل أنت متأكد من حذف مرتب ${payroll.payrollPeriod} قبل الاعتماد؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final db = ref.read(appDatabaseProvider);
+      await (db.delete(db.payrollTable)..where((t) => t.id.equals(payroll.id))).go();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف المرتب'), backgroundColor: Colors.green));
+      _loadData();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red));
     }
   }
 
@@ -338,43 +381,40 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
     }
   }
 
-  void _calculatePayroll() {
+  void _calculatePayroll() async {
     final now = DateTime.now();
-    final selectedPeriod = '${now.year}-${now.month.toString().padLeft(2, '0')}';
-    showDialog(
+    final picked = await showDatePicker(context: context, initialDate: now, firstDate: DateTime(2020), lastDate: DateTime(2030), helpText: 'اختر أي يوم في شهر المرتب');
+    if (picked == null) return;
+    final selectedPeriod = '${picked.year}-${picked.month.toString().padLeft(2, '0')}';
+    final periodStart = DateTime(picked.year, picked.month, 1);
+    final periodEnd = DateTime(picked.year, picked.month + 1, 0);
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('احتساب المرتب'),
-        content: Text('سيتم احتساب المرتب للموظف ${widget.staff.name} للفترة $selectedPeriod'),
+        content: Text('سيتم احتساب المرتب للموظف ${widget.staff.name}\nللفترة $selectedPeriod\n(${periodStart.year}/${periodStart.month}/${periodStart.day} → ${periodEnd.year}/${periodEnd.month}/${periodEnd.day})'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                final db = ref.read(appDatabaseProvider);
-                final service = StaffManagementService(StaffManagementDao(db), db);
-                final user = ref.read(authProvider);
-                await service.calculatePayroll(user, widget.staff.staffId, selectedPeriod);
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم احتساب المرتب بنجاح'), backgroundColor: Colors.green),
-                );
-                _loadData();
-              } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
-                );
-              }
-            },
-            child: const Text('احتساب'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('احتساب')),
         ],
       ),
     );
+    if (confirmed != true) return;
+    setState(() => _isCalculating = true);
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final service = StaffManagementService(StaffManagementDao(db), db);
+      final user = ref.read(authProvider);
+      await service.calculatePayroll(user, widget.staff.staffId, selectedPeriod);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم احتساب المرتب بنجاح'), backgroundColor: Colors.green));
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isCalculating = false);
+    }
   }
 }

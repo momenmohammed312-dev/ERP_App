@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 import '../app_database.dart';
 import '../tables/sales_returns_table.dart';
+import '../../services/accounting_service.dart';
 
 part 'sales_returns_dao.g.dart';
 
@@ -95,17 +96,17 @@ class SalesReturnsDao extends DatabaseAccessor<AppDatabase>
         }
       }
 
-      // Create ledger reversal entry for customer invoices
+      // Create ledger reversal entry for customer invoices (credit only, as before)
       final invoiceId = returnCompanion.originalInvoiceId.value;
       final invoice = await (db.select(db.invoices)
         ..where((t) => t.id.equals(invoiceId))
       ).getSingleOrNull();
+      final now = DateTime.now();
+      final returnAmount = returnCompanion.totalAmount.value;
       if (invoice != null &&
           invoice.customerId != null &&
           invoice.customerId != 'cash' &&
           invoice.customerId!.isNotEmpty) {
-        final now = DateTime.now();
-        final returnAmount = returnCompanion.totalAmount.value;
         await db.ledgerDao.insertTransaction(
           LedgerTransactionsCompanion.insert(
             id: '${const Uuid().v4()}_ret_$returnId',
@@ -120,6 +121,59 @@ class SalesReturnsDao extends DatabaseAccessor<AppDatabase>
             receiptNumber: Value('RET$returnId'),
           ),
         );
+      }
+
+      // ── Headless Accounting: Journal for sales return (Phase 5) ──
+      try {
+        final accounting = AccountingService(db);
+        Future<String> accId(String code) async {
+          final a = await db.accountsDao.getByCode(code);
+          if (a == null) throw Exception('Account $code not found');
+          return a.id;
+        }
+
+        final salesReturnsId = await accId('4100');
+        final arId = await accId('1100');
+        final cashId = await accId('1000');
+        final inventoryId = await accId('1200');
+        final cogsId = await accId('5000');
+
+        final isCashReturn = invoice == null ||
+            invoice.customerId == null ||
+            invoice.customerId == 'cash' ||
+            invoice.customerId!.isEmpty;
+        final creditAccountId = isCashReturn ? cashId : arId;
+
+        await accounting.postSalesReturn(
+          sourceId: returnId.toString(),
+          date: now,
+          amount: returnAmount,
+          salesReturnsAccountId: salesReturnsId,
+          debitAccountId: creditAccountId,
+        );
+
+        // Inventory reversal leg — compute cost of returned items
+        double returnCost = 0;
+        for (final item in items) {
+          final product = await db.productDao.getProductById(item.productId.value);
+          final unitCost = product?.costPrice ?? item.unitPrice.value;
+          returnCost += unitCost * item.quantity.value;
+        }
+        if (returnCost > 0) {
+          await db.journalDao.insertBalancedEntry(
+            postingKey: 'sale_return_cogs:RET$returnId',
+            date: now,
+            description: 'عكس تكلفة مرتجع $returnId',
+            sourceType: 'sale_return_cogs',
+            sourceId: returnId.toString(),
+            lines: [
+              JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: inventoryId, debit: Value(returnCost), credit: const Value(0)),
+              JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: cogsId, debit: const Value(0), credit: Value(returnCost)),
+            ],
+          );
+        }
+      } catch (e) {
+        rethrow;
       }
     });
     return returnId;

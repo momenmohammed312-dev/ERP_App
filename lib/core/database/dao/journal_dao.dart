@@ -79,6 +79,12 @@ class JournalDao extends DatabaseAccessor<AppDatabase> with _$JournalDaoMixin {
     return debit - credit;
   }
 
+  Future<List<JournalLine>> getLinesForAccount(String accountId) =>
+      (select(journalLines)..where((l) => l.accountId.equals(accountId))).get();
+
+  Stream<List<JournalEntry>> watchAllEntries() =>
+      (select(journalEntries)..orderBy([(e) => OrderingTerm.desc(e.date)])).watch();
+
   /// Posts a reversal entry mirroring original lines (debit<->credit) with reversalOfId set.
   Future<String> reverseEntry({required String originalEntryId, String? createdBy}) async {
     final original = await getById(originalEntryId);
@@ -88,6 +94,7 @@ class JournalDao extends DatabaseAccessor<AppDatabase> with _$JournalDaoMixin {
     final originalLines = await getLinesForEntry(originalEntryId);
     final reversalLines = originalLines
         .map((l) => JournalLinesCompanion.insert(
+              id: const Uuid().v4(),
               journalEntryId: '', // filled by insertBalancedEntry
               accountId: l.accountId,
               debit: Value(l.credit),

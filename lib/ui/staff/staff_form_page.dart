@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
@@ -33,6 +34,9 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   final _emergencyContactController = TextEditingController();
   final _emergencyPhoneController = TextEditingController();
   final _notesController = TextEditingController();
+  final _fingerprintIdController = TextEditingController();
+  final _fingerprintNameController = TextEditingController();
+  int? _selectedDeviceId;
 
   String _selectedEmploymentType = 'full_time';
   DateTime? _hireDate;
@@ -60,7 +64,35 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     _service = StaffManagementService(StaffManagementDao(db), db);
     if (widget.staff != null) {
       _populateForm(widget.staff!);
+      _loadFingerprintId();
+    } else {
+      _loadDevices();
     }
+  }
+
+  Future<void> _loadDevices() async {
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final devices = await db.attendanceDeviceDao.getAllDevices();
+      if (devices.isNotEmpty && mounted) setState(() => _selectedDeviceId = devices.first.id);
+    } catch (_) {}
+  }
+
+  Future<void> _loadFingerprintId() async {
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final mappings = await db.attendanceDeviceDao.getAllMappings();
+      final m = mappings.where((e) => e.staffId == widget.staff!.staffId).toList();
+      if (m.isNotEmpty && mounted) {
+        setState(() {
+          _fingerprintIdController.text = m.first.externalUserId;
+          _fingerprintNameController.text = m.first.deviceUserName ?? '';
+          _selectedDeviceId = m.first.deviceId;
+        });
+      } else {
+        _loadDevices();
+      }
+    } catch (_) {}
   }
 
   void _populateForm(Staff staff) {
@@ -180,6 +212,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               _buildBankInfo(),
               const SizedBox(height: 16),
               _buildNotes(),
+              const SizedBox(height: 16),
+              _buildBiometricInfo(),
               const SizedBox(height: 16),
               _buildWorkScheduleSection(),
             ],
@@ -495,6 +529,34 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     );
   }
 
+  Widget _buildBiometricInfo() {
+    return Card(
+      color: const Color(0xFF3A3A3A),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('بيانات البصمة', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.blue[400], fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _fingerprintIdController,
+            style: const TextStyle(color: Colors.white),
+            decoration: _buildInputDecoration('ID البصمة (رقم الجهاز)', Icons.fingerprint),
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _fingerprintNameController,
+            style: const TextStyle(color: Colors.white),
+            decoration: _buildInputDecoration('اسم البصمة على الجهاز (مثل: الياس)', Icons.badge),
+          ),
+          const SizedBox(height: 8),
+          const Text('الاسم على الجهاز قد يختلف عن الاسم في النظام — يُربط تلقائياً بأول جهاز نشط', style: TextStyle(color: Colors.white54, fontSize: 12)),
+        ]),
+      ),
+    );
+  }
+
   Widget _buildWorkScheduleSection() {
     return Card(
       color: const Color(0xFF3A3A3A),
@@ -783,6 +845,28 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               : _workDays.entries.where((e) => e.value).map((e) => e.key).join(','),
           weekendDay: _useDefaultSchedule ? null : _weekendDay,
         );
+      }
+      // حفظ ID البصمة إن وجد
+      final fpId = _fingerprintIdController.text.trim();
+      if (fpId.isNotEmpty) {
+        try {
+          final db = ref.read(appDatabaseProvider);
+          final deviceId = _selectedDeviceId ?? (await db.attendanceDeviceDao.getAllDevices()).firstOrNull?.id;
+          if (deviceId != null) {
+            final staffId = widget.staff?.staffId ?? (await db.staffManagementDao.getAllStaff()).last.staffId;
+            final existing = await db.attendanceDeviceDao.getAllMappings();
+            final already = existing.where((m) => m.staffId == staffId && m.externalUserId == fpId).isNotEmpty;
+            if (!already) {
+              await db.attendanceDeviceDao.addMapping(StaffBiometricMappingsCompanion.insert(
+                staffId: staffId, deviceId: deviceId, externalUserId: fpId, deviceUserName: Value(_fingerprintNameController.text.trim().isEmpty ? null : _fingerprintNameController.text.trim()), enrollmentStatus: 'enrolled', createdAt: DateTime.now(), updatedAt: DateTime.now(),
+              ));
+            } else {
+              // تحديث اسم البصمة إن تغير
+              final existing = (await db.attendanceDeviceDao.getAllMappings()).firstWhere((m) => m.staffId == staffId && m.externalUserId == fpId);
+              await db.attendanceDeviceDao.updateMapping(existing.copyWith(deviceUserName: Value(_fingerprintNameController.text.trim().isEmpty ? null : _fingerprintNameController.text.trim()), updatedAt: DateTime.now()));
+            }
+          }
+        } catch (_) {}
       }
 
       if (mounted) {

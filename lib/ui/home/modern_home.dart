@@ -3,6 +3,7 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/ui/accounting/accounting_hub_screen.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 import 'package:pos_offline_desktop/ui/product/product.dart';
@@ -293,6 +294,29 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                         context.push('/manufacturing/reports');
                       },
                     ),
+                  _buildLauncherButton(
+                    context,
+                    'رأس المال والشركاء',
+                    Icons.account_balance,
+                    Colors.green.shade700,
+                    () {
+                      context.push('/equity');
+                    },
+                  ),
+                  _buildLauncherButton(
+                    context,
+                    'المركز المحاسبي',
+                    Icons.account_tree,
+                    Colors.indigo.shade700,
+                    () {
+                      // Navigator مباشر حتى لا يحتاج Hot Restart لـ GoRouter
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => AccountingHubScreen(db: widget.db),
+                        ),
+                      );
+                    },
+                  ),
 
                 ],
               ),

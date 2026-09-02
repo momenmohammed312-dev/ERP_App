@@ -35,6 +35,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
   double _earlyPenaltyPerHour = 0; // مضاعف خصم الانصراف المبكر لكل ساعة
   double _overtimeRateMultiplier = 1.5;
   double _overtimeThresholdHours = 8;
+  int _breakMinutes = 60; // استراحة (فاصل) بالدقائق تُخصم من ساعات العمل
 
   // Absence generation
   int _absencesGenerated = 0;
@@ -80,6 +81,8 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             _overtimeRateMultiplier = double.tryParse(s.settingValue) ?? 1.5;
           case 'overtime_threshold_hours':
             _overtimeThresholdHours = double.tryParse(s.settingValue) ?? 8;
+          case 'break_minutes':
+            _breakMinutes = int.tryParse(s.settingValue) ?? 60;
         }
       }
     } catch (e) {
@@ -119,6 +122,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         'early_leave_penalty_per_hour': _earlyPenaltyPerHour.toString(),
         'overtime_rate_multiplier': _overtimeRateMultiplier.toString(),
         'overtime_threshold_hours': _overtimeThresholdHours.toString(),
+        'break_minutes': _breakMinutes.toString(),
       };
 
       for (final entry in settingsMap.entries) {
@@ -222,6 +226,30 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
           SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
         );
       }
+    }
+  }
+
+  Future<void> _cleanFutureAbsences() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تنظيف الغياب المستقبلي؟'),
+        content: const Text('سيتم حذف كل سجلات الغياب التلقائية التي تاريخها بعد اليوم (مثل 28-30 سبتمبر في الصورة) مرة واحدة. لا يمس الحضور الحقيقي أو الإجازات اليدوية.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final deleted = await db.staffManagementDao.deleteFutureAutoAbsences();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(deleted == 0 ? 'لا يوجد غياب مستقبلي للحذف' : 'تم حذف $deleted سجل غياب مستقبلي'), backgroundColor: deleted == 0 ? Colors.grey : Colors.green));
+      setState(() => _absencesGenerated = 0);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red));
     }
   }
 
@@ -391,6 +419,40 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
               ),
             );
             if (result != null) setState(() => _gracePeriodMinutes = result);
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('ساعات الراحة (الاستراحة)'),
+          subtitle: Text('$_breakMinutes دقيقة — تُخصم من ساعات العمل اليومية'),
+          trailing: const Icon(Icons.hotel),
+          onTap: () async {
+            final controller = TextEditingController(text: _breakMinutes.toString());
+            final result = await showDialog<int>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('ساعات الراحة (دقائق)'),
+                content: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    suffixText: 'دقيقة',
+                    hintText: '60 = ساعة راحة',
+                  ),
+                ),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(
+                    onPressed: () {
+                      final val = int.tryParse(controller.text);
+                      if (val != null) Navigator.pop(ctx, val);
+                    },
+                    child: const Text('موافق'),
+                  ),
+                ],
+              ),
+            );
+            if (result != null) setState(() => _breakMinutes = result);
           },
         ),
         const Divider(height: 1),
@@ -644,6 +706,20 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             title: Text('تم توليد $_absencesGenerated سجل غياب'),
           ),
         ],
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('حذف الغياب المستقبلي (تنظيف)'),
+          subtitle: const Text('يحذف كل الغياب التلقائي بعد اليوم مرة واحدة'),
+          trailing: ElevatedButton.icon(
+            onPressed: _cleanFutureAbsences,
+            icon: const Icon(Icons.cleaning_services),
+            label: const Text('تنظيف'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ),
       ],
     );
   }

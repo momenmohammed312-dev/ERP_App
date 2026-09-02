@@ -2,6 +2,8 @@ import 'dart:math';
 import 'package:drift/drift.dart';
 import '../database/app_database.dart';
 import '../database/tables/vegetable_shipments_table.dart';
+import 'accounting_service.dart';
+import 'audit_log_service.dart';
 import 'shipment_pricing_service.dart';
 
 class InvoiceItemParams {
@@ -81,6 +83,7 @@ class InvoiceService {
 
       // Track supplier commission totals per shipment for ledger entries.
       final supplierCommissions = <int, _SupplierCommissionAccumulator>{};
+      double cogsAmount = 0;
 
       for (final item in items) {
         final product = await _db.productDao.getProductById(item.productId);
@@ -88,6 +91,9 @@ class InvoiceService {
         if (product == null) {
           throw Exception('المنتج غير موجود (ID: ${item.productId})');
         }
+
+        final unitCost = item.unitCostAtTime ?? product.costPrice ?? 0;
+        if (unitCost > 0) cogsAmount += unitCost * item.quantity;
 
         final newQty = product.quantity - item.quantity;
         await _db.productDao.updateProduct(
@@ -237,6 +243,80 @@ class InvoiceService {
         );
       }
 
+      // ── Headless Accounting: Journal entries (Phase 2) ──
+      // Additive, inside same transaction — failure rolls back whole invoice.
+      try {
+        final accounting = AccountingService(_db);
+        Future<String> accId(String code) async {
+          final a = await _db.accountsDao.getByCode(code);
+          if (a == null) throw Exception('Account $code not found — v57 migration missing');
+          return a.id;
+        }
+
+        final cashId = await accId('1000');
+        final bankId = await accId('1010');
+        final arId = await accId('1100');
+        final revenueId = await accId('4000');
+        final cogsId = await accId('5000');
+        final inventoryId = await accId('1200');
+
+        final isCashSale = customerId == null || customerId == 'cash' || customerId.isEmpty;
+        final cashOrBankId = paymentMethod == 'cash' ? cashId : bankId;
+        final now = DateTime.now();
+
+        if (isCashSale) {
+          await accounting.postSale(
+            sourceId: invoiceId.toString(),
+            date: now,
+            description: 'بيع كاش #$actualInvoiceNumber',
+            revenueAmount: totalAmount,
+            revenueAccountId: revenueId,
+            debitAccountId: cashOrBankId,
+          );
+        } else {
+          await accounting.postSale(
+            sourceId: invoiceId.toString(),
+            date: now,
+            description: desc,
+            revenueAmount: totalAmount,
+            revenueAccountId: revenueId,
+            debitAccountId: arId,
+          );
+          if (paidAmount > 0) {
+            await accounting.postCustomerPayment(
+              sourceId: '${invoiceId}_pay',
+              date: now,
+              amount: paidAmount,
+              cashOrBankAccountId: cashOrBankId,
+              arAccountId: arId,
+            );
+          }
+        }
+
+        if (cogsAmount > 0) {
+          await accounting.postSaleCogs(
+            sourceId: invoiceId.toString(),
+            date: now,
+            cogsAmount: cogsAmount,
+            cogsAccountId: cogsId,
+            inventoryAccountId: inventoryId,
+          );
+        } else if (items.isNotEmpty) {
+          await AuditService.log(
+            db: _db,
+            action: 'UNRESOLVED_COST',
+            tableName: 'invoice_items',
+            recordId: invoiceId,
+            details: 'no cost available for COGS posting invoice $actualInvoiceNumber — profit may be understated',
+          );
+        }
+        // Supplier commission journal is global (per user answer) but deferred to Phase 3
+        // to keep Phase 2 minimal and avoid 3-line entry complexity. Ledger commission remains.
+      } catch (e) {
+        // Any accounting failure must abort the whole invoice per §24
+        rethrow;
+      }
+
       final invoice = await (_db.select(_db.invoices)
           ..where((t) => t.id.equals(invoiceId)))
           .getSingleOrNull();
@@ -329,11 +409,15 @@ class InvoiceService {
 
       // 2a. Re-apply edited items.
       final supplierCommissions = <int, _SupplierCommissionAccumulator>{};
+      double cogsAmountEdit = 0;
       for (final item in items) {
         final product = await _db.productDao.getProductById(item.productId);
         if (product == null) {
           throw Exception('المنتج غير موجود (ID: ${item.productId})');
         }
+
+        final unitCost = item.unitCostAtTime ?? product.costPrice ?? 0;
+        if (unitCost > 0) cogsAmountEdit += unitCost * item.quantity;
 
         final newQty = product.quantity - item.quantity;
         await _db.productDao.updateProduct(
@@ -477,6 +561,84 @@ class InvoiceService {
             receiptNumber: Value('INV$invoiceId'),
           ),
         );
+      }
+
+      // ── Headless Accounting: reverse old + post new (Phase 2) ──
+      try {
+        final accounting = AccountingService(_db);
+        // Reverse any existing journal entries for this invoice (idempotent)
+        for (final key in ['sale:INV$invoiceId', 'sale_cogs:INV$invoiceId', 'customer_payment:${invoiceId}_pay']) {
+          final existing = await _db.journalDao.getByPostingKey(key);
+          if (existing != null && existing.status != 'reversed') {
+            await _db.journalDao.reverseEntry(originalEntryId: existing.id);
+          }
+        }
+        Future<String> accId(String code) async {
+          final a = await _db.accountsDao.getByCode(code);
+          if (a == null) throw Exception('Account $code not found');
+          return a.id;
+        }
+
+        final cashId = await accId('1000');
+        final bankId = await accId('1010');
+        final arId = await accId('1100');
+        final revenueId = await accId('4000');
+        final cogsId = await accId('5000');
+        final inventoryId = await accId('1200');
+
+        final isCashSale = customerId == null || customerId == 'cash' || customerId.isEmpty;
+        final cashOrBankId = paymentMethod == 'cash' ? cashId : bankId;
+        final now = DateTime.now();
+        final desc2 = 'بيع #$actualInvoiceNumber';
+
+        if (isCashSale) {
+          await accounting.postSale(
+            sourceId: invoiceId.toString(),
+            date: now,
+            description: 'بيع كاش #$actualInvoiceNumber',
+            revenueAmount: totalAmount,
+            revenueAccountId: revenueId,
+            debitAccountId: cashOrBankId,
+          );
+        } else {
+          await accounting.postSale(
+            sourceId: invoiceId.toString(),
+            date: now,
+            description: desc2,
+            revenueAmount: totalAmount,
+            revenueAccountId: revenueId,
+            debitAccountId: arId,
+          );
+          if (paidAmount > 0) {
+            await accounting.postCustomerPayment(
+              sourceId: '${invoiceId}_pay',
+              date: now,
+              amount: paidAmount,
+              cashOrBankAccountId: cashOrBankId,
+              arAccountId: arId,
+            );
+          }
+        }
+
+        if (cogsAmountEdit > 0) {
+          await accounting.postSaleCogs(
+            sourceId: invoiceId.toString(),
+            date: now,
+            cogsAmount: cogsAmountEdit,
+            cogsAccountId: cogsId,
+            inventoryAccountId: inventoryId,
+          );
+        } else if (items.isNotEmpty) {
+          await AuditService.log(
+            db: _db,
+            action: 'UNRESOLVED_COST',
+            tableName: 'invoice_items',
+            recordId: invoiceId,
+            details: 'no cost available for COGS posting invoice $actualInvoiceNumber (edit)',
+          );
+        }
+      } catch (e) {
+        rethrow;
       }
 
       final updated = await getInvoiceById(invoiceId);

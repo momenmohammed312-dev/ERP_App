@@ -14,6 +14,7 @@ class ScheduleConfig {
   final int gracePeriodMinutes;
   final double standardHoursPerDay;
   final double overtimeRateMultiplier;
+  final int breakMinutes; // استراحة (فاصل) بالدقائق — يُخصم من الساعات المعتمدة
 
   const ScheduleConfig({
     required this.workStartHour,
@@ -25,6 +26,7 @@ class ScheduleConfig {
     required this.gracePeriodMinutes,
     required this.standardHoursPerDay,
     required this.overtimeRateMultiplier,
+    this.breakMinutes = 0,
   });
 
   DateTime get workStartToday {
@@ -39,8 +41,9 @@ class ScheduleConfig {
 
   int get workStartMinutesSinceMidnight => workStartHour * 60 + workStartMinute;
   int get workEndMinutesSinceMidnight => workEndHour * 60 + workEndMinute;
-  int get standardMinutesPerDay => workEndMinutesSinceMidnight - workStartMinutesSinceMidnight;
+  int get standardMinutesPerDay => (workEndMinutesSinceMidnight - workStartMinutesSinceMidnight) - breakMinutes;
   int get standardMinutesTotal => standardMinutesPerDay; // alias for clarity
+  double get effectiveWorkHours => standardMinutesPerDay / 60.0;
 }
 
 /// Result of attendance status calculation
@@ -141,6 +144,7 @@ class AttendanceCalculationEngine {
         gracePeriodMinutes: int.tryParse(await _getSetting('grace_period_minutes', '15')) ?? 15,
         standardHoursPerDay: double.tryParse(await _getSetting('overtime_threshold_hours', '8')) ?? 8.0,
         overtimeRateMultiplier: double.tryParse(await _getSetting('overtime_rate_multiplier', '1.5')) ?? 1.5,
+        breakMinutes: int.tryParse(await _getSetting('break_minutes', '60')) ?? 60,
       );
     }
 
@@ -152,6 +156,7 @@ class AttendanceCalculationEngine {
     final graceStr = await _getSetting('grace_period_minutes', '15');
     final hoursStr = await _getSetting('overtime_threshold_hours', '8');
     final rateStr = await _getSetting('overtime_rate_multiplier', '1.5');
+    final breakStr = await _getSetting('break_minutes', '60');
 
     final start = _parseTime(startStr);
     final end = _parseTime(endStr);
@@ -166,6 +171,7 @@ class AttendanceCalculationEngine {
       gracePeriodMinutes: int.tryParse(graceStr) ?? 15,
       standardHoursPerDay: double.tryParse(hoursStr) ?? 8.0,
       overtimeRateMultiplier: double.tryParse(rateStr) ?? 1.5,
+      breakMinutes: int.tryParse(breakStr) ?? 0,
     );
   }
 
@@ -204,27 +210,32 @@ class AttendanceCalculationEngine {
     }
 
     // Calculate working hours and overtime
+    // الوقت الإضافي: بعد وقت الانصراف + 15 دقيقة سماح، يتحسب بمضاعف 1.5x
     double workingHours = 0;
     double overtimeHours = 0;
 
     if (checkOutTime != null) {
       final totalMinutes = checkOutTime.difference(checkInTime).inMinutes;
-      final standardMinutes = schedule.standardMinutesPerDay; // already in minutes
+      final checkOutMinutes = checkOutTime.hour * 60 + checkOutTime.minute;
+      final breakHrs = schedule.breakMinutes / 60.0;
 
-      if (totalMinutes <= standardMinutes) {
-        workingHours = totalMinutes / 60.0;
-        overtimeHours = 0;
+      // وقت الانصراف +15 دقيقة = بداية الوقت الإضافي
+      final overtimeStartMinutes = scheduleEnd + 15;
+
+      if (checkOutMinutes > overtimeStartMinutes) {
+        // يوجد وقت إضافي
+        overtimeHours = (checkOutMinutes - overtimeStartMinutes) / 60.0;
+        // ساعات العمل الفعلية = (وقت الانصراف - وقت البدء) - الاستراحة
+        workingHours = ((checkOutMinutes - checkInMinutes) / 60.0) - breakHrs;
       } else {
-        workingHours = schedule.standardHoursPerDay;
-        overtimeHours = (totalMinutes - standardMinutes) / 60.0;
+        // لا يوجد وقت إضافي
+        workingHours = (totalMinutes / 60.0) - breakHrs;
+        overtimeHours = 0;
       }
 
       // Early leave: checked out before scheduled end
-      final checkOutMinutes = checkOutTime.hour * 60 + checkOutTime.minute;
       if (checkOutMinutes < scheduleEnd && status != 'late') {
-        // If they left early but were present, mark as early leave
-        // (but keep 'present' if they worked enough hours)
-        if (totalMinutes < standardMinutes * 0.5) {
+        if (totalMinutes < schedule.standardMinutesPerDay * 0.5) {
           status = 'early_leave';
         }
       }

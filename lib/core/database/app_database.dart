@@ -65,6 +65,8 @@ import 'package:pos_offline_desktop/core/database/tables/manufacturing_cost_comp
 import 'package:pos_offline_desktop/core/database/tables/accounts_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/journal_entries_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/journal_lines_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/partners_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/equity_transactions_table.dart';
 import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/sync_queue_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/vegetable_shipment_dao.dart';
@@ -74,6 +76,7 @@ import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.da
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_cost_component_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/accounts_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/journal_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/equity_dao.dart';
 import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
@@ -142,6 +145,11 @@ part 'app_database.g.dart';
     BomItems,
     ManufacturingOrders,
     ManufacturingCostComponents,
+    Accounts,
+    JournalEntries,
+    JournalLines,
+    Partners,
+    EquityTransactions,
   ],
   daos: [
     ProductDao,
@@ -173,6 +181,9 @@ part 'app_database.g.dart';
     BomDao,
     ManufacturingOrderDao,
     ManufacturingCostComponentDao,
+    AccountsDao,
+    JournalDao,
+    EquityDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -183,7 +194,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 56;
+  int get schemaVersion => 61;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -191,6 +202,17 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
       await _ensureStaffTables(m);
       await _ensureCriticalColumns(m);
+      // Fresh installs also need the unique indexes (Drift doesn't emit them from uniqueKeys)
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_staff_date ON attendance_table(staff_id, date)');
+      } catch (e) {
+        log('onCreate attendance index warning: $e');
+      }
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_payroll_staff_period ON payroll_table(staff_id, payroll_period)');
+      } catch (e) {
+        log('onCreate payroll index warning: $e');
+      }
     },
     onUpgrade: (Migrator m, int from, int to) async {
       log('Migration: from $from to $to');
@@ -294,6 +316,31 @@ class AppDatabase extends _$AppDatabase {
       // 4r. Schema v56 — manufacturing foundation (Phase 1: productType)
       if (from < 56) {
         await _runV56Migrations(m);
+      }
+
+      // 4s. Schema v57 — headless accounting core (Accounts + Journal)
+      if (from < 57) {
+        await _runV57Migrations(m);
+      }
+
+      // 4t. Schema v58 — unique constraints for attendance and payroll (A3)
+      if (from < 58) {
+        await _runV58Migrations(m);
+      }
+
+      // 4u. Schema v59 — equity / partners (Phase 6)
+      if (from < 59) {
+        await _runV59Migrations(m);
+      }
+
+      // 4v. Schema v60 — attendance excused (إذن/عذر) flag
+      if (from < 60) {
+        await _runV60Migrations(m);
+      }
+
+      // 4w. Schema v61 — attendance excused_hours (خصم تناسبي بالساعة)
+      if (from < 61) {
+        await _runV61Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -530,6 +577,9 @@ class AppDatabase extends _$AppDatabase {
       } catch (_) {}
       try {
         await customStatement('ALTER TABLE staff_table ADD COLUMN use_default_schedule INTEGER NOT NULL DEFAULT 1');
+      } catch (_) {}
+      try {
+        await customStatement('ALTER TABLE staff_biometric_mappings ADD COLUMN device_user_name TEXT');
       } catch (_) {}
 
       // Safety check for biometric attendance tables
@@ -1379,6 +1429,8 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'attendance_table', 'column': 'source_device_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'raw_event_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'override_reason', 'type': 'TEXT'},
+      {'table': 'attendance_table', 'column': 'excused', 'type': 'INTEGER NOT NULL DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'excused_hours', 'type': 'REAL NOT NULL DEFAULT 0'},
       {'table': 'audit_log', 'column': 'old_value', 'type': 'TEXT'},
       {'table': 'audit_log', 'column': 'new_value', 'type': 'TEXT'},
       // Invoice void support columns
@@ -1435,6 +1487,8 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'attendance_table', 'column': 'source_device_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'raw_event_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'override_reason', 'type': 'TEXT'},
+      {'table': 'attendance_table', 'column': 'excused', 'type': 'INTEGER NOT NULL DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'excused_hours', 'type': 'REAL NOT NULL DEFAULT 0'},
       {'table': 'audit_log', 'column': 'old_value', 'type': 'TEXT'},
       {'table': 'audit_log', 'column': 'new_value', 'type': 'TEXT'},
       // Invoice void support columns
@@ -1561,6 +1615,8 @@ class AppDatabase extends _$AppDatabase {
           leave_type TEXT,
           notes TEXT,
           overtime_hours REAL NOT NULL DEFAULT 0,
+          excused INTEGER NOT NULL DEFAULT 0,
+          excused_hours REAL NOT NULL DEFAULT 0,
           approved_by TEXT,
           approved_at INTEGER,
           created_at INTEGER NOT NULL,
@@ -1913,6 +1969,171 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(56, 'manufacturing_foundation', 'completed');
     } catch (e) {
       await _logMigrationStep(56, 'manufacturing_foundation', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v57 — Headless Accounting Core (Accounts + Journal double-entry)
+  Future<void> _runV57Migrations(Migrator m) async {
+    await _logMigrationStep(57, 'accounting_core', 'started');
+    try {
+      try {
+        await m.createTable(accounts);
+        log('v57: Created accounts table');
+      } catch (e) {
+        log('v57: accounts table likely already exists: $e');
+      }
+      try {
+        await m.createTable(journalEntries);
+        log('v57: Created journal_entries table');
+      } catch (e) {
+        log('v57: journal_entries table likely already exists: $e');
+      }
+      try {
+        await m.createTable(journalLines);
+        log('v57: Created journal_lines table');
+      } catch (e) {
+        log('v57: journal_lines table likely already exists: $e');
+      }
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_journal_entries_posting_key ON journal_entries(posting_key)');
+        log('v57: Created unique index on journal_entries.posting_key');
+      } catch (e) {
+        log('v57: posting_key index likely already exists: $e');
+      }
+      // Seed system accounts (INSERT OR IGNORE by code)
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final systemAccounts = [
+        ['1000', 'الصندوق (نقدية)', 'asset', 'debit'],
+        ['1010', 'البنك', 'asset', 'debit'],
+        ['1100', 'ذمم العملاء', 'asset', 'debit'],
+        ['1200', 'المخزون', 'asset', 'debit'],
+        ['2000', 'ذمم الموردين', 'liability', 'credit'],
+        ['3000', 'رأس المال', 'equity', 'credit'],
+        ['3100', 'مسحوبات الشريك', 'equity', 'debit'],
+        ['3200', 'الأرباح المرحلة', 'equity', 'credit'],
+        ['4000', 'إيرادات المبيعات', 'revenue', 'credit'],
+        ['4100', 'مردودات المبيعات', 'revenue', 'debit'],
+        ['5000', 'تكلفة البضاعة المباعة', 'expense', 'debit'],
+        ['5100', 'مصروفات تشغيلية', 'expense', 'debit'],
+      ];
+      for (final acc in systemAccounts) {
+        final id = const Uuid().v4();
+        try {
+          await customStatement(
+            "INSERT OR IGNORE INTO accounts (id, code, name, type, normal_balance, is_system, is_active, created_at) VALUES (?, ?, ?, ?, ?, 1, 1, ?)",
+            [id, acc[0], acc[1], acc[2], acc[3], now],
+          );
+        } catch (e) {
+          log('v57: seed account ${acc[0]} failed: $e');
+        }
+      }
+      log('v57: Seeded system accounts');
+      await _logMigrationStep(57, 'accounting_core', 'completed');
+    } catch (e) {
+      await _logMigrationStep(57, 'accounting_core', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> _runV58Migrations(Migrator m) async {
+    await _logMigrationStep(58, 'attendance_payroll_unique', 'started');
+    try {
+      // Clean duplicate attendance (keep latest per staffId+date)
+      try {
+        await customStatement('''
+          DELETE FROM attendance_table WHERE id NOT IN (
+            SELECT MAX(id) FROM attendance_table GROUP BY staff_id, date
+          )
+        ''');
+        log('v58: Cleaned duplicate attendance');
+      } catch (e) {
+        log('v58 attendance dedup warning: $e');
+      }
+      // Clean duplicate payroll (keep latest per staffId+payroll_period)
+      try {
+        await customStatement('''
+          DELETE FROM payroll_table WHERE id NOT IN (
+            SELECT MAX(id) FROM payroll_table GROUP BY staff_id, payroll_period
+          )
+        ''');
+        log('v58: Cleaned duplicate payroll');
+      } catch (e) {
+        log('v58 payroll dedup warning: $e');
+      }
+      // Create unique indexes
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_staff_date ON attendance_table(staff_id, date)');
+        log('v58: Created idx_attendance_staff_date');
+      } catch (e) {
+        log('v58 attendance index warning: $e');
+      }
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_payroll_staff_period ON payroll_table(staff_id, payroll_period)');
+        log('v58: Created idx_payroll_staff_period');
+      } catch (e) {
+        log('v58 payroll index warning: $e');
+      }
+      await _logMigrationStep(58, 'attendance_payroll_unique', 'completed');
+    } catch (e) {
+      await _logMigrationStep(58, 'attendance_payroll_unique', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v59 — equity / partners (Phase 6)
+  Future<void> _runV59Migrations(Migrator m) async {
+    await _logMigrationStep(59, 'equity_partners', 'started');
+    try {
+      try {
+        await m.createTable(partners);
+        log('v59: Created partners table');
+      } catch (e) {
+        log('v59: partners table likely already exists: $e');
+      }
+      try {
+        await m.createTable(equityTransactions);
+        log('v59: Created equity_transactions table');
+      } catch (e) {
+        log('v59: equity_transactions table likely already exists: $e');
+      }
+      await _logMigrationStep(59, 'equity_partners', 'completed');
+    } catch (e) {
+      await _logMigrationStep(59, 'equity_partners', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v60 — attendance excused (إذن/عذر) flag
+  Future<void> _runV60Migrations(Migrator m) async {
+    await _logMigrationStep(60, 'attendance_excused', 'started');
+    try {
+      try {
+        await customStatement('ALTER TABLE attendance_table ADD COLUMN excused INTEGER NOT NULL DEFAULT 0');
+        log('v60: Added excused column to attendance_table');
+      } catch (e) {
+        log('v60 warning: excused column likely already exists: $e');
+      }
+      await _logMigrationStep(60, 'attendance_excused', 'completed');
+    } catch (e) {
+      await _logMigrationStep(60, 'attendance_excused', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v61 — attendance excused_hours (الخصم التناسبي بالساعة للإذن/العذر)
+  Future<void> _runV61Migrations(Migrator m) async {
+    await _logMigrationStep(61, 'attendance_excused_hours', 'started');
+    try {
+      try {
+        await customStatement('ALTER TABLE attendance_table ADD COLUMN excused_hours REAL NOT NULL DEFAULT 0');
+        log('v61: Added excused_hours column to attendance_table');
+      } catch (e) {
+        log('v61 warning: excused_hours column likely already exists: $e');
+      }
+      await _logMigrationStep(61, 'attendance_excused_hours', 'completed');
+    } catch (e) {
+      await _logMigrationStep(61, 'attendance_excused_hours', 'failed', error: e.toString());
       rethrow;
     }
   }

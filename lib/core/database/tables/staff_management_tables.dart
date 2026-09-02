@@ -86,6 +86,12 @@ class AttendanceTable extends Table {
   TextColumn get status =>
       text()(); // 'present', 'absent', 'late', 'half_day', 'leave'
 
+  BoolColumn get excused =>
+      boolean().withDefault(const Constant(false))(); // إذن/عذر — لا خصم
+
+  RealColumn get excusedHours =>
+      real().withDefault(const Constant(0))(); // عدد ساعات الإذن المسموح (خصم تناسبي بالساعة)
+
   TextColumn get leaveType =>
       text().nullable()(); // 'sick', 'annual', 'emergency', 'unpaid'
 
@@ -111,7 +117,10 @@ class AttendanceTable extends Table {
 
   DateTimeColumn get updatedAt => dateTime()();
 
-  // No custom primaryKey needed - using default composite key
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {staffId, date},
+      ];
 }
 
 /// Vacations table for managing employee leave requests
@@ -280,7 +289,10 @@ class PayrollTable extends Table {
 
   DateTimeColumn get updatedAt => dateTime()();
 
-  // No custom primaryKey needed - using default composite key
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {staffId, payrollPeriod},
+      ];
 }
 
 /// Rewards and penalties table

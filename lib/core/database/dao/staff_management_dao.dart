@@ -122,6 +122,15 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
   Future<int> deleteAttendanceByStaffAndSource(String staffId, String source) =>
       (delete(attendanceTable)..where((a) => a.staffId.equals(staffId) & a.source.equals(source))).go();
 
+  /// يحذف سجلات الغياب التلقائية المستقبلية (بعد اليوم) — إصلاح لمشكلة توليد غياب لآخر الشهر مقدماً
+  Future<int> deleteFutureAutoAbsences() {
+    final tomorrow = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day).add(const Duration(days: 1));
+    return (delete(attendanceTable)
+          ..where((a) => a.source.equals('auto_generated'))
+          ..where((a) => a.date.isBiggerThanValue(tomorrow)))
+        .go();
+  }
+
   Future<void> checkIn(
     String staffId, {
     String? location,
@@ -269,6 +278,27 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> addAdvance(StaffAdvancesCompanion entry) =>
       into(staffAdvances).insert(entry);
+
+  Future<void> approveAdvance(int advanceId, String approvedBy) =>
+      (update(staffAdvances)..where((a) => a.id.equals(advanceId))).write(
+        StaffAdvancesCompanion(
+          status: const Value('approved'),
+          approvedBy: Value(approvedBy),
+          approvedAt: Value(DateTime.now()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Future<void> rejectAdvance(int advanceId, String approvedBy, String reason) =>
+      (update(staffAdvances)..where((a) => a.id.equals(advanceId))).write(
+        StaffAdvancesCompanion(
+          status: const Value('rejected'),
+          approvedBy: Value(approvedBy),
+          approvedAt: Value(DateTime.now()),
+          rejectionReason: Value(reason),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
   // PAYROLL MANAGEMENT
 

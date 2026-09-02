@@ -82,6 +82,47 @@ class StaffExcelImportResult {
   });
 }
 
+/// صف في وضع التصحيح (تحديث كود البصمة بالاسم)
+class StaffExcelCorrectionItem {
+  final StaffExcelRow row;
+  final String normalizedName;
+  final Staff? matchedStaff;
+  final List<StaffBiometricMapping> currentMappings;
+  final List<String> errors;
+  final bool isValid;
+  final String action; // update | create | no_change | skip
+  final bool willCreate;
+  StaffExcelCorrectionItem({
+    required this.row,
+    required this.normalizedName,
+    required this.matchedStaff,
+    required this.currentMappings,
+    required this.errors,
+    required this.isValid,
+    required this.action,
+    this.willCreate = false,
+  });
+}
+
+class StaffExcelCorrectionPreview {
+  final List<StaffExcelCorrectionItem> items;
+  final List<String> fileErrors;
+  StaffExcelCorrectionPreview({required this.items, this.fileErrors = const []});
+  int get total => items.length;
+  int get updateCount => items.where((e) => e.action == 'update' && e.isValid).length;
+  int get createCount => items.where((e) => e.action == 'create' && e.isValid).length;
+  int get noChangeCount => items.where((e) => e.action == 'no_change').length;
+  int get invalidCount => items.where((e) => !e.isValid).length;
+}
+
+class StaffExcelCorrectionResult {
+  final int updated;
+  final int created;
+  final int skipped;
+  final List<String> errors;
+  StaffExcelCorrectionResult({required this.updated, required this.created, required this.skipped, required this.errors});
+}
+
 class StaffExcelImportService {
   final AppDatabase db;
 
@@ -114,6 +155,11 @@ class StaffExcelImportService {
     'رقم البصمة': 'externalId',
     'البصمة': 'externalId',
     'بصمة': 'externalId',
+    'كود البصمة': 'externalId',
+    'كود البصمة (id)': 'externalId',
+    'كودالبصمة(id)': 'externalId',
+    'كودالبصمة': 'externalId',
+    'idالبصمة': 'externalId',
     'phone': 'phone',
     'التليفون': 'phone',
     'هاتف': 'phone',
@@ -334,6 +380,205 @@ class StaffExcelImportService {
   }
 
   /// تنفيذ الاستيراد الفعلي — يكتب فقط الصفوف الصالحة حسب نفس قواعد preview
+  // ── Correction mode (update by name) ──────────────────────────────────
+
+  String _normalizeName(String s) {
+    // إزالة المسافات الزيادة + lowercase + توحيد الألف والياء
+    var n = s.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+    n = n.replaceAll(RegExp(r'[أإآ]'), 'ا').replaceAll('ة', 'ه').replaceAll('ى', 'ي');
+    return n;
+  }
+
+  /// معاينة وضع التصحيح — المطابقة بالاسم فقط، تحديث كود البصمة بدون حذف حضور
+  Future<StaffExcelCorrectionPreview> previewCorrection(String filePath, {required int deviceId}) async {
+    final bytes = await File(filePath).readAsBytes();
+    final excel = Excel.decodeBytes(bytes);
+    if (excel.tables.isEmpty) return StaffExcelCorrectionPreview(items: [], fileErrors: ['الملف لا يحتوي على أي شيت']);
+    Sheet? sheet;
+    for (final t in excel.tables.values) { if (t.rows.isNotEmpty) { sheet = t; break; } }
+    if (sheet == null || sheet.rows.isEmpty) return StaffExcelCorrectionPreview(items: [], fileErrors: ['الشيت فاضي']);
+
+    final headerRow = sheet.rows.first;
+    final headerMap = <int, String>{};
+    for (int i = 0; i < headerRow.length; i++) {
+      final h = _cellString(headerRow[i]);
+      if (h.isEmpty) continue;
+      final norm = _normalizeHeader(h);
+      String? canonical;
+      for (final e in _headerAliases.entries) { if (_normalizeHeader(e.key) == norm) { canonical = e.value; break; } }
+      headerMap[i] = canonical ?? h;
+    }
+    final found = headerMap.values.toSet();
+    // للتصحيح يكفي الاسم + رقم البصمة
+    final missing = <String>[];
+    if (!found.contains('name')) missing.add('اسم الموظف');
+    if (!found.contains('externalId')) missing.add('رقم البصمة');
+    if (missing.isNotEmpty) return StaffExcelCorrectionPreview(items: [], fileErrors: ['أعمدة ناقصة: ${missing.join(', ')}']);
+
+    int idxOf(String c) { for (final e in headerMap.entries) if (e.value == c) return e.key; return -1; }
+    final idxName = idxOf('name');
+    final idxExternal = idxOf('externalId');
+    final idxPosition = idxOf('position');
+    final idxSalary = idxOf('basicSalary');
+
+    final allStaff = await db.staffManagementDao.getAllStaff();
+    final allMappings = await db.attendanceDeviceDao.getAllMappings();
+    final deviceMappings = allMappings.where((m) => m.deviceId == deviceId).toList();
+    // خريطة اسم مطبع -> Staff
+    final nameToStaff = <String, Staff>{};
+    for (final s in allStaff) { nameToStaff[_normalizeName(s.name)] = s; }
+    // existing externalId -> mapping (للجهاز المختار)
+    final externalToMapping = {for (final m in deviceMappings) m.externalUserId: m};
+
+    final seenNamesInFile = <String>{};
+    final seenExternalInFile = <String>{};
+    final items = <StaffExcelCorrectionItem>[];
+
+    for (int r = 1; r < sheet.rows.length; r++) {
+      final row = sheet.rows[r];
+      String getCell(int idx) => idx >= 0 && idx < row.length ? _cellString(row[idx]) : '';
+      final name = getCell(idxName).trim();
+      final externalId = getCell(idxExternal).trim();
+      final position = idxPosition >=0 ? getCell(idxPosition).trim() : '';
+      final salaryStr = idxSalary >=0 ? getCell(idxSalary).trim() : '';
+      if (name.isEmpty && externalId.isEmpty && position.isEmpty && salaryStr.isEmpty) continue; // تجاهل صفوف فاضية
+      // فلترة صفوف القمامة مثل Sheet26 بدون كود بصمة رقمي
+      final errors = <String>[];
+      if (name.isEmpty) errors.add('الاسم فاضي');
+      if (externalId.isEmpty) errors.add('كود البصمة فاضي');
+      final normName = _normalizeName(name);
+      if (normName.isNotEmpty) {
+        if (seenNamesInFile.contains(normName)) errors.add('الاسم مكرر داخل الملف');
+        else seenNamesInFile.add(normName);
+      }
+      if (externalId.isNotEmpty) {
+        if (seenExternalInFile.contains(externalId)) errors.add('كود البصمة مكرر داخل الملف: $externalId');
+        else seenExternalInFile.add(externalId);
+      }
+      final matched = normName.isEmpty ? null : nameToStaff[normName];
+      List<StaffBiometricMapping> currentMappings = [];
+      if (matched != null) currentMappings = deviceMappings.where((m) => m.staffId == matched.staffId).toList();
+      String action;
+      if (matched == null) { action = 'create'; if (errors.isEmpty) errors.add('الاسم غير موجود — سيتم إنشاؤه كموظف جديد'); }
+      else if (currentMappings.length == 1 && currentMappings.first.externalUserId == externalId) { action = 'no_change'; }
+      else { action = 'update'; }
+      // لو الكود الجديد مملوك لموظف آخر سيتم نقله تلقائياً (لا نمنع)
+      final salary = _parseSalary(salaryStr);
+      final rowObj = StaffExcelRow(
+        excelRowNumber: r + 1, staffIdRaw: matched?.staffId, name: name, position: position,
+        basicSalary: salary ?? 0, hireDate: matched?.hireDate ?? DateTime.now(),
+        externalId: externalId, raw: {'row': row.map((c) => c?.value).toList()},
+      );
+      final isValid = errors.isEmpty || (errors.length == 1 && errors.first.contains('سيتم إنشاؤه'));
+      // للتصحيح نعتبر create كـ valid أيضاً (سيعمل إنشاء)
+      final hasOnlyCreateNote = errors.length == 1 && errors.first.contains('سيتم إنشاؤه');
+      items.add(StaffExcelCorrectionItem(
+        row: rowObj, normalizedName: normName, matchedStaff: matched,
+        currentMappings: currentMappings, errors: hasOnlyCreateNote ? [] : errors,
+        isValid: hasOnlyCreateNote ? true : errors.isEmpty, action: hasOnlyCreateNote ? 'create' : action,
+        willCreate: hasOnlyCreateNote,
+      ));
+    }
+    return StaffExcelCorrectionPreview(items: items);
+  }
+
+  Future<StaffExcelCorrectionResult> importCorrection(StaffExcelCorrectionPreview preview, {required int deviceId}) async {
+    int updated = 0, created = 0, skipped = 0;
+    final errors = <String>[];
+    final allStaff = await db.staffManagementDao.getAllStaff();
+    final staffById = {for (final s in allStaff) s.staffId: s};
+    for (final item in preview.items) {
+      if (!item.isValid) { skipped++; errors.add('صف ${item.row.excelRowNumber} (${item.row.name}): ${item.errors.join('، ')} — تم التخطي'); continue; }
+      if (item.action == 'no_change') { skipped++; continue; }
+      final newExternalId = item.row.externalId.trim();
+      if (newExternalId.isEmpty) { errors.add('صف ${item.row.excelRowNumber}: كود البصمة فاضي'); skipped++; continue; }
+      try {
+        if (item.action == 'create' || item.matchedStaff == null) {
+          // إنشاء موظف جديد + mapping
+          String staffId = 'STAFF${DateTime.now().millisecondsSinceEpoch}${item.row.excelRowNumber}';
+          // توليد آمن
+          staffId = await _generateStaffId();
+          final now = DateTime.now();
+          final pos = item.row.position.isEmpty ? 'موظف' : item.row.position;
+          final sal = item.row.basicSalary;
+          await db.staffManagementDao.addStaff(StaffTableCompanion.insert(
+            staffId: staffId, name: item.row.name, position: pos,
+            employmentType: 'full_time', basicSalary: sal, hireDate: now, status: 'active',
+            createdAt: now, updatedAt: now,
+          ));
+          await db.attendanceDeviceDao.addMapping(StaffBiometricMappingsCompanion.insert(
+            staffId: staffId, deviceId: deviceId, externalUserId: newExternalId,
+            enrollmentStatus: 'enrolled', enrolledAt: Value(now), createdAt: now, updatedAt: now,
+          ));
+          created++;
+        } else {
+          // تحديث: احذف كل mappings القديمة لهذا الموظف على نفس الجهاز + أي mapping يملك نفس externalId لموظف آخر
+          final staffId = item.matchedStaff!.staffId;
+          final existingForStaff = await db.attendanceDeviceDao.getMappingsForStaff(staffId);
+          for (final m in existingForStaff.where((m) => m.deviceId == deviceId)) {
+            await db.attendanceDeviceDao.deleteMapping(m.id);
+          }
+          // حرر الكود لو مملوك لحد تاني
+          final allMaps = await db.attendanceDeviceDao.getAllMappings();
+          for (final m in allMaps.where((m) => m.deviceId == deviceId && m.externalUserId == newExternalId)) {
+            await db.attendanceDeviceDao.deleteMapping(m.id);
+          }
+          final now = DateTime.now();
+          await db.attendanceDeviceDao.addMapping(StaffBiometricMappingsCompanion.insert(
+            staffId: staffId, deviceId: deviceId, externalUserId: newExternalId,
+            enrollmentStatus: 'enrolled', enrolledAt: Value(now), createdAt: now, updatedAt: now,
+          ));
+          // حدث الاسم/الوظيفة لو اتغيرت في الإكسل
+          var staff = staffById[staffId] ?? await db.staffManagementDao.getStaffById(staffId);
+          if (staff != null) {
+            bool needUpdate = false;
+            String newName = staff.name;
+            String newPos = staff.position;
+            double newSal = staff.basicSalary;
+            if (item.row.name.isNotEmpty && item.row.name.trim() != staff.name) { newName = item.row.name.trim(); needUpdate = true; }
+            if (item.row.position.isNotEmpty && item.row.position != staff.position) { newPos = item.row.position; needUpdate = true; }
+            if (item.row.basicSalary > 0 && item.row.basicSalary != staff.basicSalary) { newSal = item.row.basicSalary; needUpdate = true; }
+            if (needUpdate) {
+              await db.staffManagementDao.updateStaff(staff.copyWith(name: newName, position: newPos, basicSalary: newSal, updatedAt: DateTime.now()));
+            }
+          }
+          updated++;
+        }
+      } catch (e) {
+        errors.add('صف ${item.row.excelRowNumber} (${item.row.name}): فشل — $e');
+      }
+    }
+    return StaffExcelCorrectionResult(updated: updated, created: created, skipped: skipped, errors: errors);
+  }
+
+  /// كشف الموظفين المكررة الفاضية (بدون حضور وبدون وظيفة حقيقية)
+  Future<List<Staff>> findOrphanStaff() async {
+    final all = await db.staffManagementDao.getAllStaff();
+    final orphans = <Staff>[];
+    for (final s in all) {
+      final pos = s.position.trim();
+      final isGenericPos = pos.isEmpty || pos == 'موظف' || pos == 'عامل';
+      final isZeroSalary = s.basicSalary == 0;
+      if (!isGenericPos && !isZeroSalary) continue;
+      final att = await db.staffManagementDao.getAttendanceByStaff(s.staffId);
+      if (att.isEmpty) orphans.add(s);
+    }
+    return orphans;
+  }
+
+  Future<int> deleteOrphanStaff(List<String> staffIds) async {
+    int deleted = 0;
+    for (final sid in staffIds) {
+      final att = await db.staffManagementDao.getAttendanceByStaff(sid);
+      if (att.isNotEmpty) continue; // أمان: لا تحذف اللي عنده حضور
+      final maps = await db.attendanceDeviceDao.getMappingsForStaff(sid);
+      for (final m in maps) { await db.attendanceDeviceDao.deleteMapping(m.id); }
+      await db.staffManagementDao.deleteStaff(sid);
+      deleted++;
+    }
+    return deleted;
+  }
+
   Future<StaffExcelImportResult> import(StaffExcelPreview preview, {required int deviceId}) async {
     int addedStaff = 0;
     int addedMappings = 0;

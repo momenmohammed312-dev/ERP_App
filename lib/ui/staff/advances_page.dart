@@ -204,6 +204,33 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                 ),
               ),
             ],
+            if (advance.status == 'pending') ...[
+              const Divider(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => _approveAdvance(advance),
+                    icon: const Icon(Icons.check_circle, size: 18),
+                    label: const Text('اعتماد'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _rejectAdvance(advance),
+                    icon: const Icon(Icons.cancel, size: 18),
+                    label: const Text('رفض'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (advance.status == 'approved') ...[
               const Divider(height: 12),
               Row(
@@ -273,6 +300,7 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
     final reasonCtrl = TextEditingController();
     int? installmentMonths;
     final installmentCtrl = TextEditingController();
+    DateTime selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -317,6 +345,16 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                       maxLines: 2,
                       validator: (v) =>
                           (v == null || v.trim().isEmpty) ? 'السبب مطلوب' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    ListTile(
+                      title: const Text('شهر الاستحقاق'),
+                      subtitle: Text('${selectedMonth.year}/${selectedMonth.month.toString().padLeft(2,'0')}'),
+                      trailing: const Icon(Icons.calendar_month),
+                      onTap: () async {
+                        final picked = await showDatePicker(context: context, initialDate: selectedMonth, firstDate: DateTime(2020), lastDate: DateTime(2030), helpText: 'اختر شهر السلفة');
+                        if (picked != null) setDialogState(() => selectedMonth = DateTime(picked.year, picked.month, 1));
+                      },
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -387,7 +425,7 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
             reason: reason.isNotEmpty
                 ? drift.Value(reason)
                 : const drift.Value.absent(),
-            requestDate: DateTime.now(),
+            requestDate: selectedMonth,
             status: 'pending',
             installmentMonths: inst != null && inst > 0
                 ? drift.Value(inst)
@@ -478,5 +516,91 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
         );
       }
     }
+  }
+
+  Future<void> _approveAdvance(StaffAdvance advance) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('اعتماد السلفة'),
+        content: Text('هل تريد اعتماد سلفة بقيمة ${CurrencyHelper.formatCurrency(advance.amount)} للموظف "${widget.staff.name}"؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            child: const Text('اعتماد'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final service = StaffManagementService(StaffManagementDao(db), db);
+      final user = ref.read(authProvider);
+      await service.approveAdvance(user, advance.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم اعتماد السلفة'), backgroundColor: Colors.green),
+        );
+      }
+      _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _rejectAdvance(StaffAdvance advance) async {
+    final reasonCtrl = TextEditingController();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('رفض السلفة'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('هل تريد رفض سلفة بقيمة ${CurrencyHelper.formatCurrency(advance.amount)} للموظف "${widget.staff.name}"؟'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonCtrl,
+              decoration: const InputDecoration(labelText: 'سبب الرفض', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('رفض'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final service = StaffManagementService(StaffManagementDao(db), db);
+      final user = ref.read(authProvider);
+      await service.rejectAdvance(user, advance.id, reasonCtrl.text.trim());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم رفض السلفة'), backgroundColor: Colors.orange),
+        );
+      }
+      _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+    reasonCtrl.dispose();
   }
 }

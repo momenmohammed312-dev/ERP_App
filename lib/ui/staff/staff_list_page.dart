@@ -10,6 +10,7 @@ import 'staff_details_page.dart';
 import 'attendance_page.dart';
 import 'employee_dashboard_page.dart';
 import 'historical_attendance_import_page.dart';
+import 'excel_staff_import_page.dart';
 
 class StaffListPage extends ConsumerStatefulWidget {
   const StaffListPage({super.key});
@@ -25,6 +26,7 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
   List<Staff> _filteredStaffList = [];
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
+  Map<String, List<String>> _staffExternalIds = {};
 
   @override
   void initState() {
@@ -54,11 +56,19 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
     setState(() => _isLoading = true);
     try {
       final staff = await _dao.getAllStaff();
+      final db = ref.read(appDatabaseProvider);
+      final mappings = await db.attendanceDeviceDao.getAllMappings();
+      final map = <String, List<String>>{};
+      for (final m in mappings) {
+        map.putIfAbsent(m.staffId, () => []).add(m.externalUserId);
+      }
       setState(() {
         _staffList = staff;
         _filteredStaffList = staff;
+        _staffExternalIds = map;
         _isLoading = false;
       });
+      _filterStaff();
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -69,17 +79,21 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
   }
 
   void _filterStaff() {
-    final query = _searchController.text.toLowerCase();
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) {
+      setState(() => _filteredStaffList = _staffList);
+      return;
+    }
     setState(() {
-      _filteredStaffList = _staffList
-          .where(
-            (staff) =>
-                staff.name.toLowerCase().contains(query) ||
-                staff.position.toLowerCase().contains(query) ||
-                staff.staffId.toLowerCase().contains(query) ||
-                (staff.phone?.toLowerCase().contains(query) ?? false),
-          )
-          .toList();
+      _filteredStaffList = _staffList.where((staff) {
+        if (staff.name.toLowerCase().contains(query)) return true;
+        if (staff.position.toLowerCase().contains(query)) return true;
+        if (staff.staffId.toLowerCase().contains(query)) return true;
+        if (staff.phone?.toLowerCase().contains(query) ?? false) return true;
+        final extIds = _staffExternalIds[staff.staffId];
+        if (extIds != null && extIds.any((id) => id.toLowerCase().contains(query))) return true;
+        return false;
+      }).toList();
     });
   }
 
@@ -113,6 +127,17 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
               _loadStaff();
             },
             tooltip: 'استيراد حضور تاريخي',
+          ),
+          IconButton(
+            icon: const Icon(Icons.person_add),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ExcelStaffImportPage()),
+              );
+              _loadStaff();
+            },
+            tooltip: 'استيراد / تصحيح أسماء الموظفين',
           ),
           IconButton(
             icon: const Icon(Icons.dashboard),
@@ -163,7 +188,7 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
         controller: _searchController,
         style: TextStyle(color: textColor),
         decoration: InputDecoration(
-          hintText: 'البحث بالاسم، المنصب، أو الرقم الوظيفي...',
+          hintText: 'البحث بالاسم، المنصب، الرقم الوظيفي أو ID البصمة...',
           hintStyle: TextStyle(color: subTextColor),
           prefixIcon: Icon(Icons.search, color: goldColor),
           suffixIcon: _searchController.text.isNotEmpty
@@ -363,6 +388,16 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
                 ),
               ],
             ),
+            if (_staffExternalIds[staff.staffId] != null && _staffExternalIds[staff.staffId]!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.fingerprint, size: 16, color: Colors.blue),
+                  const SizedBox(width: 4),
+                  Text('ID البصمة: ${_staffExternalIds[staff.staffId]!.join(", ")}', style: TextStyle(color: Colors.blue, fontSize: 12)),
+                ],
+              ),
+            ],
           ],
         ),
         trailing: PopupMenuButton<String>(

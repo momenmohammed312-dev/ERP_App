@@ -27,6 +27,8 @@ import 'package:pos_offline_desktop/ui/manufacturing/bom_list_screen.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/mo_list_screen.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/mo_detail_screen.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/reports/manufacturing_reports_screen.dart';
+import 'package:pos_offline_desktop/ui/equity/equity_management_screen.dart';
+import 'package:pos_offline_desktop/ui/accounting/accounting_hub_screen.dart';
 
 final firstRunCompleteProvider = FutureProvider<bool>((ref) async {
   return SettingsService.isFirstRunComplete();
@@ -165,6 +167,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/manufacturing/reports',
         builder: (context, state) => ManufacturingReportsScreen(db: db),
+      ),
+      GoRoute(
+        path: '/equity',
+        builder: (context, state) => EquityManagementScreen(db: db),
+      ),
+      GoRoute(
+        path: '/accounting',
+        builder: (context, state) => AccountingHubScreen(db: db),
       ),
     ],
   );

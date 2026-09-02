@@ -21,6 +21,7 @@ class _HistoricalAttendanceImportPageState extends ConsumerState<HistoricalAtten
   List<SheetImportReport>? _report;
   bool _importing = false;
   String? _error;
+  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
 
   Future<void> _pickFile() async {
     final res = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['xlsx'], withData: false);
@@ -83,6 +84,19 @@ class _HistoricalAttendanceImportPageState extends ConsumerState<HistoricalAtten
               child: Column(children: [
                 Row(children: [const Icon(Icons.upload_file, color: Colors.blue), const SizedBox(width: 12), Expanded(child: Text(_file == null ? 'اختر ملف .xlsx (شيت لكل موظف)' : 'الملف: ${_file!.path.split(Platform.pathSeparator).last}'))]),
                 const SizedBox(height: 12),
+                Row(children: [
+                  const Icon(Icons.calendar_month, color: Colors.teal),
+                  const SizedBox(width: 8),
+                  Text('شهر الاستيراد: ${_selectedMonth.year}/${_selectedMonth.month.toString().padLeft(2,'0')}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  ElevatedButton(onPressed: () async {
+                    final picked = await showDatePicker(context: context, initialDate: _selectedMonth, firstDate: DateTime(2020), lastDate: DateTime(2030), helpText: 'اختر شهر الحضور');
+                    if (picked != null) setState(() => _selectedMonth = DateTime(picked.year, picked.month, 1));
+                  }, child: const Text('اختيار الشهر')),
+                ]),
+                const SizedBox(height: 8),
+                const Text('سيتم إضافة الحضور للشهر المختار بكفاءة بدون تكرار', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                const SizedBox(height: 12),
                 ElevatedButton.icon(onPressed: _importing ? null : _pickFile, icon: const Icon(Icons.folder_open), label: const Text('اختيار ملف')),
               ]),
             ),
@@ -118,7 +132,7 @@ class _HistoricalAttendanceImportPageState extends ConsumerState<HistoricalAtten
                   padding: const EdgeInsets.all(8),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(e.key, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    ...rows.map((r) => Text('صف ${r.rowIndex}: ${r.date?.toIso8601String().substring(0,10) ?? '-'} حضور:${r.rawPresence} انصراف:${r.rawCheckout} → ${r.status} ${r.error ?? ''}', style: TextStyle(fontSize: 12, color: r.error != null ? Colors.red : Colors.black54))),
+                    ...rows.map((r) => Text('صف ${r.rowIndex}: ${r.date?.toIso8601String().substring(0,10) ?? '-'} حضور:${r.rawPresence} انصراف:${r.rawCheckout} → ${r.status} ${r.error ?? ''}', style: TextStyle(fontSize: 12, color: r.error != null ? Colors.redAccent : Colors.white70))),
                   ]),
                 );
               }).toList()),
@@ -126,6 +140,39 @@ class _HistoricalAttendanceImportPageState extends ConsumerState<HistoricalAtten
             const SizedBox(height: 12),
             ElevatedButton.icon(onPressed: _importing ? null : _runImport, icon: _importing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.cloud_download), label: Text(_importing ? 'جاري الاستيراد...' : 'تأكيد وتنفيذ الاستيراد'), style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), backgroundColor: Colors.teal, foregroundColor: Colors.white)),
           ],
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.event_available, color: Colors.orange),
+              title: const Text('إصلاح الجمعة المستوردة كـ غياب'),
+              subtitle: const Text('حوّل كل جمعة مستوردة من غائب → إجازة (مرة واحدة)'),
+              trailing: ElevatedButton(
+                onPressed: () async {
+                  final db = ref.read(appDatabaseProvider);
+                  final svc = HistoricalAttendanceImportService(db);
+                  final n = await svc.fixFridayAbsents();
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم إصلاح $n سجل جمعة'), backgroundColor: Colors.green));
+                },
+                child: const Text('إصلاح'),
+              ),
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.access_time, color: Colors.amber),
+              title: const Text('إصلاح التأخير المحسوب حاضر خطأً'),
+              subtitle: const Text('حوّل كل حضور 09:32+ (بعد السماح) من حاضر → متأخر'),
+              trailing: ElevatedButton(
+                onPressed: () async {
+                  final db = ref.read(appDatabaseProvider);
+                  final svc = HistoricalAttendanceImportService(db);
+                  final n = await svc.fixLateStatusForImported();
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم إصلاح $n سجل تأخير'), backgroundColor: Colors.green));
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
+                child: const Text('إصلاح التأخير'),
+              ),
+            ),
+          ),
           if (_report != null) ...[
             const SizedBox(height: 16),
             const Text('تقرير النتيجة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),

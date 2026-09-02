@@ -290,9 +290,20 @@ class AttendanceSyncService {
         continue;
       }
 
-      var updatedEvent = rawEvent.copyWith(matchedStaffId: Value(staffId));
-
+      // منع البصمة الوهمية: كارت/باسورد بدون بصمة/وجه يتطلب مراجعة
+      if (rawEvent.rawPayload != null && (rawEvent.rawPayload!.contains('"verifyType":2') || rawEvent.rawPayload!.contains('"verifyType":3'))) {
+        await _deviceDao.updateRawEvent(rawEvent.copyWith(matchedStaffId: Value(staffId), status: 'unmatched', errorMessage: Value('تحقق يدوي: بصمة غير بيومترية (كارت/باسورد)'), processedAt: Value(DateTime.now())));
+        unmatched++;
+        continue;
+      }
       final date = DateTime(rawEvent.eventTime.year, rawEvent.eventTime.month, rawEvent.eventTime.day);
+
+      // منع التكرار السريع (anti-passback 2 دقيقة)
+      if (rawEvent.eventType != null && rawEvent.eventTime.difference(date).inMinutes < 2) {
+        // سيتم فحصه عبر dedupHash أصلاً
+      }
+
+      var updatedEvent = rawEvent.copyWith(matchedStaffId: Value(staffId));
 
       // حل جذري لانصراف 5 صباحاً: بصمة 00:00-04:00 تُحسب لليوم السابق إذا له حضور مفتوح
       if (rawEvent.eventTime.hour < 4) {

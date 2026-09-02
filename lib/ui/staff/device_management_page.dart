@@ -453,9 +453,9 @@ class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
                 decoration: const InputDecoration(labelText: 'نوع الاتصال *'),
                 items: const [
                   DropdownMenuItem(value: 'tcp_ip', child: Text('TCP/IP')),
-                  DropdownMenuItem(value: 'usb_import', child: Text('استيراد USB')),
-                  DropdownMenuItem(value: 'sdk', child: Text('SDK')),
-                  DropdownMenuItem(value: 'file_import', child: Text('استيراد ملف')),
+                  DropdownMenuItem(enabled: false, value: 'usb_import', child: Text('استيراد USB (قريباً)')),
+                  DropdownMenuItem(enabled: false, value: 'sdk', child: Text('SDK (قريباً)')),
+                  DropdownMenuItem(enabled: false, value: 'file_import', child: Text('استيراد ملف (قريباً)')),
                 ],
                 onChanged: (v) {
                   if (v != null) setState(() => _connectionType = v);
