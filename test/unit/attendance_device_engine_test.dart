@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' hide isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -6,7 +7,6 @@ import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart
 import 'package:pos_offline_desktop/core/database/dao/staff_management_dao.dart';
 import 'package:pos_offline_desktop/services/attendance/attendance_calculation_engine.dart';
 import 'package:pos_offline_desktop/services/attendance/attendance_sync_service.dart';
-import 'package:pos_offline_desktop/services/staff_management_service.dart';
 
 /// يتحقق أن مسار الحضور من جهاز البصمة يستخدم نفس محرك الحساب (AttendanceCalculationEngine)
 /// المستخدم في المسار اليدوي: بصمة الساعة 12 تبقى 'late'، والخروج بعد 9 ساعات يعطي overtime.
@@ -15,7 +15,6 @@ void main() {
   late StaffManagementDao staffDao;
   late AttendanceDeviceDao deviceDao;
   late AttendanceSyncService syncService;
-  late StaffManagementService staffService;
   late AttendanceCalculationEngine engine;
 
   setUp(() async {
@@ -25,7 +24,6 @@ void main() {
     engine = AttendanceCalculationEngine(db, deviceDao, staffDao);
     await insertDefaultAttendanceSettings(db);
     syncService = AttendanceSyncService(deviceDao, staffDao, engine);
-    staffService = StaffManagementService(staffDao, db);
   });
 
   tearDown(() async {
@@ -99,10 +97,10 @@ void main() {
       expect(record.status, expected.status);
       expect(record.workingHours, expected.workingHours);
       expect(record.overtimeHours, expected.overtimeHours);
-      // دوام 12:00→21:00: ساعات فعلية = 9.0، وقتي إضافي بعد نهاية الدوام 17:00 + 15 دقيقة سماح = 3.75
-      expect(record.workingHours, 9.0);
+      // دوام 12:00→21:00 = 9 ساعات إجمالي − ساعة بريك = 8.0 ساعات فعلية، ووقت إضافي بعد نهاية الدوام 17:00 + 30 دقيقة مهلة = 3.5
+      expect(record.workingHours, 8.0);
       expect(record.overtimeHours, greaterThan(0));
-      expect(record.overtimeHours, 3.75);
+      expect(record.overtimeHours, 3.5);
       expect(record.checkOutTime, checkOutTime);
       expect(record.source, 'device');
       expect(record.sourceDeviceId, deviceId);
@@ -113,18 +111,41 @@ void main() {
   test(
     'device path and manual path produce identical status and working hours for the same times',
     () async {
+      // Fixed times (deterministic): the device checkout policy is
+      // schedule-aware, so wall-clock "now" punches would make this test
+      // time-of-day dependent. Both sides use the same engine + fixed pair.
+      final date = DateTime(2026, 1, 14);
+      final checkInTime = DateTime(2026, 1, 14, 9, 0);
+      final checkOutTime = DateTime(2026, 1, 14, 17, 0);
+
       final manualStaff = await addStaff(staffDao, 'STAFF0003');
       final deviceStaff = await addStaff(staffDao, 'STAFF0004');
       final deviceId = await addDevice(deviceDao);
       await addMapping(deviceDao, deviceId, deviceStaff, 'UID-003');
 
-      // Manual path: check-in then check-out (times are whatever recordCheckIn/Out record)
-      await staffService.recordCheckIn(manualStaff);
-      await staffService.recordCheckOut(manualStaff);
-
-      final manualRecords = await staffDao.getAttendanceByStaff(manualStaff);
-      expect(manualRecords, hasLength(1));
-      final manualRecord = manualRecords.first;
+      // Manual path: same engine calculation, stored via DAO.
+      final expected = await engine.processCheckOut(
+        manualStaff,
+        checkInTime: checkInTime,
+        checkOutTime: checkOutTime,
+      );
+      await staffDao.addAttendance(
+        AttendanceTableCompanion.insert(
+          staffId: manualStaff,
+          date: date,
+          status: expected.status,
+          checkInTime: Value(checkInTime),
+          checkOutTime: Value(checkOutTime),
+          workingHours: Value(expected.workingHours),
+          overtimeHours: Value(expected.overtimeHours),
+          source: const Value('manual'),
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+      final manualRecord = (await staffDao.getAttendanceByStaff(
+        manualStaff,
+      )).first;
       expect(manualRecord.checkInTime, isNotNull);
       expect(manualRecord.checkOutTime, isNotNull);
 
@@ -133,14 +154,14 @@ void main() {
         deviceDao,
         deviceId,
         'UID-003',
-        manualRecord.checkInTime!,
+        checkInTime,
         'hash-manual-dev-1',
       );
       await addRawEvent(
         deviceDao,
         deviceId,
         'UID-003',
-        manualRecord.checkOutTime!,
+        checkOutTime,
         'hash-manual-dev-2',
       );
       await syncService.processPendingEvents(deviceId);
@@ -251,6 +272,8 @@ Future<void> insertDefaultAttendanceSettings(AppDatabase appDb) async {
     ('grace_period_minutes', '15'),
     ('overtime_threshold_hours', '8'),
     ('overtime_rate_multiplier', '1.5'),
+    ('overtime_grace_minutes', '30'), // مهلة بدء الإضافي (v67)
+    ('break_minutes', '60'), // ساعة بريك تُخصم من ساعات العمل الفعلية
   ];
   for (final entry in settings) {
     await appDb

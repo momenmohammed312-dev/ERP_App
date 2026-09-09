@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
 import '../../core/database/app_database.dart';
+import '../../services/payroll_display.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
 import 'staff_list_page.dart';
@@ -9,6 +10,7 @@ import 'staff_form_page.dart';
 import 'device_management_page.dart';
 import 'unmatched_attendance_page.dart';
 import 'attendance_settings_page.dart';
+import 'batch_payroll_slips_page.dart';
 
 class EmployeeDashboardPage extends ConsumerStatefulWidget {
   const EmployeeDashboardPage({super.key});
@@ -18,8 +20,7 @@ class EmployeeDashboardPage extends ConsumerStatefulWidget {
       _EmployeeDashboardPageState();
 }
 
-class _EmployeeDashboardPageState
-    extends ConsumerState<EmployeeDashboardPage>
+class _EmployeeDashboardPageState extends ConsumerState<EmployeeDashboardPage>
     with SingleTickerProviderStateMixin {
   late StaffManagementDao _dao;
   late AppDatabase _db;
@@ -58,21 +59,27 @@ class _EmployeeDashboardPageState
     try {
       final allStaff = await _dao.getAllStaff();
       _activeStaff = allStaff.where((s) => s.isActive).length;
-      _totalSalary = allStaff.fold<double>(0, (s, e) => s + e.basicSalary);
+      _totalSalary = allStaff.fold<double>(
+          0, (s, e) => s + PayrollDisplay.baseOf(e).base);
 
       final today = DateTime.now();
       final todayStart = DateTime(today.year, today.month, today.day);
 
-      final attendanceRows = await _db.customSelect('''
+      final attendanceRows = await _db
+          .customSelect(
+            '''
         SELECT status, COUNT(*) as cnt FROM attendance_table
         WHERE date >= ? AND date < ?
         GROUP BY status
-      ''', variables: [
-        drift.Variable.withDateTime(todayStart),
-        drift.Variable.withDateTime(
-          todayStart.add(const Duration(days: 1)),
-        ),
-      ]).get();
+      ''',
+            variables: [
+              drift.Variable.withDateTime(todayStart),
+              drift.Variable.withDateTime(
+                todayStart.add(const Duration(days: 1)),
+              ),
+            ],
+          )
+          .get();
 
       for (final row in attendanceRows) {
         final status = row.read<String>('status');
@@ -112,9 +119,9 @@ class _EmployeeDashboardPageState
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ في تحميل البيانات: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('خطأ في تحميل البيانات: $e')));
       }
     }
   }
@@ -127,8 +134,7 @@ class _EmployeeDashboardPageState
     final textColor = isDark ? const Color(0xFFE6EDF3) : Colors.black87;
     final subTextColor = isDark ? const Color(0xFF8B949E) : Colors.black54;
     final goldColor = const Color(0xFFC9A84C);
-    final borderColor =
-        isDark ? const Color(0xFF30363D) : Colors.grey.shade300;
+    final borderColor = isDark ? const Color(0xFF30363D) : Colors.grey.shade300;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -154,19 +160,29 @@ class _EmployeeDashboardPageState
                 children: [
                   _buildSectionHeader(textColor, 'ملخص عام', Icons.dashboard),
                   const SizedBox(height: 12),
-                  _buildSummaryGrid(
-                    textColor, goldColor, cardBg, borderColor),
+                  _buildSummaryGrid(textColor, goldColor, cardBg, borderColor),
                   const SizedBox(height: 20),
                   _buildSectionHeader(
-                    textColor, 'حضور اليوم', Icons.calendar_today),
+                    textColor,
+                    'حضور اليوم',
+                    Icons.calendar_today,
+                  ),
                   const SizedBox(height: 12),
                   _buildAttendanceCards(cardBg, borderColor),
                   const SizedBox(height: 20),
                   _buildSectionHeader(
-                    textColor, 'إجراءات سريعة', Icons.flash_on),
+                    textColor,
+                    'إجراءات سريعة',
+                    Icons.flash_on,
+                  ),
                   const SizedBox(height: 12),
                   _buildQuickActions(
-                    textColor, goldColor, subTextColor, cardBg, borderColor),
+                    textColor,
+                    goldColor,
+                    subTextColor,
+                    cardBg,
+                    borderColor,
+                  ),
                 ],
               ),
             ),
@@ -191,22 +207,34 @@ class _EmployeeDashboardPageState
   }
 
   Widget _buildSummaryGrid(
-    Color textColor, Color goldColor, Color cardBg, Color borderColor) {
+    Color textColor,
+    Color goldColor,
+    Color cardBg,
+    Color borderColor,
+  ) {
     return Column(
       children: [
         Row(
           children: [
             Expanded(
               child: _buildMetricCard(
-                '$_activeStaff', 'موظفين نشطين', Colors.green,
-                Icons.person, cardBg, borderColor,
+                '$_activeStaff',
+                'موظفين نشطين',
+                Colors.green,
+                Icons.person,
+                cardBg,
+                borderColor,
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _buildMetricCard(
-                '$_pendingVacations', 'إجازات معلقة', Colors.orange,
-                Icons.beach_access, cardBg, borderColor,
+                '$_pendingVacations',
+                'إجازات معلقة',
+                Colors.orange,
+                Icons.beach_access,
+                cardBg,
+                borderColor,
               ),
             ),
           ],
@@ -217,16 +245,22 @@ class _EmployeeDashboardPageState
             Expanded(
               child: _buildMetricCard(
                 '${_pendingAdvancesTotal.toStringAsFixed(0)} ج.م',
-                'سلف معلقة', Colors.redAccent,
-                Icons.money_off, cardBg, borderColor,
+                'سلف معلقة',
+                Colors.redAccent,
+                Icons.money_off,
+                cardBg,
+                borderColor,
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _buildMetricCard(
                 '${_totalSalary.toStringAsFixed(0)} ج.م',
-                'إجمالي المرتبات', goldColor,
-                Icons.attach_money, cardBg, borderColor,
+                'إجمالي المرتبات',
+                goldColor,
+                Icons.attach_money,
+                cardBg,
+                borderColor,
               ),
             ),
           ],
@@ -236,8 +270,12 @@ class _EmployeeDashboardPageState
   }
 
   Widget _buildMetricCard(
-    String value, String label, Color color, IconData icon,
-    Color cardBg, Color borderColor,
+    String value,
+    String label,
+    Color color,
+    IconData icon,
+    Color cardBg,
+    Color borderColor,
   ) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -323,8 +361,13 @@ class _EmployeeDashboardPageState
     );
   }
 
-  Widget _buildQuickActions(Color textColor, Color goldColor,
-      Color subTextColor, Color cardBg, Color borderColor) {
+  Widget _buildQuickActions(
+    Color textColor,
+    Color goldColor,
+    Color subTextColor,
+    Color cardBg,
+    Color borderColor,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -343,9 +386,7 @@ class _EmployeeDashboardPageState
                   goldColor,
                   () => Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const StaffListPage(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const StaffListPage()),
                   ),
                 ),
               ),
@@ -358,9 +399,7 @@ class _EmployeeDashboardPageState
                   () async {
                     final result = await Navigator.push<bool>(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const StaffFormPage(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const StaffFormPage()),
                     );
                     if (result == true) _loadData();
                   },
@@ -439,7 +478,19 @@ class _EmployeeDashboardPageState
                 ),
               ),
               const SizedBox(width: 8),
-              const Expanded(child: SizedBox()),
+              Expanded(
+                child: _buildActionBtn(
+                  'المرتبات',
+                  Icons.payments,
+                  Colors.green,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BatchPayrollSlipsPage(),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ],
@@ -448,7 +499,11 @@ class _EmployeeDashboardPageState
   }
 
   Widget _buildActionBtn(
-      String label, IconData icon, Color color, VoidCallback onTap) {
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -540,12 +595,16 @@ class _SectionListSheetState extends State<_SectionListSheet> {
           WHERE v.status = 'pending'
           ORDER BY v.created_at DESC
         ''').get();
-        _items = rows.map((r) => {
-          'id': r.read<int>('id'),
-          'staff_name': r.read<String?>('staff_name') ?? '',
-          'details':
-              '${r.read<String>('vacation_type')} - ${r.read<int>('total_days')} يوم',
-        }).toList();
+        _items = rows
+            .map(
+              (r) => {
+                'id': r.read<int>('id'),
+                'staff_name': r.read<String?>('staff_name') ?? '',
+                'details':
+                    '${r.read<String>('vacation_type')} - ${r.read<int>('total_days')} يوم',
+              },
+            )
+            .toList();
       } else {
         final rows = await widget.db.customSelect('''
           SELECT a.id, a.staff_id, a.amount, a.status, a.request_date,
@@ -555,11 +614,15 @@ class _SectionListSheetState extends State<_SectionListSheet> {
           WHERE a.status IN ('pending', 'approved')
           ORDER BY a.created_at DESC
         ''').get();
-        _items = rows.map((r) => {
-          'id': r.read<int>('id'),
-          'staff_name': r.read<String?>('staff_name') ?? '',
-          'details': '${r.read<double>('amount').toStringAsFixed(0)} ج.م',
-        }).toList();
+        _items = rows
+            .map(
+              (r) => {
+                'id': r.read<int>('id'),
+                'staff_name': r.read<String?>('staff_name') ?? '',
+                'details': '${r.read<double>('amount').toStringAsFixed(0)} ج.م',
+              },
+            )
+            .toList();
       }
       if (mounted) setState(() => _isLoading = false);
     } catch (e) {
@@ -604,33 +667,33 @@ class _SectionListSheetState extends State<_SectionListSheet> {
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _items.isEmpty
-                  ? const Center(child: Text('لا توجد بيانات'))
-                  : ListView.separated(
-                      controller: widget.scrollController,
-                      itemCount: _items.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final item = _items[i];
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: widget.type == 'vacations'
-                                ? Colors.orange.withValues(alpha: 0.2)
-                                : Colors.redAccent.withValues(alpha: 0.2),
-                            child: Icon(
-                              widget.type == 'vacations'
-                                  ? Icons.beach_access
-                                  : Icons.money_off,
-                              color: widget.type == 'vacations'
-                                  ? Colors.orange
-                                  : Colors.redAccent,
-                              size: 20,
-                            ),
-                          ),
-                          title: Text(item['staff_name'] as String),
-                          subtitle: Text(item['details'] as String),
-                        );
-                      },
-                    ),
+              ? const Center(child: Text('لا توجد بيانات'))
+              : ListView.separated(
+                  controller: widget.scrollController,
+                  itemCount: _items.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final item = _items[i];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: widget.type == 'vacations'
+                            ? Colors.orange.withValues(alpha: 0.2)
+                            : Colors.redAccent.withValues(alpha: 0.2),
+                        child: Icon(
+                          widget.type == 'vacations'
+                              ? Icons.beach_access
+                              : Icons.money_off,
+                          color: widget.type == 'vacations'
+                              ? Colors.orange
+                              : Colors.redAccent,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(item['staff_name'] as String),
+                      subtitle: Text(item['details'] as String),
+                    );
+                  },
+                ),
         ),
       ],
     );

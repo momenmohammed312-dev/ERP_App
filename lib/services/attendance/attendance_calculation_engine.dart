@@ -15,6 +15,7 @@ class ScheduleConfig {
   final double standardHoursPerDay;
   final double overtimeRateMultiplier;
   final int breakMinutes; // استراحة (فاصل) بالدقائق — يُخصم من الساعات المعتمدة
+  final int overtimeGraceMinutes; // مهلة بعد الانصراف قبل بدء حساب الإضافي (افتراضي 30)
 
   const ScheduleConfig({
     required this.workStartHour,
@@ -27,6 +28,7 @@ class ScheduleConfig {
     required this.standardHoursPerDay,
     required this.overtimeRateMultiplier,
     this.breakMinutes = 0,
+    this.overtimeGraceMinutes = 30,
   });
 
   DateTime get workStartToday {
@@ -145,6 +147,7 @@ class AttendanceCalculationEngine {
         standardHoursPerDay: double.tryParse(await _getSetting('overtime_threshold_hours', '8')) ?? 8.0,
         overtimeRateMultiplier: double.tryParse(await _getSetting('overtime_rate_multiplier', '1.5')) ?? 1.5,
         breakMinutes: int.tryParse(await _getSetting('break_minutes', '60')) ?? 60,
+        overtimeGraceMinutes: int.tryParse(await _getSetting('overtime_grace_minutes', '30')) ?? 30,
       );
     }
 
@@ -161,6 +164,8 @@ class AttendanceCalculationEngine {
     final start = _parseTime(startStr);
     final end = _parseTime(endStr);
 
+    final overtimeGraceStr = await _getSetting('overtime_grace_minutes', '30');
+
     return ScheduleConfig(
       workStartHour: start.$1,
       workStartMinute: start.$2,
@@ -172,6 +177,7 @@ class AttendanceCalculationEngine {
       standardHoursPerDay: double.tryParse(hoursStr) ?? 8.0,
       overtimeRateMultiplier: double.tryParse(rateStr) ?? 1.5,
       breakMinutes: int.tryParse(breakStr) ?? 0,
+      overtimeGraceMinutes: int.tryParse(overtimeGraceStr) ?? 30,
     );
   }
 
@@ -210,7 +216,7 @@ class AttendanceCalculationEngine {
     }
 
     // Calculate working hours and overtime
-    // الوقت الإضافي: بعد وقت الانصراف + 15 دقيقة سماح، يتحسب بمضاعف 1.5x
+    // الوقت الإضافي: بعد وقت الانصراف + مهلة الإضافي (افتراضي 30 دقيقة من الإعدادات)
     double workingHours = 0;
     double overtimeHours = 0;
 
@@ -219,12 +225,12 @@ class AttendanceCalculationEngine {
       final checkOutMinutes = checkOutTime.hour * 60 + checkOutTime.minute;
       final breakHrs = schedule.breakMinutes / 60.0;
 
-      // وقت الانصراف +15 دقيقة = بداية الوقت الإضافي
-      final overtimeStartMinutes = scheduleEnd + 15;
+      // وقت الانصراف + مهلة الإضافي = بداية استحقاق الوقت الإضافي (مقارنة صارمة: عند المهلة تماماً = صفر)
+      final overtimeStartMinutes = scheduleEnd + schedule.overtimeGraceMinutes;
 
       if (checkOutMinutes > overtimeStartMinutes) {
-        // يوجد وقت إضافي
-        overtimeHours = (checkOutMinutes - overtimeStartMinutes) / 60.0;
+        // يوجد وقت إضافي: بمجرد تجاوز المهلة يُحسب الإضافي من وقت الانصراف الفعلي للجدول
+        overtimeHours = (checkOutMinutes - scheduleEnd) / 60.0;
         // ساعات العمل الفعلية = (وقت الانصراف - وقت البدء) - الاستراحة
         workingHours = ((checkOutMinutes - checkInMinutes) / 60.0) - breakHrs;
       } else {

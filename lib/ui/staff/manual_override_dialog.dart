@@ -19,6 +19,8 @@ class ManualOverrideDialog extends ConsumerStatefulWidget {
 class _ManualOverrideDialogState extends ConsumerState<ManualOverrideDialog> {
   final _reasonController = TextEditingController();
   final _notesController = TextEditingController();
+  final _permissionHoursController = TextEditingController();
+  final _overtimeHoursController = TextEditingController();
   
   DateTime _selectedDate = DateTime.now();
   TimeOfDay? _checkInTime;
@@ -37,6 +39,8 @@ class _ManualOverrideDialogState extends ConsumerState<ManualOverrideDialog> {
       if (r.checkInTime != null) _checkInTime = TimeOfDay.fromDateTime(r.checkInTime!);
       if (r.checkOutTime != null) _checkOutTime = TimeOfDay.fromDateTime(r.checkOutTime!);
       _notesController.text = r.notes ?? '';
+      _permissionHoursController.text = (r.permissionHours ?? 0) > 0 ? r.permissionHours.toString() : '';
+      _overtimeHoursController.text = r.overtimeHours > 0 ? r.overtimeHours.toString() : '';
     }
   }
 
@@ -62,6 +66,7 @@ class _ManualOverrideDialogState extends ConsumerState<ManualOverrideDialog> {
         checkOut = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, _checkOutTime!.hour, _checkOutTime!.minute);
       }
 
+      final overtimeText = _overtimeHoursController.text.trim();
       await service.recordManualOverride(
         user,
         widget.staff.staffId,
@@ -71,6 +76,8 @@ class _ManualOverrideDialogState extends ConsumerState<ManualOverrideDialog> {
         checkInTime: checkIn,
         checkOutTime: checkOut,
         notes: _notesController.text,
+        permissionHours: double.tryParse(_permissionHoursController.text) ?? 0.0,
+        overtimeHours: overtimeText.isEmpty ? null : double.tryParse(overtimeText),
       );
 
       if (mounted) {
@@ -130,6 +137,16 @@ class _ManualOverrideDialogState extends ConsumerState<ManualOverrideDialog> {
                 final t = await showTimePicker(context: context, initialTime: _checkOutTime ?? TimeOfDay.now());
                 if (t != null) setState(() => _checkOutTime = t);
               },
+            ),
+            TextField(
+              controller: _permissionHoursController,
+              decoration: const InputDecoration(labelText: 'ساعات الإذن', hintText: 'مثال: 2.5'),
+              keyboardType: TextInputType.number,
+            ),
+            TextField(
+              controller: _overtimeHoursController,
+              decoration: const InputDecoration(labelText: 'ساعات إضافي (اختياري)', hintText: 'فارغ = حساب تلقائي من الأوقات'),
+              keyboardType: TextInputType.number,
             ),
             TextField(
               controller: _reasonController,

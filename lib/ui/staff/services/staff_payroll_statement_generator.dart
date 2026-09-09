@@ -5,6 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/services/payroll_display.dart';
 import 'package:pos_offline_desktop/core/utils/pdf_bidi_helper.dart';
 
 class StaffPayrollStatementGenerator {
@@ -42,6 +43,409 @@ class StaffPayrollStatementGenerator {
   }
 
   static String _b(String text) => PdfBidiHelper.reorder(text);
+
+  static Future<void> generateAndPrintAll({
+    required BuildContext context,
+    required AppDatabase db,
+    required List<Payroll> payrolls,
+    required Map<String, Staff> staffMap,
+    required String period,
+  }) async {
+    final fonts = await _loadFonts();
+    final arabicFont = fonts['arabic'];
+    final arabicBoldFont = fonts['arabicBold'];
+    final pdf = pw.Document();
+    // prepare details for each payroll
+    final Map<int, Map<String, dynamic>> details = {};
+    for (final p in payrolls) {
+      // الغياب من المخزن أولاً (يشمل ×mult والأسبوعي ÷6)
+      details[p.id] = {
+        'absentDed': PayrollDisplay.absenceDeduction(p,
+            weekly: staffMap[p.staffId]?.payFrequency == 'weekly')
+      };
+    }
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(8),
+        theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicBoldFont),
+        build: (pw.Context ctx) => [
+          pw.Center(
+            child: pw.Text(
+              _b('كشف حساب كلي - $period'),
+              style: pw.TextStyle(font: arabicBoldFont, fontSize: 14),
+            ),
+          ),
+          pw.SizedBox(height: 8),
+          for (final p in payrolls)
+            pw.Container(
+              margin: const pw.EdgeInsets.only(bottom: 6),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+              ),
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Column(
+                children: [
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(
+                        _b(staffMap[p.staffId]?.name ?? p.staffId),
+                        style: pw.TextStyle(font: arabicBoldFont, fontSize: 9),
+                      ),
+                      pw.Text(
+                        _b('صافي: ${p.netSalary.toStringAsFixed(0)}'),
+                        style: pw.TextStyle(
+                          font: arabicBoldFont,
+                          fontSize: 9,
+                          color: PdfColors.green900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.TableHelper.fromTextArray(
+                    headers: [
+                      _b('أساسي'),
+                      _b('إضافي'),
+                      _b('انتظام'),
+                      _b('تأخير'),
+                      _b('غياب'),
+                      _b('سلف'),
+                      _b('إذن'),
+                      _b('إجمالي'),
+                    ],
+                    data: [
+                      [
+                        _b(p.basicSalary.toStringAsFixed(0)),
+                        _b(p.overtimePay.toStringAsFixed(0)),
+                        _b(p.bonus.toStringAsFixed(0)),
+                        _b(p.lateDeduction.toStringAsFixed(0)),
+                        _b(
+                          PayrollDisplay.absenceDeduction(p,
+                                  weekly: staffMap[p.staffId]?.payFrequency ==
+                                      'weekly')
+                              .toStringAsFixed(
+                            0,
+                          ),
+                        ),
+                        _b(p.advances.toStringAsFixed(0)),
+                        _b(p.permissionDeduction.toStringAsFixed(0)),
+                        _b(p.netSalary.toStringAsFixed(0)),
+                      ],
+                    ],
+                    border: pw.TableBorder.all(
+                      color: PdfColors.grey300,
+                      width: 0.4,
+                    ),
+                    headerStyle: pw.TextStyle(
+                      font: arabicBoldFont,
+                      fontSize: 7,
+                    ),
+                    cellStyle: pw.TextStyle(font: arabicFont, fontSize: 7),
+                    headerDecoration: const pw.BoxDecoration(
+                      color: PdfColors.grey200,
+                    ),
+                    cellAlignment: pw.Alignment.center,
+                  ),
+                ],
+              ),
+            ),
+          pw.SizedBox(height: 8),
+          pw.Text(
+            _b(
+              'المعادلة: أساسي + إضافي×1.5 + انتظام - تأخير×1.5 - غياب - إذن×1.0 - سلف = إجمالي',
+            ),
+            style: pw.TextStyle(
+              font: arabicFont,
+              fontSize: 7,
+              color: PdfColors.grey600,
+            ),
+          ),
+        ],
+      ),
+    );
+    await Printing.layoutPdf(onLayout: (f) async => pdf.save());
+  }
+
+  /// تقرير مجمع: 3 قسائم مرتب في ورقة A4 واحدة (توفير ورق + قص).
+  /// نفس أعمدة التصميم الحالي مصغرة + كل قسيمة سليمة لوحدها
+  /// (اسم/كود/فترة/تاريخ صرف/تاريخ إصدار/توقيعات) + خط قص بين القسائم.
+  /// يعتمد على قيم Payroll المحفوظة (netSalary مصدر الحقيقة) بدون استعلامات
+  /// حضور إضافية — الحساب التلقائي للناقص يتم قبل الاستدعاء من صفحة الدفعة.
+  static Future<void> generateAndPrintBatchSlips({
+    required BuildContext context,
+    required AppDatabase db,
+    required List<Payroll> payrolls,
+    required Map<String, Staff> staffMap,
+    required String period,
+  }) async {
+    final fonts = await _loadFonts();
+    final arabicFont = fonts['arabic'];
+    final arabicBoldFont = fonts['arabicBold'];
+    final pdf = pw.Document();
+    final dateFormat = DateFormat('yyyy-MM-dd');
+    final issueDateStr = dateFormat.format(DateTime.now());
+
+    double totalNet = 0;
+    for (final p in payrolls) {
+      totalNet += p.netSalary;
+    }
+
+    pw.Widget buildSlip(Payroll p) {
+      final staff = staffMap[p.staffId];
+      final name = staff?.name ?? p.staffId;
+      final code = staff?.staffId ?? p.staffId;
+      final paymentDateStr = p.paymentDate != null
+          ? dateFormat.format(p.paymentDate!)
+          : dateFormat.format(p.periodEnd);
+      // غياب القسيمة: من المخزن أولاً (نفس معادلة الكشف الحالي)
+      final absentDed = PayrollDisplay.absenceDeduction(p,
+          weekly: staff?.payFrequency == 'weekly');
+      return pw.Container(
+        margin: const pw.EdgeInsets.only(bottom: 4),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey600, width: 0.7),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        ),
+        padding: const pw.EdgeInsets.all(6),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            // رأس القسيمة: اسم + كود + صافي
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      _b(name),
+                      style: pw.TextStyle(font: arabicBoldFont, fontSize: 10),
+                    ),
+                    pw.Text(
+                      _b('كود: $code'),
+                      style: pw.TextStyle(
+                        font: arabicFont,
+                        fontSize: 7,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      _b('صافي: ${p.netSalary.toStringAsFixed(0)}'),
+                      style: pw.TextStyle(
+                        font: arabicBoldFont,
+                        fontSize: 11,
+                        color: PdfColors.green900,
+                      ),
+                    ),
+                    pw.Text(
+                      _b('الفترة: $period'),
+                      style: pw.TextStyle(
+                        font: arabicFont,
+                        fontSize: 7,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 2),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  _b('صرف: $paymentDateStr'),
+                  style: pw.TextStyle(
+                    font: arabicFont,
+                    fontSize: 7,
+                    color: PdfColors.grey700,
+                  ),
+                ),
+                pw.Text(
+                  _b('إصدار: $issueDateStr'),
+                  style: pw.TextStyle(
+                    font: arabicFont,
+                    fontSize: 7,
+                    color: PdfColors.grey700,
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 4),
+            // نفس أعمدة التصميم الحالي (مصغرة لتناسب ثلث الصفحة)
+            pw.TableHelper.fromTextArray(
+              headers: [
+                _b('الإسم'),
+                _b('الأساسي'),
+                _b('إضافي'),
+                _b('انتظام'),
+                _b('تأخير'),
+                _b('غياب'),
+                _b('سلف'),
+                _b('إذن'),
+                _b('إجمالي'),
+              ],
+              data: [
+                [
+                  _b(name),
+                  _b(p.basicSalary.toStringAsFixed(0)),
+                  _b(p.overtimePay.toStringAsFixed(0)),
+                  _b(p.bonus.toStringAsFixed(0)),
+                  _b(p.lateDeduction.toStringAsFixed(0)),
+                  _b(absentDed.toStringAsFixed(0)),
+                  _b(p.advances.toStringAsFixed(0)),
+                  _b(p.permissionDeduction.toStringAsFixed(0)),
+                  _b(p.netSalary.toStringAsFixed(0)),
+                ],
+              ],
+              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+              headerStyle: pw.TextStyle(font: arabicBoldFont, fontSize: 7),
+              cellStyle: pw.TextStyle(font: arabicFont, fontSize: 7),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey200,
+              ),
+              cellAlignment: pw.Alignment.center,
+              headerAlignment: pw.Alignment.center,
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2),
+                1: const pw.FlexColumnWidth(1.4),
+                2: const pw.FlexColumnWidth(1),
+                3: const pw.FlexColumnWidth(1),
+                4: const pw.FlexColumnWidth(1),
+                5: const pw.FlexColumnWidth(1),
+                6: const pw.FlexColumnWidth(1),
+                7: const pw.FlexColumnWidth(1),
+                8: const pw.FlexColumnWidth(1.5),
+              },
+            ),
+            pw.SizedBox(height: 3),
+            pw.Text(
+              _b('أساسي + إضافي + انتظام - تأخير - غياب - إذن - سلف = إجمالي'),
+              style: pw.TextStyle(
+                font: arabicFont,
+                fontSize: 6,
+                color: PdfColors.grey600,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            // توقيعات لكل قسيمة (لازمة بعد القص)
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  _b('المحاسب: ............'),
+                  style: pw.TextStyle(font: arabicFont, fontSize: 7),
+                ),
+                pw.Text(
+                  _b('المدير: ............'),
+                  style: pw.TextStyle(font: arabicFont, fontSize: 7),
+                ),
+                pw.Text(
+                  _b('الموظف: ............'),
+                  style: pw.TextStyle(font: arabicFont, fontSize: 7),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    pw.Widget buildCutLine() {
+      return pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(vertical: 3),
+        child: pw.Row(
+          children: [
+            pw.Expanded(
+              child: pw.Divider(color: PdfColors.grey400, thickness: 0.5),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 6),
+              child: pw.Text(
+                _b('✂ قص هنا'),
+                style: pw.TextStyle(
+                  font: arabicFont,
+                  fontSize: 7,
+                  color: PdfColors.grey600,
+                ),
+              ),
+            ),
+            pw.Expanded(
+              child: pw.Divider(color: PdfColors.grey400, thickness: 0.5),
+            ),
+          ],
+        ),
+      );
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(8),
+        theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicBoldFont),
+        header: (pw.Context ctx) {
+          if (ctx.pageNumber > 1) {
+            return pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 4),
+              child: pw.Center(
+                child: pw.Text(
+                  _b('كشف مرتبات مجمع - $period'),
+                  style: pw.TextStyle(font: arabicBoldFont, fontSize: 9),
+                ),
+              ),
+            );
+          }
+          return pw.SizedBox();
+        },
+        footer: (pw.Context ctx) => pw.Center(
+          child: pw.Text(
+            _b('صفحة ${ctx.pageNumber} / ${ctx.pagesCount}'),
+            style: pw.TextStyle(
+              font: arabicFont,
+              fontSize: 7,
+              color: PdfColors.grey600,
+            ),
+          ),
+        ),
+        build: (pw.Context ctx) => [
+          pw.Center(
+            child: pw.Text(
+              _b('كشف مرتبات مجمع - $period'),
+              style: pw.TextStyle(font: arabicBoldFont, fontSize: 14),
+            ),
+          ),
+          pw.SizedBox(height: 2),
+          pw.Center(
+            child: pw.Text(
+              _b(
+                'عدد الموظفين: ${payrolls.length} - إجمالي الصافي: ${totalNet.toStringAsFixed(0)} - إصدار: $issueDateStr',
+              ),
+              style: pw.TextStyle(
+                font: arabicFont,
+                fontSize: 8,
+                color: PdfColors.grey700,
+              ),
+            ),
+          ),
+          pw.SizedBox(height: 6),
+          for (int i = 0; i < payrolls.length; i++) ...[
+            buildSlip(payrolls[i]),
+            if (i != payrolls.length - 1) buildCutLine(),
+          ],
+        ],
+      ),
+    );
+
+    await Printing.layoutPdf(onLayout: (f) async => pdf.save());
+  }
 
   static Future<void> generateAndPrint({
     required BuildContext context,
@@ -101,7 +505,11 @@ class StaffPayrollStatementGenerator {
     // حساب ساعات التأخير/الانصراف المبكر الحقيقية لكل فترة من سجلات الحضور
     final Map<int, Map<String, dynamic>> payrollDetails = {};
     for (final p in payrollRecords) {
-      final atts = await db.staffManagementDao.getAttendanceByStaff(staff.staffId, startDate: p.periodStart, endDate: p.periodEnd.add(const Duration(days: 1)));
+      final atts = await db.staffManagementDao.getAttendanceByStaff(
+        staff.staffId,
+        startDate: p.periodStart,
+        endDate: p.periodEnd.add(const Duration(days: 1)),
+      );
       // نحتاج إعدادات grace و workStart/End لحساب الدقائق
       String workStart = '08:00';
       String workEnd = '17:00';
@@ -115,215 +523,226 @@ class StaffPayrollStatementGenerator {
         for (final s in settings) {
           if (s.settingKey == 'default_work_start') workStart = s.settingValue;
           if (s.settingKey == 'default_work_end') workEnd = s.settingValue;
-          if (s.settingKey == 'grace_period_minutes') grace = int.tryParse(s.settingValue) ?? 15;
-          if (s.settingKey == 'late_penalty_per_hour') lateMult = double.tryParse(s.settingValue) ?? 0;
-          if (s.settingKey == 'early_leave_penalty_per_hour') earlyMult = double.tryParse(s.settingValue) ?? 0;
-          if (s.settingKey == 'absence_penalty_amount') absencePerDay = double.tryParse(s.settingValue) ?? 0;
-          if (s.settingKey == 'absence_penalty_days_multiplier') absenceMult = double.tryParse(s.settingValue) ?? 1.0;
+          if (s.settingKey == 'grace_period_minutes')
+            grace = int.tryParse(s.settingValue) ?? 15;
+          if (s.settingKey == 'late_penalty_per_hour')
+            lateMult = double.tryParse(s.settingValue) ?? 0;
+          if (s.settingKey == 'early_leave_penalty_per_hour')
+            earlyMult = double.tryParse(s.settingValue) ?? 0;
+          if (s.settingKey == 'absence_penalty_amount')
+            absencePerDay = double.tryParse(s.settingValue) ?? 0;
+          if (s.settingKey == 'absence_penalty_days_multiplier')
+            absenceMult = double.tryParse(s.settingValue) ?? 1.0;
         }
       } catch (_) {}
-    if (!staff.useDefaultSchedule) {
-      if (staff.workScheduleStart != null && staff.workScheduleStart!.isNotEmpty) workStart = staff.workScheduleStart!;
-      if (staff.workScheduleEnd != null && staff.workScheduleEnd!.isNotEmpty) workEnd = staff.workScheduleEnd!;
-    }
-          int sMin = 9*60; int eMin = 17*60;
-      try { final pa = workStart.split(':'); sMin = (int.tryParse(pa[0])??9)*60 + (int.tryParse(pa[1])??0); } catch(_){}
-      try { final pa = workEnd.split(':'); eMin = (int.tryParse(pa[0])??17)*60 + (int.tryParse(pa[1])??0); } catch(_){}
+      if (!staff.useDefaultSchedule) {
+        if (staff.workScheduleStart != null &&
+            staff.workScheduleStart!.isNotEmpty)
+          workStart = staff.workScheduleStart!;
+        if (staff.workScheduleEnd != null && staff.workScheduleEnd!.isNotEmpty)
+          workEnd = staff.workScheduleEnd!;
+      }
+      int sMin = 9 * 60;
+      int eMin = 17 * 60;
+      try {
+        final pa = workStart.split(':');
+        sMin = (int.tryParse(pa[0]) ?? 9) * 60 + (int.tryParse(pa[1]) ?? 0);
+      } catch (_) {}
+      try {
+        final pa = workEnd.split(':');
+        eMin = (int.tryParse(pa[0]) ?? 17) * 60 + (int.tryParse(pa[1]) ?? 0);
+      } catch (_) {}
       final gEnd = sMin + grace;
-      int lateMin = 0; int earlyMin = 0;
+      int lateMin = 0;
+      int earlyMin = 0;
       bool isLateAtt(Attendance a) {
-        if (a.excused && a.excusedHours <= 0) return false; // بإذن كامل — لا يُحسب تأخير
+        if (a.excused && a.excusedHours <= 0) return false;
         if (a.status == 'late') return true;
         if (a.status == 'present' && a.checkInTime != null) {
-          final ci = a.checkInTime!.hour*60 + a.checkInTime!.minute;
+          final ci = a.checkInTime!.hour * 60 + a.checkInTime!.minute;
           return ci > gEnd;
         }
         return false;
       }
-      int excessMin(int actualMinutes, Attendance a) {
-        if (!a.excused) return actualMinutes;
-        final allowed = (a.excusedHours * 60).round();
-        if (allowed <= 0) return 0;
-        final r = actualMinutes - allowed;
-        return r < 0 ? 0 : r;
-      }
-      int excusedUsedMin(int actualMinutes, Attendance a) {
-        if (!a.excused) return 0;
-        final allowed = (a.excusedHours * 60).round();
-        if (allowed <= 0) return 0;
-        return actualMinutes < allowed ? actualMinutes : allowed;
-      }
-      int lateExcusedMin = 0; int earlyExcusedMin = 0;
+
+      int lateExcusedMin = 0;
+      int earlyExcusedMin = 0;
       for (final a in atts) {
         if (isLateAtt(a) && a.checkInTime != null) {
-          final ci = a.checkInTime!.hour*60 + a.checkInTime!.minute;
-          if (ci > gEnd) { final actual = ci - gEnd; lateMin += excessMin(actual, a); lateExcusedMin += excusedUsedMin(actual, a); }
+          final ci = a.checkInTime!.hour * 60 + a.checkInTime!.minute;
+          if (ci > gEnd) {
+            final actual = ci - sMin;
+            lateMin += actual;
+          }
         }
-        if (a.checkOutTime != null && (!a.excused || a.excusedHours > 0)) {
-          final co = a.checkOutTime!.hour*60 + a.checkOutTime!.minute;
-          if (co < eMin) { final actual = eMin - co; earlyMin += excessMin(actual, a); earlyExcusedMin += excusedUsedMin(actual, a); }
+        if (a.excused && a.excusedHours > 0) {
+          if (a.status == 'early_leave')
+            earlyExcusedMin += (a.excusedHours * 60).round();
+          else if (isLateAtt(a) || a.status == 'late')
+            lateExcusedMin += (a.excusedHours * 60).round();
+          else if (a.checkOutTime != null) {
+            final co = a.checkOutTime!.hour * 60 + a.checkOutTime!.minute;
+            if (co < eMin)
+              earlyExcusedMin += (a.excusedHours * 60).round();
+            else
+              lateExcusedMin += (a.excusedHours * 60).round();
+          } else
+            lateExcusedMin += (a.excusedHours * 60).round();
+        }
+        if (a.checkOutTime != null) {
+          final co = a.checkOutTime!.hour * 60 + a.checkOutTime!.minute;
+          if (co < eMin) {
+            if (a.excused && a.excusedHours <= 0) {
+            } else {
+              final actual = eMin - co;
+              earlyMin += actual;
+            }
+          }
         }
       }
-      // الحساب: ساعات الإذن 1x + الزيادة lateMult/earlyMult (مثال 2س إذن + 8س زيادة = 2*1 + 8*1.5)
-      final hourly = staff.hourlyRate ?? (staff.basicSalary / 30 / 8);
-      final daily = staff.basicSalary / 30;
-      final lateDed = (lateMin / 60.0) * hourly * (lateMult > 0 ? lateMult : 0) + (lateExcusedMin / 60.0) * hourly;
-      final earlyDed = (earlyMin / 60.0) * hourly * (earlyMult > 0 ? earlyMult : 0) + (earlyExcusedMin / 60.0) * hourly;
+      // الإذن منفصل: lateMin×1.5 + إذن منفصل×1.0 (القاعدة الأسبوعية ÷6)
+      final _sbase = PayrollDisplay.baseOf(staff);
+      final hourly = staff.hourlyRate ?? (_sbase.base / _sbase.divisor / 8);
+      final daily = _sbase.base / _sbase.divisor;
+      final lateDed =
+          (lateMin / 60.0) * hourly * (lateMult > 0 ? lateMult : 0) +
+          (lateExcusedMin / 60.0) * hourly;
+      final earlyDed =
+          (earlyMin / 60.0) * hourly * (earlyMult > 0 ? earlyMult : 0) +
+          (earlyExcusedMin / 60.0) * hourly;
       final lateExcusedDed = (lateExcusedMin / 60.0) * hourly;
       final earlyExcusedDed = (earlyExcusedMin / 60.0) * hourly;
-      final absentDed = absencePerDay > 0 ? p.absentDays * absencePerDay : p.absentDays * daily * absenceMult;
-      payrollDetails[p.id] = {'lateMin': lateMin, 'earlyMin': earlyMin, 'lateExcusedMin': lateExcusedMin, 'earlyExcusedMin': earlyExcusedMin, 'lateDed': lateDed, 'earlyDed': earlyDed, 'lateExcusedDed': lateExcusedDed, 'earlyExcusedDed': earlyExcusedDed, 'absentDed': absentDed};
+      final absentDed = absencePerDay > 0
+          ? p.absentDays * absencePerDay
+          : p.absentDays * daily * absenceMult;
+      payrollDetails[p.id] = {
+        'lateMin': lateMin,
+        'earlyMin': earlyMin,
+        'lateExcusedMin': lateExcusedMin,
+        'earlyExcusedMin': earlyExcusedMin,
+        'lateDed': lateDed,
+        'earlyDed': earlyDed,
+        'lateExcusedDed': lateExcusedDed,
+        'earlyExcusedDed': earlyExcusedDed,
+        'absentDed': absentDed,
+      };
     }
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(24),
-        theme: pw.ThemeData.withFont(
-          base: arabicFont,
-          bold: arabicBoldFont,
-        ),
+        theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicBoldFont),
         build: (pw.Context context) {
+          // تصميم جديد حسب ورقة العميل: الإسم / المرتب الأساسي / إضافي / انتظام / تأخير / غياب / سلف / إذن / إجمالي
           return [
-            // العنوان الرئيسي
             pw.Center(
               child: pw.Text(
-                _b('كشف حساب مرتب'),
-                style: pw.TextStyle(
-                  font: arabicBoldFont,
-                  fontSize: 20,
-                ),
+                _b('كشف المرتبات - ${payrollRecords.first.payrollPeriod}'),
+                style: pw.TextStyle(font: arabicBoldFont, fontSize: 16),
               ),
             ),
-            pw.SizedBox(height: 16),
-
-            // بيانات الموظف
-            pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
-                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-              ),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    _b('الاسم: ${staff.name}'),
-                    style: pw.TextStyle(font: arabicFont, fontSize: 12),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    _b('الكود: ${staff.staffId}'),
-                    style: pw.TextStyle(font: arabicFont, fontSize: 12),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    _b('الوظيفة: ${staff.position}'),
-                    style: pw.TextStyle(font: arabicFont, fontSize: 12),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    _b('المرتب الأساسي: ${staff.basicSalary.toStringAsFixed(2)} جنيه'),
-                    style: pw.TextStyle(font: arabicFont, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            pw.SizedBox(height: 16),
-
-            // جدول السجلات
+            pw.SizedBox(height: 12),
+            // جدول واحد مجمع لكل الموظفين بتصميم الورقة
             pw.TableHelper.fromTextArray(
-              headers: tableHeaders,
-              data: tableData,
-              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+              headers: [
+                _b('الإسم'),
+                _b('المرتب الأساسي'),
+                _b('إضافي'),
+                _b('انتظام'),
+                _b('تأخير'),
+                _b('غياب'),
+                _b('سلف'),
+                _b('إذن'),
+                _b('إجمالي المرتب'),
+              ],
+              data: payrollRecords.map((p) {
+                // الغياب من القيم المخزنة أولاً (تشمل ×mult) — إعادة الحساب
+                // اللحظية بدون المضاعف كانت تعرض رقماً مخالفاً للمخزن.
+                final d = payrollDetails[p.id];
+                double absentDed = p.deductions -
+                    p.lateDeduction -
+                    p.permissionDeduction -
+                    p.advances -
+                    p.penaltiesTotal;
+                if (absentDed < 0) absentDed = 0;
+                if (p.deductions == 0 && d != null) {
+                  absentDed =
+                      (d['absentDed'] as double?) ??
+                      p.absentDays * (p.basicSalary / 30);
+                }
+                // لو payroll قديم و lateDeduction صفر، استخدم الحساب اللحظي
+                double lateVal = p.lateDeduction;
+                double permVal = p.permissionDeduction;
+                if (lateVal == 0 && d != null)
+                  lateVal = (d['lateDed'] as double?) ?? 0;
+                if (permVal == 0 && d != null)
+                  permVal =
+                      (d['lateExcusedDed'] as double? ?? 0) +
+                      (d['earlyExcusedDed'] as double? ?? 0);
+                // انتظام = بونص
+                final intz = p.bonus;
+                return [
+                  _b(staff.name),
+                  _b(p.basicSalary.toStringAsFixed(0)),
+                  _b(p.overtimePay.toStringAsFixed(0)),
+                  _b(intz.toStringAsFixed(0)),
+                  _b(lateVal.toStringAsFixed(0)),
+                  _b(absentDed.toStringAsFixed(0)),
+                  _b(p.advances.toStringAsFixed(0)),
+                  _b(permVal.toStringAsFixed(0)),
+                  _b(p.netSalary.toStringAsFixed(0)),
+                ];
+              }).toList(),
+              border: pw.TableBorder.all(color: PdfColors.grey600, width: 0.7),
               headerStyle: pw.TextStyle(
                 font: arabicBoldFont,
-                fontSize: 10,
+                fontSize: 9,
                 fontWeight: pw.FontWeight.bold,
               ),
-              cellStyle: pw.TextStyle(
-                font: arabicFont,
-                fontSize: 9,
-              ),
+              cellStyle: pw.TextStyle(font: arabicFont, fontSize: 8),
               headerDecoration: const pw.BoxDecoration(
-                color: PdfColors.grey200,
+                color: PdfColors.grey300,
               ),
               cellAlignment: pw.Alignment.center,
               headerAlignment: pw.Alignment.center,
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2),
+                1: const pw.FlexColumnWidth(1.4),
+                2: const pw.FlexColumnWidth(1),
+                3: const pw.FlexColumnWidth(1),
+                4: const pw.FlexColumnWidth(1),
+                5: const pw.FlexColumnWidth(1),
+                6: const pw.FlexColumnWidth(1),
+                7: const pw.FlexColumnWidth(1),
+                8: const pw.FlexColumnWidth(1.5),
+              },
             ),
-            pw.SizedBox(height: 12),
-            // ملخص الإيرادات (وقت إضافي + بدلات)
-            pw.Text(_b('الإيرادات'), style: pw.TextStyle(font: arabicBoldFont, fontSize: 12)),
-            pw.SizedBox(height: 6),
-            pw.TableHelper.fromTextArray(
-              headers: [_b('البند'), _b('الكمية'), _b('المبلغ')],
-              data: payrollRecords.expand((p) {
-                final rows = <List<String>>[];
-                if (p.overtimeHours > 0) {
-                  rows.add([_b('وقت إضافي'), _b('${p.overtimeHours.toStringAsFixed(1)} س'), _b(p.overtimePay.toStringAsFixed(2))]);
-                }
-                if (p.allowances > 0) rows.add([_b('بدلات'), _b('-'), _b(p.allowances.toStringAsFixed(2))]);
-                return rows;
-              }).toList(),
-              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
-              headerStyle: pw.TextStyle(font: arabicBoldFont, fontSize: 9),
-              cellStyle: pw.TextStyle(font: arabicFont, fontSize: 8),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-              cellAlignment: pw.Alignment.center,
+            pw.SizedBox(height: 8),
+            pw.Text(
+              _b(
+                'المعادلة: أساسي + إضافي×1.5 + انتظام 200 (لو 0 غياب) - تأخير×1.5 - غياب×(أساسي÷30) - إذن×1.0 - سلف = إجمالي',
+              ),
+              style: pw.TextStyle(
+                font: arabicFont,
+                fontSize: 7,
+                color: PdfColors.grey600,
+              ),
             ),
-            pw.SizedBox(height: 12),
-            // جدول تفصيلي للخصومات
-            pw.Text(_b('تفاصيل الخصومات'), style: pw.TextStyle(font: arabicBoldFont, fontSize: 12)),
-            pw.SizedBox(height: 6),
-            pw.TableHelper.fromTextArray(
-              headers: [_b('البند'), _b('الأيام/الساعات'), _b('المبلغ'), _b('السبب')],
-              data: payrollRecords.expand((p) {
-                final rows = <List<String>>[];
-                final d = payrollDetails[p.id] ?? {'lateMin':0,'earlyMin':0,'lateDed':0.0,'earlyDed':0.0,'absentDed':0.0};
-                final lateMin = d['lateMin'] as int;
-                final earlyMin = d['earlyMin'] as int;
-                final lateExcusedMin = (d['lateExcusedMin'] as int?) ?? 0;
-                final earlyExcusedMin = (d['earlyExcusedMin'] as int?) ?? 0;
-                final lateExcusedDed = (d['lateExcusedDed'] as double?) ?? 0;
-                final earlyExcusedDed = (d['earlyExcusedDed'] as double?) ?? 0;
-                final lateDedExcess = (d['lateDed'] as double? ?? 0) - lateExcusedDed;
-                final earlyDedExcess = (d['earlyDed'] as double? ?? 0) - earlyExcusedDed;
-                final absentDed = (d['absentDed'] as double?) ?? p.absentDays * (p.basicSalary/30);
-                if (p.absentDays > 0) rows.add([_b('غياب'), _b('${p.absentDays} يوم'), _b(absentDed.toStringAsFixed(2)), _b('غياب بدون إذن')]);
-                if (lateExcusedMin > 0) {
-                  final h = (lateExcusedMin/60).toStringAsFixed(1);
-                  rows.add([_b('تأخير بإذن'), _b('${h} س'), _b(lateExcusedDed.toStringAsFixed(2)), _b('إذن ساعة بساعة (1.0×)')]);
-                }
-                if (lateMin > 0) {
-                  final h = (lateMin/60).toStringAsFixed(1);
-                  rows.add([_b('تأخير'), _b('${h} س'), _b(lateDedExcess.toStringAsFixed(2)), _b('تأخير بعد السماح (1.5×)')]);
-                } else if ((d['lateDed'] as double? ?? 0) > 0 && lateExcusedMin==0) {
-                  // حالة قديمة بلا تفصيل
-                  rows.add([_b('تأخير'), _b('${(lateMin/60).toStringAsFixed(1)} س'), _b((d['lateDed'] as double).toStringAsFixed(2)), _b('تأخير بعد السماح')]);
-                }
-                if (earlyExcusedMin > 0) {
-                  final h = (earlyExcusedMin/60).toStringAsFixed(1);
-                  rows.add([_b('انصراف بإذن'), _b('${h} س'), _b(earlyExcusedDed.toStringAsFixed(2)), _b('إذن ساعة بساعة (1.0×)')]);
-                }
-                if (earlyMin > 0) {
-                  final h = (earlyMin/60).toStringAsFixed(1);
-                  rows.add([_b('انصراف مبكر'), _b('${h} س'), _b(earlyDedExcess.toStringAsFixed(2)), _b('خروج قبل نهاية الدوام (1.5×)')]);
-                }
-                // أي جزاءات يدوية (مكافآت/جزاءات مسجلة من rewards_penalties) مش متغطاة بالتفاصيل أعلاه
-                final covered = absentDed + lateDed + earlyDed;
-                final remainder = (p.penaltiesTotal - covered);
-                if ((p.penaltiesTotal > 0 || covered > 0) && remainder.abs() > 0.01) {
-                  rows.add([_b('جزاءات / فرق'), _b('-'), _b(remainder.toStringAsFixed(2)), _b('جزاءات أخرى / تلقائية')]);
-                }
-                if (p.advances > 0) rows.add([_b('سلف'), _b('-'), _b(p.advances.toStringAsFixed(2)), _b('سلفة')]);
-                if (rows.isEmpty) rows.add([_b('-'), _b('-'), _b('0.00'), _b('لا يوجد خصومات')]);
-                return rows;
-              }).toList(),
-              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
-              headerStyle: pw.TextStyle(font: arabicBoldFont, fontSize: 9),
-              cellStyle: pw.TextStyle(font: arabicFont, fontSize: 8),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-              cellAlignment: pw.Alignment.center,
+            pw.SizedBox(height: 16),
+            // توقيعات
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  _b('توقيع المحاسب: ................'),
+                  style: pw.TextStyle(font: arabicFont, fontSize: 9),
+                ),
+                pw.Text(
+                  _b('توقيع المدير: ................'),
+                  style: pw.TextStyle(font: arabicFont, fontSize: 9),
+                ),
+              ],
             ),
           ];
         },

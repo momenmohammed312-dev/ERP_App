@@ -31,6 +31,8 @@ class StaffManagementService {
     required String position,
     required String employmentType,
     required double basicSalary,
+    String payFrequency = 'monthly',
+    double? weeklySalary,
     String? nationalId,
     String? phone,
     String? email,
@@ -78,6 +80,8 @@ class StaffManagementService {
         workScheduleEnd: Value(workScheduleEnd),
         workDays: Value(workDays),
         weekendDay: Value(weekendDay),
+        payFrequency: Value(payFrequency),
+        weeklySalary: Value(weeklySalary),
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),
@@ -103,6 +107,8 @@ class StaffManagementService {
     String? notes,
     String? status,
     DateTime? contractEndDate,
+    String? payFrequency,
+    double? weeklySalary,
     bool? useDefaultSchedule,
     String? workScheduleStart,
     String? workScheduleEnd,
@@ -141,6 +147,10 @@ class StaffManagementService {
           notes: notes != null ? Value(notes) : const Value.absent(),
           contractEndDate: contractEndDate != null
               ? Value(contractEndDate)
+              : const Value.absent(),
+          payFrequency: payFrequency ?? staff.payFrequency,
+          weeklySalary: weeklySalary != null
+              ? Value(weeklySalary)
               : const Value.absent(),
           useDefaultSchedule: useDefaultSchedule ?? staff.useDefaultSchedule,
           workScheduleStart: workScheduleStart != null
@@ -211,6 +221,7 @@ class StaffManagementService {
     double? workingHours;
     double? overtimeHours;
     String? status;
+    int? lateMinutes;
     final db = _db;
 
     if (db != null) {
@@ -243,6 +254,7 @@ class StaffManagementService {
           workingHours = result.workingHours;
           overtimeHours = result.overtimeHours;
           status = result.status;
+          lateMinutes = result.lateMinutes;
         }
       } catch (_) {
         // Fallback: let DAO calculate basic working hours
@@ -258,6 +270,7 @@ class StaffManagementService {
       workingHours: workingHours,
       overtimeHours: overtimeHours,
       status: status,
+      lateMinutes: lateMinutes,
     );
   }
 
@@ -320,6 +333,11 @@ class StaffManagementService {
     });
   }
 
+  /// تعديل يدوي (مراقب) مع دعم الوقت الإضافي:
+  /// - [overtimeHours] صريح → يُعتمد كما هو (تعديل إداري موثق بسبب [reason]).
+  /// - بدون قيمة صريحة ووجود حضور+انصراف → إعادة حساب تلقائي بالمحرك
+  ///   (مهلة الإضافي من الإعدادات) لساعات العمل والإضافي معاً.
+  /// - بدون أوقات → الاحتفاظ بالقيم المخزنة كما هي.
   Future<void> recordManualOverride(
     User? user,
     String staffId, {
@@ -329,10 +347,36 @@ class StaffManagementService {
     DateTime? checkInTime,
     DateTime? checkOutTime,
     String? notes,
+    double? permissionHours,
+    double? overtimeHours,
   }) async {
     PermissionValidator.requirePermission(user, Permission.manageAttendance);
     if (reason.trim().isEmpty) {
       throw Exception('Reason is required for manual override');
+    }
+
+    double? finalOvertime = overtimeHours;
+    double? finalWorkingHours;
+    if (finalOvertime == null &&
+        checkInTime != null &&
+        checkOutTime != null &&
+        _db != null) {
+      try {
+        final engine = AttendanceCalculationEngine(
+          _db,
+          _db.attendanceDeviceDao,
+          _dao,
+        );
+        final calc = await engine.processCheckOut(
+          staffId,
+          checkInTime: checkInTime,
+          checkOutTime: checkOutTime,
+        );
+        finalOvertime = calc.overtimeHours;
+        finalWorkingHours = calc.workingHours;
+      } catch (_) {
+        // Fallback: تُحفظ الأوقات بدون إعادة حساب
+      }
     }
 
     final entry = AttendanceTableCompanion.insert(
@@ -341,7 +385,14 @@ class StaffManagementService {
       status: status,
       checkInTime: Value(checkInTime),
       checkOutTime: Value(checkOutTime),
+      workingHours: finalWorkingHours == null
+          ? const Value.absent()
+          : Value(finalWorkingHours),
+      overtimeHours: finalOvertime == null
+          ? const Value.absent()
+          : Value(finalOvertime),
       notes: Value(notes),
+      permissionHours: Value(permissionHours ?? 0),
       source: const Value('admin_override'),
       overrideReason: Value(reason),
       createdAt: DateTime.now(),
@@ -351,11 +402,15 @@ class StaffManagementService {
     final todayRecords = await _dao.getAttendanceOnDate(staffId, date);
 
     if (todayRecords.isNotEmpty) {
-      final updated = todayRecords.first.copyWith(
+      final current = todayRecords.first;
+      final updated = current.copyWith(
         status: status,
         checkInTime: Value(checkInTime),
         checkOutTime: Value(checkOutTime),
+        workingHours: Value(finalWorkingHours ?? current.workingHours),
+        overtimeHours: finalOvertime ?? current.overtimeHours,
         notes: Value(notes),
+        permissionHours: permissionHours ?? current.permissionHours,
         source: const Value('admin_override'),
         overrideReason: Value(reason),
         updatedAt: DateTime.now(),
@@ -373,6 +428,7 @@ class StaffManagementService {
     DateTime? checkInTime,
     DateTime? checkOutTime,
     double? workingHours,
+    double? overtimeHours,
     String? notes,
     String source = 'manual',
   }) async {
@@ -385,6 +441,28 @@ class StaffManagementService {
       final computed = raw - breakHrs;
       finalWorkingHours = computed < 0 ? 0 : computed;
     }
+    // الإضافي: صريح → يُعتمد، وإلا يُحسب بالمحرك عند وجود الأوقات
+    var finalOvertime = overtimeHours;
+    if (finalOvertime == null &&
+        checkInTime != null &&
+        checkOutTime != null &&
+        _db != null) {
+      try {
+        final engine = AttendanceCalculationEngine(
+          _db,
+          _db.attendanceDeviceDao,
+          _dao,
+        );
+        final calc = await engine.processCheckOut(
+          staffId,
+          checkInTime: checkInTime,
+          checkOutTime: checkOutTime,
+        );
+        finalOvertime = calc.overtimeHours;
+      } catch (_) {
+        finalOvertime = 0;
+      }
+    }
     final entry = AttendanceTableCompanion.insert(
       staffId: staffId,
       date: date,
@@ -392,6 +470,9 @@ class StaffManagementService {
       checkInTime: Value(checkInTime),
       checkOutTime: Value(checkOutTime),
       workingHours: Value(finalWorkingHours),
+      overtimeHours: finalOvertime == null
+          ? const Value.absent()
+          : Value(finalOvertime),
       notes: Value(notes),
       source: Value(source),
       createdAt: DateTime.now(),
@@ -406,6 +487,7 @@ class StaffManagementService {
         checkInTime: Value(checkInTime),
         checkOutTime: Value(checkOutTime),
         workingHours: Value(finalWorkingHours),
+        overtimeHours: finalOvertime ?? todayRecords.first.overtimeHours,
         notes: Value(notes),
         source: Value(source),
         updatedAt: DateTime.now(),
@@ -414,6 +496,79 @@ class StaffManagementService {
     } else {
       await _dao.addAttendance(entry);
     }
+  }
+
+  /// إعادة حساب الوقت الإضافي (وساعات العمل) لسجلات فترة — بقاعدة المهلة الحالية.
+  /// يتخطى: سجلات `admin_override` (قرار إداري صريح) وأي يوم داخل فترة مرتب `paid`.
+  /// العملية كلها في transaction واحدة (atomic). ترجع (أُعيد حسابه، مُتخطى).
+  Future<({int recomputed, int skipped})> recomputeOvertimeForPeriod(
+    User? user,
+    String staffId,
+    DateTime start,
+    DateTime end,
+  ) async {
+    PermissionValidator.requirePermission(user, Permission.manageAttendance, 'إعادة حساب الإضافي');
+    final db = _dao.attachedDatabase;
+    final s = DateTime(start.year, start.month, start.day);
+    final e = DateTime(end.year, end.month, end.day).add(const Duration(days: 1));
+
+    final rows = await _dao.getAttendanceByStaff(staffId, startDate: s, endDate: e);
+    final payrolls = await (db.select(db.payrollTable)
+          ..where((t) => t.staffId.equals(staffId)))
+        .get();
+    bool inPaidPeriod(DateTime day) {
+      final d = DateTime(day.year, day.month, day.day);
+      for (final p in payrolls) {
+        if (p.status != 'paid') continue;
+        final ps = DateTime(p.periodStart.year, p.periodStart.month, p.periodStart.day);
+        final pe = DateTime(p.periodEnd.year, p.periodEnd.month, p.periodEnd.day);
+        if (!d.isBefore(ps) && !d.isAfter(pe)) return true;
+      }
+      return false;
+    }
+
+    final engine = AttendanceCalculationEngine(db, db.attendanceDeviceDao, _dao);
+    final schedule = await engine.getScheduleForStaff(staffId);
+    int recomputed = 0;
+    int skipped = 0;
+    await db.transaction(() async {
+      for (final r in rows) {
+        if (r.checkInTime == null) {
+          skipped++;
+          continue;
+        }
+        if (r.source == 'admin_override' || inPaidPeriod(r.date)) {
+          skipped++;
+          continue;
+        }
+        if (r.checkOutTime != null) {
+          final calc = await engine.processCheckOut(
+            staffId,
+            checkInTime: r.checkInTime!,
+            checkOutTime: r.checkOutTime!,
+          );
+          await _dao.updateAttendance(r.copyWith(
+            workingHours: Value(calc.workingHours),
+            overtimeHours: calc.overtimeHours,
+            lateMinutes: calc.lateMinutes,
+            status: calc.status,
+            updatedAt: DateTime.now(),
+          ));
+        } else {
+          final calc = engine.calculateAttendance(
+            checkInTime: r.checkInTime!,
+            schedule: schedule,
+          );
+          await _dao.updateAttendance(r.copyWith(
+            lateMinutes: calc.lateMinutes,
+            status: calc.status,
+            updatedAt: DateTime.now(),
+          ));
+        }
+        recomputed++;
+      }
+    });
+    return (recomputed: recomputed, skipped: skipped);
   }
 
   /// يقرأ عدد دقائق الراحة من الإعدادات (افتراضي 60 دقيقة = ساعة)
@@ -498,6 +653,30 @@ class StaffManagementService {
     await _dao.updateAttendance(rec);
   }
 
+  /// عكس حضور فقط — يصلح الاستيراد المعكوس (الحضور راح في الانصراف) بدون ما يلمس الانصراف الأصلي
+  Future<int> swapAttendanceTimesForPeriod(String staffId, DateTime from, DateTime to) async {
+    final start = DateTime(from.year, from.month, from.day);
+    final end = DateTime(to.year, to.month, to.day);
+    int count = 0;
+    for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      final list = await _dao.getAttendanceOnDate(staffId, d);
+      if (list.isEmpty) continue;
+      final r = list.first;
+      if (r.checkOutTime == null) continue;
+      // انقل قيمة الانصراف (اللي هي حضور بالغلط) للحضور، وسيب الانصراف الأصلي زي ما هو (يجي من البصمة عادي)
+      final shouldFix = r.checkInTime == null || (r.checkInTime != null && r.checkOutTime != null && r.checkInTime!.isAfter(r.checkOutTime!));
+      if (!shouldFix) continue;
+      final swapped = r.copyWith(
+        checkInTime: Value(r.checkOutTime),
+        // ميعدلش الانصراف — سيبه زي ما هو
+        updatedAt: DateTime.now(),
+      );
+      await _dao.updateAttendance(swapped);
+      count++;
+    }
+    return count;
+  }
+
   /// إلغاء الإذن لفترة — يرجع كل الأيام في الفترة إلى بدون إذن
   Future<int> clearExcusedPeriod(String staffId, DateTime from, DateTime to) async {
     final start = DateTime(from.year, from.month, from.day);
@@ -535,8 +714,9 @@ class StaffManagementService {
     int totalEarlyMinutes = 0;
     int totalLateExcusedMinutes = 0;
     int totalEarlyExcusedMinutes = 0;
+    double totalLateHours = 0.0;
+    double totalPermissionHours = 0.0;
 
-    // لجمع دقائق التأخير/انصراف مبكر نحتاج جدول العمل
     ScheduleConfig? schedule;
     final db = _db;
     if (db != null) {
@@ -548,32 +728,13 @@ class StaffManagementService {
 
     bool isLateByTime(Attendance r) {
       if (r.checkInTime == null || schedule == null) return false;
-      if (r.excused && r.excusedHours <= 0) return false; // بإذن كامل — لا يُحسب تأخير
+      if (r.excused && r.excusedHours <= 0) return false;
       final ciMin = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
       final graceEnd = schedule.workStartMinutesSinceMidnight + schedule.gracePeriodMinutes;
       return ciMin > graceEnd;
     }
 
-    // يخصم ساعات الإذن المسموح (excusedHours) من الدقائق الفعلية للمخالفة —
-    // المطلوب حالياً: ساعات الإذن نفسها تُخصم بسعر عادي (1x) + الزيادة بخصم مضاعف
-    // لذا نحسب الاثنين منفصلين: excusedUsed (يُخصم 1x) و excess (يُخصم بمضاعف)
-    int _excessMinutes(int actualMinutes, Attendance r) {
-      if (!r.excused) return actualMinutes; // بدون إذن — كله excess
-      final allowedMinutes = (r.excusedHours * 60).round();
-      if (allowedMinutes <= 0) return 0; // بإذن كامل بلا ساعات — لا excess
-      final result = actualMinutes - allowedMinutes;
-      return result < 0 ? 0 : result;
-    }
-
-    int _excusedUsedMinutes(int actualMinutes, Attendance r) {
-      if (!r.excused) return 0; // بدون إذن — لا يوجد جزء مأذون
-      final allowedMinutes = (r.excusedHours * 60).round();
-      if (allowedMinutes <= 0) return 0; // بإذن كامل بلا ساعات محددة — مجاني بالكامل
-      return actualMinutes < allowedMinutes ? actualMinutes : allowedMinutes;
-    }
-
     for (final record in attendanceRecords) {
-      // تحديد التأخير دفاعياً من الوقت حتى لو status مخزون خطأً كـ present (استيراد قديم)
       final effectiveIsLate = (record.status == 'late' || (record.status == 'present' && isLateByTime(record)));
       switch (record.status) {
         case 'present':
@@ -583,9 +744,12 @@ class StaffManagementService {
             final ciMin = record.checkInTime!.hour * 60 + record.checkInTime!.minute;
             final graceEnd = schedule!.workStartMinutesSinceMidnight + schedule.gracePeriodMinutes;
             if (ciMin > graceEnd) {
-              final actual = ciMin - graceEnd;
-              totalLateMinutes += _excessMinutes(actual, record);
-              totalLateExcusedMinutes += _excusedUsedMinutes(actual, record);
+              // القاعدة المتفق عليها: التأخير من بداية الدوام شاملاً السماح
+              final actual = ciMin - schedule.workStartMinutesSinceMidnight;
+              totalLateMinutes += actual;
+              if (record.excused && record.excusedHours > 0) {
+                totalLateExcusedMinutes += (record.excusedHours * 60).round();
+              }
             }
           } else {
             presentDays++;
@@ -598,52 +762,70 @@ class StaffManagementService {
           leaveDays++;
           break;
         case 'late':
-          presentDays++; // Late counts as present
-          // احتساب دقائق التأخير الفعلية بعد فترة السماح — ساعات الإذن تُخصم 1x والزيادة بمضاعف
+          presentDays++;
           if (record.checkInTime != null && schedule != null) {
             if (record.excused && record.excusedHours <= 0) {
-              // بإذن كامل مجاني — لا يُحسب lateDays ولا خصم
             } else {
               lateDays++;
               final ciMin = record.checkInTime!.hour * 60 + record.checkInTime!.minute;
               final graceEnd = schedule.workStartMinutesSinceMidnight + schedule.gracePeriodMinutes;
               if (ciMin > graceEnd) {
-                final actual = ciMin - graceEnd;
-                totalLateMinutes += _excessMinutes(actual, record);
-                totalLateExcusedMinutes += _excusedUsedMinutes(actual, record);
+                // القاعدة المتفق عليها: التأخير من بداية الدوام شاملاً السماح
+                final actual = ciMin - schedule.workStartMinutesSinceMidnight;
+                totalLateMinutes += actual;
+              }
+              if (record.excused && record.excusedHours > 0) {
+                totalLateExcusedMinutes += (record.excusedHours * 60).round();
               }
             }
+          } else if (record.excused && record.excusedHours > 0) {
+            totalLateExcusedMinutes += (record.excusedHours * 60).round();
           }
           break;
         case 'early_leave':
-          if (!record.excused && record.checkInTime != null && record.checkOutTime != null && schedule != null) {
-            // تحقق من كونه بدري فعلياً (checkOut قبل نهاية الدوام)
+          if (record.checkInTime != null && record.checkOutTime != null && schedule != null) {
             final coMin = record.checkOutTime!.hour * 60 + record.checkOutTime!.minute;
             final endMin = schedule.workEndMinutesSinceMidnight;
             if (coMin < endMin) lateDays++;
           }
-          presentDays++; // يُحسب كحضور مع بدري (بإذن = بدون خصم)
+          presentDays++;
+          if (record.excused && record.excusedHours > 0) {
+            totalEarlyExcusedMinutes += (record.excusedHours * 60).round();
+          }
           break;
       }
 
-      // انصراف مبكر: يحسب لأي سجل فيه checkOut قبل نهاية الدوام — ساعات الإذن 1x والزيادة بمضاعف
       if (record.checkOutTime != null && schedule != null) {
         final coMin = record.checkOutTime!.hour * 60 + record.checkOutTime!.minute;
         final endMin = schedule.workEndMinutesSinceMidnight;
         if (coMin < endMin) {
           final actual = endMin - coMin;
-          // even if excused fully with 0 hours, both helpers return 0 correctly
           if (record.excused && record.excusedHours <= 0) {
-            // بإذن كامل مجاني — لا شيء يُخصم
           } else {
-            totalEarlyMinutes += _excessMinutes(actual, record);
-            totalEarlyExcusedMinutes += _excusedUsedMinutes(actual, record);
+            if (record.status != 'early_leave' && record.excused && record.excusedHours > 0) {
+              totalEarlyExcusedMinutes += (record.excusedHours * 60).round();
+            }
+            totalEarlyMinutes += actual;
           }
         }
       }
 
       totalHours += record.workingHours ?? 0.0;
       totalOvertime += record.overtimeHours;
+      if (record.lateMinutes > 0) {
+        totalLateHours += record.lateMinutes / 60.0;
+      }
+      if (record.permissionHours > 0) {
+        totalPermissionHours += record.permissionHours;
+      }
+    }
+
+    if (totalLateHours == 0 && totalLateMinutes > 0) {
+      totalLateHours = totalLateMinutes / 60.0;
+    }
+
+    if (totalPermissionHours == 0 && (totalLateExcusedMinutes + totalEarlyExcusedMinutes) > 0) {
+      totalPermissionHours = (totalLateExcusedMinutes + totalEarlyExcusedMinutes) / 60.0;
     }
 
     return AttendanceSummary(
@@ -658,6 +840,8 @@ class StaffManagementService {
       totalEarlyMinutes: totalEarlyMinutes,
       totalLateExcusedMinutes: totalLateExcusedMinutes,
       totalEarlyExcusedMinutes: totalEarlyExcusedMinutes,
+      totalLateHours: totalLateHours,
+      totalPermissionHours: totalPermissionHours,
     );
   }
 
@@ -759,13 +943,39 @@ class StaffManagementService {
 
   // PAYROLL MANAGEMENT
 
-  Future<void> calculatePayroll(User? user, String staffId, String payrollPeriod) async {
+  Future<void> calculatePayroll(User? user, String staffId, String payrollPeriod, {double commitmentBonus = 0}) async {
     PermissionValidator.requirePermission(user, Permission.manageSalaries, 'حساب الرواتب');
     final staff = await _dao.getStaffById(staffId);
     if (staff == null) return;
 
-    final periodStart = _getPeriodStart(payrollPeriod);
-    final periodEnd = _getPeriodEnd(payrollPeriod);
+    await calculatePeriodPay(
+      staffId: staffId,
+      payrollPeriod: payrollPeriod,
+      periodStart: _getPeriodStart(payrollPeriod),
+      periodEnd: _getPeriodEnd(payrollPeriod),
+      baseSalary: staff.basicSalary,
+      dailyDivisor: 30,
+      commitmentBonus: commitmentBonus,
+    );
+  }
+
+  /// Shared payroll pipeline for any period (monthly or weekly).
+  /// Identical behavior to the old monthly path when called with the monthly
+  /// base salary and dailyDivisor 30 — STEP 2 extraction, no logic change.
+  Future<void> calculatePeriodPay({
+    required String staffId,
+    required String payrollPeriod,
+    required DateTime periodStart,
+    required DateTime periodEnd,
+    required double baseSalary,
+    required double dailyDivisor,
+    double commitmentBonus = 0,
+    bool applyCommitmentBonus = true,
+    bool capAdvancesToNet = false,
+  }) async {
+    final staff = await _dao.getStaffById(staffId);
+    if (staff == null) return;
+    final basicSalary = baseSalary;
 
     // توليد الغياب تلقائياً لكل يوم في الفترة قبل الحساب — يحترم الجمعة/الإجازة
     // مهم: لا نولّد غياب لأيام مستقبلية (بعد اليوم) — وإلا يظهر غياب 30 يوم مقدماً كما في الصورة
@@ -782,46 +992,87 @@ class StaffManagementService {
         await engine.generateAbsencesForDate(d);
       }
     } catch (_) {}
-    // Get attendance data
-    final attendanceSummary = await getAttendanceSummary(
+    // Get attendance data — لو فيه ملخص شهري مستورد (من الورق) استخدمه مباشرة (تأخير/إضافي/إذن/غياب منفصل)
+    var attendanceSummary = await getAttendanceSummary(
       staffId,
       periodStart,
       periodEnd,
     );
+    // override من monthly_attendance_summary_table لو موجود لنفس الفترة
+    try {
+      final summaryRow = await (dbForAbsence.select(dbForAbsence.monthlyAttendanceSummaryTable)..where((t) => t.staffId.equals(staffId) & t.period.equals(payrollPeriod))).getSingleOrNull();
+      if (summaryRow != null) {
+        attendanceSummary = AttendanceSummary(
+          totalDays: attendanceSummary.totalDays,
+          presentDays: attendanceSummary.presentDays,
+          absentDays: summaryRow.absentDays,
+          leaveDays: attendanceSummary.leaveDays,
+          lateDays: summaryRow.lateHours > 0 ? 1 : 0,
+          totalHours: attendanceSummary.totalHours,
+          totalOvertime: summaryRow.overtimeHours,
+          totalLateMinutes: (summaryRow.lateHours * 60).round(),
+          totalEarlyMinutes: 0,
+          totalLateExcusedMinutes: (summaryRow.excusedHours * 60).round(),
+          totalEarlyExcusedMinutes: 0,
+        );
+      }
+    } catch (_) {}
 
-    // Get advances to deduct (approved or paid advances, respecting installments)
+    // Payroll lifecycle guard first: paid rows are immutable.
+    final db = _dao.attachedDatabase;
+    final existingPayroll = await (db.select(db.payrollTable)
+      ..where((t) => t.staffId.equals(staffId) & t.payrollPeriod.equals(payrollPeriod))
+    ).getSingleOrNull();
+    if (existingPayroll != null && existingPayroll.status == 'paid') {
+      throw Exception('تم صرف راتب هذه الفترة بالفعل ولا يمكن إعادة احتسابه');
+    }
+
+    // Advance shares (remaining-aware): an advance contributes at most its
+    // unpaid remainder; fully-covered advances are settled opportunistically.
+    // Recalc neutrality: the deleted row's advance impact is reversed first
+    // (pro-rata by paidAmount) so repeated recalcs don't inflate paidAmount.
     final advances = await _dao.getAdvancesByStaff(staffId);
     final eligibleAdvances = advances.where(
       (a) => (a.status == 'approved' || a.status == 'paid'),
     ).toList();
 
-    double totalAdvances = 0.0;
-    for (final a in eligibleAdvances) {
-      if (a.installmentMonths != null &&
-          a.installmentMonths! > 1 &&
-          a.monthlyDeduction != null &&
-          a.monthlyDeduction! > 0) {
-        totalAdvances += a.monthlyDeduction!;
-      } else {
-        totalAdvances += a.amount;
+    final adjustedPaid = <int, double>{
+      for (final a in eligibleAdvances) a.id: a.paidAmount,
+    };
+    var toReverse = existingPayroll?.advances ?? 0.0;
+    if (toReverse > 0) {
+      final totalPaid = adjustedPaid.values.fold(0.0, (s, v) => s + v);
+      for (final a in eligibleAdvances) {
+        if (totalPaid <= 0 || toReverse <= 0) break;
+        final have = adjustedPaid[a.id]!;
+        final refund = toReverse * (have / totalPaid);
+        final applied = refund < have ? refund : have;
+        adjustedPaid[a.id] = have - applied;
+        toReverse -= applied;
       }
     }
+
+    final advanceShares = <int, double>{};
+    final settledIds = <int>[];
+    for (final a in eligibleAdvances) {
+      final installment = (a.installmentMonths != null &&
+              a.installmentMonths! > 1 &&
+              a.monthlyDeduction != null &&
+              a.monthlyDeduction! > 0)
+          ? a.monthlyDeduction!
+          : a.amount;
+      final remaining = a.amount - (adjustedPaid[a.id] ?? 0);
+      if (remaining <= 0) {
+        settledIds.add(a.id);
+        continue;
+      }
+      advanceShares[a.id] = installment < remaining ? installment : remaining;
+    }
+    double totalAdvances =
+        advanceShares.values.fold(0.0, (s, v) => s + v);
 
     // Get rewards and penalties for the period
-    final db = _dao.attachedDatabase;
-
-    // Check if payroll was already calculated or paid for this period
-    final existingPayroll = await (db.select(db.payrollTable)
-      ..where((t) => t.staffId.equals(staffId) & t.payrollPeriod.equals(payrollPeriod))
-    ).getSingleOrNull();
-
-    if (existingPayroll != null) {
-      if (existingPayroll.status == 'paid') {
-        throw Exception('تم صرف راتب هذه الفترة بالفعل ولا يمكن إعادة احتسابه');
-      }
-      // Remove old calculated record so fresh calculations replace it cleanly
-      await (db.delete(db.payrollTable)..where((t) => t.id.equals(existingPayroll.id))).go();
-    }
+    // (the old non-paid row, if any, is deleted inside the final txn below)
 
     final allRewardsPenalties = await (db.select(db.rewardsPenalties)
       ..where((t) => t.staffId.equals(staffId) & t.status.equals('active'))
@@ -845,7 +1096,6 @@ class StaffManagementService {
       }
     }
 
-    final basicSalary = staff.basicSalary;
     int workingDaysInPeriod = 0;
     try {
       final engTmp = AttendanceCalculationEngine(db, db.attendanceDeviceDao, _dao);
@@ -857,102 +1107,129 @@ class StaffManagementService {
       }
     } catch (_) {}
     if (workingDaysInPeriod == 0) workingDaysInPeriod = 30;
-    // Auto penalties from attendance settings — يطبق على كل بصمة/حضور محسوب مسبقاً
-    // يدعم: late بالساعات (per_hour) أو بالمرة (legacy per late), وغياب بمبلغ ثابت أو مضاعف يوم
-    try {
-      final latePerHourRow = await (db.select(db.attendanceSettings)
-            ..where((t) => t.settingKey.equals('late_penalty_per_hour')))
-          .getSingleOrNull();
-      final lateAmountRow = await (db.select(db.attendanceSettings)
-            ..where((t) => t.settingKey.equals('late_penalty_amount')))
-          .getSingleOrNull();
-      final absenceRow = await (db.select(db.attendanceSettings)
-            ..where((t) => t.settingKey.equals('absence_penalty_amount')))
-          .getSingleOrNull();
-      final absenceMultRow = await (db.select(db.attendanceSettings)
-            ..where((t) => t.settingKey.equals('absence_penalty_days_multiplier')))
-          .getSingleOrNull();
-      final latePerHour = double.tryParse(latePerHourRow?.settingValue ?? '0') ?? 0;
-      final latePerOccurrence = double.tryParse(lateAmountRow?.settingValue ?? '0') ?? 0;
-      final absencePerDay = double.tryParse(absenceRow?.settingValue ?? '0') ?? 0;
-      final absenceMult = double.tryParse(absenceMultRow?.settingValue ?? '1') ?? 1.0;
-      final earlyRow = await (db.select(db.attendanceSettings)
-            ..where((t) => t.settingKey.equals('early_leave_penalty_per_hour')))
-          .getSingleOrNull();
-      final earlyPerHour = double.tryParse(earlyRow?.settingValue ?? '0') ?? 0;
 
-      double autoLatePenalty = 0;
-      final hourlyRate = staff.hourlyRate ?? (basicSalary / 30 / 8);
-      // ساعات الإذن المأذونة تُخصم بسعر عادي (1x) + الزيادة بمضاعف — مثال 3س تأخير وإذن 2س = 2س*1x + 1س*1.5x
-      final excusedLateDeduction = attendanceSummary.totalLateExcusedHours * hourlyRate;
-      if (latePerHour > 0 && attendanceSummary.totalLateHours > 0) {
-        // latePerHour الآن مضاعف (1.5 = ساعة ونص) وليس مبلغ
-        autoLatePenalty = attendanceSummary.totalLateHours * hourlyRate * latePerHour + excusedLateDeduction;
-      } else if (latePerOccurrence > 0) {
-        autoLatePenalty = attendanceSummary.lateDays * latePerOccurrence + excusedLateDeduction;
-      } else {
-        // حتى بدون مضاعف، ساعات الإذن نفسها تُخصم كغياب جزئي بسعر عادي
-        autoLatePenalty = excusedLateDeduction;
-      }
-      double autoAbsencePenalty = 0;
-      if (absencePerDay > 0) {
-        autoAbsencePenalty = attendanceSummary.absentDays * absencePerDay;
-      } else if (absenceMult != 1.0 || absenceMult > 0) {
-        final daily = basicSalary / 30.0;
-        autoAbsencePenalty = attendanceSummary.absentDays * daily * absenceMult;
-      }
-      double autoEarlyPenalty = 0;
-      final excusedEarlyDeduction = attendanceSummary.totalEarlyExcusedHours * hourlyRate;
-      if (earlyPerHour > 0 && attendanceSummary.totalEarlyHours > 0) {
-        autoEarlyPenalty = attendanceSummary.totalEarlyHours * hourlyRate * earlyPerHour + excusedEarlyDeduction;
-      } else {
-        autoEarlyPenalty = excusedEarlyDeduction;
-      }
-      penaltiesTotal += autoLatePenalty + autoAbsencePenalty + autoEarlyPenalty;
-    } catch (_) {
-      // لو جدول الإعدادات غير موجود أو فشل القراءة — تجاهل الخصم التلقائي
+    final engine = AttendanceCalculationEngine(db, db.attendanceDeviceDao, _dao);
+    final scheduleConfig = await engine.getScheduleForStaff(staffId);
+    final standardHoursPerDay = scheduleConfig.standardHoursPerDay;
+    final overtimeMultiplier = scheduleConfig.overtimeRateMultiplier;
+
+    final hourlyRate = staff.hourlyRate ?? (basicSalary / dailyDivisor / standardHoursPerDay);
+
+    // مكافأة الحضور الكامل (بصمة كاملة) — تُمنح لو لم يغب الموظف أي يوم ولم يأخذ إجازة
+    // مكافأة التزام (تُمرر من شاشة احتساب المرتب، افتراضي 200)
+    double commitmentBonusVal = commitmentBonus;
+    if (applyCommitmentBonus && commitmentBonusVal == 0) {
+      try {
+        final pabRow = await (db.select(db.attendanceSettings)..where((t) => t.settingKey.equals('perfect_attendance_bonus'))).getSingleOrNull();
+        final def = double.tryParse(pabRow?.settingValue ?? '0') ?? 0;
+        if (def > 0 && attendanceSummary.absentDays == 0 && attendanceSummary.leaveDays == 0 && attendanceSummary.totalLateHours == 0) {
+          commitmentBonusVal = def;
+        }
+      } catch (_) {}
     }
 
-    // Calculate payroll (basicSalary already defined) — workingDaysInPeriod محسوب مسبقاً
-    // الوقت الإضافي يُحسب بمضاعف من الإعدادات (1.5x افتراضياً)
-    final otMultiplierRow = await (db.select(db.attendanceSettings)
-          ..where((t) => t.settingKey.equals('overtime_rate_multiplier')))
-        .getSingleOrNull();
-    final overtimeMultiplier =
-        double.tryParse(otMultiplierRow?.settingValue ?? '1.5') ?? 1.5;
-    final hourlyRateForOT = staff.hourlyRate ?? basicSalary / 30 / 8;
-    final overtimePay =
-        attendanceSummary.totalOvertime * hourlyRateForOT * overtimeMultiplier;
+    final overtimePay = attendanceSummary.totalOvertime * hourlyRate * overtimeMultiplier;
+    final lateDeduction = attendanceSummary.totalLateHours * hourlyRate * 1.5;
+    final permissionDeduction = attendanceSummary.totalPermissionHours * hourlyRate * 1.0;
+    // غياب: يوم = الأساسي÷dailyDivisor (مع المضاعف من الإعدادات)
+    double absenceMult = 1.0;
+    try {
+      final amRow = await (db.select(db.attendanceSettings)..where((t) => t.settingKey.equals('absence_penalty_days_multiplier'))).getSingleOrNull();
+      absenceMult = double.tryParse(amRow?.settingValue ?? '1') ?? 1.0;
+    } catch (_) {}
+    final absenceDeduction = attendanceSummary.absentDays * (basicSalary / dailyDivisor) * absenceMult;
 
-    final deductions = totalAdvances + penaltiesTotal;
+    // سقف السلفة (للأسبوعي فقط): الخصم لا يتجاوز الصافي المتاح قبل السلفة،
+    // والصافي لا ينزل تحت الصفر بسبب سلفة — والباقي يُرحّل تلقائياً لأن
+    // رصيد السلفة لا ينقص إلا بما خُصم فعلاً (يُخصم مجدداً في الفترة التالية).
+    // عند التوزيع على سقف أقل، تُوزع الحصص بترتيب الـid (حتمي).
+    double totalAdvancesCapped = totalAdvances;
+    var appliedShares = Map<int, double>.from(advanceShares);
+    if (capAdvancesToNet && totalAdvances > 0) {
+      final netBeforeAdvances = basicSalary +
+          overtimePay +
+          allowancesTotal +
+          rewardsTotal +
+          commitmentBonusVal -
+          (penaltiesTotal + lateDeduction + permissionDeduction + absenceDeduction);
+      final cap = netBeforeAdvances < 0 ? 0.0 : netBeforeAdvances;
+      if (totalAdvancesCapped > cap) {
+        var leftover = cap;
+        totalAdvancesCapped = 0.0;
+        appliedShares = {};
+        final ids = advanceShares.keys.toList()..sort();
+        for (final id in ids) {
+          if (leftover <= 0) break;
+          final take =
+              advanceShares[id]! < leftover ? advanceShares[id]! : leftover;
+          appliedShares[id] = take;
+          totalAdvancesCapped += take;
+          leftover -= take;
+        }
+      }
+    }
 
-    final netSalary = basicSalary + overtimePay + allowancesTotal + rewardsTotal - deductions;
+    final deductions = totalAdvancesCapped + penaltiesTotal + lateDeduction + permissionDeduction + absenceDeduction;
 
-    await db.into(db.payrollTable).insert(
-          PayrollTableCompanion.insert(
+    final netSalary = basicSalary + overtimePay + allowancesTotal + rewardsTotal + commitmentBonusVal - deductions;
+
+    // Final writes are atomic: advance progress + old-row delete + new row.
+    // A crash can never leave paidAmount advanced without its payroll row
+    // (or a deleted row without its replacement).
+    await db.transaction(() async {
+      for (final entry in appliedShares.entries) {
+        final adv = eligibleAdvances.firstWhere((a) => a.id == entry.key);
+        final newPaid = (adjustedPaid[entry.key] ?? 0) + entry.value;
+        await _dao.applyAdvanceDeduction(
+          advanceId: entry.key,
+          newPaidAmount: newPaid,
+          settled: newPaid >= adv.amount,
+        );
+      }
+      for (final id in settledIds) {
+        final adv = eligibleAdvances.firstWhere((a) => a.id == id);
+        await _dao.applyAdvanceDeduction(
+          advanceId: id,
+          newPaidAmount: adv.paidAmount,
+          settled: true,
+        );
+      }
+      if (existingPayroll != null) {
+        await (db.delete(db.payrollTable)
+              ..where((t) => t.id.equals(existingPayroll.id)))
+            .go();
+      }
+      await db.into(db.payrollTable).insert(
+            PayrollTableCompanion.insert(
             staffId: staffId,
             payrollPeriod: payrollPeriod,
             periodStart: periodStart,
             periodEnd: periodEnd,
             basicSalary: basicSalary,
             overtimeHours: Value(attendanceSummary.totalOvertime),
-            overtimeRate: Value(hourlyRateForOT * overtimeMultiplier),
+            overtimeRate: Value(hourlyRate * overtimeMultiplier),
             overtimePay: Value(overtimePay),
             allowances: Value(allowancesTotal),
             deductions: Value(deductions),
-            advances: Value(totalAdvances),
+            advances: Value(totalAdvancesCapped),
+            lateHours: Value(attendanceSummary.totalLateHours),
+            lateDeduction: Value(lateDeduction),
+            permissionHours: Value(attendanceSummary.totalPermissionHours),
+            permissionDeduction: Value(permissionDeduction),
             netSalary: netSalary,
             workingDays: Value(workingDaysInPeriod),
             presentDays: Value(attendanceSummary.presentDays),
             absentDays: Value(attendanceSummary.absentDays),
             leaveDays: Value(attendanceSummary.leaveDays),
             rewardsTotal: Value(rewardsTotal),
+            bonus: Value(commitmentBonusVal),
             penaltiesTotal: Value(penaltiesTotal),
             status: 'calculated',
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
           ),
         );
+    });
   }
 
   Future<void> payAdvance(User? user, int advanceId, String paymentMethod) async {
@@ -1060,6 +1337,60 @@ await db.expenseDao.insertExpense(
     });
   }
 
+  /// Weekly bounds (locked rules): week runs Saturday → Thursday (6 days),
+  /// payday is Thursday. The week belongs to its Thursday's month, and Wn is
+  /// that Thursday's order within its month (1..5).
+  /// Example: Thu 2026-09-03 → W1 = Sat 2026-08-29 .. Thu 2026-09-03.
+  (DateTime, DateTime) weekBounds(int year, int month, int week) {
+    if (week < 1) throw Exception('رقم الأسبوع غير صالح: $week');
+    var thursday = DateTime(year, month, 1);
+    while (thursday.weekday != DateTime.thursday) {
+      thursday = thursday.add(const Duration(days: 1));
+    }
+    thursday = thursday.add(Duration(days: (week - 1) * 7));
+    if (thursday.month != month || thursday.year != year) {
+      throw Exception('لا يوجد أسبوع رقم $week في $year-${month.toString().padLeft(2, '0')}');
+    }
+    final day = DateTime(thursday.year, thursday.month, thursday.day);
+    final start = day.subtract(const Duration(days: 5)); // Saturday
+    final end = DateTime(thursday.year, thursday.month, thursday.day, 23, 59, 59);
+    return (start, end);
+  }
+
+  /// Weekly payroll (locked rules): eligibility = payFrequency 'weekly' +
+  /// independent weeklySalary; daily = weekly ÷ 6; no 200 bonus; advances
+  /// capped to available net with automatic carry-over.
+  Future<void> calculateWeeklyPay(
+    User? user,
+    String staffId,
+    int year,
+    int month,
+    int week,
+  ) async {
+    PermissionValidator.requirePermission(user, Permission.manageSalaries, 'حساب الرواتب');
+    final staff = await _dao.getStaffById(staffId);
+    if (staff == null) return;
+    if (staff.payFrequency != 'weekly') {
+      throw Exception('الموظف ليس على دورة أسبوعية (الحالية: ${staff.payFrequency})');
+    }
+    final weeklySalary = staff.weeklySalary;
+    if (weeklySalary == null || weeklySalary <= 0) {
+      throw Exception('حدد الأجر الأسبوعي للموظف أولاً');
+    }
+    final bounds = weekBounds(year, month, week);
+    final period = '$year-${month.toString().padLeft(2, '0')}-W$week';
+    await calculatePeriodPay(
+      staffId: staffId,
+      payrollPeriod: period,
+      periodStart: bounds.$1,
+      periodEnd: bounds.$2,
+      baseSalary: weeklySalary,
+      dailyDivisor: 6, // locked: اليوم = الأسبوعي ÷ 6
+      applyCommitmentBonus: false, // locked: مكافأة الـ200 لا تنطبق أسبوعياً
+      capAdvancesToNet: true, // locked: سقف السلفة + ترحيل الباقي
+    );
+  }
+
   DateTime _getPeriodStart(String period) {
     // Parse period like "2024-01" or "2024-01-W1"
     final parts = period.split('-');
@@ -1068,22 +1399,23 @@ await db.expenseDao.insertExpense(
 
     if (parts.length > 2 && parts[2].startsWith('W')) {
       final week = int.parse(parts[2].substring(1));
-      final firstDay = DateTime(year, month, 1);
-      final startOfWeek = firstDay.add(Duration(days: (week - 1) * 7));
-      return startOfWeek;
+      return weekBounds(year, month, week).$1;
     }
 
     return DateTime(year, month, 1);
   }
 
   DateTime _getPeriodEnd(String period) {
-    final start = _getPeriodStart(period);
     final parts = period.split('-');
 
     if (parts.length > 2 && parts[2].startsWith('W')) {
-      return start.add(const Duration(days: 6));
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final week = int.parse(parts[2].substring(1));
+      return weekBounds(year, month, week).$2;
     }
 
+    final start = _getPeriodStart(period);
     return DateTime(start.year, start.month + 1, 0); // Last day of month
   }
 
@@ -1157,6 +1489,8 @@ class AttendanceSummary {
   final int totalEarlyMinutes;
   final int totalLateExcusedMinutes;
   final int totalEarlyExcusedMinutes;
+  final double totalLateHours;
+  final double totalPermissionHours;
 
   AttendanceSummary({
     required this.totalDays,
@@ -1170,9 +1504,10 @@ class AttendanceSummary {
     this.totalEarlyMinutes = 0,
     this.totalLateExcusedMinutes = 0,
     this.totalEarlyExcusedMinutes = 0,
+    this.totalLateHours = 0,
+    this.totalPermissionHours = 0,
   });
 
-  double get totalLateHours => totalLateMinutes / 60.0;
   double get totalEarlyHours => totalEarlyMinutes / 60.0;
   double get totalLateExcusedHours => totalLateExcusedMinutes / 60.0;
   double get totalEarlyExcusedHours => totalEarlyExcusedMinutes / 60.0;

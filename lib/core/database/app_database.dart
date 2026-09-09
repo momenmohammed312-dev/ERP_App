@@ -10,6 +10,7 @@ import 'package:pos_offline_desktop/core/database/dao/expense_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/invoice_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/ledger_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/product_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/product_variant_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/purchase_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/sales_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/supplier_dao.dart';
@@ -35,6 +36,7 @@ import 'package:pos_offline_desktop/core/database/tables/invoice_items_table.dar
 import 'package:pos_offline_desktop/core/database/tables/invoice_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/ledger_transactions_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/product_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/product_variants_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/purchase_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/purchase_items_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/sales_table.dart';
@@ -56,6 +58,7 @@ import 'package:pos_offline_desktop/core/database/tables/damaged_items_table.dar
 import 'package:pos_offline_desktop/core/database/tables/sales_returns_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/attendance_device_tables.dart';
 import 'package:pos_offline_desktop/core/database/tables/attendance_settings_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/monthly_attendance_summary_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/empty_barnika_tracking_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/sync_queue_table.dart';
@@ -87,6 +90,7 @@ part 'app_database.g.dart';
 @DriftDatabase(
   tables: [
     Products,
+    ProductVariants,
     Customers,
     Suppliers,
     LedgerTransactions,
@@ -138,6 +142,7 @@ part 'app_database.g.dart';
     AttendanceRawEvents,
     AttendanceSyncLogs,
     AttendanceSettings,
+    MonthlyAttendanceSummaryTable,
     VegetableShipments,
     EmptyBarnikaTracking,
     SyncQueue,
@@ -153,6 +158,7 @@ part 'app_database.g.dart';
   ],
   daos: [
     ProductDao,
+    ProductVariantDao,
     CustomerDao,
     SupplierDao,
     LedgerDao,
@@ -194,7 +200,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 61;
+  int get schemaVersion => 68;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -341,6 +347,41 @@ class AppDatabase extends _$AppDatabase {
       // 4w. Schema v61 — attendance excused_hours (خصم تناسبي بالساعة)
       if (from < 61) {
         await _runV61Migrations(m);
+      }
+
+      // 4x. Schema v62 — monthly attendance summary (تأخير/إضافي/إذن/غياب ملخص)
+      if (from < 62) {
+        await _runV62Migrations(m);
+      }
+
+      // 4y. Schema v63 — late/permission tracking for payroll
+      if (from < 63) {
+        await _runV63Migrations(m);
+      }
+
+      // 4z. Schema v64 — إصلاح مرتبات قديمة محسوبة بدون خصم (late_deduction 0)
+      if (from < 64) {
+        await _runV64Migrations(m);
+      }
+
+      // 4aa. Schema v65 — أصناف المنتج (ألوان/فئات) + invoice_items.variant_id
+      if (from < 65) {
+        await _runV65Migrations(m);
+      }
+
+      // 4ab. Schema v66 — Weekly Payroll: فصل Pay Frequency عن نوع العقد
+      if (from < 66) {
+        await _runV66Migrations(m);
+      }
+
+      // 4ac. Schema v67 — مهلة بدء الوقت الإضافي (overtime_grace_minutes)
+      if (from < 67) {
+        await _runV67Migrations(m);
+      }
+
+      // 4ab2. Schema v68 — نهاية دورة السلفة (تراكمي المخصوم + settled)
+      if (from < 68) {
+        await _runV68Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -1425,12 +1466,20 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'invoice_items', 'column': 'discount', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'commission', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'unit_cost_at_time', 'type': 'REAL'},
+      {'table': 'invoice_items', 'column': 'variant_id', 'type': 'INTEGER'},
+      {'table': 'sales_return_items', 'column': 'variant_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'source', 'type': 'TEXT'},
       {'table': 'attendance_table', 'column': 'source_device_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'raw_event_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'override_reason', 'type': 'TEXT'},
       {'table': 'attendance_table', 'column': 'excused', 'type': 'INTEGER NOT NULL DEFAULT 0'},
       {'table': 'attendance_table', 'column': 'excused_hours', 'type': 'REAL NOT NULL DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'late_minutes', 'type': 'INTEGER DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'permission_hours', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'late_hours', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'late_deduction', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'permission_hours', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'permission_deduction', 'type': 'REAL DEFAULT 0.0'},
       {'table': 'audit_log', 'column': 'old_value', 'type': 'TEXT'},
       {'table': 'audit_log', 'column': 'new_value', 'type': 'TEXT'},
       // Invoice void support columns
@@ -1440,6 +1489,11 @@ class AppDatabase extends _$AppDatabase {
       // Expenses extra columns
       {'table': 'expenses', 'column': 'user_id', 'type': 'TEXT'},
       {'table': 'expenses', 'column': 'day_id', 'type': 'TEXT'},
+      // Weekly Payroll (v66): pay frequency + independent weekly salary
+      {'table': 'staff_table', 'column': 'pay_frequency', 'type': "TEXT NOT NULL DEFAULT 'monthly'"},
+      {'table': 'staff_table', 'column': 'weekly_salary', 'type': 'REAL'},
+      // Advance lifecycle (v68): cumulative deducted amount
+      {'table': 'staff_advances', 'column': 'paid_amount', 'type': 'REAL NOT NULL DEFAULT 0'},
       // Multi-device sync columns (v53)
       {'table': 'products', 'column': 'sync_id', 'type': 'TEXT'},
       {'table': 'products', 'column': 'created_at', 'type': 'INTEGER'},
@@ -1483,12 +1537,20 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'invoice_items', 'column': 'discount', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'commission', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'unit_cost_at_time', 'type': 'REAL'},
+      {'table': 'invoice_items', 'column': 'variant_id', 'type': 'INTEGER'},
+      {'table': 'sales_return_items', 'column': 'variant_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'source', 'type': 'TEXT'},
       {'table': 'attendance_table', 'column': 'source_device_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'raw_event_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'override_reason', 'type': 'TEXT'},
       {'table': 'attendance_table', 'column': 'excused', 'type': 'INTEGER NOT NULL DEFAULT 0'},
       {'table': 'attendance_table', 'column': 'excused_hours', 'type': 'REAL NOT NULL DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'late_minutes', 'type': 'INTEGER DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'permission_hours', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'late_hours', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'late_deduction', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'permission_hours', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'permission_deduction', 'type': 'REAL DEFAULT 0.0'},
       {'table': 'audit_log', 'column': 'old_value', 'type': 'TEXT'},
       {'table': 'audit_log', 'column': 'new_value', 'type': 'TEXT'},
       // Invoice void support columns
@@ -1615,6 +1677,8 @@ class AppDatabase extends _$AppDatabase {
           leave_type TEXT,
           notes TEXT,
           overtime_hours REAL NOT NULL DEFAULT 0,
+          late_minutes INTEGER NOT NULL DEFAULT 0,
+          permission_hours REAL NOT NULL DEFAULT 0.0,
           excused INTEGER NOT NULL DEFAULT 0,
           excused_hours REAL NOT NULL DEFAULT 0,
           approved_by TEXT,
@@ -1697,6 +1761,10 @@ class AppDatabase extends _$AppDatabase {
           rewards_total REAL NOT NULL DEFAULT 0.0,
           penalties_total REAL NOT NULL DEFAULT 0.0,
           expense_ref_id TEXT,
+          late_hours REAL NOT NULL DEFAULT 0.0,
+          late_deduction REAL NOT NULL DEFAULT 0.0,
+          permission_hours REAL NOT NULL DEFAULT 0.0,
+          permission_deduction REAL NOT NULL DEFAULT 0.0,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
         )
@@ -2134,6 +2202,197 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(61, 'attendance_excused_hours', 'completed');
     } catch (e) {
       await _logMigrationStep(61, 'attendance_excused_hours', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> _runV62Migrations(Migrator m) async {
+    await _logMigrationStep(62, 'monthly_summary', 'started');
+    try {
+      try {
+        await m.createTable(monthlyAttendanceSummaryTable);
+        log('v62: Created monthly_attendance_summary_table');
+      } catch (e) {
+        log('v62 monthly summary likely already exists: $e');
+      }
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_monthly_summary_staff_period ON monthly_attendance_summary_table(staff_id, period)');
+      } catch (_) {}
+      await _logMigrationStep(62, 'monthly_summary', 'completed');
+    } catch (e) {
+      await _logMigrationStep(62, 'monthly_summary', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v63 — late/permission tracking for payroll
+  Future<void> _runV63Migrations(Migrator m) async {
+    await _logMigrationStep(63, 'late_permission_columns', 'started');
+    try {
+      final columns = [
+        'ALTER TABLE attendance_table ADD COLUMN late_minutes INTEGER DEFAULT 0',
+        'ALTER TABLE attendance_table ADD COLUMN permission_hours REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN late_hours REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN late_deduction REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN permission_hours REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN permission_deduction REAL DEFAULT 0.0',
+      ];
+      for (final sql in columns) {
+        try {
+          await customStatement(sql);
+        } catch (e) {
+          log('63 migration warning (column may exist): $e');
+        }
+      }
+      await _logMigrationStep(63, 'late_permission_columns', 'completed');
+    } catch (e) {
+      await _logMigrationStep(63, 'late_permission_columns', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> _runV64Migrations(Migrator m) async {
+    await _logMigrationStep(64, 'fix_old_payroll_deduction', 'started');
+    try {
+      // احذف مرتبات محسوبة قديمة (قبل v63) كانت late_deduction=0 — عشان تتحسب تاني صح (لا يمس المدفوعة)
+      try {
+        await customStatement("DELETE FROM payroll_table WHERE status='calculated' AND late_deduction=0 AND late_hours=0 AND payroll_period IN ('2026-08','2026-09')");
+        log('v64: Deleted old calculated payrolls for 2026-08/09 for recalc');
+      } catch (e) {
+        log('v64 delete old payrolls warning: $e');
+      }
+      await _logMigrationStep(64, 'fix_old_payroll_deduction', 'completed');
+    } catch (e) {
+      await _logMigrationStep(64, 'fix_old_payroll_deduction', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v65 — أصناف المنتج (ألوان/فئات لكل منتج).
+  /// Purely additive: جدول جديد + عمود nullable واحد، لا يمس بيانات موجودة.
+  /// المنتجات اللي مالهاش أصناف والفواتير القديمة (variant_id = NULL)
+  /// تفضل شغالة بالمسار القديم 100%.
+  Future<void> _runV65Migrations(Migrator m) async {
+    await _logMigrationStep(65, 'product_variants', 'started');
+    try {
+      // 1. جدول الأصناف الجديد
+      try {
+        await m.createTable(productVariants);
+        log('v65: Created product_variants table');
+      } catch (e) {
+        log('v65: product_variants table likely already exists: $e');
+      }
+
+      // 2. عمود variantId على سطور الفواتير (nullable FK، آمن على القديم)
+      try {
+        await customStatement(
+          'ALTER TABLE invoice_items ADD COLUMN variant_id INTEGER REFERENCES product_variants(id)',
+        );
+        log('v65: Added variant_id to invoice_items');
+      } catch (e) {
+        log('v65: invoice_items.variant_id likely already exists: $e');
+      }
+
+      // 3. فهارس الأداء: جلب أصناف منتج + بحث باركود الصنف + فلترة سطور الفواتير
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_variants_product ON product_variants(product_id)',
+        );
+        log('v65: Created idx_variants_product');
+      } catch (e) {
+        log('v65 index warning idx_variants_product: $e');
+      }
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_invoice_items_variant ON invoice_items(variant_id)',
+        );
+        log('v65: Created idx_invoice_items_variant');
+      } catch (e) {
+        log('v65 index warning idx_invoice_items_variant: $e');
+      }
+
+      // 4. عمود variantId على أصناف المرتجعات (nullable، آمن على القديم) —
+      //    عشان المرتجع يرجع المخزون للصنف الصح مش للأب فقط.
+      try {
+        await customStatement(
+          'ALTER TABLE sales_return_items ADD COLUMN variant_id INTEGER REFERENCES product_variants(id)',
+        );
+        log('v65: Added variant_id to sales_return_items');
+      } catch (e) {
+        log('v65: sales_return_items.variant_id likely already exists: $e');
+      }
+
+      await _logMigrationStep(65, 'product_variants', 'completed');
+    } catch (e) {
+      await _logMigrationStep(65, 'product_variants', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v66 — Weekly Payroll: فصل Pay Frequency عن نوع العقد.
+  /// Purely additive: عمودان على staff_table فقط (default آمن + nullable)،
+  /// لا يمس أي بيانات موجودة — كل الموظفين الحاليين يبقوا 'monthly'.
+  Future<void> _runV66Migrations(Migrator m) async {
+    await _logMigrationStep(66, 'weekly_payroll_columns', 'started');
+    try {
+      final columns = [
+        "ALTER TABLE staff_table ADD COLUMN pay_frequency TEXT NOT NULL DEFAULT 'monthly'",
+        'ALTER TABLE staff_table ADD COLUMN weekly_salary REAL',
+      ];
+      for (final sql in columns) {
+        try {
+          await customStatement(sql);
+        } catch (e) {
+          log('66 migration warning (column may exist): $e');
+        }
+      }
+      await _logMigrationStep(66, 'weekly_payroll_columns', 'completed');
+    } catch (e) {
+      await _logMigrationStep(66, 'weekly_payroll_columns', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v67 — مهلة بدء الوقت الإضافي بعد الانصراف (افتراضي 30 دقيقة).
+  /// بذرة فقط (INSERT OR IGNORE) — القيمة الفعلية تُقرأ من attendance_settings
+  /// مع fallback داخلي، فغياب الصف لا يكسر الحساب.
+  Future<void> _runV67Migrations(Migrator m) async {
+    await _logMigrationStep(67, 'overtime_grace_setting', 'started');
+    try {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      try {
+        await customStatement('''
+          INSERT OR IGNORE INTO attendance_settings (setting_key, setting_value, description, created_at, updated_at)
+          VALUES ('overtime_grace_minutes', '30', 'مهلة بدء الوقت الإضافي بعد الانصراف (دقائق)', $now, $now)
+        ''');
+        log('v67: Seeded overtime_grace_minutes default');
+      } catch (e) {
+        log('v67 warning (seed may exist): $e');
+      }
+      await _logMigrationStep(67, 'overtime_grace_setting', 'completed');
+    } catch (e) {
+      await _logMigrationStep(67, 'overtime_grace_setting', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v68 — نهاية دورة السلفة: عمود تراكمي واحد، والسلفة المستوفاة
+  /// تُوسم settled فتُستبعد من كل المرتبات التالية تلقائياً.
+  /// Purely additive (DEFAULT 0): الصفوف القديمة تبدأ من صفر وتُستهلك تدريجياً.
+  Future<void> _runV68Migrations(Migrator m) async {
+    await _logMigrationStep(68, 'advance_lifecycle', 'started');
+    try {
+      try {
+        await customStatement(
+          'ALTER TABLE staff_advances ADD COLUMN paid_amount REAL NOT NULL DEFAULT 0',
+        );
+        log('v68: Added paid_amount to staff_advances');
+      } catch (e) {
+        log('v68: staff_advances.paid_amount likely already exists: $e');
+      }
+      await _logMigrationStep(68, 'advance_lifecycle', 'completed');
+    } catch (e) {
+      await _logMigrationStep(68, 'advance_lifecycle', 'failed', error: e.toString());
       rethrow;
     }
   }

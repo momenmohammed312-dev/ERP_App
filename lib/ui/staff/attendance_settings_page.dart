@@ -35,7 +35,9 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
   double _earlyPenaltyPerHour = 0; // مضاعف خصم الانصراف المبكر لكل ساعة
   double _overtimeRateMultiplier = 1.5;
   double _overtimeThresholdHours = 8;
+  int _overtimeGraceMinutes = 30; // مهلة بدء الإضافي بعد الانصراف (دقائق)
   int _breakMinutes = 60; // استراحة (فاصل) بالدقائق تُخصم من ساعات العمل
+  double _perfectAttendanceBonus = 200; // مكافأة الحضور الكامل (بصمة كاملة بدون غياب)
 
   // Absence generation
   int _absencesGenerated = 0;
@@ -77,12 +79,16 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             _absenceMultiplier = double.tryParse(s.settingValue) ?? 1.0;
           case 'early_leave_penalty_per_hour':
             _earlyPenaltyPerHour = double.tryParse(s.settingValue) ?? 0;
+          case 'overtime_grace_minutes':
+            _overtimeGraceMinutes = int.tryParse(s.settingValue) ?? 30;
           case 'overtime_rate_multiplier':
             _overtimeRateMultiplier = double.tryParse(s.settingValue) ?? 1.5;
           case 'overtime_threshold_hours':
             _overtimeThresholdHours = double.tryParse(s.settingValue) ?? 8;
           case 'break_minutes':
             _breakMinutes = int.tryParse(s.settingValue) ?? 60;
+          case 'perfect_attendance_bonus':
+            _perfectAttendanceBonus = double.tryParse(s.settingValue) ?? 200;
         }
       }
     } catch (e) {
@@ -120,9 +126,11 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         'absence_penalty_amount': _absencePenaltyAmount.toString(),
         'absence_penalty_days_multiplier': _absenceMultiplier.toString(),
         'early_leave_penalty_per_hour': _earlyPenaltyPerHour.toString(),
+        'overtime_grace_minutes': _overtimeGraceMinutes.toString(),
         'overtime_rate_multiplier': _overtimeRateMultiplier.toString(),
         'overtime_threshold_hours': _overtimeThresholdHours.toString(),
         'break_minutes': _breakMinutes.toString(),
+        'perfect_attendance_bonus': _perfectAttendanceBonus.toString(),
       };
 
       for (final entry in settingsMap.entries) {
@@ -602,6 +610,42 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         ),
         const Divider(height: 1),
         ListTile(
+          title: const Text('مكافأة الحضور الكامل (بدون غياب)'),
+          subtitle: Text(_perfectAttendanceBonus > 0 ? '${_perfectAttendanceBonus.toStringAsFixed(0)} ج.م — تُضاف للموظف اللي مأخدش غياب أو إجازة بالشهر' : 'معطلة (0)'),
+          trailing: const Icon(Icons.emoji_events_outlined),
+          onTap: () async {
+            final controller = TextEditingController(
+              text: _perfectAttendanceBonus > 0 ? _perfectAttendanceBonus.toString() : '200',
+            );
+            final result = await showDialog<double>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('مكافأة الحضور الكامل (ج.م)'),
+                content: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    hintText: '0 = بدون مكافأة',
+                    suffixText: 'ج.م',
+                  ),
+                ),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(
+                    onPressed: () {
+                      final val = double.tryParse(controller.text) ?? 0;
+                      Navigator.pop(ctx, val);
+                    },
+                    child: const Text('موافق'),
+                  ),
+                ],
+              ),
+            );
+            if (result != null) setState(() => _perfectAttendanceBonus = result);
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
           title: const Text('مضاعف خصم الانصراف المبكر لكل ساعة'),
           subtitle: Text(_earlyPenaltyPerHour > 0 ? 'x${_earlyPenaltyPerHour.toStringAsFixed(1)} — ساعة بدري = ${_earlyPenaltyPerHour}x أجر الساعة' : 'بدون خصم للانصراف المبكر'),
           trailing: const Icon(Icons.logout),
@@ -627,6 +671,48 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
               ),
             );
             if (result != null) setState(() => _earlyPenaltyPerHour = result);
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('مهلة بدء الوقت الإضافي'),
+          subtitle: Text('$_overtimeGraceMinutes دقيقة بعد الانصراف — قبلها لا يُحسب إضافي'),
+          trailing: const Icon(Icons.more_time),
+          onTap: () async {
+            final controller = TextEditingController(text: _overtimeGraceMinutes.toString());
+            final result = await showDialog<int>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('مهلة بدء الإضافي (دقائق)'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      hintText: '30 = الإضافي بعد نص ساعة من الانصراف',
+                      suffixText: 'دقيقة',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, children: [
+                    ActionChip(label: const Text('15'), onPressed: () => Navigator.pop(ctx, 15)),
+                    ActionChip(label: const Text('30'), onPressed: () => Navigator.pop(ctx, 30)),
+                    ActionChip(label: const Text('60'), onPressed: () => Navigator.pop(ctx, 60)),
+                  ]),
+                ]),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(
+                    onPressed: () {
+                      final val = int.tryParse(controller.text);
+                      if (val != null && val >= 0) Navigator.pop(ctx, val);
+                    },
+                    child: const Text('موافق'),
+                  ),
+                ],
+              ),
+            );
+            if (result != null) setState(() => _overtimeGraceMinutes = result);
           },
         ),
         const Divider(height: 1),
