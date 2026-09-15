@@ -200,7 +200,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 68;
+  int get schemaVersion => 69;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -382,6 +382,11 @@ class AppDatabase extends _$AppDatabase {
       // 4ab2. Schema v68 — نهاية دورة السلفة (تراكمي المخصوم + settled)
       if (from < 68) {
         await _runV68Migrations(m);
+      }
+
+      // 4ab3. Schema v69 — تعيين السلفة لفترة (أسبوع محدد للأسبوعي)
+      if (from < 69) {
+        await _runV69Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -1494,6 +1499,8 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'staff_table', 'column': 'weekly_salary', 'type': 'REAL'},
       // Advance lifecycle (v68): cumulative deducted amount
       {'table': 'staff_advances', 'column': 'paid_amount', 'type': 'REAL NOT NULL DEFAULT 0'},
+      // Advance deduct period (v69): explicit start period, weekly week picker
+      {'table': 'staff_advances', 'column': 'deduct_on_period', 'type': 'TEXT'},
       // Multi-device sync columns (v53)
       {'table': 'products', 'column': 'sync_id', 'type': 'TEXT'},
       {'table': 'products', 'column': 'created_at', 'type': 'INTEGER'},
@@ -2393,6 +2400,26 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(68, 'advance_lifecycle', 'completed');
     } catch (e) {
       await _logMigrationStep(68, 'advance_lifecycle', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v69 — تعيين السلفة لفترة استحقاق (للأسبوعي: أي أسبوع تُخصم منه).
+  /// Purely additive nullable: الصفوف القديمة (null) تحتفظ بالسلوك الحالي.
+  Future<void> _runV69Migrations(Migrator m) async {
+    await _logMigrationStep(69, 'advance_deduct_period', 'started');
+    try {
+      try {
+        await customStatement(
+          'ALTER TABLE staff_advances ADD COLUMN deduct_on_period TEXT',
+        );
+        log('v69: Added deduct_on_period to staff_advances');
+      } catch (e) {
+        log('v69: staff_advances.deduct_on_period likely already exists: $e');
+      }
+      await _logMigrationStep(69, 'advance_deduct_period', 'completed');
+    } catch (e) {
+      await _logMigrationStep(69, 'advance_deduct_period', 'failed', error: e.toString());
       rethrow;
     }
   }

@@ -8,6 +8,8 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/ui/supplier/add_supplier_transaction_dialog.dart';
 import 'package:pos_offline_desktop/ui/supplier/edit_supplier_transaction_dialog.dart';
 import 'package:pos_offline_desktop/ui/supplier/services/supplier_statement_generator.dart';
+import 'package:pos_offline_desktop/ui/widgets/invoice_items_table.dart';
+import 'package:pos_offline_desktop/ui/purchase/widgets/edit_purchase_invoice_page.dart';
 
 class SupplierStatementScreen extends ConsumerStatefulWidget {
   final Supplier supplier;
@@ -489,6 +491,11 @@ class _SupplierStatementRow extends StatefulWidget {
 
 class _SupplierStatementRowState extends State<_SupplierStatementRow> {
   bool _expanded = false;
+  bool _isLoadingDetails = false;
+  List<InvoiceItemDisplayModel> _items = [];
+  Purchase? _purchase;
+
+  bool get _isPurchase => widget.data.tx.origin == 'purchase';
 
   String _originLabel(String origin) {
     switch (origin) {
@@ -509,6 +516,82 @@ class _SupplierStatementRowState extends State<_SupplierStatementRow> {
     }
   }
 
+  Future<void> _loadDetails() async {
+    if (_isLoadingDetails) return;
+    setState(() => _isLoadingDetails = true);
+    try {
+      if (_isPurchase) {
+        Purchase? purchase;
+        final receiptNum = widget.data.tx.receiptNumber;
+        if (receiptNum != null && receiptNum.isNotEmpty) {
+          purchase = await (widget.db.select(widget.db.purchases)
+                ..where((p) =>
+                    p.invoiceNumber.equals(receiptNum) |
+                    p.id.equals(receiptNum)))
+              .getSingleOrNull();
+        }
+
+        if (purchase == null) {
+          final match = RegExp(r'فاتورة\s*([^\s,]+)')
+              .firstMatch(widget.data.tx.description);
+          final invNum = match?.group(1) ??
+              widget.data.tx.id.replaceAll('_ledger', '');
+          purchase = await (widget.db.select(widget.db.purchases)
+                ..where((p) =>
+                    p.invoiceNumber.equals(invNum) |
+                    p.id.equals(invNum)))
+              .getSingleOrNull();
+        }
+
+        if (purchase != null) {
+          _purchase = purchase;
+          final itemsWithProducts = await widget.db.purchaseDao
+              .getItemsWithProductsByPurchase(purchase.id);
+          if (mounted) {
+            setState(() {
+              _items = itemsWithProducts.map((e) {
+                final item = e.$1;
+                final prod = e.$2;
+                return InvoiceItemDisplayModel(
+                  productName: prod?.name ?? 'منتج ${item.productId}',
+                  quantity: item.quantity.toDouble(),
+                  unitPrice: item.unitPrice,
+                  total: item.totalPrice,
+                  unit: item.unit ?? prod?.unit,
+                );
+              }).toList();
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading supplier row details: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingDetails = false);
+    }
+  }
+
+  void _toggle() {
+    setState(() => _expanded = !_expanded);
+    if (_expanded) _loadDetails();
+  }
+
+  void _editPurchaseInvoice() {
+    if (_purchase == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditPurchaseInvoicePage(
+          db: widget.db,
+          purchaseId: _purchase!.id,
+          onSaved: () {
+            widget.onChanged();
+          },
+        ),
+      ),
+    );
+  }
+
   void _edit() {
     showDialog(
       context: context,
@@ -525,7 +608,7 @@ class _SupplierStatementRowState extends State<_SupplierStatementRow> {
       child: Column(
         children: [
           InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
+            onTap: _toggle,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
@@ -544,21 +627,47 @@ class _SupplierStatementRowState extends State<_SupplierStatementRow> {
             Container(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               decoration: BoxDecoration(border: Border(top: BorderSide(color: widget.goldColor.withValues(alpha: 0.2)))),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Gap(8),
-                  _detailRow('النوع', _originLabel(tx.origin), Colors.purple),
-                  if (tx.receiptNumber != null) _detailRow('المرجع', tx.receiptNumber!, Colors.grey),
-                  _detailRow('طريقة الدفع', tx.paymentMethod ?? 'غير محدد', Colors.green),
-                  _detailRow('المبلغ', '${(tx.credit > 0 ? tx.credit : tx.debit).toStringAsFixed(2)} ج.م', tx.credit > 0 ? Colors.redAccent : Colors.green),
-                  const Gap(8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(onPressed: _edit, icon: const Icon(Icons.edit, size: 18), label: const Text('تعديل/حذف الحركة'), style: OutlinedButton.styleFrom(foregroundColor: Colors.blue)),
-                  ),
-                ],
-              ),
+              child: _isLoadingDetails
+                  ? const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Gap(8),
+                        _detailRow('النوع', _originLabel(tx.origin), Colors.purple),
+                        if (tx.receiptNumber != null) _detailRow('المرجع', tx.receiptNumber!, Colors.grey),
+                        _detailRow('طريقة الدفع', tx.paymentMethod ?? 'غير محدد', Colors.green),
+                        _detailRow('المبلغ', '${(tx.credit > 0 ? tx.credit : tx.debit).toStringAsFixed(2)} ج.م', tx.credit > 0 ? Colors.redAccent : Colors.green),
+                        if (_isPurchase && _items.isNotEmpty) ...[
+                          const Gap(8),
+                          const Divider(),
+                          InvoiceItemsTable(items: _items),
+                          const Gap(8),
+                        ],
+                        const Gap(8),
+                        Row(
+                          children: [
+                            if (_isPurchase && _purchase != null) ...[
+                              OutlinedButton.icon(
+                                onPressed: _editPurchaseInvoice,
+                                icon: const Icon(Icons.edit_note, size: 18),
+                                label: const Text('تعديل الفاتورة'),
+                                style: OutlinedButton.styleFrom(foregroundColor: Colors.blue),
+                              ),
+                              const Gap(8),
+                            ],
+                            OutlinedButton.icon(
+                              onPressed: _edit,
+                              icon: const Icon(Icons.edit, size: 18),
+                              label: const Text('تعديل/حذف الحركة'),
+                              style: OutlinedButton.styleFrom(foregroundColor: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
             ),
         ],
       ),

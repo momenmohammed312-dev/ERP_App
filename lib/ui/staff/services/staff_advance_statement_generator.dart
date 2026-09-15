@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/services/payroll_display.dart';
 import 'package:pos_offline_desktop/core/utils/pdf_bidi_helper.dart';
 
 class StaffAdvanceStatementGenerator {
@@ -141,7 +142,9 @@ class StaffAdvanceStatementGenerator {
                   ),
                   pw.SizedBox(height: 4),
                   pw.Text(
-                    _b('المرتب الأساسي: ${staff.basicSalary.toStringAsFixed(2)} جنيه'),
+                    staff.payFrequency == 'weekly' && staff.weeklySalary != null
+                        ? _b('الأجر الأسبوعي: ${staff.weeklySalary!.toStringAsFixed(2)} جنيه')
+                        : _b('المرتب الأساسي: ${staff.basicSalary.toStringAsFixed(2)} جنيه'),
                     style: pw.TextStyle(font: arabicFont, fontSize: 12),
                   ),
                 ],

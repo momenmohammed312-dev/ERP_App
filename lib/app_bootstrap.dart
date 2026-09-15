@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:pos_offline_desktop/core/config/app_flavor.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/core/router/go_router.dart';
@@ -51,13 +52,15 @@ Future<void> bootstrapApp({Flavor? flavor}) async {
 
   // Multi-device sync (local-first → Supabase): initialize the client once and
   // start the background outbox flush. Guarded so a missing/placeholder
-  // SUPABASE_URL never blocks app startup.
-  try {
-    final syncService = container.read(syncServiceProvider);
-    await syncService.initialize();
-    syncService.startPeriodicSync();
-  } catch (e) {
-    debugPrint('Sync service init error (continuing offline): $e');
+  // SUPABASE_URL never blocks app startup. Disabled entirely for standalone flavors.
+  if (AppFeatures.hasMultiDeviceSync) {
+    try {
+      final syncService = container.read(syncServiceProvider);
+      await syncService.initialize();
+      syncService.startPeriodicSync();
+    } catch (e) {
+      debugPrint('Sync service init error (continuing offline): $e');
+    }
   }
 
   await NotificationService().initialize(db);

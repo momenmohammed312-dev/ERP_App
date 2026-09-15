@@ -88,6 +88,32 @@ class SalesReturnsDao extends DatabaseAccessor<AppDatabase>
         final itemWithReturnId = item.copyWith(returnId: Value(returnId));
         await into(salesReturnItems).insert(itemWithReturnId);
 
+        // مرتجع صنف (لون/فئة): الاسترجاع للصنف + إعادة حساب مجموع الأب.
+        final returnVariantId = item.variantId.value;
+        if (returnVariantId != null) {
+          final variant = await db.productVariantDao.getVariantById(
+            returnVariantId,
+          );
+          if (variant != null) {
+            await db.productVariantDao.updateVariantQuantity(
+              variant.id,
+              variant.quantity + item.quantity.value,
+            );
+            final total = await db.productVariantDao
+                .getTotalQuantityByProduct(item.productId.value);
+            final parent = await db.productDao.getProductById(
+              item.productId.value,
+            );
+            if (parent != null) {
+              await db.productDao.updateProduct(
+                parent.copyWith(quantity: total),
+              );
+            }
+            continue;
+          }
+          // الصنف اتحذف نهائيًا — نكمل للاسترجاع المباشر للأب تحت.
+        }
+
         final product = await db.productDao.getProductById(item.productId.value);
         if (product != null) {
           await db.productDao.updateProduct(

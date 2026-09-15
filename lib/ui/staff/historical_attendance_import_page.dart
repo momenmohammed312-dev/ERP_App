@@ -36,6 +36,16 @@ class _HistoricalAttendanceImportPageState extends ConsumerState<HistoricalAtten
         final match = service.matchSheetsToStaff(excel.tables.keys.toList(), staffList);
         final parsed = <String, List<RowParseResult>>{};
         for (final e in excel.tables.entries) {
+          final lk = e.key.trim().toLowerCase();
+          if (lk.contains('ملخص') || lk.contains('summary')) {
+            // لا نعرض تفاصيل يومية للملخص
+            parsed[e.key] = [];
+            continue;
+          }
+          if (lk.startsWith('مثال')) {
+            parsed[e.key] = [];
+            continue;
+          }
           parsed[e.key] = service.parseSheetRows(e.value);
         }
         setState(() {
@@ -52,17 +62,20 @@ class _HistoricalAttendanceImportPageState extends ConsumerState<HistoricalAtten
     }
   }
 
-  Future<void> _runImport() async {
+  Future<void> _runImport({bool onlyPermissionsAndOvertime = false}) async {
     if (_excel == null) return;
     setState(() { _importing = true; _error = null; });
     try {
       final db = ref.read(appDatabaseProvider);
       final service = HistoricalAttendanceImportService(db);
-      final reports = await service.importFromExcel(_excel!);
+      final reports = await service.importFromExcel(_excel!, onlyPermissionsAndOvertime: onlyPermissionsAndOvertime);
       setState(() => _report = reports);
       if (mounted) {
         final total = reports.fold(0, (s, r) => s + r.imported);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم الاستيراد: $total سجل'), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(onlyPermissionsAndOvertime ? 'تم استيراد الإذن والإضافي: $total موظف' : 'تم الاستيراد: $total سجل'),
+          backgroundColor: Colors.green,
+        ));
       }
     } catch (e) {
       setState(() => _error = 'فشل الاستيراد: $e');
@@ -110,6 +123,25 @@ class _HistoricalAttendanceImportPageState extends ConsumerState<HistoricalAtten
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(columns: const [DataColumn(label: Text('الشيت')), DataColumn(label: Text('الموظف المطابق')), DataColumn(label: Text('الصفوف')), DataColumn(label: Text('حضور/غياب'))], rows: _match!.entries.map((e) {
+                  final lk = e.key.trim().toLowerCase();
+                  final isSummary = lk.contains('ملخص') || lk.contains('summary');
+                  final isExample = lk.startsWith('مثال');
+                  if (isSummary) {
+                    return DataRow(cells: [
+                      DataCell(Text(e.key)),
+                      DataCell(Text('✅ ملخص شهري (تأخير/إذن/غياب)', style: TextStyle(color: Colors.teal))),
+                      DataCell(Text('—')),
+                      DataCell(Text('سيُستورد كملخص')),
+                    ]);
+                  }
+                  if (isExample) {
+                    return DataRow(cells: [
+                      DataCell(Text(e.key)),
+                      DataCell(Text('⚠ مثال — احذفه قبل الاستيراد', style: TextStyle(color: Colors.orange))),
+                      DataCell(Text('—')),
+                      DataCell(Text('تجاهل')),
+                    ]);
+                  }
                   final staff = e.value;
                   final rows = _parsed![e.key] ?? [];
                   final present = rows.where((r) => r.status == 'present').length;
@@ -138,7 +170,36 @@ class _HistoricalAttendanceImportPageState extends ConsumerState<HistoricalAtten
               }).toList()),
             ),
             const SizedBox(height: 12),
-            ElevatedButton.icon(onPressed: _importing ? null : _runImport, icon: _importing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.cloud_download), label: Text(_importing ? 'جاري الاستيراد...' : 'تأكيد وتنفيذ الاستيراد'), style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), backgroundColor: Colors.teal, foregroundColor: Colors.white)),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _importing ? null : () => _runImport(onlyPermissionsAndOvertime: true),
+                  icon: _importing
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.alarm_on),
+                  label: Text(_importing ? 'جاري الاستيراد...' : 'استيراد الإذن والإضافي فقط (المطلوب)'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                    backgroundColor: Colors.purple.shade700,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _importing ? null : () => _runImport(onlyPermissionsAndOvertime: false),
+                  icon: _importing
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.cloud_download),
+                  label: Text(_importing ? 'جاري الاستيراد...' : 'استيراد كامل (الملخص بالكامل)'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
           ],
           Card(
             color: Colors.red.shade900.withValues(alpha: 0.3),

@@ -903,23 +903,51 @@ class _ReturnDialog extends StatefulWidget {
 
 class _ReturnDialogState extends State<_ReturnDialog> {
   late Map<int, int> _returnQty;
+  Map<int, String> _variantNames = {};
   String _reason = 'تالف';
   bool _processing = false;
 
   @override
   void initState() {
     super.initState();
+    // المفتاح هو id سطر الفاتورة (فريد لكل سطر) — مش productId، لأن منتجًا
+    // واحدًا قد يظهر في سطرين بصنفين مختلفين (لونين).
     _returnQty = {
       for (final entry in widget.itemsWithProducts)
-        entry.$1.productId: 0,
+        entry.$1.id: 0,
     };
+    _loadVariantNames();
+  }
+
+  /// أسماء الأصناف (ألوان/فئات) لسطور الفاتورة — للعرض فقط.
+  Future<void> _loadVariantNames() async {
+    final names = <int, String>{};
+    for (final entry in widget.itemsWithProducts) {
+      final variantId = entry.$1.variantId;
+      if (variantId != null) {
+        try {
+          final v = await widget.db.productVariantDao.getVariantById(
+            variantId,
+          );
+          if (v != null) names[entry.$1.id] = v.name;
+        } catch (_) {}
+      }
+    }
+    if (mounted) setState(() => _variantNames = names);
+  }
+
+  String _lineDisplayName(dynamic item, dynamic product) {
+    final base = product?.name ?? 'منتج ${item.productId}';
+    final variantName = _variantNames[item.id];
+    if (variantName == null) return base;
+    return '$base — $variantName';
   }
 
   double get _totalReturn {
     double total = 0;
     for (final entry in widget.itemsWithProducts) {
       final item = entry.$1;
-      final qty = _returnQty[item.productId] ?? 0;
+      final qty = _returnQty[item.id] ?? 0;
       if (qty > 0) {
         total += qty * (item.quantity > 0 ? item.price / item.quantity : 0);
       }
@@ -938,16 +966,17 @@ class _ReturnDialogState extends State<_ReturnDialog> {
       for (final entry in widget.itemsWithProducts) {
         final item = entry.$1;
         final product = entry.$2;
-        final qty = _returnQty[item.productId] ?? 0;
+        final qty = _returnQty[item.id] ?? 0;
         if (qty <= 0) continue;
         returnItems.add(
           SalesReturnItemsCompanion.insert(
             returnId: 0,
             productId: item.productId,
-            productName: product?.name ?? 'منتج ${item.productId}',
+            productName: _lineDisplayName(item, product),
             quantity: qty,
             unitPrice: item.quantity > 0 ? item.price / item.quantity : 0,
             totalPrice: qty * (item.quantity > 0 ? item.price / item.quantity : 0),
+            variantId: drift.Value(item.variantId),
           ),
         );
       }
@@ -1009,7 +1038,7 @@ class _ReturnDialogState extends State<_ReturnDialog> {
                         child: Row(
                           children: [
                             Expanded(
-                              child: Text(product?.name ?? 'منتج ${item.productId}'),
+                              child: Text(_lineDisplayName(item, product)),
                             ),
                             const SizedBox(width: 8),
                             SizedBox(
@@ -1024,7 +1053,7 @@ class _ReturnDialogState extends State<_ReturnDialog> {
                                 onChanged: (v) {
                                   final qty = int.tryParse(v) ?? 0;
                                   setState(() {
-                                    _returnQty[item.productId] = qty.clamp(0, item.quantity);
+                                    _returnQty[item.id] = qty.clamp(0, item.quantity);
                                   });
                                 },
                               ),

@@ -60,6 +60,14 @@ class StaffTable extends Table {
   TextColumn get workDays => text().nullable()();          // 'sun,mon,tue,wed,thu' or null = use default
   TextColumn get weekendDay => text().nullable()();        // 'fri' or null = use default
   BoolColumn get useDefaultSchedule => boolean().withDefault(const Constant(true))();
+
+  // ── Pay Frequency (مستقل عن نوع العقد) ─────────────────────────────
+  // 'monthly' (افتراضي) | 'weekly'. مستقل عن employmentType عشان النظام
+  // يدعم مستقبلاً frequencies تانية بدون إعادة تصميم.
+  TextColumn get payFrequency => text().withDefault(const Constant('monthly'))();
+  // الأجر الأسبوعي المستقل (مبلغ ثابت متفق عليه — ليس monthly/4).
+  // null = الموظف شهري أو لم يُحدد بعد.
+  RealColumn get weeklySalary => real().nullable()();
 }
 
 /// Attendance table for tracking employee attendance
@@ -107,6 +115,10 @@ class AttendanceTable extends Table {
 
   RealColumn get overtimeHours =>
       real().withDefault(const Constant(0))(); // Overtime hours
+
+  IntColumn get lateMinutes => integer().withDefault(const Constant(0))(); // دقايق التأخير المحسوبة وقت الانصراف
+
+  RealColumn get permissionHours => real().withDefault(const Constant(0))(); // ساعات إذن جزئي (يمشي بدري) يدخلها الأدمن
 
   TextColumn get approvedBy => text().nullable()(); // Manager who approved
 
@@ -200,6 +212,15 @@ class StaffAdvances extends Table {
   RealColumn get monthlyDeduction =>
       real().nullable()(); // Monthly installment amount
 
+  // تراكمي ما خُصم فعلاً من المرتبات. السلفة تتوقف تلقائياً (settled)
+  // عندما يغطي التراكمي كامل المبلغ — فلا تُخصم للأبد.
+  RealColumn get paidAmount =>
+      real().withDefault(const Constant(0))(); // Cumulative deducted amount
+
+  // فترة بدء الخصم ('YYYY-MM' أو 'YYYY-MM-Wn') — للأسبوعي خاصةً لاختيار
+  // الأسبوع. null = سلوك قديم (تُخصم في كل مرتب حتى الاستيفاء).
+  TextColumn get deductOnPeriod => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
 
   DateTimeColumn get updatedAt => dateTime()();
@@ -236,6 +257,11 @@ class PayrollTable extends Table {
 
   RealColumn get advances =>
       real().withDefault(const Constant(0))(); // Advance deductions
+
+  RealColumn get lateHours => real().withDefault(const Constant(0))();
+  RealColumn get lateDeduction => real().withDefault(const Constant(0))();
+  RealColumn get permissionHours => real().withDefault(const Constant(0))();
+  RealColumn get permissionDeduction => real().withDefault(const Constant(0))();
 
   RealColumn get taxes =>
       real().withDefault(const Constant(0))(); // Tax deductions

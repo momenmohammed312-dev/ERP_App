@@ -73,9 +73,22 @@ class HistoricalAttendanceImportService {
     final result = <String, Staff?>{};
     for (final sheet in sheetNames) {
       final trimmed = sheet.trim();
-      final key = trimmed.toLowerCase();
-      // جرب مطابقة الاسم أولاً، ثم ID، ثم الرقم فقط (لحالة شيت باسم "1" وموظف STAFF0001)
-      result[sheet] = mapByName[key] ?? mapById[key] ?? mapByName[trimmed] ?? mapById[trimmed];
+      // تجاهل شيت الملخص وشيت المثال — لا يُطابق كموظف
+      final lk = trimmed.toLowerCase();
+      if (lk.contains('ملخص') || lk.contains('summary') || lk.startsWith('مثال')) {
+        result[sheet] = null; // يُعالج كملخص، لا كموظف
+        continue;
+      }
+      // ادعم "مثال يومي - أحمد خليفة" → خذ الجزء بعد "-"
+      String keyRaw = trimmed;
+      if (trimmed.contains('-')) {
+        final parts = trimmed.split('-');
+        keyRaw = parts.last.trim();
+      } else if (trimmed.contains('—')) {
+        keyRaw = trimmed.split('—').last.trim();
+      }
+      final key = keyRaw.toLowerCase();
+      result[sheet] = mapByName[key] ?? mapById[key] ?? mapByName[keyRaw] ?? mapById[keyRaw] ?? mapByName[trimmed.toLowerCase()] ?? mapById[trimmed.toLowerCase()];
     }
     return result;
   }
@@ -175,6 +188,7 @@ class HistoricalAttendanceImportService {
       if (q.hasTime) {
         checkOut = DateTime(date.year, date.month, date.day, q.h!, q.m!, q.s ?? 0);
       }
+      // ميعدلش الانصراف — لو الحضور بعد الانصراف سيبه للزر اليدوي "عكس حضور فقط"
       String status = 'present';
       if (p.isAbsent && q.isAbsent) {
         // الجمعة إجازة تلقائية — لا تُحسب غياب
@@ -363,8 +377,84 @@ class HistoricalAttendanceImportService {
     return fixed;
   }
 
-  Future<List<SheetImportReport>> importFromExcel(Excel excel) async {
+  /// شيت ملخص: | اسم الموظف | تأخير | إضافي | إذن | غياب | فترة |
+  /// شيت ملخص: | اسم الموظف | تأخير | إضافي | إذن | غياب | فترة |
+  Future<List<SheetImportReport>> importSummarySheet(Sheet sheet, {bool onlyPermissionsAndOvertime = false}) async {
+    final reports = <SheetImportReport>[];
+    // توقع الهيدر في الصف الأول
+    for (int i = 1; i < sheet.rows.length; i++) {
+      final row = sheet.rows[i];
+      if (row.isEmpty) continue;
+      final name = row.isNotEmpty ? row[0]?.value?.toString().trim() ?? '' : '';
+      if (name.isEmpty || name.contains('اسم')) continue;
+      final staff = await db.staffManagementDao.getAllStaff().then((list) {
+        for (final s in list) if (s.name.trim() == name || s.staffId == name) return s;
+        // بحث تقريبي
+        for (final s in list) if (s.name.trim().toLowerCase() == name.toLowerCase()) return s;
+        return null;
+      });
+      if (staff == null) {
+        reports.add(SheetImportReport(sheetName: 'ملخص:$name', staff: null, imported: 0, skippedExists: 0, conflicts: 0, parseErrors: 1, errors: ['موظف غير موجود: $name']));
+        continue;
+      }
+      double parseH(dynamic v) => double.tryParse(v?.toString().replaceAll('س', '').replaceAll('ساعة', '').trim() ?? '0') ?? 0;
+      int parseD(dynamic v) => int.tryParse(v?.toString().replaceAll('يوم', '').replaceAll('ايام', '').trim() ?? '0') ?? 0;
+      final lateH = parseH(row.length > 1 ? row[1]?.value : null);
+      final overH = parseH(row.length > 2 ? row[2]?.value : null);
+      final excH = parseH(row.length > 3 ? row[3]?.value : null);
+      final absentD = parseD(row.length > 4 ? row[4]?.value : null);
+      final period = row.length > 5 && row[5]?.value != null ? row[5]!.value.toString().trim() : '';
+      final p = (period.isNotEmpty && RegExp(r'^\d{4}-\d{2}$').hasMatch(period)) ? period : DateTime.now().toIso8601String().substring(0, 7);
+      final now = DateTime.now();
+      final existing = await (db.select(db.monthlyAttendanceSummaryTable)..where((t) => t.staffId.equals(staff.staffId) & t.period.equals(p))).getSingleOrNull();
+      if (existing != null) {
+        if (onlyPermissionsAndOvertime) {
+          await (db.update(db.monthlyAttendanceSummaryTable)..where((t) => t.id.equals(existing.id))).write(
+            MonthlyAttendanceSummaryTableCompanion(
+              overtimeHours: drift.Value(overH),
+              excusedHours: drift.Value(excH),
+              updatedAt: drift.Value(now),
+            ),
+          );
+        } else {
+          await (db.update(db.monthlyAttendanceSummaryTable)..where((t) => t.id.equals(existing.id))).write(
+            MonthlyAttendanceSummaryTableCompanion(
+              lateHours: drift.Value(lateH),
+              overtimeHours: drift.Value(overH),
+              excusedHours: drift.Value(excH),
+              absentDays: drift.Value(absentD),
+              updatedAt: drift.Value(now),
+            ),
+          );
+        }
+      } else {
+        await db.into(db.monthlyAttendanceSummaryTable).insert(MonthlyAttendanceSummaryTableCompanion.insert(
+          staffId: staff.staffId,
+          period: p,
+          lateHours: onlyPermissionsAndOvertime ? const drift.Value(0) : drift.Value(lateH),
+          overtimeHours: drift.Value(overH),
+          excusedHours: drift.Value(excH),
+          absentDays: onlyPermissionsAndOvertime ? const drift.Value(0) : drift.Value(absentD),
+          createdAt: now,
+          updatedAt: now,
+        ));
+      }
+      reports.add(SheetImportReport(sheetName: 'ملخص:${staff.name}', staff: staff, imported: 1, skippedExists: 0, conflicts: 0, parseErrors: 0, errors: []));
+    }
+    return reports;
+  }
+
+  Future<List<SheetImportReport>> importFromExcel(Excel excel, {bool onlyPermissionsAndOvertime = false}) async {
     await _loadBreakMinutes();
+    // لو فيه شيت اسمه ملخص/تأخير/ملخص شهري — عالجه أولاً
+    Sheet? summarySheet;
+    for (final k in excel.tables.keys) {
+      final lk = k.trim().toLowerCase();
+      if (lk.contains('ملخص') || lk.contains('summary')) { summarySheet = excel.tables[k]; break; }
+    }
+    if (summarySheet != null) {
+      return await importSummarySheet(summarySheet, onlyPermissionsAndOvertime: onlyPermissionsAndOvertime);
+    }
     final staffList = await db.staffManagementDao.getAllStaff();
     final sheetNames = excel.tables.keys.toList();
     final match = matchSheetsToStaff(sheetNames, staffList);

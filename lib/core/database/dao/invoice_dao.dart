@@ -77,6 +77,25 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
       final items = await getItemsByInvoiceId(invoiceId);
       final productsTable = attachedDatabase.products;
       for (final item in items) {
+        // سطر مباع عبر صنف (لون/فئة): الاسترجاع للصنف + إعادة حساب مجموع الأب.
+        if (item.variantId != null) {
+          final variant = await db.productVariantDao.getVariantById(
+            item.variantId!,
+          );
+          if (variant != null) {
+            await db.productVariantDao.updateVariantQuantity(
+              variant.id,
+              variant.quantity + item.quantity,
+            );
+            final total = await db.productVariantDao
+                .getTotalQuantityByProduct(item.productId);
+            await (update(productsTable)
+                  ..where((p) => p.id.equals(item.productId)))
+                .write(ProductsCompanion(quantity: Value(total)));
+            continue;
+          }
+          // الصنف اتحذف نهائيًا — نكمل للاسترجاع المباشر للأب تحت.
+        }
         final product = await (select(productsTable)..where((p) => p.id.equals(item.productId))).getSingleOrNull();
         if (product != null) {
           await (update(productsTable)..where((p) => p.id.equals(product.id))).write(

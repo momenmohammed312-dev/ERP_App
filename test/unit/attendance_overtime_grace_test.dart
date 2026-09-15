@@ -105,25 +105,25 @@ void main() {
       expect(await overtimeAfter(30), 0);
     });
 
-    test('31 دقيقة = دقيقة واحدة إضافي', () async {
-      expect(await overtimeAfter(31), closeTo(1 / 60, 1e-9));
+    test('31 دقيقة = 31 دقيقة إضافي (المهلة بوابة فقط)', () async {
+      expect(await overtimeAfter(31), closeTo(31 / 60, 1e-9));
     });
 
-    test('90 دقيقة = ساعة إضافي', () async {
-      expect(await overtimeAfter(90), closeTo(1.0, 1e-9));
+    test('90 دقيقة = 90 دقيقة إضافي (المهلة بوابة فقط)', () async {
+      expect(await overtimeAfter(90), closeTo(90 / 60, 1e-9));
     });
 
     test('بدون صف إعداد = fallback ثلاثون دقيقة', () async {
       // لا نزرع المفتاح — يجب أن تسري القاعدة الجديدة لا الـ15 القديمة
       expect(await overtimeAfter(20), 0);
-      expect(await overtimeAfter(45), closeTo(15 / 60, 1e-9));
+      expect(await overtimeAfter(45), closeTo(45 / 60, 1e-9));
     });
   });
 
   group('مهلة مخصصة من الإعدادات', () {
-    test('مهلة 15 دقيقة تُحترم عند ضبطها', () async {
+    test('مهلة 15 دقيقة تُحترم عند ضبطها (بوابة فقط)', () async {
       await setGrace('15');
-      expect(await overtimeAfter(20), closeTo(5 / 60, 1e-9));
+      expect(await overtimeAfter(20), closeTo(20 / 60, 1e-9));
       expect(await overtimeAfter(15), 0);
     });
   });
@@ -162,8 +162,8 @@ void main() {
         checkOutTime: DateTime(day.year, day.month, day.day, 18, 0),
       );
       final rec = (await dao.getAttendanceOnDate(staffId, dateOnly)).first;
-      // 18:00 = +60 بعد 17:00 ناقص مهلة 30 = 30 دقيقة = 0.5 ساعة
-      expect(rec.overtimeHours, closeTo(0.5, 1e-9));
+      // 18:00 = +60 بعد 17:00 وتجاوز المهلة → كامل الـ60 دقيقة = 1.0 ساعة
+      expect(rec.overtimeHours, closeTo(1.0, 1e-9));
     });
   });
 

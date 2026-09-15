@@ -148,6 +148,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
     int? sourceDeviceId,
     int? rawEventId,
     String status = 'present',
+    int? lateMinutes,
   }) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -169,6 +170,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
         sourceDeviceId: Value(sourceDeviceId),
         rawEventId: Value(rawEventId),
         status: status,
+        lateMinutes: lateMinutes ?? record.lateMinutes,
         updatedAt: now,
       ));
     } else {
@@ -182,6 +184,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
           source: Value(source),
           sourceDeviceId: Value(sourceDeviceId),
           rawEventId: Value(rawEventId),
+          lateMinutes: Value(lateMinutes ?? 0),
           createdAt: now,
           updatedAt: now,
         ),
@@ -199,6 +202,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
     double? workingHours,
     double? overtimeHours,
     String? status,
+    int? lateMinutes,
   }) async {
     final now = DateTime.now();
     // Find today's attendance record
@@ -237,6 +241,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
         workingHours: Value(finalWorkingHours),
         overtimeHours: finalOvertimeHours ?? 0,
         status: finalStatus,
+        lateMinutes: lateMinutes ?? record.lateMinutes,
         source: Value(source),
         sourceDeviceId: Value(sourceDeviceId),
         rawEventId: Value(rawEventId),
@@ -306,6 +311,23 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
           approvedBy: Value(approvedBy),
           approvedAt: Value(DateTime.now()),
           rejectionReason: Value(reason),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  /// Records a payroll deduction against an advance. When the cumulative
+  /// deducted amount covers the full advance, it is marked 'settled' so all
+  /// future payrolls exclude it automatically. Must run in the same
+  /// transaction as the payroll insert.
+  Future<void> applyAdvanceDeduction({
+    required int advanceId,
+    required double newPaidAmount,
+    required bool settled,
+  }) =>
+      (update(staffAdvances)..where((a) => a.id.equals(advanceId))).write(
+        StaffAdvancesCompanion(
+          paidAmount: Value(newPaidAmount),
+          status: settled ? const Value('settled') : const Value.absent(),
           updatedAt: Value(DateTime.now()),
         ),
       );

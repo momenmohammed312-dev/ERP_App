@@ -29,6 +29,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   final _departmentController = TextEditingController();
   final _basicSalaryController = TextEditingController();
   final _hourlyRateController = TextEditingController();
+  final _weeklySalaryController = TextEditingController();
   final _bankNameController = TextEditingController();
   final _bankAccountController = TextEditingController();
   final _emergencyContactController = TextEditingController();
@@ -39,6 +40,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   int? _selectedDeviceId;
 
   String _selectedEmploymentType = 'full_time';
+  // دورة القبض — مستقلة عن نوع التوظيف (شهري افتراضياً)
+  String _selectedPayFrequency = 'monthly';
   DateTime? _hireDate;
   DateTime? _contractEndDate;
   bool _isLoading = false;
@@ -105,7 +108,9 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     _departmentController.text = staff.department ?? '';
     _basicSalaryController.text = staff.basicSalary.toString();
     _hourlyRateController.text = staff.hourlyRate?.toString() ?? '';
+    _weeklySalaryController.text = staff.weeklySalary?.toString() ?? '';
     _selectedEmploymentType = staff.employmentType;
+    _selectedPayFrequency = staff.payFrequency;
     _hireDate = staff.hireDate;
     _contractEndDate = staff.contractEndDate;
     _bankNameController.text = staff.bankName ?? '';
@@ -154,6 +159,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     _departmentController.dispose();
     _basicSalaryController.dispose();
     _hourlyRateController.dispose();
+    _weeklySalaryController.dispose();
     _bankNameController.dispose();
     _bankAccountController.dispose();
     _emergencyContactController.dispose();
@@ -277,23 +283,64 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               },
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _basicSalaryController,
-              keyboardType: TextInputType.number,
+            DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
+              value: _selectedPayFrequency,
               decoration: _buildInputDecoration(
-                'الراتب الأساسي',
-                Icons.attach_money,
+                'دورة القبض',
+                Icons.calendar_view_week,
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'هذا الحقل مطلوب';
-                }
-                if (double.tryParse(value) == null) {
-                  return 'يرجى إدخال رقم صحيح';
-                }
-                return null;
+              items: const [
+                DropdownMenuItem(value: 'monthly', child: Text('شهري')),
+                DropdownMenuItem(value: 'weekly', child: Text('أسبوعي (سبت–خميس)')),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _selectedPayFrequency = value!;
+                });
               },
             ),
+            if (_selectedPayFrequency == 'weekly') ...[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _weeklySalaryController,
+                keyboardType: TextInputType.number,
+                decoration: _buildInputDecoration(
+                  'الأجر الأسبوعي (مبلغ مستقل)',
+                  Icons.payments,
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'الأجر الأسبوعي مطلوب للدورة الأسبوعية';
+                  }
+                  if (double.tryParse(value) == null) {
+                    return 'يرجى إدخال رقم صحيح';
+                  }
+                  return null;
+                },
+              ),
+            ],
+            const SizedBox(height: 12),
+            // الراتب الأساسي للشهري فقط — الأسبوعي له أجر مستقل ولا يستخدمه
+            if (_selectedPayFrequency == 'monthly') ...[
+              TextFormField(
+                controller: _basicSalaryController,
+                keyboardType: TextInputType.number,
+                decoration: _buildInputDecoration(
+                  'الراتب الأساسي (شهري)',
+                  Icons.attach_money,
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'هذا الحقل مطلوب';
+                  }
+                  if (double.tryParse(value) == null) {
+                    return 'يرجى إدخال رقم صحيح';
+                  }
+                  return null;
+                },
+              ),
+            ],
             if (_selectedEmploymentType == 'part_time') ...[
               const SizedBox(height: 12),
               TextFormField(
@@ -736,13 +783,24 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       if (_nameController.text.trim().isEmpty) {
         throw Exception('اسم الموظف مطلوب');
       }
-      if (_basicSalaryController.text.trim().isEmpty) {
+      if (_basicSalaryController.text.trim().isEmpty &&
+          _selectedPayFrequency == 'monthly') {
         throw Exception('الراتب الأساسي مطلوب');
       }
 
-      final salary = double.tryParse(_basicSalaryController.text);
-      if (salary == null || salary <= 0) {
+      // الأسبوعي: الأجر الأسبوعي هو المرجع الوحيد، والأساسي يُخزن 0
+      final salary = _selectedPayFrequency == 'weekly'
+          ? 0.0
+          : double.tryParse(_basicSalaryController.text);
+      if (salary == null || (salary <= 0 && _selectedPayFrequency == 'monthly')) {
         throw Exception('الراتب الأساسي يجب أن يكون رقماً موجباً');
+      }
+      double? weeklySalary;
+      if (_selectedPayFrequency == 'weekly') {
+        weeklySalary = double.tryParse(_weeklySalaryController.text);
+        if (weeklySalary == null || weeklySalary <= 0) {
+          throw Exception('الأجر الأسبوعي يجب أن يكون رقماً موجباً');
+        }
       }
 
       if (widget.staff == null) {
@@ -754,6 +812,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
           position: _positionController.text.trim(),
           employmentType: _selectedEmploymentType,
           basicSalary: salary,
+          payFrequency: _selectedPayFrequency,
+          weeklySalary: weeklySalary,
           nationalId: _nationalIdController.text.trim().isEmpty
               ? null
               : _nationalIdController.text.trim(),
@@ -809,6 +869,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               : _departmentController.text.trim(),
           employmentType: _selectedEmploymentType,
           basicSalary: salary,
+          payFrequency: _selectedPayFrequency,
+          weeklySalary: weeklySalary,
           hourlyRate: _hourlyRateController.text.trim().isEmpty
               ? null
               : double.tryParse(_hourlyRateController.text),

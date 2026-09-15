@@ -180,8 +180,17 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                   ),
               ],
             ),
-            if (advance.reason != null && advance.reason!.isNotEmpty) ...[
-              const SizedBox(height: 12),
+            if (advance.deductOnPeriod != null) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'تُخصم بدءاً من: ${advance.deductOnPeriod}',
+                  style: TextStyle(fontSize: 13, color: Colors.teal[700]),
+                ),
+              ),
+            ],
+            if (advance.reason != null && advance.reason!.isNotEmpty) ...[              const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerRight,
                 child: Text(
@@ -301,6 +310,21 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
     int? installmentMonths;
     final installmentCtrl = TextEditingController();
     DateTime selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
+    // للأسبوعي: اختيار أسبوع الاستحقاق بدل الشهر وحده
+    final isWeekly = widget.staff.payFrequency == 'weekly';
+    int? deductWeek;
+    List<int> validWeeks = [];
+    if (isWeekly) {
+      final db = ref.read(appDatabaseProvider);
+      final svc = StaffManagementService(StaffManagementDao(db), db);
+      for (var w = 1; w <= 5; w++) {
+        try {
+          svc.weekBounds(selectedMonth.year, selectedMonth.month, w);
+          validWeeks.add(w);
+        } catch (_) {}
+      }
+      deductWeek = validWeeks.isNotEmpty ? validWeeks.last : null;
+    }
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -353,9 +377,43 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                       trailing: const Icon(Icons.calendar_month),
                       onTap: () async {
                         final picked = await showDatePicker(context: context, initialDate: selectedMonth, firstDate: DateTime(2020), lastDate: DateTime(2030), helpText: 'اختر شهر السلفة');
-                        if (picked != null) setDialogState(() => selectedMonth = DateTime(picked.year, picked.month, 1));
+                        if (picked != null) setDialogState(() {
+                          selectedMonth = DateTime(picked.year, picked.month, 1);
+                          if (isWeekly) {
+                            validWeeks = [];
+                            final db = ref.read(appDatabaseProvider);
+                            final svc = StaffManagementService(StaffManagementDao(db), db);
+                            for (var w = 1; w <= 5; w++) {
+                              try {
+                                svc.weekBounds(selectedMonth.year, selectedMonth.month, w);
+                                validWeeks.add(w);
+                              } catch (_) {}
+                            }
+                            deductWeek = validWeeks.isNotEmpty ? validWeeks.last : null;
+                          }
+                        });
                       },
                     ),
+                    if (isWeekly) ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        // ignore: deprecated_member_use
+                        value: deductWeek,
+                        decoration: const InputDecoration(
+                          labelText: 'أسبوع الاستحقاق (القبض الخميس)',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: validWeeks
+                            .map((w) => DropdownMenuItem(
+                                  value: w,
+                                  child: Text('أسبوع $w'),
+                                ))
+                            .toList(),
+                        onChanged: (v) => setDialogState(() => deductWeek = v),
+                        validator: (v) =>
+                            v == null ? 'اختر أسبوع الاستحقاق' : null,
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: installmentCtrl,
@@ -397,6 +455,8 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                       'amount': amount,
                       'reason': reasonCtrl.text.trim(),
                       'installments': inst,
+                      'deductWeek': deductWeek,
+                      'deductMonth': selectedMonth,
                     });
                   }
                 },
@@ -412,11 +472,19 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
       },
     );
 
-    if (result != null) {
+      if (result != null) {
       try {
         final amount = result['amount'] as double;
         final reason = result['reason'] as String;
         final inst = result['installments'] as int?;
+        // فترة الاستحقاق: للأسبوعي أسبوع محدد، وnull تعني كل الفترات (قديم)
+        String? deductOnPeriod;
+        if (widget.staff.payFrequency == 'weekly' &&
+            result['deductWeek'] != null) {
+          final m = result['deductMonth'] as DateTime;
+          deductOnPeriod =
+              '${m.year}-${m.month.toString().padLeft(2, '0')}-W${result['deductWeek']}';
+        }
 
         await _dao.addAdvance(
           StaffAdvancesCompanion.insert(
@@ -427,6 +495,9 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                 : const drift.Value.absent(),
             requestDate: selectedMonth,
             status: 'pending',
+            deductOnPeriod: deductOnPeriod == null
+                ? const drift.Value.absent()
+                : drift.Value(deductOnPeriod),
             installmentMonths: inst != null && inst > 0
                 ? drift.Value(inst)
                 : const drift.Value.absent(),

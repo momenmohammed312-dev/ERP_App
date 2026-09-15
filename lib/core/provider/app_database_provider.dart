@@ -70,8 +70,8 @@ final attendanceSyncServiceProvider = Provider<AttendanceSyncService>((ref) {
     db.staffManagementDao,
   );
   final service = AttendanceSyncService(deviceDao, db.staffManagementDao, engine);
-  // حل جذري: مزامنة تلقائية في الخلفية كل دقيقتين — لا تتأثر بانقطاع النت (الـ LAN يعمل محلياً)
-  service.startAutoSync(interval: const Duration(minutes: 2));
+  // مزامنة تلقائية في الخلفية كل 5 دقائق — تقليل التداخل مع المزامنة اليدوية وحمل الجهاز
+  service.startAutoSync(interval: const Duration(minutes: 5));
   ref.onDispose(() => service.stopAutoSync());
   return service;
 });

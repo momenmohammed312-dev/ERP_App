@@ -35,5 +35,18 @@ void main() {
       expect(AppFeatures.hasEmptyContainerTracking, isFalse);
       expect(AppFeatures.hasCommissionPricing, isFalse);
     });
+
+    test('multi-device sync is enabled for base flavor and disabled for clothing', () {
+      AppFlavor.initialize(Flavor.base);
+      expect(AppFeatures.hasMultiDeviceSync, isTrue);
+
+      AppFlavor.initialize(Flavor.clothing);
+      expect(AppFeatures.hasMultiDeviceSync, isFalse);
+      expect(AppFeatures.isClothingDistribution, isTrue);
+      expect(AppFeatures.hasManufacturing, isFalse);
+      expect(AppFeatures.hasStaffManagement, isFalse);
+      expect(AppFeatures.hasBackupLauncher, isFalse);
+      expect(AppFeatures.hasAccountingHub, isFalse);
+    });
   });
 }

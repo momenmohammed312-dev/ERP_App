@@ -7,6 +7,7 @@ import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/ui/widgets/invoice_items_table.dart';
 import 'package:pos_offline_desktop/ui/customer/edit_payment_dialog.dart';
 import 'package:pos_offline_desktop/ui/invoice/edit_invoice_page.dart';
+import 'package:pos_offline_desktop/ui/purchase/widgets/edit_purchase_invoice_page.dart';
 
 const Color _bgDark = Color(0xFF0D1117);
 const Color _gold = Color(0xFFC9A84C);
@@ -35,6 +36,7 @@ class TransactionDetailDialog extends StatefulWidget {
 class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
   List<InvoiceItemDisplayModel> _items = [];
   bool _isLoading = true;
+  Purchase? _purchaseRecord;
 
   bool get _isPayment =>
       widget.transaction.origin == 'payment' ||
@@ -50,6 +52,52 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
 
   Future<void> _loadItems() async {
     try {
+      if (widget.entityType == 'Supplier') {
+        Purchase? purchase;
+        final receiptNum = widget.transaction.receiptNumber;
+        if (receiptNum != null && receiptNum.isNotEmpty) {
+          purchase = await (widget.db.select(widget.db.purchases)
+                ..where((p) =>
+                    p.invoiceNumber.equals(receiptNum) |
+                    p.id.equals(receiptNum)))
+              .getSingleOrNull();
+        }
+
+        if (purchase == null) {
+          final match = RegExp(r'فاتورة\s*([^\s,]+)')
+              .firstMatch(widget.transaction.description);
+          final invNum = match?.group(1) ??
+              widget.transaction.id.replaceAll('_ledger', '');
+          purchase = await (widget.db.select(widget.db.purchases)
+                ..where((p) =>
+                    p.invoiceNumber.equals(invNum) |
+                    p.id.equals(invNum)))
+              .getSingleOrNull();
+        }
+
+        if (purchase != null) {
+          _purchaseRecord = purchase;
+          final items = await widget.db.purchaseDao
+              .getItemsWithProductsByPurchase(purchase.id);
+          if (!mounted) return;
+          setState(() {
+            _items = items.map((e) {
+              final item = e.$1;
+              final product = e.$2;
+              return InvoiceItemDisplayModel(
+                productName: product?.name ?? 'منتج ${item.productId}',
+                quantity: item.quantity.toDouble(),
+                unitPrice: item.unitPrice,
+                total: item.totalPrice,
+                unit: item.unit ?? product?.unit,
+              );
+            }).toList();
+            _isLoading = false;
+          });
+          return;
+        }
+      }
+
       int? invoiceId;
       final receiptNum = widget.transaction.receiptNumber;
       if (receiptNum != null && receiptNum.isNotEmpty) {
@@ -216,12 +264,35 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
               label: const Text('استرجاع'),
               style: TextButton.styleFrom(foregroundColor: Colors.orange),
             ),
+        ] else if (!_isSale && _purchaseRecord != null) ...[
+          TextButton.icon(
+            onPressed: () => _openEditPurchaseInvoice(context, _purchaseRecord!),
+            icon: const Icon(Icons.edit_note, size: 18),
+            label: const Text('تعديل الفاتورة'),
+            style: TextButton.styleFrom(foregroundColor: Colors.blue),
+          ),
         ],
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('إغلاق', style: TextStyle(color: _textMuted)),
         ),
       ],
+    );
+  }
+
+  void _openEditPurchaseInvoice(BuildContext context, Purchase purchase) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditPurchaseInvoicePage(
+          db: widget.db,
+          purchaseId: purchase.id,
+          onSaved: () {
+            _notifyChanged();
+            if (context.mounted) Navigator.pop(context);
+          },
+        ),
+      ),
     );
   }
 
@@ -347,6 +418,7 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
             quantity: item.quantity,
             unitPrice: unitPrice,
             totalPrice: item.price,
+            variantId: drift.Value(item.variantId),
           ),
         );
       }

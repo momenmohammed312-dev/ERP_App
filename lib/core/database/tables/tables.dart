@@ -15,6 +15,7 @@ export 'invoice_table.dart';
 export 'ledger_transactions_table.dart';
 export 'notifications_table.dart';
 export 'product_table.dart';
+export 'product_variants_table.dart';
 export 'purchase_budget_tables.dart';
 export 'purchase_items_table.dart';
 export 'purchase_orders_tables.dart';

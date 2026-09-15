@@ -219,7 +219,10 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
     final totalStaff = _staffList.length;
     final totalSalary = _staffList.fold<double>(
       0,
-      (sum, staff) => sum + staff.basicSalary,
+      (sum, staff) => sum +
+          (staff.payFrequency == 'weekly' && staff.weeklySalary != null
+              ? staff.weeklySalary!
+              : staff.basicSalary),
     );
 
     return Padding(
@@ -380,7 +383,9 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
                 Icon(Icons.attach_money, size: 16, color: Colors.green),
                 const SizedBox(width: 4),
                 Text(
-                  'المرتب الأساسي: ${staff.basicSalary.toStringAsFixed(2)} ج.م',
+                  staff.payFrequency == 'weekly' && staff.weeklySalary != null
+                      ? 'الأجر الأسبوعي: ${staff.weeklySalary!.toStringAsFixed(2)} ج.م'
+                      : 'المرتب الأساسي: ${staff.basicSalary.toStringAsFixed(2)} ج.م',
                   style: TextStyle(
                     color: Colors.green,
                     fontWeight: FontWeight.w500,

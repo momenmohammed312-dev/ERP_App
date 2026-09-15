@@ -97,10 +97,11 @@ void main() {
       expect(record.status, expected.status);
       expect(record.workingHours, expected.workingHours);
       expect(record.overtimeHours, expected.overtimeHours);
-      // دوام 12:00→21:00 = 9 ساعات إجمالي − ساعة بريك = 8.0 ساعات فعلية، ووقت إضافي بعد نهاية الدوام 17:00 + 30 دقيقة مهلة = 3.5
+      // دوام 12:00→21:00 = 9 ساعات إجمالي − ساعة بريك = 8.0 ساعات فعلية،
+      // وإضافي من نهاية الدوام 17:00 (المهلة 30 دقيقة بوابة فقط) = 4.0
       expect(record.workingHours, 8.0);
       expect(record.overtimeHours, greaterThan(0));
-      expect(record.overtimeHours, 3.5);
+      expect(record.overtimeHours, 4.0);
       expect(record.checkOutTime, checkOutTime);
       expect(record.source, 'device');
       expect(record.sourceDeviceId, deviceId);

@@ -8,6 +8,8 @@ import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/core/utils/app_utils.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 import 'package:pos_offline_desktop/ui/supplier/supplier_statement_screen.dart';
+import 'package:pos_offline_desktop/ui/home/widgets/transaction_detail_dialog.dart';
+import 'package:pos_offline_desktop/ui/supplier/add_edit_supplier_page.dart';
 
 class SuppliersWidget extends ConsumerWidget {
   final AppDatabase db;
@@ -216,7 +218,7 @@ class SuppliersWidget extends ConsumerWidget {
       return result.map((row) {
         final d = row.data;
         return {
-          'id': int.tryParse(d['id']?.toString() ?? '') ?? 0,
+          'id': d['id']?.toString() ?? '',
           'invoice_number': d['invoice_number']?.toString(),
           'purchase_date': parseDate(d['purchase_date']).toIso8601String(),
           'total_amount': (d['total_amount'] as num?)?.toDouble() ?? 0.0,
@@ -232,120 +234,11 @@ class SuppliersWidget extends ConsumerWidget {
   }
 
   void _showAddSupplierDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    final phoneController = TextEditingController();
-    final addressController = TextEditingController();
-    final emailController = TextEditingController();
-    final balanceController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        final l10n = AppLocalizations.of(dialogContext);
-        return AlertDialog(
-          title: Text(l10n.add_new_supplier),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: l10n.supplier_name,
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const Gap(16),
-              TextField(
-                controller: phoneController,
-                decoration: InputDecoration(
-                  labelText: l10n.phone_number,
-                  border: const OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.phone,
-              ),
-              const Gap(16),
-              TextField(
-                controller: addressController,
-                decoration: InputDecoration(
-                  labelText: l10n.address,
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const Gap(16),
-              TextField(
-                controller: emailController,
-                decoration: InputDecoration(
-                  labelText: l10n.email,
-                  border: const OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const Gap(16),
-              TextField(
-                controller: balanceController,
-                decoration: InputDecoration(
-                  labelText: l10n.opening_balance,
-                  border: const OutlineInputBorder(),
-                  prefixText: l10n.currency,
-                ),
-                keyboardType: TextInputType.number,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(l10n.cancel),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (nameController.text.isNotEmpty) {
-                  try {
-                    // Add supplier to database
-                    await db.supplierDao.insertSupplier(
-                      SuppliersCompanion.insert(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        name: nameController.text,
-                        phone: phoneController.text.isNotEmpty
-                            ? Value(phoneController.text)
-                            : const Value.absent(),
-                        address: addressController.text.isNotEmpty
-                            ? Value(addressController.text)
-                            : const Value.absent(),
-                        openingBalance: Value(
-                          double.tryParse(balanceController.text) ?? 0.0,
-                        ),
-                        status: const Value('Active'),
-                      ),
-                    );
-
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(
-                          content: Text(l10n.supplier_added_successfully),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(
-                          content: Text('${l10n.error}: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                }
-              },
-              child: Text(l10n.save),
-            ),
-          ],
-        );
-      },
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AddEditSupplierPage(),
+      ),
     );
   }
 }
@@ -632,16 +525,20 @@ class _SupplierCard extends StatelessWidget {
                                 purchase['paid_amount'] as double;
                             final remaining = amount - paidAmount;
                             final isPaid = remaining <= 0;
-                            return Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  bottom: BorderSide(
-                                    color: Theme.of(context).colorScheme.outline
-                                        .withValues(alpha: 0.1),
+                            return InkWell(
+                              onTap: () => _showPurchaseDetailDialog(context, purchase),
+                              borderRadius: BorderRadius.circular(4),
+                              hoverColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: Theme.of(context).colorScheme.outline
+                                          .withValues(alpha: 0.1),
+                                    ),
                                   ),
                                 ),
-                              ),
                               child: Row(
                                 children: [
                                   Expanded(
@@ -693,8 +590,9 @@ class _SupplierCard extends StatelessWidget {
                                   ),
                                 ],
                               ),
-                            );
-                          }),
+                            ),
+                          );
+                        }),
                         ],
                       ),
                     );
@@ -788,113 +686,55 @@ class _SupplierCard extends StatelessWidget {
     );
   }
 
-  void _showEditSupplierDialog(Supplier supplier) {
-    final nameController = TextEditingController(text: supplier.name);
-    final phoneController = TextEditingController(text: supplier.phone ?? '');
-    final addressController = TextEditingController(
-      text: supplier.address ?? '',
-    );
-    final balanceController = TextEditingController(
-      text: supplier.openingBalance.toString(),
-    );
+  void _showPurchaseDetailDialog(BuildContext ctx, Map<String, dynamic> purchase) async {
+    final invNumber = purchase['invoice_number']?.toString() ?? '';
+    final purchaseId = purchase['id']?.toString() ?? '';
 
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text('تعديل بيانات المورد'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: 'اسم المورد',
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const Gap(16),
-              TextField(
-                controller: phoneController,
-                decoration: InputDecoration(
-                  labelText: 'رقم الهاتف',
-                  border: const OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.phone,
-              ),
-              const Gap(16),
-              TextField(
-                controller: addressController,
-                decoration: InputDecoration(
-                  labelText: 'العنوان',
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const Gap(16),
-              TextField(
-                controller: balanceController,
-                decoration: InputDecoration(
-                  labelText: 'الرصيد الافتتاحي',
-                  border: const OutlineInputBorder(),
-                  prefixText: 'ج.م',
-                ),
-                keyboardType: TextInputType.number,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('إلغاء'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (nameController.text.isNotEmpty) {
-                  try {
-                    await db.supplierDao.updateSupplier(
-                      SuppliersCompanion(
-                        id: Value(supplier.id),
-                        name: Value(nameController.text),
-                        phone: phoneController.text.isNotEmpty
-                            ? Value(phoneController.text)
-                            : const Value.absent(),
-                        address: addressController.text.isNotEmpty
-                            ? Value(addressController.text)
-                            : const Value.absent(),
-                        openingBalance: Value(
-                          double.tryParse(balanceController.text) ?? 0.0,
-                        ),
-                        status: const Value('Active'),
-                      ),
-                    );
+    // Look up matching ledger transaction if one exists
+    final tx = await (db.select(db.ledgerTransactions)
+          ..where((t) =>
+              (t.receiptNumber.equals(invNumber) |
+                  t.id.equals('${invNumber}_ledger') |
+                  t.id.equals('${purchaseId}_ledger')) &
+              t.entityType.equals('Supplier')))
+        .getSingleOrNull();
 
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(
-                          content: Text('تم تحديث بيانات المورد بنجاح'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(
-                          content: Text('خطأ: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                }
-              },
-              child: Text('حفظ'),
-            ),
-          ],
+    final effectiveTx = tx ??
+        LedgerTransaction(
+          id: '${purchaseId}_ledger',
+          entityType: 'Supplier',
+          refId: supplier.id,
+          date: DateTime.tryParse(purchase['purchase_date']?.toString() ?? '') ?? DateTime.now(),
+          description: 'فاتورة مشتريات $invNumber',
+          debit: 0.0,
+          credit: (purchase['total_amount'] as num?)?.toDouble() ?? 0.0,
+          origin: 'purchase',
+          paymentMethod: purchase['payment_method']?.toString(),
+          receiptNumber: invNumber,
         );
-      },
+
+    if (!ctx.mounted) return;
+    showDialog(
+      context: ctx,
+      builder: (_) => TransactionDetailDialog(
+        db: db,
+        transaction: effectiveTx,
+        entityType: 'Supplier',
+        onChanged: () {
+          if (ctx is Element && ctx.mounted) {
+            ctx.markNeedsBuild();
+          }
+        },
+      ),
+    );
+  }
+
+  void _showEditSupplierDialog(Supplier supplier) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddEditSupplierPage(supplier: supplier),
+      ),
     );
   }
 

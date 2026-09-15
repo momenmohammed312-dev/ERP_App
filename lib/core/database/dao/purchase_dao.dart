@@ -29,6 +29,14 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
             ..where((p) => p.id.equals(id) & p.isDeleted.equals(false)))
           .getSingleOrNull();
 
+  // Get purchase by invoice number
+  Future<Purchase?> getPurchaseByInvoiceNumber(String invoiceNumber) =>
+      (select(purchases)
+            ..where((p) =>
+                p.invoiceNumber.equals(invoiceNumber) &
+                p.isDeleted.equals(false)))
+          .getSingleOrNull();
+
   // Get purchases by supplier
   Future<List<Purchase>> getPurchasesBySupplier(String supplierId) =>
       (select(purchases)..where(
@@ -137,14 +145,19 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
 
         final originalStock = product.quantity;
         final newStock = originalStock + quantity;
+        final newSellingPrice = (item['sellingPrice'] as num?)?.toDouble() ??
+            (item['price'] as num?)?.toDouble() ??
+            product.price;
+        final newCostPrice = unitPrice > 0 ? unitPrice : product.costPrice;
 
-        // Update product quantity
+        // Update product quantity and prices
         await update(db.products).replace(
           ProductsCompanion(
             id: Value(product.id),
             name: Value(product.name),
             quantity: Value(newStock),
-            price: Value(product.price),
+            price: Value(newSellingPrice),
+            costPrice: Value(newCostPrice),
             unit: Value(product.unit),
             category: Value(product.category),
             barcode: Value(product.barcode),
@@ -211,6 +224,157 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
       }
 
       return purchaseId;
+    });
+  }
+
+  // Update existing purchase with items (atomically adjusts stock and supplier ledger)
+  Future<void> updatePurchaseWithItems({
+    required String purchaseId,
+    String? supplierId,
+    required String invoiceNumber,
+    required String description,
+    required double totalAmount,
+    required double paidAmount,
+    required String paymentMethod,
+    required String status,
+    required DateTime purchaseDate,
+    String? notes,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    return transaction(() async {
+      // 1. Fetch old purchase
+      final oldPurchase = await (select(purchases)..where((p) => p.id.equals(purchaseId))).getSingleOrNull();
+      if (oldPurchase == null) throw Exception('فاتورة الشراء غير موجودة');
+
+      // 2. Fetch old items
+      final oldItems = await (select(purchaseItems)..where((pi) => pi.purchaseId.equals(purchaseId))).get();
+
+      // 3. Reverse old inventory: decrease product stock by old quantities
+      for (final oldItem in oldItems) {
+        final prodId = int.tryParse(oldItem.productId);
+        if (prodId != null) {
+          final prod = await (select(db.products)..where((p) => p.id.equals(prodId))).getSingleOrNull();
+          if (prod != null) {
+            await (update(db.products)..where((p) => p.id.equals(prodId))).write(
+              ProductsCompanion(
+                quantity: Value(prod.quantity - oldItem.quantity),
+              ),
+            );
+          }
+        }
+      }
+
+      // 4. Delete old purchase items
+      await (delete(purchaseItems)..where((pi) => pi.purchaseId.equals(purchaseId))).go();
+
+      // 5. Update purchase record
+      await (update(purchases)..where((p) => p.id.equals(purchaseId))).write(
+        PurchasesCompanion(
+          supplierId: supplierId != null ? Value(supplierId) : const Value.absent(),
+          invoiceNumber: Value(invoiceNumber),
+          description: Value(description),
+          totalAmount: Value(totalAmount),
+          paidAmount: Value(paidAmount),
+          paymentMethod: Value(paymentMethod),
+          status: Value(status),
+          purchaseDate: Value(purchaseDate),
+          notes: notes != null ? Value(notes) : const Value.absent(),
+        ),
+      );
+
+      // 6. Insert new purchase items and apply new quantities & prices
+      for (final item in items) {
+        final productId = item['productId'] as int;
+        final quantity = item['quantity'] as int;
+        final unitPrice = (item['unitPrice'] as num).toDouble();
+        final unit = (item['unit'] as String?) ?? 'قطعة';
+        final cartonQuantity = item['cartonQuantity'] as int?;
+        final cartonPrice = (item['cartonPrice'] as num?)?.toDouble();
+        final discount = (item['discount'] as num?)?.toDouble() ?? 0.0;
+        final tax = (item['tax'] as num?)?.toDouble() ?? 0.0;
+
+        final product = await (select(db.products)..where((p) => p.id.equals(productId))).getSingleOrNull();
+        if (product == null) throw Exception('المنتج غير موجود: $productId');
+
+        final originalStock = product.quantity;
+        final newStock = originalStock + quantity;
+        final newSellingPrice = (item['sellingPrice'] as num?)?.toDouble() ??
+            (item['price'] as num?)?.toDouble() ??
+            product.price;
+        final newCostPrice = unitPrice > 0 ? unitPrice : product.costPrice;
+
+        await (update(db.products)..where((p) => p.id.equals(productId))).write(
+          ProductsCompanion(
+            quantity: Value(newStock),
+            price: Value(newSellingPrice),
+            costPrice: Value(newCostPrice),
+          ),
+        );
+
+        // Insert new purchase item
+        await into(purchaseItems).insert(
+          PurchaseItemsCompanion.insert(
+            id: '$purchaseId$productId',
+            purchaseId: purchaseId,
+            productId: productId.toString(),
+            quantity: quantity,
+            unitPrice: unitPrice,
+            totalPrice: (quantity * unitPrice) - discount + tax,
+            unit: unit,
+            cartonQuantity: cartonQuantity != null ? Value(cartonQuantity) : const Value.absent(),
+            cartonPrice: cartonPrice != null ? Value(cartonPrice) : const Value.absent(),
+            discount: Value(discount),
+            tax: Value(tax),
+            createdAt: DateTime.now(),
+            originalStock: Value(originalStock),
+            newStock: Value(newStock),
+          ),
+        );
+      }
+
+      // 7. Update supplier subledger transaction if credit
+      final remainingAmount = totalAmount - paidAmount;
+      if (supplierId != null) {
+        final ledgerTxs = await (select(db.ledgerTransactions)
+              ..where((t) =>
+                  (t.receiptNumber.equals(invoiceNumber) |
+                   t.id.equals('${invoiceNumber}_ledger') |
+                   t.id.equals('${purchaseId}_ledger')) &
+                  t.entityType.equals('Supplier')))
+            .get();
+
+        if (ledgerTxs.isNotEmpty) {
+          final tx = ledgerTxs.first;
+          await (update(db.ledgerTransactions)..where((t) => t.id.equals(tx.id))).write(
+            LedgerTransactionsCompanion(
+              credit: Value(remainingAmount > 0 ? remainingAmount : 0.0),
+              description: Value('تعديل شراء: فاتورة $invoiceNumber'),
+              date: Value(purchaseDate),
+              receiptNumber: Value(invoiceNumber),
+            ),
+          );
+        } else if (paymentMethod != 'cash' && remainingAmount > 0) {
+          await db.ledgerDao.insertTransaction(
+            LedgerTransactionsCompanion.insert(
+              id: '${invoiceNumber}_ledger',
+              entityType: 'Supplier',
+              refId: supplierId,
+              date: purchaseDate,
+              description: 'شراء آجل: فاتورة $invoiceNumber',
+              debit: const Value(0.0),
+              credit: Value(remainingAmount),
+              origin: 'purchase',
+              receiptNumber: Value(invoiceNumber),
+            ),
+          );
+        }
+
+        // Recalculate supplier balance
+        final balance = await db.ledgerDao.getSupplierBalance(supplierId);
+        await (update(db.suppliers)..where((s) => s.id.equals(supplierId))).write(
+          SuppliersCompanion(currentBalance: Value(balance)),
+        );
+      }
     });
   }
 

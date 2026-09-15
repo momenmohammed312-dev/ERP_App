@@ -6,6 +6,34 @@ import 'dart:typed_data';
 import 'zkteco_models.dart';
 import 'zkteco_packet_codec.dart';
 
+/// Thrown when the device transport fails (timeout, disconnect, truncated
+/// data). Unlike an empty log, this must NOT be treated as "zero records".
+class ZkTransportException implements Exception {
+  final String message;
+  const ZkTransportException(this.message);
+  @override
+  String toString() => 'ZkTransportException: $message';
+}
+
+/// Diagnostics for one attendance-log fetch. Lets the sync layer distinguish
+/// fetchFailed (throw) vs fetchOkEmpty vs fetchOkNonEmpty, and detects parser
+/// mismatch (droppedChunks > 0) instead of silently returning [].
+class ZkFetchReport {
+  final List<ZkAttendanceRecord> records;
+  final int rawBytes;
+  final int droppedChunks;
+  final bool fetchOk;
+  final String? debugSample;
+
+  const ZkFetchReport({
+    required this.records,
+    required this.rawBytes,
+    required this.droppedChunks,
+    required this.fetchOk,
+    this.debugSample,
+  });
+}
+
 /// Minimal ZKTeco client for K50 Pro — only what attendance sync needs
 class ZKTecoClient {
   final String host;
@@ -32,6 +60,10 @@ class ZKTecoClient {
 
   String? _lastError;
   String? get lastError => _lastError;
+
+  ZkFetchReport? _lastFetchReport;
+  /// Diagnostics of the most recent attendance fetch (null before first fetch).
+  ZkFetchReport? get lastFetchReport => _lastFetchReport;
 
   Future<bool> connect() async {
     _lastError = null;
@@ -169,38 +201,91 @@ class ZKTecoClient {
     return users;
   }
 
-  Future<List<ZkAttendanceRecord>> getAttendanceRecords({DateTime? since}) async {
+  /// Fetches the attendance log with transport diagnostics.
+  ///
+  /// Throws [ZkTransportException] on timeout/disconnect/truncation — callers
+  /// must treat that as fetchFailed (no cursor move), never as zero records.
+  /// An empty-but-proven device log returns fetchOk with zero records.
+  Future<ZkFetchReport> fetchAttendanceReport({DateTime? since}) async {
     _ensureConnected();
-    var data = await _fetchDataCommand(command: ZkCommand.cmdAttLogRrq);
-    if (data.isEmpty) return [];
+    Uint8List data;
+    try {
+      data = await _fetchDataCommand(command: ZkCommand.cmdAttLogRrq);
+    } on ZkTransportException catch (e) {
+      // Single reconnect + retry for auth/timeout races (stale session or
+      // ackUnauthorized mid-fetch). Failure after retry propagates as-is.
+      if (e.message.contains('unauthorized') || e.message.contains('timeout')) {
+        final ok = await connect();
+        if (!ok) {
+          throw ZkTransportException('reconnect failed before fetch retry: $lastError');
+        }
+        _ensureConnected();
+        data = await _fetchDataCommand(command: ZkCommand.cmdAttLogRrq);
+      } else {
+        rethrow;
+      }
+    }
+    final rawBytes = data.length;
+    if (data.isEmpty) {
+      const report = ZkFetchReport(records: [], rawBytes: 0, droppedChunks: 0, fetchOk: true);
+      _lastFetchReport = report;
+      return report;
+    }
     // K50 Pro sometimes prefixes 4-byte totalSize; skip it if present
-    if (data.length % 40 == 4) {
-      final possibleSize = ByteData.sublistView(data, 0, 4).getUint32(0, Endian.little);
-      if (possibleSize == data.length - 4) data = Uint8List.sublistView(data, 4);
+    var payload = data;
+    if (payload.length % 40 == 4) {
+      final possibleSize = ByteData.sublistView(payload, 0, 4).getUint32(0, Endian.little);
+      if (possibleSize == payload.length - 4) payload = Uint8List.sublistView(payload, 4);
     }
     final records = <ZkAttendanceRecord>[];
-    if (data.length >= 40 && data.length % 40 == 0) {
-      for (int offset = 0; offset + 40 <= data.length; offset += 40) {
-        final chunk = Uint8List.sublistView(data, offset, offset + 40);
-        final rec = _parse40ByteAttendance(chunk);
-        if (rec != null && (since == null || rec.timestamp.isAfter(since))) records.add(rec);
-      }
-    } else if (data.length >= 8 && (data.length % 8 == 0 || data.length % 16 == 0)) {
-      final rs = (data.length % 16 == 0) ? 16 : 8;
-      for (int offset = 0; offset + rs <= data.length; offset += rs) {
-        final chunk = Uint8List.sublistView(data, offset, offset + rs);
-        final rec = _parseLegacyAttendance(chunk);
-        if (rec != null && (since == null || rec.timestamp.isAfter(since))) records.add(rec);
-      }
-    } else {
-      for (int offset = 0; offset + 40 <= data.length; offset += 40) {
-        final chunk = Uint8List.sublistView(data, offset, offset + 40);
-        final rec = _parse40ByteAttendance(chunk);
-        if (rec != null && (since == null || rec.timestamp.isAfter(since))) records.add(rec);
+    int dropped = 0;
+    String? sample;
+    void handleChunk(Uint8List chunk, ZkAttendanceRecord? Function(Uint8List) parse) {
+      final rec = parse(chunk);
+      if (rec == null) {
+        dropped++;
+        // Keep one hex sample (first 80 chars) for device-mismatch diagnosis.
+        if (sample == null) {
+          final hex = chunk.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+          sample = hex.length > 80 ? hex.substring(0, 80) : hex;
+        }
+      } else if (since == null || rec.timestamp.isAfter(since)) {
+        records.add(rec);
       }
     }
+    if (payload.length >= 40 && payload.length % 40 == 0) {
+      for (int offset = 0; offset + 40 <= payload.length; offset += 40) {
+        handleChunk(Uint8List.sublistView(payload, offset, offset + 40), _parse40ByteAttendance);
+      }
+    } else if (payload.length >= 8 && (payload.length % 8 == 0 || payload.length % 16 == 0)) {
+      final rs = (payload.length % 16 == 0) ? 16 : 8;
+      for (int offset = 0; offset + rs <= payload.length; offset += rs) {
+        handleChunk(Uint8List.sublistView(payload, offset, offset + rs), _parseLegacyAttendance);
+      }
+    } else {
+      for (int offset = 0; offset + 40 <= payload.length; offset += 40) {
+        handleChunk(Uint8List.sublistView(payload, offset, offset + 40), _parse40ByteAttendance);
+      }
+      // Trailing bytes that fit no record size: visible as dropped, not silent.
+      if (payload.length % 40 != 0) dropped++;
+    }
     records.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    return records;
+    final report = ZkFetchReport(
+      records: records,
+      rawBytes: rawBytes,
+      droppedChunks: dropped,
+      fetchOk: true,
+      debugSample: sample,
+    );
+    _lastFetchReport = report;
+    return report;
+  }
+
+  /// Backward-compatible accessor (dev tools). For sync, prefer
+  /// [fetchAttendanceReport] which distinguishes transport failure from empty.
+  Future<List<ZkAttendanceRecord>> getAttendanceRecords({DateTime? since}) async {
+    final report = await fetchAttendanceReport(since: since);
+    return report.records;
   }
 
   // --- Core ---
@@ -242,14 +327,29 @@ class ZKTecoClient {
 
   Future<Uint8List> _fetchDataCommand({required int command, Uint8List? payload}) async {
     final firstReply = await _sendCommand(command, payload: payload);
-    if (firstReply == null) return Uint8List(0);
+    // No reply at all (timeout/disconnect) is a transport failure — callers
+    // must NOT mistake it for an empty device log.
+    if (firstReply == null) {
+      throw const ZkTransportException('timeout waiting for device reply — weak network or busy device');
+    }
+    if (firstReply.command == ZkCommand.ackUnauthorized) {
+      throw const ZkTransportException('unauthorized: device rejected command (CommKey?)');
+    }
     if (firstReply.command == ZkCommand.ackData) return firstReply.payload;
     if (firstReply.command == ZkCommand.cmdPrepareData) {
       final totalSize = firstReply.payload.length >= 4 ? ByteData.sublistView(firstReply.payload, 0, 4).getUint32(0, Endian.little) : 0;
       final acc = <int>[];
+      // Total 60s budget for large logs; stalling mid-stream is a failure,
+      // not a short-but-valid log (prevents silent truncation).
+      final budgetEnd = DateTime.now().add(const Duration(seconds: 60));
       while (acc.length < totalSize) {
+        if (DateTime.now().isAfter(budgetEnd)) {
+          throw ZkTransportException('truncated data: received ${acc.length} of $totalSize bytes within 60s');
+        }
         final p = await _receivePacket();
-        if (p == null) break;
+        if (p == null) {
+          throw ZkTransportException('truncated data: stream stalled at ${acc.length} of $totalSize bytes');
+        }
         if (p.command == ZkCommand.cmdData || p.command == ZkCommand.ackData) acc.addAll(p.payload);
         else if (p.command == ZkCommand.ackOk) break;
       }

@@ -52,16 +52,36 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
 
       await _loadDevices();
       if (mounted) {
-        if (updatedDevice?.lastSyncStatus == 'success') {
+        // Truthful message from the latest run counters: success vs
+        // success_no_new_records vs partial vs failed (never a bare "نجاح").
+        final lastLog = await dao.getLatestSyncLogForDevice(device.id);
+        final fetched = lastLog?.eventsFetched ?? 0;
+        final matched = lastLog?.eventsMatched ?? 0;
+        final unmatched = lastLog?.eventsUnmatched ?? 0;
+        final status = updatedDevice?.lastSyncStatus;
+        if (status == 'success' && unmatched == 0) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تمت المزامنة بنجاح')),
+            SnackBar(
+              content: Text(fetched == 0
+                  ? 'تمت المزامنة بنجاح — لا بصمات جديدة'
+                  : 'تمت المزامنة بنجاح: $fetched جديدة • $matched مطابقة'),
+            ),
+          );
+        } else if (status == 'partial' || (status == 'success' && unmatched > 0)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'مزامنة جزئية: $matched مطابقة • $unmatched تحتاج مراجعة (صفحة البصمات غير المطابقة)'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
           );
         } else {
           final err = updatedDevice?.lastSyncError;
           final isNetIssue = err != null && (err.contains('timeout') || err.contains('مهلة') || err.contains('شبكة'));
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(err != null && err.length < 120 ? err : 'فشلت المزامنة — ${isNetIssue ? 'الشبكة غير مستقرة، سيعاد تلقائياً كل دقيقتين والحضور محفوظ محلياً' : 'راجع تفاصيل الجهاز'}'),
+              content: Text(err != null && err.length < 120 ? err : 'فشلت المزامنة — ${isNetIssue ? 'الشبكة غير مستقرة، سيعاد تلقائياً كل 5 دقائق والحضور محفوظ محلياً' : 'راجع تفاصيل الجهاز'}'),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 5),
             ),
@@ -308,13 +328,17 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
                                     ? 'لم يتم المزامنة'
                                     : device.lastSyncStatus == 'success'
                                         ? 'متصل'
-                                        : 'مفصول/خطأ',
+                                        : device.lastSyncStatus == 'partial'
+                                            ? 'جزئي — راجع غير المطابق'
+                                            : 'مفصول/خطأ',
                                 style: TextStyle(
                                   color: device.lastSyncStatus == null
                                       ? Colors.grey
                                       : device.lastSyncStatus == 'success'
                                           ? Colors.green
-                                          : Colors.red,
+                                          : device.lastSyncStatus == 'partial'
+                                              ? Colors.orange
+                                              : Colors.red,
                                 ),
                               ),
                               const SizedBox(width: 8),

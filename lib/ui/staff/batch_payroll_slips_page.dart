@@ -5,6 +5,7 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/ui/staff/services/staff_payroll_statement_generator.dart';
+import 'package:pos_offline_desktop/ui/staff/payroll_disbursement_sheet.dart';
 
 /// صفحة المرتبات المجمعة: تقرير لكل الموظفين لفترة (شهر/أسبوع)
 /// مع حساب تلقائي للناقص وطباعة 3 قسائم في ورقة A4 (توفير ورق + قص).
@@ -28,6 +29,8 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
   bool _loading = true;
   bool _calculating = false;
   String _calcProgress = '';
+  // قسائم مختارة للطباعة: فاضي = طباعة الكل
+  final Set<int> _selectedPayrollIds = {};
 
   String get _period {
     final ym = '${_month.year}-${_month.month.toString().padLeft(2, '0')}';
@@ -96,6 +99,9 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
           _staffMap = {for (final s in staffList) s.staffId: s};
           _activeStaff = active;
           _payrolls = filtered;
+          _selectedPayrollIds.removeWhere(
+            (id) => !filtered.any((p) => p.id == id),
+          );
           _loading = false;
         });
       }
@@ -119,9 +125,11 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
   }
 
   int get _skippedByMode => _activeStaff
-      .where((s) => _isMonthly
-          ? s.payFrequency == 'weekly'
-          : s.payFrequency != 'weekly')
+      .where(
+        (s) => _isMonthly
+            ? s.payFrequency == 'weekly'
+            : s.payFrequency != 'weekly',
+      )
       .length;
 
   Future<void> _pickMonth() async {
@@ -175,7 +183,12 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
           await service.calculatePayroll(user, s.staffId, _period);
         } else {
           await service.calculateWeeklyPay(
-              user, s.staffId, _month.year, _month.month, _week);
+            user,
+            s.staffId,
+            _month.year,
+            _month.month,
+            _week,
+          );
         }
       } catch (e) {
         failures.add('${s.name}: $e');
@@ -200,6 +213,26 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
     );
   }
 
+  void _openDisbursementSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => PayrollDisbursementSheet(
+        period: _period,
+        staffMap: _staffMap,
+        selectedIds: Set<int>.of(_selectedPayrollIds),
+        onChanged: () {
+          Navigator.pop(context);
+          _load();
+        },
+        onPrintSlips: _printBatch,
+      ),
+    );
+  }
+
   Future<void> _printBatch() async {
     if (_payrolls.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -209,12 +242,20 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
       );
       return;
     }
+    // طباعة المختار فقط إن وُجد، وإلا الكل
+    final toPrint = _visiblePayrolls;
+    if (toPrint.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('اختر مرتباً واحداً على الأقل للطباعة')),
+      );
+      return;
+    }
     try {
       final db = ref.read(appDatabaseProvider);
       await StaffPayrollStatementGenerator.generateAndPrintBatchSlips(
         context: context,
         db: db,
-        payrolls: _payrolls,
+        payrolls: toPrint,
         staffMap: _staffMap,
         period: _period,
       );
@@ -227,18 +268,13 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
     }
   }
 
-  String _statusText(String status) {
-    switch (status) {
-      case 'paid':
-        return 'مدفوع';
-      case 'approved':
-        return 'معتمد';
-      case 'calculated':
-        return 'محسوب';
-      default:
-        return status;
-    }
-  }
+  /// مرتبات نطاق العرض الحالي: المحدد بالشيك بوكس، أو الكل إن لا تحديد.
+  List<Payroll> get _visiblePayrolls => _selectedPayrollIds.isEmpty
+      ? _payrolls
+      : _payrolls.where((p) => _selectedPayrollIds.contains(p.id)).toList();
+
+  double get _visibleTotal =>
+      _visiblePayrolls.fold(0.0, (s, p) => s + p.netSalary);
 
   @override
   Widget build(BuildContext context) {
@@ -250,8 +286,10 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.print),
-            tooltip: 'طباعة 3 قسائم / صفحة',
-            onPressed: (_payrolls.isEmpty || _calculating) ? null : _printBatch,
+            tooltip: 'ملخص واعتماد الصرف (الكل أو المحدد بالشيك بوكس)',
+            onPressed: (_payrolls.isEmpty || _calculating)
+                ? null
+                : _openDisbursementSheet,
           ),
         ],
       ),
@@ -270,6 +308,24 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
               ),
             ),
           _buildSummaryChips(missing.length),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _selectedPayrollIds.isEmpty
+                      ? 'إجمالي الكل (${_payrolls.length}): ${_visibleTotal.toStringAsFixed(0)}'
+                      : 'إجمالي المحدد (${_visiblePayrolls.length}): ${_visibleTotal.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+          ),
           if (_failures.isNotEmpty)
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -301,12 +357,36 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
                     padding: const EdgeInsets.all(16),
                     children: [
                       if (_payrolls.isNotEmpty) ...[
-                        const Text(
-                          'مرتبات محسوبة',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
+                        Row(
+                          children: [
+                            const Text(
+                              'مرتبات محسوبة',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                            const Spacer(),
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  if (_selectedPayrollIds.length ==
+                                      _payrolls.length) {
+                                    _selectedPayrollIds.clear();
+                                  } else {
+                                    _selectedPayrollIds
+                                      ..clear()
+                                      ..addAll(_payrolls.map((p) => p.id));
+                                  }
+                                });
+                              },
+                              child: Text(
+                                _selectedPayrollIds.length == _payrolls.length
+                                    ? 'إلغاء تحديد الكل'
+                                    : 'تحديد الكل للطباعة',
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         for (final p in _payrolls) _buildPayrollTile(p),
@@ -350,9 +430,11 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
                       ? null
                       : _printBatch,
                   icon: const Icon(Icons.print, color: Colors.white),
-                  label: const Text(
-                    'طباعة 3 / صفحة',
-                    style: TextStyle(color: Colors.white),
+                  label: Text(
+                    _selectedPayrollIds.isEmpty
+                        ? 'طباعة 3 / صفحة'
+                        : 'طباعة المختار (${_selectedPayrollIds.length})',
+                    style: const TextStyle(color: Colors.white),
                   ),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
                 ),
@@ -408,29 +490,35 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
                   label: const Text('تغيير الشهر'),
                 ),
                 if (!_isMonthly)
-                  Builder(builder: (context) {
-                    final valid = _validWeeks();
-                    if (valid.isEmpty) return const Text('لا أسابيع');
-                    final svc = ref.read(staffManagementServiceProvider);
-                    return DropdownButton<int>(
-                      value: valid.contains(_week) ? _week : valid.last,
-                      items: valid.map((w) {
-                        final b = svc.weekBounds(
-                            _month.year, _month.month, w);
-                        return DropdownMenuItem(
-                          value: w,
-                          child: Text(
-                              'أسبوع $w (${b.$1.day}/${b.$1.month}→${b.$2.day}/${b.$2.month})'),
-                        );
-                      }).toList(),
-                      onChanged: (w) {
-                        if (w != null) {
-                          setState(() => _week = w);
-                          _load();
-                        }
-                      },
-                    );
-                  }),
+                  Builder(
+                    builder: (context) {
+                      final valid = _validWeeks();
+                      if (valid.isEmpty) return const Text('لا أسابيع');
+                      final svc = ref.read(staffManagementServiceProvider);
+                      return DropdownButton<int>(
+                        value: valid.contains(_week) ? _week : valid.last,
+                        items: valid.map((w) {
+                          final b = svc.weekBounds(
+                            _month.year,
+                            _month.month,
+                            w,
+                          );
+                          return DropdownMenuItem(
+                            value: w,
+                            child: Text(
+                              'أسبوع $w (${b.$1.day}/${b.$1.month}→${b.$2.day}/${b.$2.month})',
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (w) {
+                          if (w != null) {
+                            setState(() => _week = w);
+                            _load();
+                          }
+                        },
+                      );
+                    },
+                  ),
               ],
             ),
           ],
@@ -473,14 +561,31 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
           s?.name ?? p.staffId,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        subtitle: Text('${s?.staffId ?? p.staffId} • ${_statusText(p.status)}'),
-        trailing: Text(
-          p.netSalary.toStringAsFixed(0),
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.green,
-            fontSize: 16,
-          ),
+        subtitle: Text(s?.staffId ?? p.staffId),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              p.netSalary.toStringAsFixed(0),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+                fontSize: 16,
+              ),
+            ),
+            Checkbox(
+              value: _selectedPayrollIds.contains(p.id),
+              onChanged: (v) {
+                setState(() {
+                  if (v == true) {
+                    _selectedPayrollIds.add(p.id);
+                  } else {
+                    _selectedPayrollIds.remove(p.id);
+                  }
+                });
+              },
+            ),
+          ],
         ),
       ),
     );

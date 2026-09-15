@@ -16,6 +16,9 @@ class InvoiceItemParams {
   final double? unitCostAtTime;
   final int? shipmentId;
 
+  /// صنف المنتج (لون/فئة) — null = المنتج نفسه بلا أصناف (المسار القديم).
+  final int? variantId;
+
   InvoiceItemParams({
     required this.productId,
     required this.quantity,
@@ -25,6 +28,7 @@ class InvoiceItemParams {
     this.commission = 0,
     this.unitCostAtTime,
     this.shipmentId,
+    this.variantId,
   });
 }
 
@@ -95,21 +99,9 @@ class InvoiceService {
         final unitCost = item.unitCostAtTime ?? product.costPrice ?? 0;
         if (unitCost > 0) cogsAmount += unitCost * item.quantity;
 
-        final newQty = product.quantity - item.quantity;
-        await _db.productDao.updateProduct(
-          ProductsCompanion(
-            id: Value(product.id),
-            name: Value(product.name),
-            quantity: Value(newQty < 0 ? 0 : newQty),
-            price: Value(product.price),
-            unit: Value(product.unit),
-            category: Value(product.category),
-            barcode: Value(product.barcode),
-            cartonQuantity: Value(product.cartonQuantity),
-            cartonPrice: Value(product.cartonPrice),
-            status: Value(product.status),
-          ),
-        );
+        // خصم المخزون: من الصنف (لون/فئة) لو متحدد، وإلا المسار القديم من الأب.
+        // كمية الأب بعد بيع صنف = مجموع الأصناف (تحافظ على التقارير وتنبيه النواقص).
+        await _applySaleStock(product, item.quantity, item.variantId);
 
         // Auto-calculate commission for commission-based shipments.
         var itemCommission = item.commission;
@@ -136,6 +128,7 @@ class InvoiceService {
             commission: Value(itemCommission),
             unitCostAtTime: Value(item.unitCostAtTime),
             shipmentId: Value(item.shipmentId),
+            variantId: Value(item.variantId),
           ),
         );
 
@@ -328,6 +321,103 @@ class InvoiceService {
     });
   }
 
+  /// خصم مخزون سطر بيع — atomic ضمن transaction الفاتورة المستدعية.
+  ///
+  /// - لو [variantId] متحدد: يخصم من الصنف (لون/فئة) بعد التحقق من الكفاية،
+  ///   ثم يعيد حساب كمية الأب = مجموع الأصناف.
+  /// - لو null: المسار القديم بالظبط (خصم من الأب مع clamp عند الصفر).
+  Future<void> _applySaleStock(
+    Product product,
+    int quantity,
+    int? variantId,
+  ) async {
+    if (variantId == null) {
+      // حماية الـ invariant: منتج له أصناف لازم يتباع عبر صنف، مش مباشرة —
+      // وإلا كمية الأب هتتكتب فوقها (sum) في أول بيع صنف بعده وتضيع الحركة.
+      final variants = await _db.productVariantDao.getVariantsByProduct(
+        product.id,
+      );
+      if (variants.isNotEmpty) {
+        throw Exception(
+          'المنتج «${product.name}» له أصناف (ألوان/فئات) — اختر الصنف أولًا',
+        );
+      }
+      final newQty = product.quantity - quantity;
+      await _db.productDao.updateProduct(
+        ProductsCompanion(
+          id: Value(product.id),
+          name: Value(product.name),
+          quantity: Value(newQty < 0 ? 0 : newQty),
+          price: Value(product.price),
+          unit: Value(product.unit),
+          category: Value(product.category),
+          barcode: Value(product.barcode),
+          cartonQuantity: Value(product.cartonQuantity),
+          cartonPrice: Value(product.cartonPrice),
+          status: Value(product.status),
+        ),
+      );
+      return;
+    }
+
+    final variant = await _db.productVariantDao.getVariantById(variantId);
+    if (variant == null || variant.status == 'Deleted') {
+      throw Exception('الصنف (اللون/الفئة) غير موجود');
+    }
+    if (variant.productId != product.id) {
+      throw Exception('الصنف «${variant.name}» لا يتبع المنتج «${product.name}»');
+    }
+    if (variant.quantity < quantity) {
+      throw Exception(
+        'الكمية غير كافية للصنف «${variant.name}» من «${product.name}» '
+        '(متاح: ${variant.quantity}, مطلوب: $quantity)',
+      );
+    }
+    await _db.productVariantDao.updateVariantQuantity(
+      variant.id,
+      variant.quantity - quantity,
+    );
+    // كمية الأب = مجموع الأصناف (التقارير وتنبيه النواقص تفضل سليمة).
+    final total = await _db.productVariantDao.getTotalQuantityByProduct(
+      product.id,
+    );
+    await _db.productDao.updateProduct(product.copyWith(quantity: total));
+  }
+
+  /// عكس خصم مخزون سطر بيع (تعديل/إلغاء فاتورة) — atomic ضمن الـ transaction.
+  Future<void> _restoreSaleStock(
+    int productId,
+    int quantity,
+    int? variantId,
+  ) async {
+    if (variantId != null) {
+      final variant = await _db.productVariantDao.getVariantById(variantId);
+      if (variant != null) {
+        await _db.productVariantDao.updateVariantQuantity(
+          variant.id,
+          variant.quantity + quantity,
+        );
+        final total = await _db.productVariantDao.getTotalQuantityByProduct(
+          productId,
+        );
+        final product = await _db.productDao.getProductById(productId);
+        if (product != null) {
+          await _db.productDao.updateProduct(
+            product.copyWith(quantity: total),
+          );
+        }
+        return;
+      }
+      // الصنف اتحذف نهائيًا بعد البيع — نرجع الكمية للأب مباشرة عشان ماتضيعش.
+    }
+    final product = await _db.productDao.getProductById(productId);
+    if (product != null) {
+      await _db.productDao.updateProduct(
+        product.copyWith(quantity: product.quantity + quantity),
+      );
+    }
+  }
+
   Future<void> deleteInvoice(Insertable<Invoice> invoice) async {
     await _db.invoiceDao.deleteInvoice(invoice);
   }
@@ -380,12 +470,7 @@ class InvoiceService {
 
       // 1a. Reverse original stock + shipment counts.
       for (final item in originalItems) {
-        final product = await _db.productDao.getProductById(item.productId);
-        if (product != null) {
-          await _db.productDao.updateProduct(
-            product.copyWith(quantity: product.quantity + item.quantity),
-          );
-        }
+        await _restoreSaleStock(item.productId, item.quantity, item.variantId);
         if (item.shipmentId != null) {
           final shipment =
               await _db.vegetableShipmentDao.getById(item.shipmentId!);
@@ -419,10 +504,7 @@ class InvoiceService {
         final unitCost = item.unitCostAtTime ?? product.costPrice ?? 0;
         if (unitCost > 0) cogsAmountEdit += unitCost * item.quantity;
 
-        final newQty = product.quantity - item.quantity;
-        await _db.productDao.updateProduct(
-          product.copyWith(quantity: newQty < 0 ? 0 : newQty),
-        );
+        await _applySaleStock(product, item.quantity, item.variantId);
 
         var itemCommission = item.commission;
         if (item.shipmentId != null && itemCommission == 0) {
@@ -449,6 +531,7 @@ class InvoiceService {
             commission: Value(itemCommission),
             unitCostAtTime: Value(item.unitCostAtTime),
             shipmentId: Value(item.shipmentId),
+            variantId: Value(item.variantId),
           ),
         );
 

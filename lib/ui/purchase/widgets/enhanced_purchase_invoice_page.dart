@@ -171,8 +171,9 @@ class _EnhancedPurchaseInvoicePageState
       context: context,
       builder: (context) => ProductSelectionModal(
         product: product ?? _filteredProducts.first,
+        db: widget.db,
         forPurchase: true,
-        onConfirm: (quantity, unit, unitPrice, discount, tax) {
+        onConfirm: (quantity, unit, unitPrice, discount, tax, variant) {
           _addProductToPurchase(
             product ?? _filteredProducts.first,
             quantity,
@@ -318,8 +319,16 @@ class _EnhancedPurchaseInvoicePageState
               );
 
           final currentProduct = entry.product!;
+          // تحديث الكمية + سعر التكلفة (costPrice) من فاتورة الشراء.
+          // لو المستخدم حدد سعر بيع جديد (costPrice field مستخدم كـ selling price هنا)
+          // يتم تحديث سعر البيع في المنتج.
+          final newSellingPrice = entry.costPrice > 0
+              ? entry.costPrice  // الـ costPrice في الـ purchase flow = سعر البيع المطلوب
+              : currentProduct.price;
           final updatedProduct = currentProduct.copyWith(
             quantity: currentProduct.quantity + entry.quantity,
+            costPrice: Value(entry.unitPrice),  // سعر الشراء الفعلي
+            price: newSellingPrice,       // سعر البيع
           );
           await widget.db.productDao.updateProduct(updatedProduct);
         }
@@ -336,59 +345,64 @@ class _EnhancedPurchaseInvoicePageState
               debit: const Value(0.0),
               credit: Value(_remainingAmount),
               origin: 'purchase',
+              receiptNumber: Value(_invoiceNumber),
             ),
           );
         }
 
         // ── Headless Accounting: Journal (Phase 3) ──
-        final accounting = AccountingService(widget.db);
-        Future<String> accId(String code) async {
-          final a = await widget.db.accountsDao.getByCode(code);
-          if (a == null) throw Exception('Account $code not found — v57 migration missing');
-          return a.id;
-        }
+        try {
+          final accounting = AccountingService(widget.db);
+          Future<String> accId(String code) async {
+            final a = await widget.db.accountsDao.getByCode(code);
+            if (a == null) throw Exception('Account $code not found');
+            return a.id;
+          }
 
-        final inventoryId = await accId('1200');
-        final cashId = await accId('1000');
-        final bankId = await accId('1010');
-        final apId = await accId('2000');
-        final isCash = _paymentMethod == PaymentMethod.cash;
-        final cashOrBankId = isCash ? cashId : bankId;
+          final inventoryId = await accId('1200');
+          final cashId = await accId('1000');
+          final bankId = await accId('1010');
+          final apId = await accId('2000');
+          final isCash = _paymentMethod == PaymentMethod.cash;
+          final cashOrBankId = isCash ? cashId : bankId;
 
-        if (!isCash && _remainingAmount > 0 && _paidAmount > 0) {
-          // Partial: Debit Inventory total, Credit AP remaining + Credit Cash/Bank paid
-          await widget.db.journalDao.insertBalancedEntry(
-            postingKey: 'purchase:PUR$_invoiceNumber',
-            date: DateTime.now(),
-            description: 'مشتريات فاتورة $_invoiceNumber من ${_selectedSupplier!.name}',
-            sourceType: 'purchase',
-            sourceId: _invoiceNumber!,
-            lines: [
-              JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: inventoryId, debit: Value(_grandTotal), credit: const Value(0)),
-              JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: apId, debit: const Value(0), credit: Value(_remainingAmount)),
-              JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: cashOrBankId, debit: const Value(0), credit: Value(_paidAmount)),
-            ],
-          );
-        } else if (!isCash && _remainingAmount > 0) {
-          // Fully credit
-          await accounting.postPurchase(
-            sourceId: _invoiceNumber!,
-            date: DateTime.now(),
-            totalAmount: _grandTotal,
-            inventoryAccountId: inventoryId,
-            creditAccountId: apId,
-            description: 'مشتريات فاتورة $_invoiceNumber من ${_selectedSupplier!.name}',
-          );
-        } else {
-          // Fully cash (or cash-like)
-          await accounting.postPurchase(
-            sourceId: _invoiceNumber!,
-            date: DateTime.now(),
-            totalAmount: _grandTotal,
-            inventoryAccountId: inventoryId,
-            creditAccountId: cashOrBankId,
-            description: 'مشتريات فاتورة $_invoiceNumber من ${_selectedSupplier!.name}',
-          );
+          if (!isCash && _remainingAmount > 0 && _paidAmount > 0) {
+            // Partial: Debit Inventory total, Credit AP remaining + Credit Cash/Bank paid
+            await widget.db.journalDao.insertBalancedEntry(
+              postingKey: 'purchase:PUR$_invoiceNumber',
+              date: DateTime.now(),
+              description: 'مشتريات فاتورة $_invoiceNumber من ${_selectedSupplier!.name}',
+              sourceType: 'purchase',
+              sourceId: _invoiceNumber!,
+              lines: [
+                JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: inventoryId, debit: Value(_grandTotal), credit: const Value(0)),
+                JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: apId, debit: const Value(0), credit: Value(_remainingAmount)),
+                JournalLinesCompanion.insert(id: const Uuid().v4(), journalEntryId: '', accountId: cashOrBankId, debit: const Value(0), credit: Value(_paidAmount)),
+              ],
+            );
+          } else if (!isCash && _remainingAmount > 0) {
+            // Fully credit
+            await accounting.postPurchase(
+              sourceId: _invoiceNumber!,
+              date: DateTime.now(),
+              totalAmount: _grandTotal,
+              inventoryAccountId: inventoryId,
+              creditAccountId: apId,
+              description: 'مشتريات فاتورة $_invoiceNumber من ${_selectedSupplier!.name}',
+            );
+          } else {
+            // Fully cash (or cash-like)
+            await accounting.postPurchase(
+              sourceId: _invoiceNumber!,
+              date: DateTime.now(),
+              totalAmount: _grandTotal,
+              inventoryAccountId: inventoryId,
+              creditAccountId: cashOrBankId,
+              description: 'مشتريات فاتورة $_invoiceNumber من ${_selectedSupplier!.name}',
+            );
+          }
+        } catch (e) {
+          log('Non-fatal accounting entry failed for purchase $_invoiceNumber: $e');
         }
       });
 

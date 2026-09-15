@@ -17,6 +17,11 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
   String? _lastError;
   String? get lastError => _lastError ?? _client.lastError;
 
+  /// Diagnostics of the most recent fetch (records/rawBytes/dropped/fetchOk).
+  /// Null before the first fetch. Used by the sync service to distinguish
+  /// fetchFailed from fetchOkEmpty and to log parser mismatch.
+  ZkFetchReport? get lastFetchReport => _client.lastFetchReport;
+
   ZKTecoTcpAttendanceSource({
     required this.ipAddress,
     required this.port,
@@ -64,16 +69,26 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
   Future<List<RawAttendanceEvent>> fetchEvents({DateTime? since}) async {
     _status = AttendanceSourceStatus.fetching;
     try {
-      final records = await _client.getAttendanceRecords(since: since);
+      // Throws ZkTransportException on timeout/truncation: propagates as
+      // fetchFailed and must never be converted to an empty list here.
+      final report = await _client.fetchAttendanceReport(since: since);
       _status = AttendanceSourceStatus.connected;
 
-      return records.map((r) {
+      return report.records.map((r) {
+        // Truncate to seconds: dedupHash is second-precision, ms jitter
+        // would break idempotent re-ingest of the same device event.
+        final t = r.timestamp;
+        final eventTime = DateTime(t.year, t.month, t.day, t.hour, t.minute, t.second);
+        // NOTE: r.eventType (device status 0/1) is preserved for audit only.
+        // It is NOT trusted for check-in/out decisions (parser byte-overlap
+        // makes it unreliable) — see the processor policy in
+        // attendance_sync_service.dart.
         return RawAttendanceEvent(
           externalUserId: r.userId,
-          eventTime: r.timestamp,
+          eventTime: eventTime,
           eventType: r.eventType,
           rawPayload:
-              '{"userId":"${r.userId}","time":"${r.timestamp.toIso8601String()}","status":${r.status},"verifyType":${r.verifyType}}',
+              '{"userId":"${r.userId}","time":"${eventTime.toIso8601String()}","status":${r.status},"verifyType":${r.verifyType}}',
         );
       }).toList();
     } catch (e) {

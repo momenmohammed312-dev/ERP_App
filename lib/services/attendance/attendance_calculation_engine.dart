@@ -304,12 +304,11 @@ class AttendanceCalculationEngine {
   }
 
   /// Processes a check-in with smart status detection
-  /// Returns the calculated status ('present' or 'late')
-  Future<String> processCheckIn(String staffId, {DateTime? checkInTime}) async {
+  /// Returns the calculated AttendanceCalcResult (status, lateMinutes, etc.)
+  Future<AttendanceCalcResult> processCheckIn(String staffId, {DateTime? checkInTime}) async {
     final time = checkInTime ?? DateTime.now();
     final schedule = await getScheduleForStaff(staffId);
-    final result = calculateAttendance(checkInTime: time, schedule: schedule);
-    return result.status;
+    return calculateAttendance(checkInTime: time, schedule: schedule);
   }
 
   /// Processes a check-out with working hours and overtime calculation

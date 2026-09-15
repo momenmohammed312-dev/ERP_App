@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/payroll_display.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/database/app_database.dart';
@@ -8,6 +9,7 @@ import '../../core/utils/currency_helper.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../services/staff_management_service.dart';
 import 'services/staff_payroll_statement_generator.dart';
+import 'all_payrolls_report_page.dart';
 
 class PayrollPage extends ConsumerStatefulWidget {
   final Staff staff;
@@ -52,6 +54,16 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('كشف المرتب'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.table_chart),
+            tooltip: 'كشف حساب كلي',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AllPayrollsReportPage())),
+          ),
+        ],
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _payrollHistory.isEmpty
@@ -161,6 +173,12 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                 'بدلات ومكافآت',
                 CurrencyHelper.formatCurrency(payroll.allowances),
               ),
+            if (payroll.bonus > 0)
+              _buildPayrollDetailRow(
+                'مكافأة حضور كامل',
+                CurrencyHelper.formatCurrency(payroll.bonus),
+                color: Colors.teal[800],
+              ),
             if (payroll.deductions > 0) ...[
               _buildPayrollDetailRow(
                 'استقطاعات وسلف',
@@ -172,8 +190,21 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red.withValues(alpha: 0.2))),
                 child: Column(children: [
-                  if (payroll.absentDays > 0) _buildPayrollDetailRow('غياب (${payroll.absentDays} يوم)', '- ${CurrencyHelper.formatCurrency(payroll.absentDays * (payroll.basicSalary / 30))}', color: Colors.red),
-                  if (payroll.overtimeHours > 0) _buildPayrollDetailRow('تأخير/بدري (${payroll.overtimeHours.toStringAsFixed(1)} س)', '- ${CurrencyHelper.formatCurrency(payroll.deductions - payroll.advances)}', color: Colors.orange),
+                  if (payroll.absentDays > 0) _buildPayrollDetailRow('غياب (${payroll.absentDays} يوم)', '- ${CurrencyHelper.formatCurrency(PayrollDisplay.absenceDeduction(payroll, weekly: widget.staff.payFrequency == 'weekly'))}', color: Colors.red),
+                  if (payroll.lateHours > 0 || payroll.lateDeduction > 0) () {
+                    final totalM = (payroll.lateHours * 60).round();
+                    final h = totalM ~/ 60;
+                    final m = totalM % 60;
+                    final timeStr = h > 0 ? '${h}س ${m}د' : '${m} دقيقة';
+                    return _buildPayrollDetailRow('تأخير ($timeStr)', '- ${CurrencyHelper.formatCurrency(payroll.lateDeduction)}', color: Colors.amber[800]);
+                  }(),
+                  if (payroll.permissionHours > 0 || payroll.permissionDeduction > 0) () {
+                    final totalM = (payroll.permissionHours * 60).round();
+                    final h = totalM ~/ 60;
+                    final m = totalM % 60;
+                    final timeStr = h > 0 ? '${h}س ${m}د' : '${m} دقيقة';
+                    return _buildPayrollDetailRow('إذن/بدري ($timeStr)', '- ${CurrencyHelper.formatCurrency(payroll.permissionDeduction)}', color: Colors.orange);
+                  }(),
                   if (payroll.advances > 0) _buildPayrollDetailRow('سلف', '- ${CurrencyHelper.formatCurrency(payroll.advances)}', color: Colors.deepOrange),
                 ]),
               ),
@@ -385,28 +416,99 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
     final now = DateTime.now();
     final picked = await showDatePicker(context: context, initialDate: now, firstDate: DateTime(2020), lastDate: DateTime(2030), helpText: 'اختر أي يوم في شهر المرتب');
     if (picked == null) return;
+    final db0 = ref.read(appDatabaseProvider);
+    final svc0 = StaffManagementService(StaffManagementDao(db0), db0);
+    // الدورة الأسبوعية: اختيار الأسبوع (سبت–خميس) بدل الشهر — بدون مكافأة 200
+    if (widget.staff.payFrequency == 'weekly') {
+      final validWeeks = <int>[];
+      for (var w = 1; w <= 5; w++) {
+        try {
+          svc0.weekBounds(picked.year, picked.month, w);
+          validWeeks.add(w);
+        } catch (_) {}
+      }
+      if (!mounted) return;
+      var chosenWeek = validWeeks.contains(1) ? 1 : validWeeks.first;
+      final weekOk = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(builder: (ctx, setS) => AlertDialog(
+          title: const Text('احتساب المرتب الأسبوعي'),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('الموظف ${widget.staff.name}\nالأجر الأسبوعي ${widget.staff.weeklySalary ?? 0}'),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              value: chosenWeek,
+              decoration: const InputDecoration(labelText: 'الأسبوع (القبض الخميس)'),
+              items: validWeeks.map((w) {
+                final b = svc0.weekBounds(picked.year, picked.month, w);
+                return DropdownMenuItem(
+                  value: w,
+                  child: Text('أسبوع $w (${b.$1.day}/${b.$1.month} → ${b.$2.day}/${b.$2.month})'),
+                );
+              }).toList(),
+              onChanged: (v) => setS(() => chosenWeek = v ?? chosenWeek),
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+            ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('احتساب')),
+          ],
+        )),
+      );
+      if (weekOk != true || !mounted) return;
+      setState(() => _isCalculating = true);
+      try {
+        final user = ref.read(authProvider);
+        await svc0.calculateWeeklyPay(user, widget.staff.staffId, picked.year, picked.month, chosenWeek);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم احتساب المرتب الأسبوعي بنجاح'), backgroundColor: Colors.green));
+        await _loadData();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red));
+      } finally {
+        if (mounted) setState(() => _isCalculating = false);
+      }
+      return;
+    }
     final selectedPeriod = '${picked.year}-${picked.month.toString().padLeft(2, '0')}';
     final periodStart = DateTime(picked.year, picked.month, 1);
     final periodEnd = DateTime(picked.year, picked.month + 1, 0);
     if (!mounted) return;
+    // قراءة مكافأة الالتزام الافتراضية من الإعدادات
+    double commitmentBonus = 0;
+    try {
+      final dbTmp = ref.read(appDatabaseProvider);
+      final row = await (dbTmp.select(dbTmp.attendanceSettings)..where((t) => t.settingKey.equals('perfect_attendance_bonus'))).getSingleOrNull();
+      commitmentBonus = double.tryParse(row?.settingValue ?? '200') ?? 200;
+    } catch (_) { commitmentBonus = 200; }
+
+    final bonusCtrl = TextEditingController(text: commitmentBonus > 0 ? commitmentBonus.toStringAsFixed(0) : '0');
+    bool addBonus = commitmentBonus > 0;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StatefulBuilder(builder: (ctx, setS) => AlertDialog(
         title: const Text('احتساب المرتب'),
-        content: Text('سيتم احتساب المرتب للموظف ${widget.staff.name}\nللفترة $selectedPeriod\n(${periodStart.year}/${periodStart.month}/${periodStart.day} → ${periodEnd.year}/${periodEnd.month}/${periodEnd.day})'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('سيتم احتساب المرتب للموظف ${widget.staff.name}\nللفترة $selectedPeriod\n(${periodStart.year}/${periodStart.month}/${periodStart.day} → ${periodEnd.year}/${periodEnd.month}/${periodEnd.day})'),
+          const SizedBox(height: 12),
+          CheckboxListTile(value: addBonus, onChanged: (v) => setS(() => addBonus = v ?? false), title: const Text('مكافأة التزام حضور (200 ج)'), controlAffinity: ListTileControlAffinity.leading, contentPadding: EdgeInsets.zero),
+          if (addBonus) TextField(controller: bonusCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'قيمة المكافأة', suffixText: 'ج.م')),
+        ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
           ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('احتساب')),
         ],
-      ),
+      )),
     );
     if (confirmed != true) return;
+    final double bonusVal = addBonus ? (double.tryParse(bonusCtrl.text) ?? 0.0) : 0.0;
     setState(() => _isCalculating = true);
     try {
       final db = ref.read(appDatabaseProvider);
       final service = StaffManagementService(StaffManagementDao(db), db);
       final user = ref.read(authProvider);
-      await service.calculatePayroll(user, widget.staff.staffId, selectedPeriod);
+      await service.calculatePayroll(user, widget.staff.staffId, selectedPeriod, commitmentBonus: bonusVal);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم احتساب المرتب بنجاح'), backgroundColor: Colors.green));
       await _loadData();

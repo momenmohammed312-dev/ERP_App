@@ -23,6 +23,8 @@ class _ProductQuickAddDialogState extends State<ProductQuickAddDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _priceController = TextEditingController();
+  final _sellingPriceController = TextEditingController();
+  final _markupController = TextEditingController();
   final _barcodeController = TextEditingController();
   final _categoryController = TextEditingController();
   final _cartonQuantityController = TextEditingController();
@@ -70,14 +72,14 @@ class _ProductQuickAddDialogState extends State<ProductQuickAddDialog> {
                 ),
                 const SizedBox(height: 12),
 
-                // Price and Unit
+                // Cost Price and Unit
                 Row(
                   children: [
                     Expanded(
                       flex: 2,
                       child: TextFormField(
                         controller: _priceController,
-                        decoration: _inputDecoration('السعر *'),
+                        decoration: _inputDecoration('سعر الشراء (التكلفة) *'),
                         style: const TextStyle(color: Colors.white),
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
@@ -89,6 +91,7 @@ class _ProductQuickAddDialogState extends State<ProductQuickAddDialog> {
                           }
                           return null;
                         },
+                        onChanged: (_) => _recalcSellingFromMarkup(),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -110,6 +113,42 @@ class _ProductQuickAddDialogState extends State<ProductQuickAddDialog> {
                           }
                         },
                       ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Selling Price + Markup %
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextFormField(
+                        controller: _sellingPriceController,
+                        decoration: _inputDecoration('سعر البيع (اختياري)'),
+                        style: const TextStyle(color: Colors.white),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _markupController,
+                        decoration: _inputDecoration('نسبة الربح %'),
+                        style: const TextStyle(color: Colors.white),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        onChanged: (_) => _recalcSellingFromMarkup(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.calculate, color: Colors.purple),
+                      tooltip: 'حساب سعر البيع من النسبة',
+                      onPressed: _recalcSellingFromMarkup,
                     ),
                   ],
                 ),
@@ -222,6 +261,16 @@ class _ProductQuickAddDialogState extends State<ProductQuickAddDialog> {
     );
   }
 
+  /// حساب سعر البيع تلقائياً من سعر الشراء + نسبة الربح.
+  void _recalcSellingFromMarkup() {
+    final cost = double.tryParse(_priceController.text) ?? 0;
+    final markup = double.tryParse(_markupController.text) ?? 0;
+    if (cost > 0 && markup > 0) {
+      final selling = cost + (cost * markup / 100);
+      _sellingPriceController.text = selling.toStringAsFixed(2);
+    }
+  }
+
   Future<void> _saveProduct() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -231,17 +280,19 @@ class _ProductQuickAddDialogState extends State<ProductQuickAddDialog> {
       final productDao = ProductDao(widget.database);
 
       // Parse values
-      final price = double.tryParse(_priceController.text) ?? 0.0;
+      final costPrice = double.tryParse(_priceController.text) ?? 0.0;
+      final sellingPrice = double.tryParse(_sellingPriceController.text) ?? costPrice;
       final cartonQty = int.tryParse(_cartonQuantityController.text) ?? 0;
       final cartonPrice = double.tryParse(_cartonPriceController.text) ?? 0.0;
 
-      // Create product
+      // Create product with both costPrice and selling price
       final productId = await productDao.insertProduct(
         ProductsCompanion.insert(
           name: _nameController.text.trim(),
-          price: price,
+          price: sellingPrice, // سعر البيع
           unit: drift.Value(_selectedUnit),
-          quantity: 0, // Initial quantity is 0
+          quantity: 0, // Initial quantity is 0 — purchase will increment
+          costPrice: drift.Value(costPrice), // سعر الشراء (التكلفة)
           category: drift.Value(
             _categoryController.text.isEmpty
                 ? null
@@ -297,6 +348,8 @@ class _ProductQuickAddDialogState extends State<ProductQuickAddDialog> {
   void dispose() {
     _nameController.dispose();
     _priceController.dispose();
+    _sellingPriceController.dispose();
+    _markupController.dispose();
     _barcodeController.dispose();
     _categoryController.dispose();
     _cartonQuantityController.dispose();

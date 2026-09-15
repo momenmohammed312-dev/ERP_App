@@ -4,6 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/services/payroll_display.dart';
 import 'package:pos_offline_desktop/core/utils/pdf_bidi_helper.dart';
 
 class StaffAttendanceReportGenerator {
@@ -35,6 +36,7 @@ class StaffAttendanceReportGenerator {
     required List<Attendance> records,
     DateTime? startDate,
     DateTime? endDate,
+    MonthlyAttendanceSummary? monthlySummary,
   }) async {
     final fonts = await _loadFonts();
     final arabicFont = fonts['arabic'];
@@ -64,7 +66,8 @@ if (!staff.useDefaultSchedule) {
       if (staff.workScheduleStart != null && staff.workScheduleStart!.isNotEmpty) workStartStr = staff.workScheduleStart!;
       if (staff.workScheduleEnd != null && staff.workScheduleEnd!.isNotEmpty) workEndStr = staff.workScheduleEnd!;
     }
-        final hourly = staff.hourlyRate ?? (staff.basicSalary / 30 / 8);
+        final _base = PayrollDisplay.baseOf(staff);
+        final hourly = staff.hourlyRate ?? (_base.base / _base.divisor / 8);
 
     // احتساب دقائق التأخير لكل سجل للتقرير
     int parseStartMin(String s) {
@@ -85,7 +88,7 @@ if (!staff.useDefaultSchedule) {
     ];
 
     // إحصائيات — مع حساب دفاعي: present بعد السماح يُعتبر late
-    // السجلات بإذن (excused) لا تحتسب في التأخير/الخصم — مع خصم تناسبي بالساعة (excusedHours)
+    // الإذن منفصل عن التأخير — لا نخصم المسموح من الفعلي
     bool isLateEff(Attendance r) {
       if (r.excused && r.excusedHours <= 0) return false;
       if (r.status == 'late') return true;
@@ -94,19 +97,6 @@ if (!staff.useDefaultSchedule) {
         return ci > graceEnd;
       }
       return false;
-    }
-    int excessMin(int actualMinutes, Attendance r) {
-      if (!r.excused) return actualMinutes;
-      final allowed = (r.excusedHours * 60).round();
-      if (allowed <= 0) return 0;
-      final res = actualMinutes - allowed;
-      return res < 0 ? 0 : res;
-    }
-    int excusedUsedMin(int actualMinutes, Attendance r) {
-      if (!r.excused) return 0;
-      final allowed = (r.excusedHours * 60).round();
-      if (allowed <= 0) return 0;
-      return actualMinutes < allowed ? actualMinutes : allowed;
     }
     int absent = records.where((r) => r.status == 'absent').length;
     int lateCount = records.where(isLateEff).length;
@@ -117,17 +107,38 @@ if (!staff.useDefaultSchedule) {
     for (final r in records) {
       if (isLateEff(r) && r.checkInTime != null) {
         final ci = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
-        if (ci > graceEnd) { final actual = ci - graceEnd; totalLateMin += excessMin(actual, r); totalLateExcusedMin += excusedUsedMin(actual, r); }
+        if (ci > graceEnd) { final actual = ci - startMin; totalLateMin += actual; }
       }
-      if (r.checkOutTime != null && (!r.excused || r.excusedHours > 0)) {
+      if (r.excused && r.excusedHours > 0) {
+        if (r.status == 'early_leave') totalEarlyExcusedMin += (r.excusedHours * 60).round();
+        else if (isLateEff(r) || r.status == 'late') totalLateExcusedMin += (r.excusedHours * 60).round();
+        else if (r.checkOutTime != null) {
+          final co = r.checkOutTime!.hour * 60 + r.checkOutTime!.minute;
+          if (co < endMin) totalEarlyExcusedMin += (r.excusedHours * 60).round();
+          else totalLateExcusedMin += (r.excusedHours * 60).round();
+        } else {
+          totalLateExcusedMin += (r.excusedHours * 60).round();
+        }
+      }
+      if (r.checkOutTime != null) {
         final co = r.checkOutTime!.hour * 60 + r.checkOutTime!.minute;
-        if (co < endMin) { final actual = endMin - co; totalEarlyMin += excessMin(actual, r); totalEarlyExcusedMin += excusedUsedMin(actual, r); }
+        if (co < endMin) {
+          if (r.excused && r.excusedHours <= 0) {} else { final actual = endMin - co; totalEarlyMin += actual; }
+        }
       }
     }
-    double totalLateHours = totalLateMin / 60.0;
+    // دمج الملخص الشهري المستورد إن وجد
+    final sumExcused = monthlySummary?.excusedHours ?? 0.0;
+    final sumOvertime = monthlySummary?.overtimeHours ?? 0.0;
+    final sumLate = monthlySummary?.lateHours ?? 0.0;
+    final sumAbsent = monthlySummary?.absentDays ?? 0;
+
+    double totalLateHours = sumLate > 0 ? sumLate : totalLateMin / 60.0;
     double totalEarlyHours = totalEarlyMin / 60.0;
-    double totalLateExcusedHours = totalLateExcusedMin / 60.0;
-    double totalEarlyExcusedHours = totalEarlyExcusedMin / 60.0;
+    double totalLateExcusedHours = sumExcused > 0 ? sumExcused : totalLateExcusedMin / 60.0;
+    double totalEarlyExcusedHours = sumExcused > 0 ? 0.0 : totalEarlyExcusedMin / 60.0;
+    int effAbsent = absent > 0 ? absent : sumAbsent;
+
     double lateDeduction = 0;
     if (lateMult > 0) {
       lateDeduction = totalLateHours * hourly * lateMult + totalLateExcusedHours * hourly;
@@ -140,7 +151,7 @@ if (!staff.useDefaultSchedule) {
       } catch (_) { lateDeduction = totalLateExcusedHours * hourly; }
     }
     double earlyDeduction = earlyMult > 0 ? totalEarlyHours * hourly * earlyMult + totalEarlyExcusedHours * hourly : totalEarlyExcusedHours * hourly;
-    double absenceDeduction = absencePerDay > 0 ? absent * absencePerDay * absenceMultiplier : absent * (staff.basicSalary / 30) * absenceMultiplier;
+    double absenceDeduction = absencePerDay > 0 ? effAbsent * absencePerDay * absenceMultiplier : effAbsent * (_base.base / _base.divisor) * absenceMultiplier;
     double totalDeduction = lateDeduction + earlyDeduction + absenceDeduction;
     double totalHours = records.fold(0.0, (s, r) => s + (r.workingHours ?? 0));
 
@@ -169,7 +180,7 @@ if (!staff.useDefaultSchedule) {
       int lateMin = 0;
       if (effLate && r.checkInTime != null) {
         final ci = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
-        if (ci > graceEnd) lateMin = ci - graceEnd;
+        if (ci > graceEnd) lateMin = ci - startMin;
       }
       final lateStr = lateMin > 0 ? '${lateMin ~/ 60}س ${lateMin % 60}د' : '-';
       double rowDeduction = 0;
@@ -198,7 +209,7 @@ if (!staff.useDefaultSchedule) {
     pw.Widget _employeeBlock(Staff s, List<Attendance> recs) {
       final empAbsent = recs.where((r) => r.status == 'absent').length;
       final empLateCount = recs.where(isLateEff).length;
-      int empLateMin = 0; for (final r in recs) if (isLateEff(r) && r.checkInTime != null) { final ci = r.checkInTime!.hour*60+r.checkInTime!.minute; if (ci>graceEnd) empLateMin += ci-graceEnd; }
+      int empLateMin = 0; for (final r in recs) if (isLateEff(r) && r.checkInTime != null) { final ci = r.checkInTime!.hour*60+r.checkInTime!.minute; if (ci>graceEnd) empLateMin += ci-startMin; }
       final empOvertime = recs.fold(0.0, (a,r)=>a+(r.overtimeHours));
       final empLateHours = empLateMin / 60.0;
       return pw.Container(
@@ -231,13 +242,18 @@ if (!staff.useDefaultSchedule) {
                 pw.SizedBox(height: 6),
                 pw.Text(_b('الفترة: ${startDate != null ? _fmtDate(startDate) : '-'} - ${endDate != null ? _fmtDate(endDate) : _fmtDate(DateTime.now())}'), style: pw.TextStyle(font: arabicFont, fontSize: 8)),
                 pw.Text(_b('الموظف: ${staff.name} (${staff.staffId}) — المرتب: ${staff.basicSalary.toStringAsFixed(0)}'), style: pw.TextStyle(font: arabicFont, fontSize: 8)),
+                if (monthlySummary != null && (sumExcused > 0 || sumOvertime > 0))
+                  pw.Text(
+                    _b('ملخص مستورد للفترة: إذن ${sumExcused.toStringAsFixed(1)}س ${sumOvertime > 0 ? '| إضافي ${sumOvertime.toStringAsFixed(1)}س' : ''}'),
+                    style: pw.TextStyle(font: arabicBoldFont, fontSize: 8, color: PdfColors.purple800),
+                  ),
                 pw.SizedBox(height: 8),
               ])
             : pw.SizedBox.shrink(),
         footer: (ctx) => pw.Container(
           alignment: pw.Alignment.centerLeft,
           margin: const pw.EdgeInsets.only(top: 8),
-          child: pw.Text(_b('إجمالي الخصومات: ${totalDeduction.toStringAsFixed(2)} ج.م (تأخير ${lateDeduction.toStringAsFixed(2)} + بدري ${earlyDeduction.toStringAsFixed(2)} + غياب ${absenceDeduction.toStringAsFixed(2)}) | ساعات: ${totalHours.toStringAsFixed(1)}'), style: pw.TextStyle(font: arabicFont, fontSize: 7)),
+          child: pw.Text(_b('إجمالي الخصومات: ${totalDeduction.toStringAsFixed(2)} ج.م (تأخير ${lateDeduction.toStringAsFixed(2)} + إذن/بدري ${earlyDeduction.toStringAsFixed(2)} + غياب ${absenceDeduction.toStringAsFixed(2)}) ${sumExcused > 0 ? '| إذن مستورد: ${sumExcused.toStringAsFixed(1)}س' : ''} ${sumOvertime > 0 ? '| إضافي: ${sumOvertime.toStringAsFixed(1)}س' : ''} | ساعات: ${totalHours.toStringAsFixed(1)}'), style: pw.TextStyle(font: arabicFont, fontSize: 7)),
         ),
         build: (ctx) => [
           pw.TableHelper.fromTextArray(
@@ -245,7 +261,14 @@ if (!staff.useDefaultSchedule) {
             data: records.map((r) {
               final effLate = isLateEff(r);
               final extra = (r.overtimeHours).toStringAsFixed(1);
-              final late = effLate ? '${(r.checkInTime != null ? (r.checkInTime!.hour*60+r.checkInTime!.minute - graceEnd) : 0) ~/60}س' : '-';
+              String late = '-';
+              if (effLate && r.checkInTime != null) {
+                final ci = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
+                if (ci > graceEnd) {
+                  final m = ci - startMin;
+                  late = '${m ~/ 60}س ${m % 60}د';
+                }
+              }
               final eff = r.status=='present' && effLate ? 'late' : r.status;
               final effTxt = r.excused ? (eff=='early_leave'?'انصراف بإذن':'متأخر بإذن') : (eff=='present'?'حاضر':eff=='absent'?'غائب':eff=='late'?'متأخر':'إجازة');
               return [_b(_fmtDate(r.date)), _b(_fmtTime(r.checkInTime)), _b(_fmtTime(r.checkOutTime)), _b(effTxt), _b(extra), _b(late), _b(eff=='absent'?'1':''), _b(eff=='leave'||r.excused?'✓':'')];
