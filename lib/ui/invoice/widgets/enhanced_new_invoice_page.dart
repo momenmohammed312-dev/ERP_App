@@ -14,6 +14,7 @@ import 'package:pos_offline_desktop/ui/invoice/widgets/order_line_item.dart';
 import 'package:pos_offline_desktop/ui/invoice/models/product_entry.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/services/invoice_service.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
 import 'package:pos_offline_desktop/ui/invoice/widgets/day_closed_dialog.dart';
@@ -189,8 +190,8 @@ class _EnhancedNewInvoicePageState
       final products = await widget.db.productDao.getAllProducts();
       final customers = await widget.db.customerDao.getAllActiveCustomers();
 
-      // Generate invoice number
-      _invoiceNumber = '${DateTime.now().millisecondsSinceEpoch}';
+      // Bug 3: no pre-generated number. Drafts persist NULL; the canonical
+      // 6-digit number is assigned by InvoiceService at POST time.
 
       if (!mounted) return;
       setState(() {
@@ -590,12 +591,12 @@ class _EnhancedNewInvoicePageState
     try {
       final db = widget.db;
       final now = DateTime.now();
-      final draftNumber = _invoiceNumber ?? 'DRAFT_${now.millisecondsSinceEpoch}';
+      // Bug 3: drafts carry no number (NULL until posted & numbered).
       final customerName = _selectedCustomer?.name ?? 'عميل نقدي';
 
       final invoiceId = await db.invoiceDao.insertInvoice(
         InvoicesCompanion(
-          invoiceNumber: Value(draftNumber),
+          invoiceNumber: const Value.absent(),
           customerId: Value(_selectedCustomerId),
           customerName: Value(customerName),
           customerContact: Value(_selectedCustomer?.phone ?? ''),
@@ -927,7 +928,11 @@ class _EnhancedNewInvoicePageState
         .map((e) => e.product?.name ?? '')
         .where((n) => n.isNotEmpty)
         .join(', ');
-    final ledgerDescription = 'بيع #$_invoiceNumber ($productSummary)';
+    // Bug 3: no number exists pre-POST; custom wording only for legacy rows
+    // that already carry one. (Bug 2 rewrites the wording itself.)
+    final ledgerDescription = _invoiceNumber == null
+        ? null
+        : 'بيع #$_invoiceNumber ($productSummary)';
 
     final result = await InvoiceService(db).createInvoice(
       customerId: customerId == 'cash' ? null : customerId,
@@ -945,6 +950,10 @@ class _EnhancedNewInvoicePageState
     );
 
     final invoiceId = result.invoiceId;
+
+    // Canonical number assigned atomically by the service (Bug 3).
+    final newInvoiceNumber =
+        result.invoice.invoiceNumber ?? formatInvoiceNumber(invoiceId);
 
     // Vegetable flavor: record empty crates issued to a real customer.
     // Uses ShipmentAllocationService to record barnika out.
@@ -988,7 +997,7 @@ class _EnhancedNewInvoicePageState
 
     final invoiceModel = ups.Invoice(
       id: invoiceId,
-      invoiceNumber: _invoiceNumber ?? 'INV$invoiceId',
+      invoiceNumber: newInvoiceNumber,
       customerName: customerName,
       customerPhone: selectedCustomer?.phone ?? 'N/A',
       customerZipCode: '',

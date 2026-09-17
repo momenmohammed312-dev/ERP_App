@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:drift/drift.dart';
 import '../database/app_database.dart';
 import '../database/tables/vegetable_shipments_table.dart';
+import 'invoice_number_formatter.dart';
 import 'shipment_pricing_service.dart';
 
 class InvoiceItemParams {
@@ -56,13 +57,15 @@ class InvoiceService {
     List<SplitPaymentEntry>? splitPayments,
     int? primaryShipmentId,
   }) async {
-    final actualInvoiceNumber = invoiceNumber ?? 'INV${DateTime.now().millisecondsSinceEpoch}';
+    // Bug 3: no timestamp numbering. A caller-supplied value is preserved
+    // as legacy; otherwise the canonical display number derives from the
+    // row id (assigned below) — never generated before the insert.
     final rand = Random.secure();
 
     return _db.transaction(() async {
       final invoiceId = await _db.invoiceDao.insertInvoice(
         InvoicesCompanion(
-          invoiceNumber: Value(actualInvoiceNumber),
+          invoiceNumber: Value(invoiceNumber),
           customerName: Value(customerName),
           customerContact: Value(customerContact ?? ''),
           customerAddress: Value(customerAddress ?? ''),
@@ -177,6 +180,16 @@ class InvoiceService {
           );
         }
       }
+
+      final canonicalNumber = formatInvoiceNumber(invoiceId);
+      if (invoiceNumber == null) {
+        await (_db.update(_db.invoices)
+              ..where((t) => t.id.equals(invoiceId)))
+            .write(InvoicesCompanion(invoiceNumber: Value(canonicalNumber)));
+      }
+      // Resolved display number: legacy caller value, else canonical.
+      // (Wording of descriptions is Bug 2's commit; numbering only here.)
+      final actualInvoiceNumber = invoiceNumber ?? canonicalNumber;
 
       final desc = ledgerDescription ?? 'بيع #$actualInvoiceNumber';
 

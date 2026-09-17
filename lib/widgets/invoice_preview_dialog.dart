@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
 
@@ -79,7 +80,7 @@ class InvoicePreviewDialog extends StatelessWidget {
                       final invoiceModel = ups.Invoice(
                         id: invoice.id,
                         invoiceNumber:
-                            invoice.invoiceNumber ?? 'INV${invoice.id}',
+                            invoice.invoiceNumber ?? formatInvoiceNumber(invoice.id),
                         customerName: customerName,
                         customerPhone: 'N/A',
                         customerZipCode: '',
@@ -166,7 +167,7 @@ class InvoicePreviewDialog extends StatelessWidget {
 
                   final invoiceModel = ups.Invoice(
                     id: invoice.id,
-                    invoiceNumber: invoice.invoiceNumber ?? 'INV${invoice.id}',
+                    invoiceNumber: invoice.invoiceNumber ?? formatInvoiceNumber(invoice.id),
                     customerName: customerName,
                     customerPhone: 'N/A',
                     customerZipCode: '',
@@ -258,7 +259,7 @@ class InvoicePreviewDialog extends StatelessWidget {
                         final invoiceModel = ups.Invoice(
                           id: invoice.id,
                           invoiceNumber:
-                              invoice.invoiceNumber ?? 'INV${invoice.id}',
+                              invoice.invoiceNumber ?? formatInvoiceNumber(invoice.id),
                           customerName: customerName,
                           customerPhone: 'N/A',
                           customerZipCode: '',
@@ -363,7 +364,7 @@ class InvoicePreviewDialog extends StatelessWidget {
                         final invoiceModel = ups.Invoice(
                           id: invoice.id,
                           invoiceNumber:
-                              invoice.invoiceNumber ?? 'INV${invoice.id}',
+                              invoice.invoiceNumber ?? formatInvoiceNumber(invoice.id),
                           customerName: customerName,
                           customerPhone: 'N/A',
                           customerZipCode: '',

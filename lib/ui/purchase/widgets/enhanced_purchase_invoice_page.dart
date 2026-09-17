@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/day_closed_dialog.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/product_card.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/product_selection_modal.dart';
@@ -113,8 +114,8 @@ class _EnhancedPurchaseInvoicePageState
       final products = await widget.db.productDao.getAllProducts();
       final suppliers = await widget.db.supplierDao.getAllSuppliers();
 
-      // Generate invoice number
-      _invoiceNumber = 'PUR-${DateTime.now().millisecondsSinceEpoch}';
+      // Bug 3: no pre-generated number. The PUR- sequence value is assigned
+      // at SAVE time (_nextPurchaseNumber), so abandoned forms leave no gaps.
 
       setState(() {
         _isDayOpen = true;
@@ -259,6 +260,30 @@ class _EnhancedPurchaseInvoicePageState
     _remainingAmount = _grandTotal - _paidAmount;
   }
 
+  /// Next supplier number: max existing `PUR-(\d+)` + 1 (own series,
+  /// never customer values). Existence loop closes even a theoretical
+  /// same-moment collision; legacy non-matching numbers are ignored.
+  Future<String> _nextPurchaseNumber() async {
+    final rows = await widget.db.customSelect(
+      "SELECT invoice_number AS n FROM purchases "
+      "WHERE invoice_number LIKE 'PUR-%'",
+    ).get();
+    var maxN = 0;
+    for (final r in rows) {
+      final n = parsePurchaseNumber(r.readNullable<String>('n'));
+      if (n != null && n > maxN) maxN = n;
+    }
+    var candidate = maxN + 1;
+    while (true) {
+      final num = formatPurchaseNumber(candidate);
+      final exists = await (widget.db.select(widget.db.purchases)
+            ..where((t) => t.id.equals(num)))
+          .getSingleOrNull();
+      if (exists == null) return num;
+      candidate++;
+    }
+  }
+
   Future<void> _savePurchaseInvoice() async {
     if (_selectedSupplier == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -269,6 +294,10 @@ class _EnhancedPurchaseInvoicePageState
       );
       return;
     }
+
+    // Bug 3: supplier sequence (own series, never customer values).
+    _invoiceNumber ??= await _nextPurchaseNumber();
+    if (!mounted) return;
 
     if (_productEntries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -426,7 +455,7 @@ class _EnhancedPurchaseInvoicePageState
       _notesController.clear();
       _paymentMethod = PaymentMethod.cash;
       _calculateTotals();
-      _invoiceNumber = 'PUR-${DateTime.now().millisecondsSinceEpoch}';
+      _invoiceNumber = null; // Next save assigns a fresh sequence value.
     });
   }
 
@@ -469,7 +498,11 @@ class _EnhancedPurchaseInvoicePageState
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('فاتورة مشتريات جديدة #$_invoiceNumber'),
+        title: Text(
+          _invoiceNumber == null
+              ? 'فاتورة مشتريات جديدة'
+              : 'فاتورة مشتريات جديدة #$_invoiceNumber',
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
@@ -517,7 +550,8 @@ class _EnhancedPurchaseInvoicePageState
                           ),
                           const Gap(8),
                           Text(
-                            'رقم الفاتورة: $_invoiceNumber',
+                            // Assigned at save; '...' while unposted.
+                            'رقم الفاتورة: ${_invoiceNumber ?? '...'}',
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
                                   color: Theme.of(
