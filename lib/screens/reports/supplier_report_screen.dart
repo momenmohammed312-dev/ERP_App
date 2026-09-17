@@ -3,6 +3,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:intl/intl.dart';
 import '../../core/database/app_database.dart';
 import '../../core/utils/app_utils.dart';
+import '../../ui/supplier/services/supplier_statement_generator.dart';
 
 class SupplierReportScreen extends StatefulWidget {
   final AppDatabase database;
@@ -102,6 +103,11 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
             icon: Icon(Icons.refresh),
             onPressed: _loadSupplierData,
             tooltip: 'تحديث',
+          ),
+          IconButton(
+            icon: Icon(Icons.picture_as_pdf),
+            onPressed: _exportAllSuppliersStatement,
+            tooltip: 'كشف حساب كل الموردين PDF',
           ),
           IconButton(
             icon: Icon(Icons.download),
@@ -669,5 +675,39 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
         backgroundColor: Colors.green,
       ),
     );
+  }
+
+  /// All-suppliers statement (one PDF: per-supplier opening/period/closing
+  /// + grand totals), honoring the selected period chip.
+  Future<void> _exportAllSuppliersStatement() async {
+    try {
+      final now = DateTime.now();
+      late final DateTime from;
+      switch (_selectedPeriod) {
+        case 'today':
+          from = DateTime(now.year, now.month, now.day);
+          break;
+        case 'week':
+          from = now.subtract(const Duration(days: 7));
+          break;
+        case 'month':
+          from = DateTime(now.year, now.month, 1);
+          break;
+        case 'all':
+        default:
+          from = DateTime(2020);
+      }
+      await SupplierStatementGenerator.generateAllSuppliersStatement(
+        db: widget.database,
+        fromDate: from,
+        toDate: now,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في تصدير الكشف: $e')),
+        );
+      }
+    }
   }
 }

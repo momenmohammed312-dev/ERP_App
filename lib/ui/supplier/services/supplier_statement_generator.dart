@@ -227,6 +227,141 @@ class SupplierStatementGenerator {
     );
   }
 
+  // ─── ALL SUPPLIERS STATEMENT ───────────────────────────────────────
+  // One statement for every active supplier: opening, period purchases,
+  // period payments, closing + grand totals. Read-only aggregation.
+
+  static Future<void> generateAllSuppliersStatement({
+    required AppDatabase db,
+    required DateTime fromDate,
+    required DateTime toDate,
+  }) async {
+    final fonts = await _loadFonts();
+    final pdf = pw.Document();
+
+    final suppliers = await db.supplierDao.getActiveSuppliers();
+    final rows = <Map<String, dynamic>>[];
+    double grandOpening = 0, grandCredit = 0, grandDebit = 0, grandClosing = 0;
+    for (final s in suppliers) {
+      final opening = await db.ledgerDao.getRunningBalance(
+        'Supplier',
+        s.id,
+        upToDate: fromDate.subtract(const Duration(seconds: 1)),
+      );
+      final txs = await db.ledgerDao.getTransactionsByDateRange(
+        'Supplier',
+        s.id,
+        DateTime(fromDate.year, fromDate.month, fromDate.day),
+        DateTime(toDate.year, toDate.month, toDate.day, 23, 59, 59),
+      );
+      final credit = txs.fold<double>(0, (sum, t) => sum + t.credit);
+      final debit = txs.fold<double>(0, (sum, t) => sum + t.debit);
+      final closing = await db.ledgerDao.getRunningBalance(
+        'Supplier',
+        s.id,
+        upToDate: toDate,
+      );
+      rows.add({
+        'name': s.name,
+        'opening': opening,
+        'credit': credit,
+        'debit': debit,
+        'closing': closing,
+      });
+      grandOpening += opening;
+      grandCredit += credit;
+      grandDebit += debit;
+      grandClosing += closing;
+    }
+
+    final businessName = await SettingsService.getBusinessName();
+    final taxNumber = await SettingsService.getTaxNumber();
+    final logoPath = await SettingsService.getBusinessLogoPath();
+
+    String fmt(double v) => v.toStringAsFixed(2);
+    pw.TableRow row(List<String> cells, {bool bold = false}) => pw.TableRow(
+          children: [
+            for (final c in cells)
+              pw.Padding(
+                padding: const pw.EdgeInsets.all(6),
+                child: pw.Text(
+                  _b(c),
+                  style: pw.TextStyle(
+                    font: fonts['arabic'],
+                    fontWeight:
+                        bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+                  ),
+                  textDirection: pw.TextDirection.rtl,
+                ),
+              ),
+          ],
+        );
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        header: (pw.Context context) => _buildHeader(
+          fonts,
+          title: _b('كشف حساب كل الموردين'),
+          partyLabel: _b('النطاق'),
+          partyName: _b(
+            '${DateFormat('yyyy/MM/dd').format(fromDate)} - ${DateFormat('yyyy/MM/dd').format(toDate)}',
+          ),
+          fromDate: fromDate,
+          toDate: toDate,
+          openingBalance: grandOpening,
+          currentBalance: grandClosing,
+          businessName: _b(businessName),
+          taxNumber: taxNumber,
+          logoPath: logoPath,
+        ),
+        footer: (pw.Context context) => _buildFooter(fonts, context),
+        build: (pw.Context context) => [
+          pw.Table(
+            border: pw.TableBorder.all(),
+            children: [
+              row(
+                const [
+                  'المورد',
+                  'الافتتاحي',
+                  'مشتريات الفترة',
+                  'مدفوعات الفترة',
+                  'الختامي',
+                ],
+                bold: true,
+              ),
+              for (final r in rows)
+                row([
+                  r['name'] as String,
+                  fmt(r['opening'] as double),
+                  fmt(r['credit'] as double),
+                  fmt(r['debit'] as double),
+                  fmt(r['closing'] as double),
+                ]),
+              row(
+                [
+                  'الإجمالي (${rows.length})',
+                  fmt(grandOpening),
+                  fmt(grandCredit),
+                  fmt(grandDebit),
+                  fmt(grandClosing),
+                ],
+                bold: true,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) => pdf.save(),
+      name: _b('كشف حساب كل الموردين'),
+      format: PdfPageFormat.a4,
+    );
+  }
+
   // ─── SHARED: Header ──────────────────────────────────────────────
 
   static pw.Widget _buildHeader(

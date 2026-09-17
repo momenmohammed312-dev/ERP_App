@@ -7,6 +7,7 @@ import 'package:pos_offline_desktop/core/utils/logger.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/customer_report_tab.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/expenses_report_tab.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/sales_report_tab.dart';
+import 'package:pos_offline_desktop/ui/reports/widgets/purchases_report_tab.dart';
 import 'package:pos_offline_desktop/screens/reports/supplier_report_screen.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/staff_expenses_report.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/purchase_by_product_report.dart';
@@ -509,6 +510,24 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (context) => SalesReportTab(
+                              db: ref.read(appDatabaseProvider),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const Gap(15),
+                  Expanded(
+                    child: _buildActionCard(
+                      'فواتير المشتريات',
+                      'قائمة فواتير الموردين بالتفاصيل',
+                      Icons.shopping_cart,
+                      Colors.orange,
+                      () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => PurchasesReportTab(
                               db: ref.read(appDatabaseProvider),
                             ),
                           ),

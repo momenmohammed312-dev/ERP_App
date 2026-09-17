@@ -154,7 +154,11 @@ class _SalesReportTabState extends State<SalesReportTab> {
 
       for (final invoice in _invoices) {
         data.add({
-          'invoiceNumber': invoice.invoiceNumber ?? invoice.id.toString(),
+          'invoiceNumber': displayInvoiceNumber(
+                invoice.invoiceNumber,
+                invoice.id,
+              ) ??
+              '',
           'customerName': invoice.customerName ?? 'عميل غير محدد',
           'totalAmount': invoice.totalAmount,
           'paidAmount': invoice.paidAmount,
