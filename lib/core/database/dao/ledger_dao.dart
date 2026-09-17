@@ -384,6 +384,7 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
       'SELECT s.id, s.name, s.phone, (s.opening_balance + SUM(COALESCE(l.credit, 0) - COALESCE(l.debit, 0))) as balance '
       'FROM suppliers s '
       'LEFT JOIN ledger_transactions l ON l.ref_id = s.id AND l.entity_type = \'Supplier\' '
+      'WHERE s.status = \'Active\' '
       'GROUP BY s.id '
       'ORDER BY balance DESC',
       readsFrom: {db.suppliers, db.ledgerTransactions},
