@@ -215,7 +215,9 @@ class SuppliersWidget extends ConsumerWidget {
       return result.map((row) {
         final d = row.data;
         return {
-          'id': int.tryParse(d['id']?.toString() ?? '') ?? 0,
+          // Keep the TEXT purchase id verbatim (int.tryParse used to
+          // collapse every PUR- id to 0, breaking detail/edit/return).
+          'id': d['id']?.toString() ?? '',
           'invoice_number': d['invoice_number']?.toString(),
           'purchase_date': parseDate(d['purchase_date']).toIso8601String(),
           'total_amount': (d['total_amount'] as num?)?.toDouble() ?? 0.0,
@@ -649,8 +651,36 @@ class _SupplierCard extends StatelessWidget {
                                     ),
                                   ),
                                   Expanded(
-                                    child: Text(
-                                      'فاتورة ${purchase['invoice_number'] ?? 'غير محدد'}',
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'فاتورة ${purchase['invoice_number'] ?? 'غير محدد'}',
+                                        ),
+                                        const Gap(2),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.withValues(
+                                              alpha: 0.1,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: const Text(
+                                            'شراء',
+                                            style: TextStyle(
+                                              color: Colors.blue,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   Expanded(
@@ -702,19 +732,12 @@ class _SupplierCard extends StatelessWidget {
 
                 const Gap(16),
 
-                // Action Buttons
+                // Action Buttons (supplier quick-purchase removed permanently:
+                // it posted debit-side ledger rows with no purchase, items or
+                // stock — see Item 3; purchases are created from the supply
+                // invoice page only).
                 Row(
                   children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          _showAddPurchaseDialog(supplier);
-                        },
-                        icon: const Icon(Icons.shopping_cart),
-                        label: Text(AppLocalizations.of(context).add_purchase),
-                      ),
-                    ),
-                    const Gap(16),
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () {
@@ -925,96 +948,6 @@ class _SupplierCard extends StatelessWidget {
                 foregroundColor: Colors.white,
               ),
               child: Text('حذف'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showAddPurchaseDialog(Supplier supplier) {
-    final amountController = TextEditingController();
-    final descriptionController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text('إضافة مشتريات من ${supplier.name}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: amountController,
-                decoration: InputDecoration(
-                  labelText: 'المبلغ',
-                  border: const OutlineInputBorder(),
-                  prefixText: 'ج.م',
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const Gap(16),
-              TextField(
-                controller: descriptionController,
-                decoration: InputDecoration(
-                  labelText: 'الوصف',
-                  border: const OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('إلغاء'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (amountController.text.isNotEmpty) {
-                  try {
-                    // Add purchase transaction
-                    await db.ledgerDao.insertTransaction(
-                      LedgerTransactionsCompanion.insert(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        entityType: 'Supplier',
-                        refId: supplier.id,
-                        date: DateTime.now(),
-                        description: descriptionController.text.isNotEmpty
-                            ? descriptionController.text
-                            : 'شراء من المورد',
-                        debit: Value(
-                          double.tryParse(amountController.text) ?? 0.0,
-                        ),
-                        origin: 'purchase',
-                        paymentMethod: const Value('cash'),
-                        createdAt: Value(DateTime.now()),
-                      ),
-                    );
-
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(
-                          content: Text('تم إضافة المشتريات بنجاح'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(
-                          content: Text('خطأ: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                }
-              },
-              child: Text('إضافة'),
             ),
           ],
         );
