@@ -68,29 +68,70 @@ class LedgerService {
         ),
       );
 
-      // 2. لو مرتبطة بفاتورة: مزامنة الفاتورة.
+      // 2. لو مرتبطة بفاتورة: مزامنة الفاتورة من إجمالي كل دفعاتها —
+      // الدفعة المعدّلة + الدفعات الشقيقة بنفس الإيصال (تعدد الدفعات).
+      // المبلغ الممرر في invoice_payments يُزامن مع الصف المطابق (نفس
+      // المبلغ/الطريقة القديمة) حتى لا ينفصل split-payment عن الدفتر.
       if (invoiceId != null) {
         final invoice = await _db.invoiceDao.getInvoiceById(invoiceId);
         if (invoice == null) throw Exception('الفاتورة المرتبطة غير موجودة');
 
+        final siblings = await _db.ledgerDao.getTransactionsByReceiptNumber(
+          'INV$invoiceId',
+        );
+        double siblingsSum = 0.0;
+        for (final s in siblings) {
+          if (s.id == tx.id) continue;
+          if (s.origin != 'payment') continue;
+          siblingsSum += s.credit - s.debit;
+        }
+        const eps = 0.01;
         final total = invoice.totalAmount;
-        final status = newAmount >= total
+        final paidTotal = siblingsSum + newAmount;
+        if (paidTotal - total > eps) {
+          throw Exception(
+            'إجمالي الدفعات بعد التعديل (${paidTotal.toStringAsFixed(2)}) '
+            'يتجاوز إجمالي الفاتورة (${total.toStringAsFixed(2)})',
+          );
+        }
+        final status = paidTotal >= total - eps
             ? 'paid'
-            : (newAmount > 0 ? 'partial' : 'pending');
+            : (paidTotal > eps ? 'partial' : 'pending');
 
         await _db.invoiceDao.updateInvoice(
           invoice.copyWith(
-            paidAmount: newAmount,
+            paidAmount: paidTotal,
             status: status,
-            cashAmount: paymentMethod == 'cash' ? newAmount : 0,
+            cashAmount: paymentMethod == 'cash' ? paidTotal : 0,
             cardAmount: paymentMethod == 'visa' ||
                     paymentMethod == 'card' ||
                     paymentMethod == 'bank'
-                ? newAmount
+                ? paidTotal
                 : 0,
-            creditAmount: paymentMethod == 'credit' ? newAmount : 0,
+            creditAmount: paymentMethod == 'credit' ? paidTotal : 0,
           ),
         );
+
+        // مزامنة صف invoice_payments المطابق (نفس المبلغ والطريقة القدامى) —
+        // أول تطابق فقط؛ غياب التطابق يُترك كما هو (legacy) ولا يفشل العملية.
+        final oldAmount = tx.credit > 0 ? tx.credit : tx.debit;
+        final payRows =
+            await _db.invoicePaymentsDao.getPaymentsForInvoice(invoiceId);
+        for (final p in payRows) {
+          if ((p.amount - oldAmount).abs() <= eps &&
+              p.paymentMethod == tx.paymentMethod) {
+            await (_db.update(_db.invoicePayments)
+                  ..where((t) => t.id.equals(p.id)))
+                .write(
+              InvoicePaymentsCompanion(
+                amount: Value(newAmount),
+                paymentMethod: Value(paymentMethod),
+                paidAt: Value(date),
+              ),
+            );
+            break;
+          }
+        }
       }
     });
 

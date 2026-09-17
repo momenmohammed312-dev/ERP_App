@@ -64,9 +64,12 @@ class _AddEditSupplierPageState extends ConsumerState<AddEditSupplierPage> {
     try {
       final db = ref.read(appDatabaseProvider);
       final supplierId = widget.supplier!.id;
-      final txs = await (db.select(db.ledgerTransactions)
-            ..where((t) => t.entityType.equals('Supplier') & t.refId.equals(supplierId)))
-          .get();
+      // B5: مصدر البيانات هو LedgerDao حصرًا (تفاصيل العرض فقط تُجمع هنا،
+      // والرصيد المعتمد يُحسب في LedgerDao.getSupplierBalance).
+      final txs = await db.ledgerDao.getTransactionsByEntity(
+        'Supplier',
+        supplierId,
+      );
 
       double purchases = 0.0;
       double paid = 0.0;
@@ -411,8 +414,11 @@ class _AddEditSupplierPageState extends ConsumerState<AddEditSupplierPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('تأكيد الحذف'),
-        content: Text('هل أنت متأكد من حذف المورد "${widget.supplier?.name}"؟'),
+        title: const Text('تأكيد التعطيل'),
+        content: Text(
+          'سيتم تعطيل المورد "${widget.supplier?.name}" (إخفاؤه من القوائم) '
+          'مع الاحتفاظ الكامل بسجل حساباته ومشترياته. هل أنت متأكد؟',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -421,7 +427,7 @@ class _AddEditSupplierPageState extends ConsumerState<AddEditSupplierPage> {
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('حذف'),
+            child: const Text('تعطيل'),
           ),
         ],
       ),
@@ -433,12 +439,13 @@ class _AddEditSupplierPageState extends ConsumerState<AddEditSupplierPage> {
 
     try {
       final database = ref.read(appDatabaseProvider);
-      await database.supplierDao.deleteSupplier(widget.supplier!.id);
+      // Soft-delete only: history (ledger + purchases) is preserved.
+      await database.supplierDao.deactivateSupplier(widget.supplier!.id);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ تم حذف المورد بنجاح'),
+            content: Text('✅ تم تعطيل المورد بنجاح (السجل محفوظ)'),
             backgroundColor: Colors.green,
           ),
         );
@@ -448,7 +455,7 @@ class _AddEditSupplierPageState extends ConsumerState<AddEditSupplierPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ خطأ في حذف المورد: $e'),
+            content: Text('❌ خطأ في تعطيل المورد: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -499,7 +506,8 @@ class _AddEditSupplierPageState extends ConsumerState<AddEditSupplierPage> {
           Navigator.pop(context, true);
         }
       } else {
-        // إضافة مورد جديد
+        // إضافة مورد جديد — عبر SupplierDao.insertSupplier (فحص الاسم النشط
+        // المكرر + enqueue للمزامنة)، لا insert مباشر.
         final uuid = const Uuid().v4();
         final openingBalance =
             double.tryParse(_openingBalanceController.text) ?? 0.0;
@@ -518,23 +526,13 @@ class _AddEditSupplierPageState extends ConsumerState<AddEditSupplierPage> {
           createdAt: Value(DateTime.now()),
         );
 
-        await database.into(database.suppliers).insert(newSupplier);
+        await database.supplierDao.insertSupplier(newSupplier);
 
-        // إذا كان هناك رصيد افتتاحي، سجل حركة افتتاحية في دفتر الأستاذ
-        if (openingBalance > 0) {
-          await database.ledgerDao.insertTransaction(
-            LedgerTransactionsCompanion.insert(
-              id: '${uuid}_opening',
-              entityType: 'Supplier',
-              refId: uuid,
-              date: DateTime.now(),
-              description: 'رصيد افتتاحي للمورد ${_nameController.text.trim()}',
-              debit: const Value(0.0),
-              credit: Value(openingBalance),
-              origin: 'opening',
-            ),
-          );
-        }
+        // B5: لا تُكتب حركة افتتاحية في الدفتر هنا — الرصيد الافتتاحي يُخزن
+        // في عمود suppliers.opening_balance فقط (نفس اتفاق العملاء، راجع
+        // CustomerOpeningBalanceFix: العمود + حركة origin='opening' كانا
+        // يُجمعان معًا في getSupplierBalance/getRunningBalance فيُظهر ضعف
+        // القيمة). الدفتر يبقى المصدر الوحيد للرصيد عبر LedgerDao.
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -551,6 +549,8 @@ class _AddEditSupplierPageState extends ConsumerState<AddEditSupplierPage> {
         String errorMessage = 'حدث خطأ غير متوقع';
         if (e.toString().contains('UNIQUE constraint failed')) {
           errorMessage = 'اسم المورد موجود بالفعل';
+        } else if (e.toString().contains('المورد موجود بالفعل')) {
+          errorMessage = 'المورد موجود بالفعل (نشط)';
         } else {
           errorMessage = '❌ خطأ: ${e.toString()}';
         }

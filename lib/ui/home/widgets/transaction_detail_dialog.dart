@@ -407,9 +407,10 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
       for (final entry in itemsWithProducts) {
         final item = entry.$1;
         final product = entry.$2;
-        final unitPrice =
-            item.quantity > 0 ? item.price / item.quantity : item.price;
-        totalReturn += item.price;
+        // سعر السطر مخزّن unit (canonical) — الإجمالي = unit × الكمية.
+        final unitPrice = item.price;
+        final lineTotal = item.quantity * item.price;
+        totalReturn += lineTotal;
         returnItems.add(
           SalesReturnItemsCompanion.insert(
             returnId: 0,
@@ -417,7 +418,7 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
             productName: product?.name ?? 'منتج ${item.productId}',
             quantity: item.quantity,
             unitPrice: unitPrice,
-            totalPrice: item.price,
+            totalPrice: lineTotal,
             variantId: drift.Value(item.variantId),
           ),
         );
@@ -504,8 +505,9 @@ class _InvoiceDetailViewState extends State<_InvoiceDetailView> {
           return InvoiceItemDisplayModel(
             productName: product?.name ?? 'منتج ${item.productId}',
             quantity: item.quantity.toDouble(),
-            unitPrice: item.quantity > 0 ? item.price / item.quantity : item.price,
-            total: item.price,
+            // سعر السطر unit — الإجمالي = unit × الكمية.
+            unitPrice: item.price,
+            total: item.quantity * item.price,
             unit: product?.unit,
           );
         }).toList();

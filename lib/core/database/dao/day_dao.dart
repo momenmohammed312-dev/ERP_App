@@ -22,34 +22,24 @@ class DayDao extends DatabaseAccessor<AppDatabase> with _$DayDaoMixin {
     return row?.data;
   }
 
-  Future<Map<String, Object?>?> getOrCreateTodayDay({
-    double? openingBalance,
-    String? openedBy,
-  }) async {
-    final isOpen = await isDayOpen();
-    if (isOpen) {
-      throw Exception('يوجد يوم مفتوح بالفعل');
-    }
+  /// The single authoritative open day row (oldest first), or null when no
+  /// business day is open. `days` is the source of truth for "is the day
+  /// open?" — cash sessions only mirror it.
+  Future<Map<String, Object?>?> getOpenDay() async {
+    final row = await customSelect(
+      'SELECT * FROM days WHERE is_open = 1 ORDER BY id ASC LIMIT 1',
+    ).getSingleOrNull();
+    return row?.data;
+  }
 
-    final existing = await getTodayDay();
-    if (existing != null) return existing;
-
-    await customInsert(
-      'INSERT INTO days (date, is_open, opening_balance, created_at, opened_by) VALUES (?, ?, ?, ?, ?)',
-      variables: [
-        Variable.withDateTime(DateTime.now()),
-        Variable.withBool(true),
-        Variable.withReal(openingBalance ?? 0.0),
-        Variable.withDateTime(DateTime.now()),
-        Variable.withString(openedBy ?? ''),
-      ],
-    );
-
-    final created = await customSelect(
-      'SELECT * FROM days WHERE id = last_insert_rowid() LIMIT 1',
-    ).getSingle();
-
-    return created.data;
+  /// Every open day row (oldest first). More than one means a legacy
+  /// duplicate that the v70 migration / repair must reconcile — callers must
+  /// never silently pick one and hide the rest.
+  Future<List<Map<String, Object?>>> getOpenDays() async {
+    final rows = await customSelect(
+      'SELECT * FROM days WHERE is_open = 1 ORDER BY id ASC',
+    ).get();
+    return rows.map((r) => r.data).toList();
   }
 
   Future<int> openDay({required double openingBalance, String? openedBy}) async {
@@ -92,6 +82,14 @@ class DayDao extends DatabaseAccessor<AppDatabase> with _$DayDaoMixin {
     required int dayId,
     String? reopenedBy,
   }) async {
+    // Single-open guard (same as openDay): reopening is an UPDATE, so it
+    // bypasses the INSERT-only trigger trg_prevent_multi_open — the V45
+    // partial unique index idx_days_one_open stays as the SQL-level backstop.
+    final openDays = await getOpenDays();
+    final otherOpen = openDays.where((d) => (d['id'] as int) != dayId);
+    if (otherOpen.isNotEmpty) {
+      throw Exception('يوجد يوم مفتوح بالفعل — أغلقه أولاً قبل إعادة فتح يوم آخر');
+    }
     await customUpdate(
       'UPDATE days SET is_open = 1, reopened_at = ?, reopened_by = ? WHERE id = ?',
       variables: [

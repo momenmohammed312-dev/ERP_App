@@ -33,4 +33,30 @@ class PayrollDisplay {
     final b = baseOf(staff);
     return staff.hourlyRate ?? (b.base / b.divisor / standardHoursPerDay);
   }
+
+  /// ── C3: ONE SHARED STORED-VALUE TOTALS FOLD ──────────────────────────
+  /// Single + batch MUST obey identical rules: every total over stored
+  /// payroll rows (voucher strip, batch-slips footer, page header,
+  /// disbursement breakdown, batch-pay transaction) is derived from this
+  /// one fold over the stored `Payroll` values (`netSalary` is the source
+  /// of truth — never recomputed here).
+  static PayrollTotals totalsOf(List<Payroll> payrolls) {
+    double basic = 0, additions = 0, deductions = 0, net = 0;
+    for (final p in payrolls) {
+      basic += p.basicSalary;
+      additions += p.overtimePay + p.bonus + p.allowances + p.rewardsTotal;
+      deductions += p.deductions;
+      net += p.netSalary;
+    }
+    return (basic: basic, additions: additions, deductions: deductions, net: net);
+  }
 }
+
+/// Stored-payroll totals record shared by single + batch paths (see
+/// [PayrollDisplay.totalsOf]).
+typedef PayrollTotals = ({
+  double basic,
+  double additions,
+  double deductions,
+  double net,
+});

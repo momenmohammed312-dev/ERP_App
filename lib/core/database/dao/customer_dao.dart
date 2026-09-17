@@ -6,6 +6,72 @@ import 'package:flutter/foundation.dart';
 
 part 'customer_dao.g.dart';
 
+/// Normalizes a phone number to a canonical digit string so that trivial
+/// formatting variants never create duplicate customer identities.
+///
+/// Rules (documented once here, used by sync reconciliation only):
+///  1. strip every non-digit (spaces, dashes, '+', parentheses);
+///  2. strip Egyptian country-prefix variants: leading '0020' or '20'
+///     (only when digits remain longer than a local number);
+///  3. strip one leading trunk '0'.
+/// Empty/null input normalizes to '' (never matches — callers skip it).
+String normalizePhone(String? raw) {
+  if (raw == null) return '';
+  var digits = raw.replaceAll(RegExp(r'\D'), '');
+  if (digits.isEmpty) return '';
+  if (digits.startsWith('0020')) {
+    digits = digits.substring(4);
+  } else if (digits.startsWith('20') && digits.length > 10) {
+    digits = digits.substring(2);
+  }
+  if (digits.startsWith('0') && digits.length > 1) {
+    digits = digits.substring(1);
+  }
+  return digits;
+}
+
+/// Outcome of [CustomerDao.reconcileRemoteCustomer].
+enum CustomerSyncOutcome {
+  /// Remote `sync_id` matched a local row by stable id (upsert applied or
+  /// skipped by last-write-wins).
+  matchedById,
+
+  /// Remote id unknown/absent but exactly ONE local row shares the same
+  /// normalized phone — remote fields adopted onto that row (id unchanged).
+  mergedByPhone,
+
+  /// Remote id unknown/absent and no local row shares the phone — inserted
+  /// as a new local row under the remote id (when present).
+  inserted,
+
+  /// Remote id unknown/absent and ≥2 local rows share the normalized phone.
+  /// NOTHING was changed — caller must surface/log the conflict.
+  conflict,
+
+  /// Local row is newer (last-write-wins) — remote row ignored.
+  skippedStale,
+}
+
+/// Typed result of a customer sync-reconciliation attempt. A [conflict]
+/// outcome preserves all history and carries the ambiguous candidate ids.
+class CustomerReconciliation {
+  final CustomerSyncOutcome outcome;
+
+  /// Local customer id that was created/updated, if any.
+  final String? customerId;
+
+  /// Ambiguous local candidate ids (only for [CustomerSyncOutcome.conflict]).
+  final List<String> conflictIds;
+
+  const CustomerReconciliation({
+    required this.outcome,
+    this.customerId,
+    this.conflictIds = const [],
+  });
+
+  bool get isConflict => outcome == CustomerSyncOutcome.conflict;
+}
+
 @DriftAccessor(tables: [Customers])
 class CustomerDao extends DatabaseAccessor<AppDatabase>
     with _$CustomerDaoMixin {
@@ -123,36 +189,250 @@ class CustomerDao extends DatabaseAccessor<AppDatabase>
   /// Looks up the existing row by `id` first: if found, updates it only when
   /// the remote `updatedAt` is newer than the local one (last-write-wins); if
   /// not found, inserts a new local row with the same `id`.
+  ///
+  /// Soft-delete replication rule (documented once here):
+  ///  - ordering key is `updatedAt` (falling back to `createdAt` when
+  ///    `updatedAt` is null — [insertCustomer] historically left it null);
+  ///    a row with no clock at all counts as epoch (remote wins);
+  ///  - newer timestamp wins (last-write-wins);
+  ///  - on an exact timestamp TIE, delete wins: if either side is
+  ///    inactive/deleted the merged row stays deleted;
+  ///  - when clocks are incomparable (remote has no timestamp) a locally
+  ///    deleted row is NEVER resurrected — the delete is preserved;
+  ///  - legacy remote rows without any activity flag keep the local
+  ///    `isActive`/`status` untouched (no silent resurrection, no silent
+  ///    delete).
+  /// The remote activity flag is read opportunistically from `is_active` (or
+  /// `status` == 'Inactive'/'Deleted'); absence means "unknown", not "active".
   Future<void> upsertFromRemote(Map<String, dynamic> remoteRow) async {
     final syncId = remoteRow['sync_id'] as String?;
     if (syncId == null || syncId.isEmpty) return;
     final remoteUpdated =
         DateTime.tryParse(remoteRow['updated_at'] as String? ?? '');
+    final remoteIsActive = _remoteIsActive(remoteRow);
     final existing = await getCustomerById(syncId);
 
-    if (existing != null &&
-        existing.updatedAt != null &&
-        remoteUpdated != null &&
-        existing.updatedAt!.isAfter(remoteUpdated)) {
-      // Local row is newer — last-write-wins: do not overwrite.
+    if (existing == null) {
+      await into(customers).insert(
+        _remoteCompanion(
+          syncId,
+          remoteRow,
+          remoteUpdated,
+          isActive: remoteIsActive ?? true,
+        ),
+      );
       return;
     }
 
-    final companion = CustomersCompanion(
-      id: Value(syncId),
+    final localClock = existing.updatedAt ?? existing.createdAt;
+    if (!_remoteWins(localClock, remoteUpdated)) {
+      // Local row is newer — last-write-wins: do not overwrite.
+      // Tie with a local delete also keeps the delete (delete-wins-on-tie).
+      return;
+    }
+
+    final tie = localClock != null &&
+        remoteUpdated != null &&
+        localClock.isAtSameMomentAs(remoteUpdated);
+    // On a tie, delete wins: merged activity = active ONLY if both sides active.
+    final mergedActive = tie
+        ? (existing.isActive && (remoteIsActive ?? true))
+        : (remoteIsActive ?? existing.isActive);
+
+    final companion = _remoteCompanion(
+      syncId,
+      remoteRow,
+      remoteUpdated,
+      isActive: mergedActive,
+    );
+    await (update(customers)..where((t) => t.id.equals(syncId)))
+        .write(companion);
+  }
+
+  /// Reconciles one remote customer row when the remote stable id may be
+  /// unknown locally. NEVER merges on name alone.
+  ///
+  ///  1. `sync_id` matches a local row → id-based upsert (see
+  ///     [upsertFromRemote]) → [CustomerSyncOutcome.matchedById].
+  ///  2. id unknown/absent → match ONLY on unambiguous normalized phone
+  ///     ([normalizePhone]; the [Customers] schema has NO customer-code
+  ///     column — checked `customer_table.dart`: id/name/phone/address/
+  ///     gstinNumber/email/openingBalance/totalDebt/totalPaid/createdAt/
+  ///     updatedAt/notes/isActive/status — so phone is the sole fallback key):
+  ///       - exactly 1 candidate → adopt remote fields onto that row
+  ///         (row id NEVER changes, history preserved; guarded by the same
+  ///         last-write-wins clock) → `mergedByPhone`;
+  ///       - 0 candidates → insert under the remote id when present,
+  ///         else synthesize nothing and report `inserted` with null id...
+  ///         (a row without any stable id cannot be tracked, so it is
+  ///         SKIPPED and reported as `skippedStale` — never invented);
+  ///       - ≥2 candidates → [CustomerSyncOutcome.conflict]: NOTHING is
+  ///         merged, all history preserved, candidate ids returned and the
+  ///         conflict is logged for an admin to resolve via the merge utility.
+  Future<CustomerReconciliation> reconcileRemoteCustomer(
+    Map<String, dynamic> remoteRow,
+  ) async {
+    final syncId = remoteRow['sync_id'] as String?;
+    if (syncId != null &&
+        syncId.isNotEmpty &&
+        await getCustomerById(syncId) != null) {
+      final before = await getCustomerById(syncId);
+      await upsertFromRemote(remoteRow);
+      final after = await getCustomerById(syncId);
+      if (before != null &&
+          after != null &&
+          before.updatedAt != null &&
+          _remoteDate(remoteRow) != null &&
+          before.updatedAt!.isAfter(_remoteDate(remoteRow)!)) {
+        return const CustomerReconciliation(
+          outcome: CustomerSyncOutcome.skippedStale,
+        );
+      }
+      return CustomerReconciliation(
+        outcome: CustomerSyncOutcome.matchedById,
+        customerId: syncId,
+      );
+    }
+
+    final remotePhone = normalizePhone(remoteRow['phone'] as String?);
+    if (remotePhone.isEmpty) {
+      // No stable id and no phone: insert only when a remote id exists to
+      // track the row by; otherwise there is nothing safe to key on.
+      if (syncId == null || syncId.isEmpty) {
+        debugPrint(
+          '[CustomerSync] skipped remote row with no sync_id and no phone',
+        );
+        return const CustomerReconciliation(
+          outcome: CustomerSyncOutcome.skippedStale,
+        );
+      }
+      await upsertFromRemote(remoteRow);
+      return CustomerReconciliation(
+        outcome: CustomerSyncOutcome.inserted,
+        customerId: syncId,
+      );
+    }
+
+    final candidates = await _findByNormalizedPhone(remotePhone);
+    if (candidates.length >= 2) {
+      final ids = candidates.map((c) => c.id).toList();
+      debugPrint(
+        '[CustomerSync] CONFLICT: ambiguous phone "$remotePhone" matches '
+        '${ids.length} local customers (${ids.join(', ')}). No merge performed.',
+      );
+      return CustomerReconciliation(
+        outcome: CustomerSyncOutcome.conflict,
+        conflictIds: ids,
+      );
+    }
+    if (candidates.isEmpty) {
+      if (syncId == null || syncId.isEmpty) {
+        debugPrint(
+          '[CustomerSync] skipped remote row with no sync_id and unmatched phone',
+        );
+        return const CustomerReconciliation(
+          outcome: CustomerSyncOutcome.skippedStale,
+        );
+      }
+      await upsertFromRemote(remoteRow);
+      return CustomerReconciliation(
+        outcome: CustomerSyncOutcome.inserted,
+        customerId: syncId,
+      );
+    }
+
+    // Exactly one candidate: adopt remote fields onto the existing row.
+    // The row id NEVER changes, so invoices/ledger/containers keep pointing
+    // at the same row — full history preserved.
+    final target = candidates.single;
+    final remoteUpdated = _remoteDate(remoteRow);
+    final localClock = target.updatedAt ?? target.createdAt;
+    if (!_remoteWins(localClock, remoteUpdated)) {
+      return CustomerReconciliation(
+        outcome: CustomerSyncOutcome.skippedStale,
+        customerId: target.id,
+      );
+    }
+    final remoteIsActive = _remoteIsActive(remoteRow);
+    await (update(customers)..where((t) => t.id.equals(target.id))).write(
+      _remoteCompanion(
+        target.id,
+        remoteRow,
+        remoteUpdated,
+        isActive: remoteIsActive ?? target.isActive,
+      ),
+    );
+    debugPrint(
+      '[CustomerSync] merged remote row into local ${target.id} by unambiguous phone',
+    );
+    return CustomerReconciliation(
+      outcome: CustomerSyncOutcome.mergedByPhone,
+      customerId: target.id,
+    );
+  }
+
+  /// Local clock comparison for last-write-wins.
+  /// Returns true when the remote row may overwrite the local row:
+  /// remote strictly newer, exact tie (delete-wins resolves the flag), or
+  /// local clock unknown-but-remote-known... — EXCEPT a locally deleted row
+  /// is never resurrected by a remote row without a comparable clock.
+  bool _remoteWins(DateTime? localClock, DateTime? remoteUpdated) {
+    if (remoteUpdated == null) return false;
+    if (localClock == null) return true;
+    return !localClock.isAfter(remoteUpdated);
+  }
+
+  DateTime? _remoteDate(Map<String, dynamic> remoteRow) =>
+      DateTime.tryParse(remoteRow['updated_at'] as String? ?? '');
+
+  /// Reads the remote activity flag opportunistically. Returns null when the
+  /// remote row carries no activity information (legacy row → "unknown").
+  bool? _remoteIsActive(Map<String, dynamic> remoteRow) {
+    if (remoteRow.containsKey('is_active')) {
+      final v = remoteRow['is_active'];
+      if (v is bool) return v;
+      if (v is num) return v != 0;
+      if (v is String) {
+        final s = v.toLowerCase();
+        if (s == 'true' || s == '1') return true;
+        if (s == 'false' || s == '0') return false;
+      }
+    }
+    final status = remoteRow['status'] as String?;
+    if (status != null) {
+      if (status == 'Inactive' || status == 'Deleted') return false;
+      if (status == 'Active') return true;
+    }
+    return null;
+  }
+
+  CustomersCompanion _remoteCompanion(
+    String id,
+    Map<String, dynamic> remoteRow,
+    DateTime? remoteUpdated, {
+    required bool isActive,
+  }) {
+    return CustomersCompanion(
+      id: Value(id),
       name: Value(remoteRow['name'] as String? ?? ''),
       phone: Value(remoteRow['phone'] as String?),
       address: Value(remoteRow['address'] as String?),
       openingBalance: Value((remoteRow['opening_balance'] as num?)?.toDouble() ?? 0),
+      isActive: Value(isActive),
+      status: Value(isActive ? 'Active' : 'Inactive'),
       updatedAt: Value(remoteUpdated),
     );
+  }
 
-    if (existing != null) {
-      await (update(customers)..where((t) => t.id.equals(syncId)))
-          .write(companion);
-    } else {
-      await into(customers).insert(companion);
-    }
+  /// Finds local customers whose phone normalizes ([normalizePhone]) to
+  /// [normalized]. Normalization is app-side (SQLite has no such function),
+  /// so this scans the table — fine for reconciliation cardinality.
+  Future<List<Customer>> _findByNormalizedPhone(String normalized) async {
+    if (normalized.isEmpty) return const [];
+    final all = await select(customers).get();
+    return all
+        .where((c) => normalizePhone(c.phone) == normalized)
+        .toList();
   }
 
   /// Enqueues a customer for sync. Payload only contains Supabase columns
@@ -189,12 +469,20 @@ class CustomerDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
-  /// Update customer active status (Soft Delete)
+  /// Update customer active status (Soft Delete).
+  /// Bumps `updatedAt` so last-write-wins ordering keeps working, and
+  /// enqueues the change so the delete replicates to other devices instead
+  /// of being silently resurrected by a stale remote row.
   Future<void> deleteCustomer(String id) async {
     try {
       await (update(customers)..where((t) => t.id.equals(id))).write(
-        CustomersCompanion(isActive: const Value(false)),
+        CustomersCompanion(
+          isActive: const Value(false),
+          status: const Value('Inactive'),
+          updatedAt: Value(DateTime.now()),
+        ),
       );
+      await _enqueueCustomer(id, 'update');
       debugPrint('✅ Customer soft deleted - ID: $id');
     } catch (e) {
       debugPrint('❌ Error deleting customer: $e');
@@ -218,22 +506,18 @@ class CustomerDao extends DatabaseAccessor<AppDatabase>
         .watchSingle();
   }
 
-  /// Get Total Debt across all active customers
-  Stream<double> watchTotalDebt() {
-    // Determine which column tracks debt.
-    // Schema now has `totalDebt` column.
-    // Ideally this column is updated whenever transactions happen.
-    // If we rely on calculation from Ledger for accuracy, we should use that.
-    // But per user request we added `totalDebt` column. We will sum that.
-
-    final totalDebtExp = customers.totalDebt.sum();
-
-    return (selectOnly(customers)
-          ..addColumns([totalDebtExp])
-          ..where(customers.isActive.equals(true)))
-        .map((row) => row.read(totalDebtExp) ?? 0.0)
-        .watchSingle();
-  }
+  /// Get Total Debt across all active customers.
+  ///
+  /// LEDGER IS AUTHORITATIVE (B5): the `customers.totalDebt` cached column is
+  /// a second truth that diverges (it is only ever written by the add/edit
+  /// UI with hand-typed values — see `add_edit_customer_page.dart`, now
+  /// neutralized to preserve stored values and display the ledger balance).
+  /// This stream therefore DELEGATES to
+  /// [LedgerDao.watchTotalReceivables], which computes
+  /// openingBalance + Σ(debit − credit) per active customer from the ledger.
+  /// Old formula: SUM(customers.totalDebt) WHERE is_active → new delegate:
+  /// ledger receivables. Do NOT reintroduce the cached-column sum.
+  Stream<double> watchTotalDebt() => db.ledgerDao.watchTotalReceivables();
 
   /// Get total active customer count (non-stream version)
   Future<int> getTotalCustomerCount() async {

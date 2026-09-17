@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
+import 'package:pos_offline_desktop/services/payroll_display.dart';
 import 'package:pos_offline_desktop/ui/staff/services/staff_payroll_statement_generator.dart';
 import 'package:pos_offline_desktop/ui/staff/payroll_disbursement_sheet.dart';
 
@@ -273,8 +274,9 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
       ? _payrolls
       : _payrolls.where((p) => _selectedPayrollIds.contains(p.id)).toList();
 
-  double get _visibleTotal =>
-      _visiblePayrolls.fold(0.0, (s, p) => s + p.netSalary);
+  // C3: page header total uses the ONE shared fold over stored rows —
+  // identical rules to voucher + service + batch-pay by construction.
+  double get _visibleTotal => PayrollDisplay.totalsOf(_visiblePayrolls).net;
 
   @override
   Widget build(BuildContext context) {
@@ -573,6 +575,12 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
                 fontSize: 16,
               ),
             ),
+            if (p.status == 'calculated')
+              IconButton(
+                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                tooltip: 'حذف المرتب وإعادة الحساب',
+                onPressed: () => _deletePayroll(p),
+              ),
             Checkbox(
               value: _selectedPayrollIds.contains(p.id),
               onChanged: (v) {
@@ -589,6 +597,56 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _deletePayroll(Payroll payroll) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف المرتب'),
+        content: Text(
+          'هل أنت متأكد من حذف مرتب ${payroll.payrollPeriod} قبل الاعتماد؟ '
+          'سيتم إعادة حسابه من جديد.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final db = ref.read(appDatabaseProvider);
+      await (db.delete(
+        db.payrollTable,
+      )..where((t) => t.id.equals(payroll.id))).go();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم حذف المرتب — يمكنك إعادة احتسابه'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ في الحذف: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildMissingTile(Staff s) {

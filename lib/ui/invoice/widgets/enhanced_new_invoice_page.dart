@@ -13,6 +13,7 @@ import 'package:pos_offline_desktop/ui/invoice/widgets/product_selection_modal.d
 import 'package:pos_offline_desktop/ui/invoice/widgets/order_line_item.dart';
 import 'package:pos_offline_desktop/ui/invoice/models/product_entry.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/services/business_date_service.dart';
 import 'package:pos_offline_desktop/core/services/invoice_service.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
@@ -83,7 +84,6 @@ class _EnhancedNewInvoicePageState
   bool _isLoading = true;
   bool _showInvoiceTypeModal = true;
   Timer? _searchDebounce;
-  String? _invoiceNumber;
 
   // Vegetable-flavor: record empty crates issued to the customer on sale.
   bool _registerEmptyBarnika = true;
@@ -145,7 +145,8 @@ class _EnhancedNewInvoicePageState
 
   Future<void> _checkDayStatus() async {
     try {
-      final isOpen = await widget.db.dayDao.isDayOpen();
+      // Authoritative day state: `days` is the single source of truth.
+      final isOpen = await BusinessDateService(widget.db).isBusinessDayOpen();
       if (mounted) {
         setState(() {
           _isDayOpen = isOpen;
@@ -167,8 +168,8 @@ class _EnhancedNewInvoicePageState
         return;
       }
 
-      // Check day status first
-      bool isOpen = await widget.db.dayDao.isDayOpen();
+      // Check day status first (authoritative `days` state, not the session)
+      bool isOpen = await BusinessDateService(widget.db).isBusinessDayOpen();
 
       if (!isOpen) {
         if (mounted) {
@@ -189,8 +190,8 @@ class _EnhancedNewInvoicePageState
       final products = await widget.db.productDao.getAllProducts();
       final customers = await widget.db.customerDao.getAllActiveCustomers();
 
-      // Generate invoice number
-      _invoiceNumber = '${DateTime.now().millisecondsSinceEpoch}';
+      // The canonical invoice number is assigned by InvoiceService inside the
+      // create transaction — never pre-generated here.
 
       if (!mounted) return;
       setState(() {
@@ -619,12 +620,13 @@ class _EnhancedNewInvoicePageState
     try {
       final db = widget.db;
       final now = DateTime.now();
-      final draftNumber = _invoiceNumber ?? 'DRAFT_${now.millisecondsSinceEpoch}';
+      // Drafts persist with invoice_number = NULL until posted through
+      // InvoiceService.createInvoice (canonical number assigned in-txn).
+      // No DRAFT_/timestamp numbers are ever persisted (v70 contract).
       final customerName = _selectedCustomer?.name ?? 'عميل نقدي';
 
       final invoiceId = await db.invoiceDao.insertInvoice(
         InvoicesCompanion(
-          invoiceNumber: Value(draftNumber),
           customerId: Value(_selectedCustomerId),
           customerName: Value(customerName),
           customerContact: Value(_selectedCustomer?.phone ?? ''),
@@ -739,7 +741,7 @@ class _EnhancedNewInvoicePageState
 
                 try {
                   final db = widget.db;
-                  final isOpen = await db.dayDao.isDayOpen();
+                  final isOpen = await BusinessDateService(db).isBusinessDayOpen();
                   if (!isOpen) {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
@@ -955,11 +957,7 @@ class _EnhancedNewInvoicePageState
       }
     }
 
-    final productSummary = _productEntries
-        .map((e) => e.displayName)
-        .where((n) => n.isNotEmpty)
-        .join(', ');
-    final ledgerDescription = 'بيع #$_invoiceNumber ($productSummary)';
+    // Ledger wording comes from InvoiceNumberService inside createInvoice.
 
     final result = await InvoiceService(db).createInvoice(
       customerId: customerId == 'cash' ? null : customerId,
@@ -970,13 +968,13 @@ class _EnhancedNewInvoicePageState
       totalAmount: _grandTotal,
       paidAmount: _paidAmount,
       status: status,
-      invoiceNumber: _invoiceNumber,
       items: items,
-      ledgerDescription: ledgerDescription,
       primaryShipmentId: primaryShipmentId,
     );
 
     final invoiceId = result.invoiceId;
+    // Canonical number assigned atomically by the service.
+    final newInvoiceNumber = result.invoice.invoiceNumber ?? 'INV$invoiceId';
 
     // Vegetable flavor: record empty crates issued to a real customer.
     // Uses ShipmentAllocationService to record barnika out.
@@ -1020,7 +1018,7 @@ class _EnhancedNewInvoicePageState
 
     final invoiceModel = ups.Invoice(
       id: invoiceId,
-      invoiceNumber: _invoiceNumber ?? 'INV$invoiceId',
+      invoiceNumber: newInvoiceNumber,
       customerName: customerName,
       customerPhone: selectedCustomer?.phone ?? 'N/A',
       customerZipCode: '',
@@ -1193,7 +1191,8 @@ class _EnhancedNewInvoicePageState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _invoiceNumber ?? 'جاري الإنشاء...',
+                  // The canonical number is assigned on save by the service.
+                  'فاتورة جديدة',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,

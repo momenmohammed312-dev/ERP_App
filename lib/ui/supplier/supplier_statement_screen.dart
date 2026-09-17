@@ -3,8 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
+import 'package:drift/drift.dart' hide Column;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/dao/ledger_dao.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+// StatementHelpers is defined once in the customer statement generator and
+// shared by both statements (single normalizer + label rule).
+import 'package:pos_offline_desktop/ui/customer/services/enhanced_customer_statement_generator.dart';
 import 'package:pos_offline_desktop/ui/supplier/add_supplier_transaction_dialog.dart';
 import 'package:pos_offline_desktop/ui/supplier/edit_supplier_transaction_dialog.dart';
 import 'package:pos_offline_desktop/ui/supplier/services/supplier_statement_generator.dart';
@@ -60,17 +65,22 @@ class _SupplierStatementScreenState extends ConsumerState<SupplierStatementScree
     setState(() => _isLoading = true);
     final db = ref.read(appDatabaseProvider);
 
+    // ONE shared normalizer (StatementHelpers): inclusive day boundaries,
+    // same as the customer statement.
+    final (from, to) = StatementHelpers.normalizeRange(_fromDate, _toDate);
+
     final txs = await db.ledgerDao.getTransactionsByDateRange(
       'Supplier',
       widget.supplier.id,
-      DateTime(_fromDate.year, _fromDate.month, _fromDate.day),
-      DateTime(_toDate.year, _toDate.month, _toDate.day, 23, 59, 59),
+      from,
+      to,
     );
 
+    // Opening balance: canonical getRunningBalance up-to from−1s helper.
     final prevBalance = await db.ledgerDao.getRunningBalance(
       'Supplier',
       widget.supplier.id,
-      upToDate: _fromDate.subtract(const Duration(seconds: 1)),
+      upToDate: StatementHelpers.openingCutoff(_fromDate),
     );
 
     double purchases = 0, payments = 0, adjustments = 0, reversals = 0;
@@ -136,26 +146,44 @@ class _SupplierStatementScreenState extends ConsumerState<SupplierStatementScree
     setState(() => _isExporting = true);
     try {
       final db = ref.read(appDatabaseProvider);
-      final currentBalance = await db.ledgerDao.getRunningBalance('Supplier', widget.supplier.id, upToDate: _toDate);
+      // Same pattern as the customer export: the PDF renders the SCREEN's
+      // filtered rows (never re-queries), with the screen's final balance.
+      final finalBalance =
+          _rows.isEmpty ? _openingBalance : _rows.last.balance;
+
+      final exportTransactions = _filteredRows
+          .map(
+            (r) => LedgerTransactionWithBalance(
+              transaction: r.tx,
+              runningBalance: r.balance,
+            ),
+          )
+          .toList();
+
+      final fromDateNormalized = StatementHelpers.startOfDay(_fromDate);
+      final toDateNormalized = StatementHelpers.endOfDay(_toDate);
+
       if (_isDetailed) {
         await SupplierStatementGenerator.generateStatement(
           db: db,
           supplierId: widget.supplier.id,
           supplierName: widget.supplier.name,
-          fromDate: _fromDate,
-          toDate: _toDate,
+          fromDate: fromDateNormalized,
+          toDate: toDateNormalized,
           openingBalance: _openingBalance,
-          currentBalance: currentBalance,
+          currentBalance: finalBalance,
+          transactions: exportTransactions,
         );
       } else {
         await SupplierStatementGenerator.generateSummaryStatement(
           db: db,
           supplierId: widget.supplier.id,
           supplierName: widget.supplier.name,
-          fromDate: _fromDate,
-          toDate: _toDate,
+          fromDate: fromDateNormalized,
+          toDate: toDateNormalized,
           openingBalance: _openingBalance,
-          currentBalance: currentBalance,
+          currentBalance: finalBalance,
+          transactions: exportTransactions,
         );
       }
     } catch (e) {
@@ -220,8 +248,9 @@ class _SupplierStatementScreenState extends ConsumerState<SupplierStatementScree
         ),
         body: Column(
           children: [
+            // Screen order (B6–B9): Name → Period → Transactions (+nested) →
+            // Balance/Summary.
             _buildSupplierInfo(cardBg, textColor, subTextColor, goldColor),
-            _buildSummaryCards(cardBg, textColor),
             _buildDateFilter(cardBg, textColor, goldColor),
             _buildFilters(cardBg, textColor, goldColor),
             _buildStatementToggle(cardBg, textColor, goldColor),
@@ -248,6 +277,7 @@ class _SupplierStatementScreenState extends ConsumerState<SupplierStatementScree
                           },
                         ),
             ),
+            _buildSummaryCards(cardBg, textColor),
             _buildFooter(finalBalance, textColor, goldColor, cardBg, isDark),
           ],
         ),
@@ -521,6 +551,10 @@ class _SupplierStatementRowState extends State<_SupplierStatementRow> {
     setState(() => _isLoadingDetails = true);
     try {
       if (_isPurchase) {
+        // Resolve the purchase ONLY via the structured receiptNumber link
+        // (purchase.id or purchase.invoiceNumber). Free-text description is
+        // NEVER parsed for identity — legacy rows without a receiptNumber
+        // simply show no nested items.
         Purchase? purchase;
         final receiptNum = widget.data.tx.receiptNumber;
         if (receiptNum != null && receiptNum.isNotEmpty) {
@@ -528,18 +562,6 @@ class _SupplierStatementRowState extends State<_SupplierStatementRow> {
                 ..where((p) =>
                     p.invoiceNumber.equals(receiptNum) |
                     p.id.equals(receiptNum)))
-              .getSingleOrNull();
-        }
-
-        if (purchase == null) {
-          final match = RegExp(r'فاتورة\s*([^\s,]+)')
-              .firstMatch(widget.data.tx.description);
-          final invNum = match?.group(1) ??
-              widget.data.tx.id.replaceAll('_ledger', '');
-          purchase = await (widget.db.select(widget.db.purchases)
-                ..where((p) =>
-                    p.invoiceNumber.equals(invNum) |
-                    p.id.equals(invNum)))
               .getSingleOrNull();
         }
 
@@ -557,7 +579,7 @@ class _SupplierStatementRowState extends State<_SupplierStatementRow> {
                   quantity: item.quantity.toDouble(),
                   unitPrice: item.unitPrice,
                   total: item.totalPrice,
-                  unit: item.unit ?? prod?.unit,
+                  unit: item.unit,
                 );
               }).toList();
             });

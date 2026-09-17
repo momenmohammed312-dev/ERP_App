@@ -65,6 +65,31 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
     );
     _isActive = widget.customer?.isActive ?? true;
     _status = widget.customer?.status ?? 'Active';
+
+    if (_isEditing) {
+      _loadLedgerBalance();
+    }
+  }
+
+  /// B5: loads the authoritative ledger balance for display. The
+  /// totalDebt/totalPaid COLUMNS are legacy/backfill-only — the ledger is the
+  /// single source of truth, so these fields are read-only and the save path
+  /// never overwrites the columns with hand-typed values.
+  Future<void> _loadLedgerBalance() async {
+    try {
+      final database = ref.read(appDatabaseProvider);
+      final balance = await database.ledgerDao.getCustomerBalance(
+        widget.customer!.id,
+      );
+      if (mounted) {
+        setState(() {
+          _totalDebtController.text =
+              (balance > 0 ? balance : 0.0).toStringAsFixed(2);
+          _totalPaidController.text =
+              (balance < 0 ? -balance : 0.0).toStringAsFixed(2);
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -265,11 +290,13 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
 
                 const Gap(16),
 
-                // إجمالي الدين
+                // إجمالي الدين — قراءة فقط من دفتر الأستاذ (B5: الدفتر هو
+                // مصدر الحقيقة الوحيد؛ العمود totalDebt للتوافق الخلفي فقط
+                // ولا يُكتب يدويًا أبدًا).
                 TextFormField(
                   controller: _totalDebtController,
                   decoration: InputDecoration(
-                    labelText: 'إجمالي الدين',
+                    labelText: 'إجمالي الدين (من دفتر الأستاذ)',
                     hintText: '0.0',
                     prefixIcon: const Icon(Icons.account_balance),
                     border: OutlineInputBorder(
@@ -277,24 +304,17 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
                     ),
                     filled: true,
                   ),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(
-                      RegExp(r'^\d+\.?\d{0,2}'),
-                    ),
-                  ],
+                  readOnly: true,
                   textInputAction: TextInputAction.next,
                 ),
 
                 const Gap(16),
 
-                // إجمالي المدفوع
+                // إجمالي المدفوع — قراءة فقط من دفتر الأستاذ (B5).
                 TextFormField(
                   controller: _totalPaidController,
                   decoration: InputDecoration(
-                    labelText: 'إجمالي المدفوع',
+                    labelText: 'إجمالي المدفوع (من دفتر الأستاذ)',
                     hintText: '0.0',
                     prefixIcon: const Icon(Icons.payments),
                     border: OutlineInputBorder(
@@ -302,14 +322,7 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
                     ),
                     filled: true,
                   ),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(
-                      RegExp(r'^\d+\.?\d{0,2}'),
-                    ),
-                  ],
+                  readOnly: true,
                   textInputAction: TextInputAction.next,
                 ),
 
@@ -455,7 +468,8 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
       final database = ref.read(appDatabaseProvider);
 
       if (_isEditing) {
-        // تحديث
+        // تحديث — B5: لا تُكتب totalDebt/totalPaid يدويًا أبدًا (القيم
+        // المخزنة تُحفظ كما هي؛ الحقيقة في دفتر الأستاذ).
         final updated = CustomersCompanion(
           id: Value(widget.customer!.id),
           name: Value(_nameController.text.trim()),
@@ -466,12 +480,6 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
           notes: Value(_notesController.text.trim().isEmpty ? null : _notesController.text.trim()),
           openingBalance: Value(
             double.tryParse(_openingBalanceController.text) ?? 0.0,
-          ),
-          totalDebt: Value(
-            double.tryParse(_totalDebtController.text) ?? 0.0,
-          ),
-          totalPaid: Value(
-            double.tryParse(_totalPaidController.text) ?? 0.0,
           ),
           isActive: Value(_isActive),
           status: Value(_status),
@@ -490,7 +498,8 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
           Navigator.pop(context, true);
         }
       } else {
-        // إضافة جديد
+        // إضافة جديد — B5: totalDebt/totalPaid يُتركان للافتراضي (0.0) ولا
+        // يُكتبان يدويًا أبدًا؛ الرصيد يُبنى في دفتر الأستاذ.
         final uuid = const Uuid().v4();
         final openingBalance =
             double.tryParse(_openingBalanceController.text) ?? 0.0;
@@ -504,12 +513,6 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
           gstinNumber: Value(_gstinController.text.trim().isEmpty ? null : _gstinController.text.trim()),
           notes: Value(_notesController.text.trim().isEmpty ? null : _notesController.text.trim()),
           openingBalance: Value(openingBalance),
-          totalDebt: Value(
-            double.tryParse(_totalDebtController.text) ?? 0.0,
-          ),
-          totalPaid: Value(
-            double.tryParse(_totalPaidController.text) ?? 0.0,
-          ),
           isActive: Value(_isActive),
           status: Value(_status),
           createdAt: Value(DateTime.now()),

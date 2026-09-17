@@ -50,13 +50,13 @@ void main() {
       raw.dispose();
     }
 
-    // Open via AppDatabase — onUpgrade must run v66..v69.
+    // Open via AppDatabase — onUpgrade must run v66..current (v71).
     final db = AppDatabase(NativeDatabase(file));
     try {
       final versionRow =
           await db.customSelect('PRAGMA user_version').getSingle();
-      expect(versionRow.read<int>('user_version'), 69,
-          reason: 'schema should be upgraded to 69');
+      expect(versionRow.read<int>('user_version'), 71,
+          reason: 'schema should be upgraded to current (71)');
 
       final cols = await db.customSelect(
         "SELECT name FROM pragma_table_info('staff_table')",

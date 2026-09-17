@@ -5,6 +5,7 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/services/payroll_display.dart';
+import 'package:pos_offline_desktop/services/attendance/attendance_calculation_engine.dart';
 import 'package:pos_offline_desktop/core/utils/pdf_bidi_helper.dart';
 
 class StaffAttendanceReportGenerator {
@@ -76,7 +77,7 @@ if (!staff.useDefaultSchedule) {
     }
     final startMin = parseStartMin(workStartStr);
     final endMin = parseStartMin(workEndStr);
-    final graceEnd = startMin + grace;
+    // (grace تنطبق داخل computeLateness/isEffectiveLateDay — لا مقارنة يدوية)
 
     final pdf = pw.Document();
     final title = _b('كشف الحضور والغياب والخصومات');
@@ -87,17 +88,22 @@ if (!staff.useDefaultSchedule) {
       _b('الفترة: ${startDate != null ? _fmtDate(startDate) : '-'} - ${endDate != null ? _fmtDate(endDate) : _fmtDate(DateTime.now())}'),
     ];
 
-    // إحصائيات — مع حساب دفاعي: present بعد السماح يُعتبر late
-    // الإذن منفصل عن التأخير — لا نخصم المسموح من الفعلي
-    bool isLateEff(Attendance r) {
-      if (r.excused && r.excusedHours <= 0) return false;
-      if (r.status == 'late') return true;
-      if (r.status == 'present' && r.checkInTime != null) {
-        final ci = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
-        return ci > graceEnd;
-      }
-      return false;
-    }
+    // إحصائيات — C1: نفس المسار الوحيد (isEffectiveLateDay للدقائق
+    // computeLateness من بداية الدوام شاملاً السماح). الإذن منفصل عن
+    // التأخير — لا نخصم المسموح من الفعلي.
+    bool isLateEff(Attendance r) => isEffectiveLateDay(
+      status: r.status,
+      checkInTime: r.checkInTime,
+      scheduleStartMinutes: startMin,
+      graceMinutes: grace,
+      excused: r.excused,
+      excusedHours: r.excusedHours,
+    );
+    int lateOf(Attendance r) => computeLateness(
+      checkInTime: isLateEff(r) ? r.checkInTime : null,
+      scheduleStartMinutes: startMin,
+      graceMinutes: grace,
+    );
     int absent = records.where((r) => r.status == 'absent').length;
     int lateCount = records.where(isLateEff).length;
     int totalLateMin = 0;
@@ -105,10 +111,7 @@ if (!staff.useDefaultSchedule) {
     int totalLateExcusedMin = 0;
     int totalEarlyExcusedMin = 0;
     for (final r in records) {
-      if (isLateEff(r) && r.checkInTime != null) {
-        final ci = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
-        if (ci > graceEnd) { final actual = ci - startMin; totalLateMin += actual; }
-      }
+      totalLateMin += lateOf(r);
       if (r.excused && r.excusedHours > 0) {
         if (r.status == 'early_leave') totalEarlyExcusedMin += (r.excusedHours * 60).round();
         else if (isLateEff(r) || r.status == 'late') totalLateExcusedMin += (r.excusedHours * 60).round();
@@ -177,11 +180,7 @@ if (!staff.useDefaultSchedule) {
         case 'excused_late': statusA = 'متأخر بإذن'; break;
         case 'excused_early': statusA = 'انصراف بإذن'; break;
       }
-      int lateMin = 0;
-      if (effLate && r.checkInTime != null) {
-        final ci = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
-        if (ci > graceEnd) lateMin = ci - startMin;
-      }
+      int lateMin = lateOf(r);
       final lateStr = lateMin > 0 ? '${lateMin ~/ 60}س ${lateMin % 60}د' : '-';
       double rowDeduction = 0;
       if (effLate && lateMin > 0 && lateMult > 0) rowDeduction = (lateMin / 60.0) * hourly * lateMult;
@@ -209,7 +208,7 @@ if (!staff.useDefaultSchedule) {
     pw.Widget _employeeBlock(Staff s, List<Attendance> recs) {
       final empAbsent = recs.where((r) => r.status == 'absent').length;
       final empLateCount = recs.where(isLateEff).length;
-      int empLateMin = 0; for (final r in recs) if (isLateEff(r) && r.checkInTime != null) { final ci = r.checkInTime!.hour*60+r.checkInTime!.minute; if (ci>graceEnd) empLateMin += ci-startMin; }
+      int empLateMin = 0; for (final r in recs) empLateMin += computeLateness(checkInTime: isLateEff(r) ? r.checkInTime : null, scheduleStartMinutes: startMin, graceMinutes: grace);
       final empOvertime = recs.fold(0.0, (a,r)=>a+(r.overtimeHours));
       final empLateHours = empLateMin / 60.0;
       return pw.Container(
@@ -261,13 +260,11 @@ if (!staff.useDefaultSchedule) {
             data: records.map((r) {
               final effLate = isLateEff(r);
               final extra = (r.overtimeHours).toStringAsFixed(1);
+              // C1: دقائق التأخير من الدالة الوحيدة (0 داخل السماح).
+              final m = computeLateness(checkInTime: effLate ? r.checkInTime : null, scheduleStartMinutes: startMin, graceMinutes: grace);
               String late = '-';
-              if (effLate && r.checkInTime != null) {
-                final ci = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
-                if (ci > graceEnd) {
-                  final m = ci - startMin;
-                  late = '${m ~/ 60}س ${m % 60}د';
-                }
+              if (m > 0) {
+                late = '${m ~/ 60}س ${m % 60}د';
               }
               final eff = r.status=='present' && effLate ? 'late' : r.status;
               final effTxt = r.excused ? (eff=='early_leave'?'انصراف بإذن':'متأخر بإذن') : (eff=='present'?'حاضر':eff=='absent'?'غائب':eff=='late'?'متأخر':'إجازة');

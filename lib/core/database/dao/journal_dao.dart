@@ -57,6 +57,31 @@ class JournalDao extends DatabaseAccessor<AppDatabase> with _$JournalDaoMixin {
   Future<JournalEntry?> getByPostingKey(String postingKey) =>
       (select(journalEntries)..where((e) => e.postingKey.equals(postingKey))).getSingleOrNull();
 
+  /// يحذف قيود يومية كاملة (رأس + سطور) حسب مفاتيح الترحيل — داخل transaction
+  /// المستدعي. يُستخدم في تعديل الفاتورة (D4): حذف-ثم-إعادة-ترحيل بنفس
+  /// المفاتيح، لأن [insertBalancedEntry] يتجاهل (no-op) أي مفتاح موجود
+  /// (UNIQUE posting_key) — بدونه يصبح إعادة الترحيل no-op صامتًا ويبقى
+  /// الرصيد القديم. اختيار التدقيق: اليومية مخزن keyed-idempotent (قيد حي
+  /// واحد لكل مفتاح، آمن لإعادة المحاولة)، بينما دفتر الأستاذ append-only
+  /// بالعكوس (راجع `LedgerDao.reverseTransactionsByReceipt`).
+  Future<int> deleteEntriesByPostingKeys(List<String> postingKeys) async {
+    if (postingKeys.isEmpty) return 0;
+    final entries = await (select(
+      journalEntries,
+    )..where((e) => e.postingKey.isIn(postingKeys))).get();
+    var count = 0;
+    for (final entry in entries) {
+      await (delete(
+        journalLines,
+      )..where((l) => l.journalEntryId.equals(entry.id))).go();
+      await (delete(
+        journalEntries,
+      )..where((e) => e.id.equals(entry.id))).go();
+      count++;
+    }
+    return count;
+  }
+
   Future<JournalEntry?> getById(String id) =>
       (select(journalEntries)..where((e) => e.id.equals(id))).getSingleOrNull();
 

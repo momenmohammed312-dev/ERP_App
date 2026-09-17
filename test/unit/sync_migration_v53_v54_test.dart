@@ -163,7 +163,7 @@ void main() {
     try {
       final versionRow = await db.customSelect('PRAGMA user_version').getSingle();
       final version = versionRow.read<int>('user_version');
-      expect(version, 54, reason: 'schema should be upgraded to 54');
+      expect(version, 71, reason: 'schema should be upgraded to current (71)');
 
       Future<List<String>> columnNames(String table) async {
         final rows = await db.customSelect('PRAGMA table_info($table)').get();

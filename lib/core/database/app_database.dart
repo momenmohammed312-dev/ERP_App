@@ -200,7 +200,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 69;
+  int get schemaVersion => 71;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -208,6 +208,7 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
       await _ensureStaffTables(m);
       await _ensureCriticalColumns(m);
+      await ensureSystemAccounts();
       // Fresh installs also need the unique indexes (Drift doesn't emit them from uniqueKeys)
       try {
         await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_staff_date ON attendance_table(staff_id, date)');
@@ -219,9 +220,50 @@ class AppDatabase extends _$AppDatabase {
       } catch (e) {
         log('onCreate payroll index warning: $e');
       }
+      // Fresh installs need the same day-guard and numbering objects that the
+      // v44/v45/v70 migrations create on upgrade paths (m.createAll emits
+      // neither triggers nor partial unique indexes).
+      try {
+        await customStatement('''
+          CREATE TRIGGER IF NOT EXISTS trg_prevent_multi_open
+          BEFORE INSERT ON days
+          WHEN NEW.is_open = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'يوجد يوم مفتوح بالفعل')
+            WHERE EXISTS (SELECT 1 FROM days WHERE is_open = 1);
+          END
+        ''');
+      } catch (e) {
+        log('onCreate day trigger warning: $e');
+      }
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_days_one_open ON days(is_open) WHERE is_open = 1');
+      } catch (e) {
+        log('onCreate day index warning: $e');
+      }
+      try {
+        await customStatement(
+          'CREATE TABLE IF NOT EXISTS invoice_number_sequence (id INTEGER PRIMARY KEY CHECK (id = 1), next_value INTEGER NOT NULL)',
+        );
+        await customStatement(
+          'INSERT OR IGNORE INTO invoice_number_sequence (id, next_value) VALUES (1, 1)',
+        );
+      } catch (e) {
+        log('onCreate invoice sequence warning: $e');
+      }
+      try {
+        await customStatement(
+          "CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_canonical_number ON invoices(invoice_number) WHERE invoice_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'",
+        );
+      } catch (e) {
+        log('onCreate canonical invoice index warning: $e');
+      }
     },
     onUpgrade: (Migrator m, int from, int to) async {
       log('Migration: from $from to $to');
+
+      // The log table must exist before ANY _logMigrationStep call below.
+      await _ensureMigrationLogTable();
 
       // 1. Initial migrations (v2 - v20)
       if (from < 20) {
@@ -387,6 +429,19 @@ class AppDatabase extends _$AppDatabase {
       // 4ab3. Schema v69 — تعيين السلفة لفترة (أسبوع محدد للأسبوعي)
       if (from < 69) {
         await _runV69Migrations(m);
+      }
+
+      // 4ab4. Schema v70 — day-state repair + global invoice numbering
+      // (forward-only: never rewrites V42..V69 steps or existing numbers).
+      if (from < 70) {
+        await _runV70Migrations(m);
+      }
+
+      // 4ab5. Schema v71 — accounts dedup + UNIQUE(code), supplier
+      // legacy opening-row dedup (flag/row repair only, never rewrites
+      // financial meaning: only exact-duplicate rows are removed).
+      if (from < 71) {
+        await _runV71Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -750,8 +805,184 @@ class AppDatabase extends _$AppDatabase {
 
       // Safety check for staff-related tables (missing in some DBs)
       await _ensureStaffTablesSafetyCheck();
+
+      // Ensure system accounts and accounting tables exist
+      await ensureSystemAccounts();
+
+      // Day-state + numbering safety net (idempotent; never throws — an
+      // open failure here must not brick app startup, migration is the
+      // authoritative path and it propagates there).
+      await _repairDayStateAndSequence();
     },
   );
+
+  /// beforeOpen safety net for day state + invoice numbering.
+  /// Mirrors the v70 guarantees for databases that reached v70 through an
+  /// unusual path (restored backup, interrupted upgrade): V42 `days` columns,
+  /// the V44 trigger + V45 partial index, duplicate-open reconciliation, the
+  /// sequence table + seed, and the canonical partial unique index.
+  /// Each step is check-then-act / IF NOT EXISTS and logs instead of throwing.
+  Future<void> _repairDayStateAndSequence() async {
+    // V42 days columns.
+    try {
+      if (await _tableExists('days')) {
+        final cols = await _columnNames('days');
+        const repairs = {
+          'opened_by': 'TEXT',
+          'closed_by': 'TEXT',
+          'reopened_at': 'TEXT',
+          'reopened_by': 'TEXT',
+        };
+        for (final entry in repairs.entries) {
+          if (!cols.contains(entry.key)) {
+            await customStatement(
+              'ALTER TABLE days ADD COLUMN ${entry.key} ${entry.value}',
+            );
+            log('beforeOpen repair: added days.${entry.key}');
+          }
+        }
+      }
+    } catch (e) {
+      log('beforeOpen repair (days columns): $e');
+    }
+
+    // V44 trigger + duplicate-open reconciliation + V45 index.
+    try {
+      await customStatement('''
+        CREATE TRIGGER IF NOT EXISTS trg_prevent_multi_open
+        BEFORE INSERT ON days
+        WHEN NEW.is_open = 1
+        BEGIN
+          SELECT RAISE(ABORT, 'يوجد يوم مفتوح بالفعل')
+          WHERE EXISTS (SELECT 1 FROM days WHERE is_open = 1);
+        END
+      ''');
+      final openRows = await customSelect(
+        'SELECT id FROM days WHERE is_open = 1 ORDER BY id ASC',
+      ).get();
+      if (openRows.length > 1) {
+        final keepId = openRows.first.read<int>('id');
+        await customStatement(
+          'UPDATE days SET is_open = 0 WHERE is_open = 1 AND id != ?',
+          [keepId],
+        );
+        log('beforeOpen repair: reconciled ${openRows.length} open days (kept id=$keepId)');
+      }
+      await customStatement(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_days_one_open '
+        'ON days(is_open) WHERE is_open = 1',
+      );
+    } catch (e) {
+      log('beforeOpen repair (day guards): $e');
+    }
+
+    // Sequence table + seed + canonical index.
+    try {
+      await customStatement(
+        'CREATE TABLE IF NOT EXISTS invoice_number_sequence '
+        '(id INTEGER PRIMARY KEY CHECK (id = 1), next_value INTEGER NOT NULL)',
+      );
+      final seqRows = await customSelect(
+        'SELECT next_value FROM invoice_number_sequence WHERE id = 1',
+      ).get();
+      if (seqRows.isEmpty) {
+        final maxRow = await customSelect(
+          "SELECT MAX(CAST(invoice_number AS INTEGER)) AS max_n FROM invoices "
+          "WHERE invoice_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'",
+        ).getSingle();
+        final v = maxRow.data['max_n'];
+        final maxN = v is int ? v : (v is num ? v.toInt() : 0);
+        await customStatement(
+          'INSERT INTO invoice_number_sequence (id, next_value) VALUES (1, ?)',
+          [maxN + 1],
+        );
+        log('beforeOpen repair: seeded invoice_number_sequence next_value=${maxN + 1}');
+      }
+      await customStatement(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_canonical_number "
+        "ON invoices(invoice_number) "
+        "WHERE invoice_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'",
+      );
+    } catch (e) {
+      log('beforeOpen repair (numbering): $e');
+    }
+  }
+
+  /// Ensures that headless accounting core tables and 12 baseline system accounts exist.
+  Future<void> ensureSystemAccounts() async {
+    try {
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS accounts (
+          id TEXT PRIMARY KEY,
+          code TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL,
+          normal_balance TEXT NOT NULL,
+          is_system INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL
+        )
+      ''');
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS journal_entries (
+          id TEXT PRIMARY KEY,
+          date INTEGER NOT NULL,
+          description TEXT NOT NULL,
+          reference TEXT,
+          source_type TEXT NOT NULL,
+          source_id TEXT,
+          posting_key TEXT UNIQUE,
+          created_at INTEGER NOT NULL
+        )
+      ''');
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS journal_lines (
+          id TEXT PRIMARY KEY,
+          entry_id TEXT NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+          account_id TEXT NOT NULL REFERENCES accounts(id),
+          debit REAL NOT NULL DEFAULT 0.0,
+          credit REAL NOT NULL DEFAULT 0.0,
+          memo TEXT
+        )
+      ''');
+      try {
+        await customStatement(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_journal_entries_posting_key ON journal_entries(posting_key)',
+        );
+      } catch (e) {
+        log('Index idx_journal_entries_posting_key note: $e');
+      }
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final systemAccounts = [
+        ['1000', 'الصندوق (نقدية)', 'asset', 'debit'],
+        ['1010', 'البنك', 'asset', 'debit'],
+        ['1100', 'ذمم العملاء', 'asset', 'debit'],
+        ['1200', 'المخزون', 'asset', 'debit'],
+        ['2000', 'ذمم الموردين', 'liability', 'credit'],
+        ['3000', 'رأس المال', 'equity', 'credit'],
+        ['3100', 'مسحوبات الشريك', 'equity', 'debit'],
+        ['3200', 'الأرباح المرحلة', 'equity', 'credit'],
+        ['4000', 'إيرادات المبيعات', 'revenue', 'credit'],
+        ['4100', 'مردودات المبيعات', 'revenue', 'debit'],
+        ['5000', 'تكلفة البضاعة المباعة', 'expense', 'debit'],
+        ['5100', 'مصروفات تشغيلية', 'expense', 'debit'],
+      ];
+      for (final acc in systemAccounts) {
+        final id = const Uuid().v4();
+        try {
+          await customStatement(
+            "INSERT OR IGNORE INTO accounts (id, code, name, type, normal_balance, is_system, is_active, created_at) VALUES (?, ?, ?, ?, ?, 1, 1, ?)",
+            [id, acc[0], acc[1], acc[2], acc[3], now],
+          );
+        } catch (e) {
+          log('ensureSystemAccounts seed ${acc[0]} note: $e');
+        }
+      }
+    } catch (e) {
+      log('Error in ensureSystemAccounts: $e');
+    }
+  }
 
   Future<void> _runLegacyMigrations(Migrator m, int from) async {
     // Grouped legacy column additions
@@ -2422,6 +2653,243 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(69, 'advance_deduct_period', 'failed', error: e.toString());
       rethrow;
     }
+  }
+
+  /// Schema v70 — single-open day repair + global invoice numbering.
+  /// Forward-only: V42..V69 steps are never edited. Check-then-act
+  /// (PRAGMA / sqlite_master reads) instead of exception-driven idempotency;
+  /// any structural failure propagates (throws) so the schema version cannot
+  /// advance on a partial migration.
+  /// a) Repair V42 `days` audit columns (add only if PRAGMA shows missing).
+  /// b) Verify V44 trigger + V45 partial index exist, then reconcile
+  ///    duplicate open days (keep oldest open id, flag-only repair).
+  /// c) `invoice_number_sequence` table, seeded from max(canonical) + 1.
+  /// d) Partial unique index on canonical 6-digit invoice numbers only.
+  Future<void> _runV70Migrations(Migrator m) async {
+    await _logMigrationStep(70, 'v70_repair_numbering', 'started');
+    try {
+      // ── a) V42 days columns ──
+      if (await _tableExists('days')) {
+        final dayCols = await _columnNames('days');
+        const v42Repairs = {
+          'opened_by': 'TEXT',
+          'closed_by': 'TEXT',
+          'reopened_at': 'TEXT',
+          'reopened_by': 'TEXT',
+        };
+        for (final entry in v42Repairs.entries) {
+          if (!dayCols.contains(entry.key)) {
+            await customStatement(
+              'ALTER TABLE days ADD COLUMN ${entry.key} ${entry.value}',
+            );
+            log('v70: Repaired missing days.${entry.key}');
+          }
+        }
+      } else {
+        await m.createTable(days);
+        log('v70: days table was missing — created');
+      }
+
+      // ── b) V44 trigger (INSERT-only; safe with duplicates present) ──
+      await customStatement('''
+        CREATE TRIGGER IF NOT EXISTS trg_prevent_multi_open
+        BEFORE INSERT ON days
+        WHEN NEW.is_open = 1
+        BEGIN
+          SELECT RAISE(ABORT, 'يوجد يوم مفتوح بالفعل')
+          WHERE EXISTS (SELECT 1 FROM days WHERE is_open = 1);
+        END
+      ''');
+      log('v70: Verified trg_prevent_multi_open');
+
+      // ── b2) Reconcile duplicate open days BEFORE the unique index:
+      // keep the oldest open row (MIN id), clear the flag on the rest.
+      // Rows are preserved — flag-only repair.
+      final openRows = await customSelect(
+        'SELECT id FROM days WHERE is_open = 1 ORDER BY id ASC',
+      ).get();
+      if (openRows.length > 1) {
+        final keepId = openRows.first.read<int>('id');
+        await customStatement(
+          'UPDATE days SET is_open = 0 WHERE is_open = 1 AND id != ?',
+          [keepId],
+        );
+        log('v70: Reconciled ${openRows.length} open days — kept id=$keepId, '
+            'closed ${openRows.length - 1} (flag-only, rows preserved)');
+        await _logMigrationStep(
+          70,
+          'days_reconcile_multi_open',
+          'completed(${openRows.length - 1} closed, kept id=$keepId)',
+        );
+      }
+
+      // ── b3) V45 partial unique index (backstop, incl. reopenDay UPDATEs) ──
+      await customStatement(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_days_one_open '
+        'ON days(is_open) WHERE is_open = 1',
+      );
+      log('v70: Verified idx_days_one_open');
+
+      // ── c) Invoice sequence table + seed (never rewrites numbers) ──
+      // A drifted DB can lack `invoices` entirely; create it canonically
+      // first so the seed query and partial index below cannot brick the
+      // upgrade (an empty table seeds 1 and loses no history).
+      if (!await _tableExists('invoices')) {
+        try {
+          await m.createTable(invoices);
+          log('v70: invoices table was missing — created');
+        } catch (e) {
+          log('v70: invoices create note: $e');
+        }
+      }
+      await customStatement(
+        'CREATE TABLE IF NOT EXISTS invoice_number_sequence '
+        '(id INTEGER PRIMARY KEY CHECK (id = 1), next_value INTEGER NOT NULL)',
+      );
+      final seqRows = await customSelect(
+        'SELECT next_value FROM invoice_number_sequence WHERE id = 1',
+      ).get();
+      if (seqRows.isEmpty) {
+        final maxRow = await customSelect(
+          "SELECT MAX(CAST(invoice_number AS INTEGER)) AS max_n FROM invoices "
+          "WHERE invoice_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'",
+        ).getSingle();
+        final v = maxRow.data['max_n'];
+        final maxN = v is int ? v : (v is num ? v.toInt() : 0);
+        await customStatement(
+          'INSERT INTO invoice_number_sequence (id, next_value) VALUES (1, ?)',
+          [maxN + 1],
+        );
+        log('v70: Seeded invoice_number_sequence next_value=${maxN + 1}');
+      } else {
+        log('v70: invoice_number_sequence already seeded');
+      }
+
+      // ── d) Partial unique index: canonical 6-digit numbers only ──
+      // Legacy timestamp / DRAFT_ / prefixed rows are unaffected.
+      await customStatement(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_canonical_number "
+        "ON invoices(invoice_number) "
+        "WHERE invoice_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'",
+      );
+      log('v70: Verified idx_invoices_canonical_number');
+
+      await _logMigrationStep(70, 'v70_repair_numbering', 'completed');
+    } catch (e) {
+      await _logMigrationStep(70, 'v70_repair_numbering', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v71 — forward-only repair, no historical rewrite.
+  ///
+  /// 1. `accounts` dedup by `code` (legacy `ensureSystemAccounts` ran on
+  ///    every startup without a UNIQUE guard, so drifted DBs can hold
+  ///    several rows per system code, which makes `getByCode` throw
+  ///    "Too many elements"). Survivor per code: system row first, else
+  ///    oldest `created_at`. `journal_lines` reference `account_id` (not
+  ///    code), so loser rows are repointed to the survivor before delete —
+  ///    no journal meaning changes. Afterwards a UNIQUE index on
+  ///    `accounts(code)` prevents recurrence.
+  /// 2. Supplier legacy opening-row dedup: the old supplier form wrote BOTH
+  ///    `suppliers.opening_balance` AND an `origin='opening'` ledger credit
+  ///    whose id is deterministically `<supplierUuid>_opening` (verified:
+  ///    no other writer uses that id pattern). Those rows are
+  ///    auto-created mirrors of the column — including stale ones left
+  ///    behind when the opening was later edited (column-only edit).
+  ///    Removal rule: entity/origin match + id pattern + referenced
+  ///    supplier still exists. Orphans and every other opening row are
+  ///    kept (conservative).
+  /// Structural failures propagate (no swallow) so the version cannot
+  /// advance on a partial repair.
+  Future<void> _runV71Migrations(Migrator m) async {
+    await _logMigrationStep(71, 'v71_accounts_supplier_opening', 'started');
+    try {
+      // ── 1) accounts dedup ──
+      if (await _tableExists('accounts')) {
+        final dupCodes = await customSelect(
+          'SELECT code FROM accounts GROUP BY code HAVING COUNT(*) > 1',
+        ).get();
+        for (final row in dupCodes) {
+          final code = row.read<String>('code');
+          final ordered = await customSelect(
+            'SELECT id FROM accounts WHERE code = ? '
+            'ORDER BY is_system DESC, created_at ASC',
+            variables: [Variable.withString(code)],
+          ).get();
+          if (ordered.length < 2) continue;
+          final survivor = ordered.first.read<String>('id');
+          for (final loser in ordered.skip(1)) {
+            final loserId = loser.read<String>('id');
+            if (await _tableExists('journal_lines')) {
+              await customUpdate(
+                'UPDATE journal_lines SET account_id = ? WHERE account_id = ?',
+                variables: [
+                  Variable.withString(survivor),
+                  Variable.withString(loserId),
+                ],
+              );
+            }
+            await customUpdate(
+              'DELETE FROM accounts WHERE id = ?',
+              variables: [Variable.withString(loserId)],
+            );
+            log('v71: Merged duplicate account code=$code loser=$loserId '
+                'into $survivor');
+          }
+        }
+        await customStatement(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_code '
+          'ON accounts(code)',
+        );
+        log('v71: Verified idx_accounts_code');
+      }
+
+      // ── 2) supplier legacy opening dedup (exact-duplicate only) ──
+      if (await _tableExists('ledger_transactions') &&
+          await _tableExists('suppliers')) {
+        final removed = await customUpdate(
+          "DELETE FROM ledger_transactions "
+          "WHERE entity_type = 'Supplier' AND origin = 'opening' "
+          "AND id GLOB '*_opening' "
+          "AND EXISTS (SELECT 1 FROM suppliers s "
+          "WHERE s.id = ledger_transactions.ref_id)",
+          variables: const [],
+        );
+        log('v71: Removed $removed auto-created supplier opening rows '
+            '(<uuid>_opening mirrors of suppliers.opening_balance)');
+        await _logMigrationStep(
+          71,
+          'supplier_opening_dedup',
+          'completed($removed removed)',
+        );
+      }
+
+      await _logMigrationStep(71, 'v71_accounts_supplier_opening', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        71,
+        'v71_accounts_supplier_opening',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// sqlite_master existence probe for check-then-act migrations.
+  Future<bool> _tableExists(String table) async {
+    final rows = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      variables: [Variable.withString(table)],
+    ).get();
+    return rows.isNotEmpty;
+  }
+
+  /// PRAGMA column-name probe for check-then-act migrations.
+  Future<Set<String>> _columnNames(String table) async {
+    final rows = await customSelect('PRAGMA table_info($table)').get();
+    return rows.map((r) => r.read<String>('name')).toSet();
   }
 
   /// Backfills `sync_id` (a fresh UUID per row) plus `created_at`/`updated_at`

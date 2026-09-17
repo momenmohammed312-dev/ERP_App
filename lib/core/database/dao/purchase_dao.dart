@@ -369,11 +369,7 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
           );
         }
 
-        // Recalculate supplier balance
-        final balance = await db.ledgerDao.getSupplierBalance(supplierId);
-        await (update(db.suppliers)..where((s) => s.id.equals(supplierId))).write(
-          SuppliersCompanion(currentBalance: Value(balance)),
-        );
+
       }
     });
   }

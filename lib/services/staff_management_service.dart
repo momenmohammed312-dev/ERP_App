@@ -6,6 +6,7 @@ import '../core/database/dao/staff_management_dao.dart';
 import '../core/models/user_model.dart';
 import '../core/services/validation/permission_validator.dart';
 import '../services/attendance/attendance_calculation_engine.dart';
+import '../services/payroll_display.dart';
 
 class StaffManagementService {
   final StaffManagementDao _dao;
@@ -670,13 +671,38 @@ class StaffManagementService {
     return 60;
   }
 
-  /// Mark a specific day with a permission (إذن):
-  /// - [permissionType] == 'leave': إجازة كاملة (لا يُحسب غياب) — السلوك القديم
-  /// - == 'late': إذن حضور متأخر
-  /// - == 'early': إذن انصراف مبكر
-  /// [excused] = true → لا خصم على التأخير/الانصراف المبكر، false → يُخصم بالساعة
-  /// [excusedHours] = عدد ساعات الإذن المسموح بيها (للخصم التناسبي: الفرق فوق المسموح فقط يُخصم)
-  Future<void> markLeaveDay(
+  /// ── C4: PERMISSION WORKFLOW (no new subsystem, no schema change) ──
+  /// Types stay string-based ('leave' | 'late' | 'early' → stored status
+  /// 'leave' | 'late' | 'early_leave') in attendance_table.
+  ///
+  /// STATE MACHINE on EXISTING columns only:
+  /// - REQUESTED (pending): permission-status row with `approvedAt == null`
+  ///   AND `excused == false` AND `excusedHours == 0`. Payroll treats it
+  ///   exactly like an ordinary late/early row (no waiver — an unapproved
+  ///   late never waives, never penalizes beyond the normal late path).
+  /// - APPROVED-AND-EXCUSED: `excused == true` (the approved marker).
+  ///   New approvals additionally stamp `approvedBy`/`approvedAt`; legacy
+  ///   rows predate the stamp and are grandfathered as approved so the
+  ///   frozen payroll math is untouched.
+  /// - REJECTED / CLEARED: [clearExcusedDay] (`excused=false`, hours=0).
+  /// Late arrival waives lateness ONLY through the single C1 function input
+  /// (fully-excused rows are skipped by the shared predicate), must never
+  /// create an absence, and must never invent a monetary deduction — its
+  /// only money path is the existing `permissionDeduction × 1.0`.
+  ///
+  /// WHY no richer state fits (evidence): attendance_table's UNIQUE is
+  /// {staffId, date} (staff_management_tables.dart), so at most one row
+  /// per staff+day can carry permission state; `excused` conflates "granted"
+  /// with "approved"; `approvedBy`/`approvedAt` exist but nothing wrote
+  /// them before this change. A true pending→approved→rejected workflow
+  /// with actor history needs the DDL quoted at the bottom of this file
+  /// (documented, NOT applied — Agent 1 owns schema).
+  ///
+  /// Returns [PermissionApplied] on write, or [PermissionAlreadyExists]
+  /// instead of a silent overwrite when the day already carries a
+  /// permission row (callers surface it; the period-apply loop counts it
+  /// as skipped).
+  Future<PermissionRequestResult> markLeaveDay(
     String staffId,
     DateTime date, {
     String? notes,
@@ -684,6 +710,7 @@ class StaffManagementService {
     String permissionType = 'leave',
     bool excused = false,
     double excusedHours = 0,
+    String? approvedBy,
   }) async {
     final dateOnly = DateTime(date.year, date.month, date.day);
     final existing = await _dao.getAttendanceOnDate(staffId, dateOnly);
@@ -698,26 +725,39 @@ class StaffManagementService {
     }
 
     if (existing.isNotEmpty) {
+      final current = existing.first;
+      if (_isPermissionRow(current)) {
+        return PermissionAlreadyExists(current);
+      }
       final clearTimes = status == 'leave';
-      final rec = existing.first.copyWith(
+      final rec = current.copyWith(
         status: status,
         excused: excused,
         excusedHours: excusedHours,
         // الإجازة الكاملة بتمسح الأوقات، أما التأخير/الانصراف يحتفظ بالأوقات
         checkInTime: clearTimes
             ? const Value(null)
-            : Value(existing.first.checkInTime),
+            : Value(current.checkInTime),
         checkOutTime: clearTimes
             ? const Value(null)
-            : Value(existing.first.checkOutTime),
+            : Value(current.checkOutTime),
         workingHours: clearTimes
             ? const Value(null)
-            : Value(existing.first.workingHours),
+            : Value(current.workingHours),
         notes: Value(notes),
         source: Value(source),
         updatedAt: DateTime.now(),
+        // C4: approval stamp is additive metadata only — absent keeps the
+        // stored row byte-identical to the pre-workflow behavior.
+        approvedBy: approvedBy == null
+            ? const Value.absent()
+            : Value(approvedBy),
+        approvedAt: approvedBy == null
+            ? const Value.absent()
+            : Value(DateTime.now()),
       );
       await _dao.updateAttendance(rec);
+      return const PermissionApplied(created: false);
     } else {
       await _dao.addAttendance(
         AttendanceTableCompanion.insert(
@@ -730,9 +770,69 @@ class StaffManagementService {
           source: Value(source),
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
+          approvedBy: approvedBy == null
+              ? const Value.absent()
+              : Value(approvedBy),
+          approvedAt: approvedBy == null
+              ? const Value.absent()
+              : Value(DateTime.now()),
         ),
       );
+      return const PermissionApplied(created: true);
     }
+  }
+
+  /// A row already carries a permission grant (and must not be silently
+  /// overwritten): full leave, or a late/early row with an excuse marker.
+  /// Plain device/manual late rows (`excused == false`, `excusedHours == 0`)
+  /// are NOT permission rows — granting a permission on them is the main
+  /// flow and stays allowed.
+  bool _isPermissionRow(Attendance r) {
+    if (r.status == 'leave') return true;
+    if (r.status == 'late' || r.status == 'early_leave') {
+      return r.excused || r.excusedHours > 0;
+    }
+    return false;
+  }
+
+  /// C4 approval step on existing columns only: flips a permission-status
+  /// row (REQUESTED/pending or plain late) to APPROVED-AND-EXCUSED
+  /// (`excused == true` is the approved marker) and stamps the actor.
+  /// Returns false when the day has no permission-status row to approve
+  /// (nothing written). Rejection path is the existing [clearExcusedDay].
+  /// Payroll effect: none beyond the frozen excused semantics (full excuse
+  /// waives lateness input per C1; partial excuse flows only through the
+  /// existing permissionDeduction ×1.0).
+  Future<bool> approvePermissionDay(
+    String staffId,
+    DateTime date, {
+    double? excusedHours,
+    String? approvedBy,
+  }) async {
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    final existing = await _dao.getAttendanceOnDate(staffId, dateOnly);
+    if (existing.isEmpty) return false;
+    final current = existing.first;
+    // Approval targets the permission STATUSES (not just granted rows):
+    // a pending request (excused == false) is exactly what approval flips.
+    if (current.status != 'leave' &&
+        current.status != 'late' &&
+        current.status != 'early_leave') {
+      return false;
+    }
+    final rec = current.copyWith(
+      excused: true,
+      excusedHours: excusedHours ?? current.excusedHours,
+      updatedAt: DateTime.now(),
+      approvedBy: approvedBy == null
+          ? const Value.absent()
+          : Value(approvedBy),
+      approvedAt: approvedBy == null
+          ? const Value.absent()
+          : Value(DateTime.now()),
+    );
+    await _dao.updateAttendance(rec);
+    return true;
   }
 
   /// إلغاء الإذن ليوم واحد — يرجع excused=false و excusedHours=0
@@ -843,13 +943,19 @@ class StaffManagementService {
       } catch (_) {}
     }
 
+    // C1: lateness predicate + minutes come from the single authoritative
+    // path (computeLateness / isEffectiveLateDay). The excused policy below
+    // is byte-identical to the frozen behavior — only the minute arithmetic
+    // was de-duplicated.
     bool isLateByTime(Attendance r) {
       if (r.checkInTime == null || schedule == null) return false;
       if (r.excused && r.excusedHours <= 0) return false;
-      final ciMin = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
-      final graceEnd =
-          schedule.workStartMinutesSinceMidnight + schedule.gracePeriodMinutes;
-      return ciMin > graceEnd;
+      return computeLateness(
+            checkInTime: r.checkInTime,
+            scheduleStartMinutes: schedule.workStartMinutesSinceMidnight,
+            graceMinutes: schedule.gracePeriodMinutes,
+          ) >
+          0;
     }
 
     for (final record in attendanceRecords) {
@@ -861,18 +967,16 @@ class StaffManagementService {
           if (effectiveIsLate) {
             lateDays++;
             presentDays++;
-            final ciMin =
-                record.checkInTime!.hour * 60 + record.checkInTime!.minute;
-            final graceEnd =
-                schedule!.workStartMinutesSinceMidnight +
-                schedule.gracePeriodMinutes;
-            if (ciMin > graceEnd) {
-              // القاعدة المتفق عليها: التأخير من بداية الدوام شاملاً السماح
-              final actual = ciMin - schedule.workStartMinutesSinceMidnight;
-              totalLateMinutes += actual;
-              if (record.excused && record.excusedHours > 0) {
-                totalLateExcusedMinutes += (record.excusedHours * 60).round();
-              }
+            // C1: القاعدة المتفق عليها — التأخير من بداية الدوام شاملاً
+            // السماح (نفس computeLateness الذي تعرضه الشاشات).
+            totalLateMinutes += computeLateness(
+              checkInTime: record.checkInTime,
+              scheduleStartMinutes:
+                  schedule!.workStartMinutesSinceMidnight,
+              graceMinutes: schedule.gracePeriodMinutes,
+            );
+            if (record.excused && record.excusedHours > 0) {
+              totalLateExcusedMinutes += (record.excusedHours * 60).round();
             }
           } else {
             presentDays++;
@@ -890,16 +994,14 @@ class StaffManagementService {
             if (record.excused && record.excusedHours <= 0) {
             } else {
               lateDays++;
-              final ciMin =
-                  record.checkInTime!.hour * 60 + record.checkInTime!.minute;
-              final graceEnd =
-                  schedule.workStartMinutesSinceMidnight +
-                  schedule.gracePeriodMinutes;
-              if (ciMin > graceEnd) {
-                // القاعدة المتفق عليها: التأخير من بداية الدوام شاملاً السماح
-                final actual = ciMin - schedule.workStartMinutesSinceMidnight;
-                totalLateMinutes += actual;
-              }
+              // C1: نفس الدالة الوحيدة — القاعدة المتفق عليها: التأخير من
+              // بداية الدوام شاملاً السماح.
+              totalLateMinutes += computeLateness(
+                checkInTime: record.checkInTime,
+                scheduleStartMinutes:
+                    schedule.workStartMinutesSinceMidnight,
+                graceMinutes: schedule.gracePeriodMinutes,
+              );
               if (record.excused && record.excusedHours > 0) {
                 totalLateExcusedMinutes += (record.excusedHours * 60).round();
               }
@@ -1771,7 +1873,8 @@ class StaffManagementService {
       final voucherNo = await _nextVoucherNo(db, payrollPeriod);
       if (toPay.isEmpty) return (count: 0, total: 0.0, voucherNo: voucherNo);
 
-      final total = toPay.fold(0.0, (s, p) => s + p.netSalary);
+      // C3: batch total uses the same shared fold as single + voucher.
+      final total = PayrollDisplay.totalsOf(toPay).net;
       final batchId = '${now.millisecondsSinceEpoch}_${payrollPeriod}_batch';
       final desc =
           'مستند $voucherNo: صرف مرتبات الفترة $payrollPeriod (${toPay.length} موظف)';
@@ -1980,8 +2083,7 @@ class StaffManagementService {
 
 /// تفصيل المستحق للصرف لفترة: المستحق (نشطون غير مدفوعين) +
 /// المدفوع مسبقاً (مستبعد) + المنتهية خدمتهم (مستبعد) + رقم المستند التالي.
-class DisbursementBreakdown {
-  final List<Payroll> payable;
+class DisbursementBreakdown {  final List<Payroll> payable;
   final int paidCount;
   final double paidTotal;
   final int excludedCount;
@@ -1998,10 +2100,55 @@ class DisbursementBreakdown {
   });
 
   int get payableCount => payable.length;
-  double get payableTotal => payable.fold(0.0, (s, p) => s + p.netSalary);
+  // C3: single + batch obey identical rules — one shared fold over stored rows.
+  double get payableTotal => PayrollDisplay.totalsOf(payable).net;
   int get payableCalculated =>
       payable.where((p) => p.status == 'calculated').length;
 }
+
+/// ── C4: permission request result (typed, no silent overwrite) ──
+/// [markLeaveDay] returns one of these instead of `void`.
+sealed class PermissionRequestResult {
+  const PermissionRequestResult();
+}
+
+/// The permission was written (`created` distinguishes insert vs. update of
+/// a previously non-permission attendance row).
+class PermissionApplied extends PermissionRequestResult {
+  final bool created;
+  const PermissionApplied({required this.created});
+}
+
+/// The staff+date already carries a permission row — NOTHING was written.
+/// The caller must surface this (duplicate prevention); the pre-existing
+/// [Attendance] row is attached for inspection.
+class PermissionAlreadyExists extends PermissionRequestResult {
+  final Attendance existing;
+  const PermissionAlreadyExists(this.existing);
+}
+
+/// ── C4: DDL NEEDED-BUT-NOT-APPLIED ─────────────────────────────────
+/// A true pending→approved→rejected workflow with actor history cannot fit
+/// in existing columns (evidence: UNIQUE {staffId, date} allows one row per
+/// day; `excused` conflates grant+approval; legacy rows have no stamp).
+/// Exact DDL for the orchestrator (Agent 1 owns schema — DO NOT apply here):
+///
+/// ```sql
+/// ALTER TABLE attendance_table ADD COLUMN permission_status TEXT
+///   NOT NULL DEFAULT 'none'
+///   CHECK (permission_status IN ('none','pending','approved','rejected'));
+/// ALTER TABLE attendance_table ADD COLUMN permission_type TEXT NULL
+///   CHECK (permission_type IN ('leave','late','early'));
+/// ALTER TABLE attendance_table ADD COLUMN permission_requested_at DATETIME NULL;
+/// ALTER TABLE attendance_table ADD COLUMN permission_decided_at DATETIME NULL;
+/// ALTER TABLE attendance_table ADD COLUMN permission_decided_by TEXT NULL;
+/// ```
+/// Semantics: request writes (pending, type, requested_at); approve →
+/// (approved, decided_*) + sets the frozen `excused`/`excusedHours` exactly
+/// as today; reject → (rejected, decided_*) + [clearExcusedDay]. No payroll
+/// formula reads the new columns — money still flows only through the
+/// frozen `lateDeduction ×1.5` / `permissionDeduction ×1.0` /
+/// `absenceDeduction` inputs computed by `calculatePeriodPay`.
 
 class AttendanceSummary {
   final int totalDays;

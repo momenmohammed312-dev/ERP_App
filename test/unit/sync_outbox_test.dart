@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:pos_offline_desktop/core/config/app_flavor.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 
 /// These tests prove that every local write the outbox can push to the "other"
@@ -33,6 +34,9 @@ Future<List<Map<String, dynamic>>> payloadsFor(
 
 void main() {
   setUpAll(() {
+    // Sync outbox tags rows with the flavor device name; the test env has
+    // no app_bootstrap (production always initializes at startup).
+    AppFlavor.initialize(Flavor.base);
     SharedPreferences.setMockInitialValues({});
   });
 

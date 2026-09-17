@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/services/payroll_display.dart';
+import 'package:pos_offline_desktop/services/attendance/attendance_calculation_engine.dart';
 import 'package:pos_offline_desktop/core/utils/pdf_bidi_helper.dart';
 
 class StaffPayrollStatementGenerator {
@@ -172,22 +173,10 @@ class StaffPayrollStatementGenerator {
 
   /// مجاميع شريط الوثيقة من قيم Payroll المحفوظة (مصدر الحقيقة):
   /// أساسي + إضافات (إضافي/انتظام/بدلات/مكافآت) - خصومات (المخزنة) = صافي.
-  static ({double basic, double additions, double deductions, double net})
-  computeVoucherTotals(List<Payroll> payrolls) {
-    double basic = 0, additions = 0, deductions = 0, net = 0;
-    for (final p in payrolls) {
-      basic += p.basicSalary;
-      additions += p.overtimePay + p.bonus + p.allowances + p.rewardsTotal;
-      deductions += p.deductions;
-      net += p.netSalary;
-    }
-    return (
-      basic: basic,
-      additions: additions,
-      deductions: deductions,
-      net: net,
-    );
-  }
+  /// C3: delegates to the ONE shared fold ([PayrollDisplay.totalsOf]) so
+  /// single + batch obey identical rules by construction.
+  static PayrollTotals computeVoucherTotals(List<Payroll> payrolls) =>
+      PayrollDisplay.totalsOf(payrolls);
 
   /// مستند صرف رسمي: صفحة A4 واحدة مضمونة — ترويسة + شريط مجاميع +
   /// جدول (اسم/كود/صافي) + سطر استبعاد + الطريقة/المستلم + 3 توقيعات.
@@ -431,10 +420,8 @@ class StaffPayrollStatementGenerator {
     final dateFormat = DateFormat('yyyy-MM-dd');
     final issueDateStr = dateFormat.format(DateTime.now());
 
-    double totalNet = 0;
-    for (final p in payrolls) {
-      totalNet += p.netSalary;
-    }
+    // C3: batch-slips footer uses the same shared fold as single + voucher.
+    final totalNet = PayrollDisplay.totalsOf(payrolls).net;
 
     pw.Widget buildSlip(Payroll p) {
       final staff = staffMap[p.staffId];
@@ -845,29 +832,29 @@ class StaffPayrollStatementGenerator {
         final pa = workEnd.split(':');
         eMin = (int.tryParse(pa[0]) ?? 17) * 60 + (int.tryParse(pa[1]) ?? 0);
       } catch (_) {}
-      final gEnd = sMin + grace;
+      // (grace تنطبق داخل computeLateness — لا مقارنة يدوية هنا)
       int lateMin = 0;
       int earlyMin = 0;
-      bool isLateAtt(Attendance a) {
-        if (a.excused && a.excusedHours <= 0) return false;
-        if (a.status == 'late') return true;
-        if (a.status == 'present' && a.checkInTime != null) {
-          final ci = a.checkInTime!.hour * 60 + a.checkInTime!.minute;
-          return ci > gEnd;
-        }
-        return false;
-      }
+      // C1: نفس المسار الوحيد — isLateAtt يطابق قاعدة العد المجمدة، والدقائق
+      // من computeLateness (من بداية الدوام شاملاً السماح).
+      bool isLateAtt(Attendance a) => isEffectiveLateDay(
+        status: a.status,
+        checkInTime: a.checkInTime,
+        scheduleStartMinutes: sMin,
+        graceMinutes: grace,
+        excused: a.excused,
+        excusedHours: a.excusedHours,
+      );
 
       int lateExcusedMin = 0;
       int earlyExcusedMin = 0;
       for (final a in atts) {
-        if (isLateAtt(a) && a.checkInTime != null) {
-          final ci = a.checkInTime!.hour * 60 + a.checkInTime!.minute;
-          if (ci > gEnd) {
-            final actual = ci - sMin;
-            lateMin += actual;
-          }
-        }
+        // C1: الدقائق من الدالة الوحيدة (تعيد 0 داخل السماح).
+        lateMin += computeLateness(
+          checkInTime: isLateAtt(a) ? a.checkInTime : null,
+          scheduleStartMinutes: sMin,
+          graceMinutes: grace,
+        );
         if (a.excused && a.excusedHours > 0) {
           if (a.status == 'early_leave')
             earlyExcusedMin += (a.excusedHours * 60).round();

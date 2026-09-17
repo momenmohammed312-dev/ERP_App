@@ -949,7 +949,8 @@ class _ReturnDialogState extends State<_ReturnDialog> {
       final item = entry.$1;
       final qty = _returnQty[item.id] ?? 0;
       if (qty > 0) {
-        total += qty * (item.quantity > 0 ? item.price / item.quantity : 0);
+        // سعر السطر مخزّن unit (canonical — كل الكتّاب يخزنون unit) — لا قسمة.
+        total += qty * item.price;
       }
     }
     return total;
@@ -974,8 +975,9 @@ class _ReturnDialogState extends State<_ReturnDialog> {
             productId: item.productId,
             productName: _lineDisplayName(item, product),
             quantity: qty,
-            unitPrice: item.quantity > 0 ? item.price / item.quantity : 0,
-            totalPrice: qty * (item.quantity > 0 ? item.price / item.quantity : 0),
+            // سعر السطر unit — القسمة القديمة كانت تُقلل المرتجع بمعامل الكمية.
+            unitPrice: item.price,
+            totalPrice: qty * item.price,
             variantId: drift.Value(item.variantId),
           ),
         );

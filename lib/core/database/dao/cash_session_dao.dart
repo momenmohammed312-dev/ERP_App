@@ -18,10 +18,38 @@ class CashSessionDao extends DatabaseAccessor<AppDatabase>
             ..limit(1))
           .getSingleOrNull();
 
+  /// Every session with status = 'open' (oldest first). More than one is a
+  /// legacy anomaly: [getCurrentSession] keeps its latest-wins read for
+  /// display, but open/close flows must go through [assertSingleOpenSession]
+  /// so multiples can never hide.
+  Future<List<CashSession>> getOpenSessions() =>
+      (select(cashSessions)
+            ..where((tbl) => tbl.status.equals('open'))
+            ..orderBy([(tbl) => OrderingTerm.asc(tbl.openedAt)]))
+          .get();
+
+  /// Returns the unique open session, or null when none is open.
+  /// Throws when several sessions are open at once — the caller must surface
+  /// this for manual repair instead of silently acting on the latest row.
+  Future<CashSession?> assertSingleOpenSession() async {
+    final open = await getOpenSessions();
+    if (open.length > 1) {
+      throw Exception(
+        'توجد ${open.length} جلسات صندوق مفتوحة في نفس الوقت — يلزم مراجعة يدوية قبل المتابعة',
+      );
+    }
+    return open.isEmpty ? null : open.first;
+  }
+
   Future<CashSession> openCashSession({
     required String openedBy,
     double openingBalance = 0.0,
   }) async {
+    // Forbid a second open session: only one cash session may be open.
+    final alreadyOpen = await getOpenSessions();
+    if (alreadyOpen.isNotEmpty) {
+      throw Exception('توجد جلسة صندوق مفتوحة بالفعل — أغلقها أولاً');
+    }
     final companion = CashSessionsCompanion.insert(
       openedBy: Value(openedBy),
       openedAt: DateTime.now(),

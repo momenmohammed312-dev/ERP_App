@@ -3,6 +3,7 @@
 // ══════════════════════════════════════════════════════════════════════
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_offline_desktop/core/config/app_flavor.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart' as models;
 import 'package:pos_offline_desktop/core/services/auth_service.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
@@ -11,6 +12,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 
 void main() {
+  // Test env has no app_bootstrap: providers need an initialized flavor
+  // (production always initializes at startup). Setup only, no assertions changed.
+  AppFlavor.initialize(Flavor.base);
   group('RBAC Simple Tests', () {
     late AuthService authService;
     late UserDao userDao;

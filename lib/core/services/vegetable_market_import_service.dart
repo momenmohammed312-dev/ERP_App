@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 import '../database/app_database.dart';
+import 'invoice_number_service.dart';
 
 class ImportResult {
   final int suppliers;
@@ -39,6 +40,18 @@ class VegetableMarketImportService {
   final _existingShipmentNumbers = <String>{};
 
   VegetableMarketImportService(this._db);
+
+  /// Derives the invoice status from amounts (single rule shared by the
+  /// sale-import path): paid / partial / pending. Tested directly.
+  static String deriveImportStatus({
+    required double total,
+    required double paid,
+    double eps = 0.01,
+  }) {
+    if (paid >= total - eps) return 'paid';
+    if (paid > eps) return 'partial';
+    return 'pending';
+  }
 
   Future<ImportResult> importFromFile(String filePath) async {
     final file = File(filePath);
@@ -284,11 +297,9 @@ class VegetableMarketImportService {
     final cashAmount = (sale['cashAmount'] as num).toDouble();
     final creditAmount = (sale['creditAmount'] as num).toDouble();
     final discount = (sale['discount'] as num?)?.toDouble() ?? 0;
-    final status = sale['status'] as String? ?? 'pending';
     final paymentMethod = sale['paymentMethod'] as String? ?? 'cash';
     final notes = sale['notes'] as String? ?? '';
     final shipmentId = sale['shipmentId'] as String?;
-    final shipmentNumber = sale['shipmentNumber'] as String?;
 
     final shipmentIntId = shipmentId != null ? shipmentUuidToId[shipmentId] : null;
     final pricingMode = sale['pricingMode'] as String?;
@@ -296,6 +307,13 @@ class VegetableMarketImportService {
 
     final invNumber = 'IMP-${date.toIso8601String().substring(0, 10).replaceAll('-', '')}-${_uuid.v4().substring(0, 8)}';
 
+    // حالة الاستيراد تُشتق من المبالغ (مدفوع/جزئي/معلق) — لا تُطمس الجزئية.
+    // أرقام IMP- غير canonical (legacy) فتُستخدم صياغة legacy للوصف
+    // ('بيع #'/'دفع #'/'عمولة بيع شحنة') ولا تُدخل تنسيق 'فاتورة 000001'
+    // المخصص للأرقام القانونية فقط.
+    const eps = 0.01;
+    final derivedStatus =
+        VegetableMarketImportService.deriveImportStatus(total: totalAmount, paid: paidAmount);
     final invoiceId = await _db.into(_db.invoices).insert(InvoicesCompanion(
           invoiceNumber: Value(invNumber),
           customerId: Value(customerId),
@@ -304,7 +322,7 @@ class VegetableMarketImportService {
           totalAmount: Value(totalAmount),
           paidAmount: Value(paidAmount),
           date: Value(date),
-          status: Value(status == 'paid' ? 'paid' : 'pending'),
+          status: Value(derivedStatus),
           cashAmount: Value(cashAmount),
           creditAmount: Value(creditAmount),
           shipmentId: Value(shipmentIntId),
@@ -325,7 +343,7 @@ class VegetableMarketImportService {
           shipmentId: Value(shipmentIntId),
         ));
 
-    if (status == 'paid' && paidAmount > 0) {
+    if (paidAmount > eps) {
       await _db.into(_db.invoicePayments).insert(InvoicePaymentsCompanion.insert(
             invoiceId: invoiceId,
             paymentMethod: paymentMethod,
@@ -335,20 +353,58 @@ class VegetableMarketImportService {
           ));
     }
 
+    // D3: مسار الاستيراد كان يتخطى صفوف الدفتر — تُكتب الآن بنفس اتفاقية
+    // المسار الحي (إيصال 'INV<id>' قابل للربط). الوصف بصياغة legacy لأن
+    // رقم IMP- غير canonical.
+    if (customerId != null && customerId.isNotEmpty) {
+      await _db.into(_db.ledgerTransactions).insert(LedgerTransactionsCompanion.insert(
+            id: _uuid.v4(),
+            entityType: 'Customer',
+            refId: customerId,
+            date: date,
+            description: 'بيع #$invNumber',
+            debit: Value(totalAmount),
+            credit: const Value(0.0),
+            origin: 'sale',
+            paymentMethod: Value(paymentMethod),
+            receiptNumber: Value('INV$invoiceId'),
+          ));
+      if (paidAmount > 0) {
+        await _db.into(_db.ledgerTransactions).insert(LedgerTransactionsCompanion.insert(
+              id: _uuid.v4(),
+              entityType: 'Customer',
+              refId: customerId,
+              date: date,
+              description: 'دفع #$invNumber',
+              debit: const Value(0.0),
+              credit: Value(paidAmount),
+              origin: 'payment',
+              paymentMethod: Value(paymentMethod),
+              receiptNumber: Value('INV$invoiceId'),
+            ));
+      }
+    }
+
     if (isCommission && shipmentIntId != null) {
       final shipment = await _db.vegetableShipmentDao.getById(shipmentIntId);
       if (shipment != null) {
         final commPct = shipment.commissionPercentage;
+        // D8: صافي المستحق دائنًا (sell − commission) — نفس المسار الحي، لا
+        // العمولة وحدها. (ملاحظة: shipmentNumber تُستخدم في الوصف القديم أدناه
+        // كما هي — سطر تاريخي.)
         if (commPct != null && commPct > 0) {
           final commissionAmount = totalAmount * commPct / 100;
+          final supplierDue = totalAmount - commissionAmount;
           await _db.into(_db.ledgerTransactions).insert(LedgerTransactionsCompanion.insert(
                 id: _uuid.v4(),
                 entityType: 'Supplier',
                 refId: shipment.supplierId,
                 date: date,
-                description: 'عمولة بيع شحنة $shipmentNumber',
-                credit: Value(commissionAmount),
+                description: 'عمولة بيع شحنة ${shipment.shipmentNumber}',
+                debit: const Value(0.0),
+                credit: Value(supplierDue),
                 origin: 'import',
+                receiptNumber: Value('INV$invoiceId'),
               ));
         }
       }
@@ -383,14 +439,19 @@ class VegetableMarketImportService {
       return;
     }
 
+    // D3: تشمل الجزئية أيضًا (الكاتب الموحّد يضع 'partial' — الاستعلام القديم
+    // بـ'pending' فقط كان يفقدها في التحصيل التالي).
     final pendingInvoices = await (_db.select(_db.invoices)
-          ..where((t) => (t.customerId.equals(customerId)) & (t.status.equals('pending')))
+          ..where((t) =>
+              (t.customerId.equals(customerId)) &
+              (t.status.isIn(['pending', 'partial'])))
           ..orderBy([(t) => OrderingTerm.asc(t.id)]))
         .get();
 
     var remainingCollection = totalAmount;
     for (final inv in pendingInvoices) {
       if (remainingCollection <= 0) break;
+      if (inv.status == 'voided') continue;
       final invRemaining = inv.totalAmount - inv.paidAmount;
       if (invRemaining <= 0) continue;
 
@@ -404,8 +465,27 @@ class VegetableMarketImportService {
             notes: Value(notes.isNotEmpty ? notes : null),
           ));
 
+      // D3: التخصيص كان يتخطى الدفتر — صف سداد مرتبط بالإيصال كباقي المسارات.
+      // الوصف canonical فقط للأرقام القانونية؛ أرقام IMP- بصياغة legacy.
+      final collInvNumber = inv.invoiceNumber ?? 'INV${inv.id}';
+      final collDesc = InvoiceNumberService.isCanonical(collInvNumber)
+          ? InvoiceNumberService.paymentDescription(collInvNumber)
+          : 'دفع #$collInvNumber';
+      await _db.into(_db.ledgerTransactions).insert(LedgerTransactionsCompanion.insert(
+            id: _uuid.v4(),
+            entityType: 'Customer',
+            refId: customerId,
+            date: date,
+            description: collDesc,
+            debit: const Value(0.0),
+            credit: Value(paymentAmount),
+            origin: 'payment',
+            paymentMethod: const Value('cash'),
+            receiptNumber: Value('INV${inv.id}'),
+          ));
+
       final newPaid = inv.paidAmount + paymentAmount;
-      final newStatus = newPaid >= inv.totalAmount ? 'paid' : 'pending';
+      final newStatus = newPaid >= inv.totalAmount - 0.01 ? 'paid' : 'partial';
 
       await (_db.update(_db.invoices)..where((t) => t.id.equals(inv.id))).write(InvoicesCompanion(
             paidAmount: Value(newPaid),
@@ -421,9 +501,14 @@ class VegetableMarketImportService {
             entityType: 'Customer',
             refId: customerId,
             date: date,
-            description: 'تحصيل $notes',
+            description: notes.isNotEmpty ? notes : 'تحصيل رصيد مقدم',
+            debit: const Value(0.0),
             credit: Value(remainingCollection),
             origin: 'import',
+            // D3: لا إيصال null جديد — الفائض بلا فاتورة يُربط ADV صريح.
+            receiptNumber: Value(
+              'ADV-${customerId}_${date.millisecondsSinceEpoch}',
+            ),
           ));
     }
   }

@@ -195,7 +195,7 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
       runningBalance = await getRunningBalance(
         entityType,
         refId,
-        upToDate: from.subtract(const Duration(days: 1)),
+        upToDate: from.subtract(const Duration(seconds: 1)),
       );
     }
 
@@ -272,11 +272,17 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
     });
   }
 
-  /// إجمالي الرصيد المستحق للموردين عبر كل الفترات (شحنات عمولة + مشتريات)
-  /// = SUM(debit − credit). يستخدم في تسوية نهاية اليوم للمعرض فقط — عرض فقط.
+  /// إجمالي الرصيد المستحق للموردين عبر كل الفترات (شحنات عمولة + مشتريات).
+  ///
+  /// القاعدة القانونية (D8/D11): رصيد المورد = opening + Σ(credit − debit)
+  /// (المشتريات/العمولة دائن يزيد المستحق، والمدفوعات مدين ينقصه — نفس
+  /// [getSupplierBalance] و [getAllSupplierBalances] و [getRunningBalance]
+  /// و `SupplierDao.getSupplierBalance`/`watchTotalSuppliersDues`).
+  /// كان هنا `SUM(debit − credit)` (معكوس) — إصلاح Agent 4.
+  /// يستخدم في تسوية نهاية اليوم للمعرض فقط — عرض فقط.
   Future<double> getSupplierOutstandingBalance() async {
     final row = await customSelect(
-      'SELECT COALESCE(SUM(debit - credit), 0) as total FROM ledger_transactions '
+      'SELECT COALESCE(SUM(credit - debit), 0) as total FROM ledger_transactions '
       "WHERE entity_type = 'Supplier'",
       readsFrom: {ledgerTransactions},
     ).getSingle();
@@ -290,6 +296,7 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
       '  SELECT c.opening_balance + SUM(COALESCE(l.debit, 0) - COALESCE(l.credit, 0)) as balance '
       '  FROM customers c '
       '  LEFT JOIN ledger_transactions l ON l.ref_id = c.id AND l.entity_type = \'Customer\' '
+      '  WHERE c.is_active = 1 '
       '  GROUP BY c.id'
       ') WHERE balance > 0',
       readsFrom: {db.customers, db.ledgerTransactions},
@@ -304,6 +311,7 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
       '  SELECT c.opening_balance + SUM(COALESCE(l.debit, 0) - COALESCE(l.credit, 0)) as balance '
       '  FROM customers c '
       '  LEFT JOIN ledger_transactions l ON l.ref_id = c.id AND l.entity_type = \'Customer\' '
+      '  WHERE c.is_active = 1 '
       '  GROUP BY c.id'
       ') WHERE balance > 0',
       readsFrom: {db.customers, db.ledgerTransactions},
@@ -311,12 +319,16 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
     return row.readNullable<double>('total') ?? 0.0;
   }
 
-  /// المستحق للموردين من شحنات العمولة — مجموع (debit - credit) لكل
-  /// `LedgerTransactions` فيها `origin = 'sale'` و `entityType = 'Supplier'`.
+  /// المستحق للموردين من شحنات العمولة — مجموع (credit − debit) لكل
+  /// `LedgerTransactions` فيها `origin` بيع (`'sale'` للمسار الحي، `'import'`
+  /// لمستورد سوق الخضار) و `entityType = 'Supplier'`.
+  ///
+  /// القاعدة القانونية (D8): العمولة payable = دائن (credit) بصافي المستحق
+  /// (sell − commission). كان هنا `SUM(debit − credit)` (معكوس) — إصلاح Agent 4.
   Future<double> getSupplierCommissionDue() async {
     final rows = await customSelect(
-      'SELECT COALESCE(SUM(debit - credit), 0) as total '
-      "FROM ledger_transactions WHERE origin = 'sale' AND entity_type = 'Supplier'",
+      'SELECT COALESCE(SUM(credit - debit), 0) as total '
+      "FROM ledger_transactions WHERE origin IN ('sale', 'import') AND entity_type = 'Supplier'",
       readsFrom: {ledgerTransactions},
     ).get();
     return (rows.first.data['total'] as num?)?.toDouble() ?? 0.0;
@@ -327,6 +339,7 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
       'SELECT c.id, c.name, c.phone, (c.opening_balance + SUM(COALESCE(l.debit, 0) - COALESCE(l.credit, 0))) as balance '
       'FROM customers c '
       'LEFT JOIN ledger_transactions l ON l.ref_id = c.id AND l.entity_type = \'Customer\' '
+      'WHERE c.is_active = 1 '
       'GROUP BY c.id '
       'ORDER BY balance DESC',
       readsFrom: {db.customers, db.ledgerTransactions},
@@ -340,12 +353,97 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
       'SELECT s.id, s.name, s.phone, (s.opening_balance + SUM(COALESCE(l.credit, 0) - COALESCE(l.debit, 0))) as balance '
       'FROM suppliers s '
       'LEFT JOIN ledger_transactions l ON l.ref_id = s.id AND l.entity_type = \'Supplier\' '
+      "WHERE s.status = 'Active' "
       'GROUP BY s.id '
       'ORDER BY balance DESC',
       readsFrom: {db.suppliers, db.ledgerTransactions},
     ).get();
 
     return rows.map((row) => row.data).toList();
+  }
+
+  /// صفوف الدفع (`origin = 'payment'`) المرتبطة بإيصال فاتورة (`'INV<id>'`).
+  /// تُستخدم لحارس الدفع المزدوج (D3) وللحفاظ على history المدفوعات في
+  /// التعديل/الإلغاء (لا تُعكس ولا تُحذف — النقدية المستلمة تبقى).
+  Future<List<LedgerTransaction>> getPaymentsForReceipt(
+    String receiptNumber,
+  ) =>
+      (select(ledgerTransactions)
+            ..where(
+              (tbl) =>
+                  tbl.receiptNumber.equals(receiptNumber) &
+                  tbl.origin.equals('payment'),
+            ))
+          .get();
+
+  /// كاشف دفعات مكررة تشخيصي (D3): هل توجد دفعة بنفس المبلغ على نفس الإيصال
+  /// داخل نافذة [window] حول [around]؟ محفوظة للتشخيص فقط — لا يستخدمها الكاتب
+  /// الموحّد (الدليل: كبتت دفعات FIFO مشروعة متساوية متتالية؛ الحماية الآن عبر
+  /// حارس التجاوز + مفاتيح اليومية الفريدة، والـdouble-tap على الـUI).
+  Future<bool> hasDuplicatePayment({
+    required String receiptNumber,
+    required double amount,
+    required DateTime around,
+    Duration window = const Duration(seconds: 30),
+  }) async {
+    final from = around.subtract(window);
+    final to = around.add(window);
+    final rows =
+        await (select(ledgerTransactions)
+              ..where(
+                (tbl) =>
+                    tbl.receiptNumber.equals(receiptNumber) &
+                    tbl.origin.equals('payment') &
+                    tbl.credit.equals(amount) &
+                    tbl.date.isBetweenValues(from, to),
+              ))
+            .get();
+    return rows.isNotEmpty;
+  }
+
+  /// يعكس كل صفوف إيصال (`receiptNumber`) بصفوف عكسية (mirror) — debit↔credit —
+  /// بنفس الكيان والمرجع، `origin = 'reversal'`، وإيصال [reversalReceipt]
+  /// (مثال `'REV-INV<id>'`) حتى لا تختلط مع الأصل في حذف/استعلام الإيصال.
+  ///
+  /// قاعدة التدقيق (D4/D5): دفتر الأستاذ append-only — لا حذف فيزيائي لتاريخ
+  /// مرحّل؛ العكس يحفظ الأصل + القيد العكسي معًا. يعمل داخل transaction
+  /// المستدعي (لا يفتح transaction خاصة). يرجع الصفوف العكسية المُدخلة.
+  ///
+  /// [onlyOrigins] لتقييد العكس (مثال `{'sale'}` في الـvoid لإبقاء المدفوعات
+  /// كـhistory — قرار D5: النقدية المستلمة لا تُعكس ضمنيًا، الاسترداد حركة
+  /// صريحة منفصلة).
+  Future<List<LedgerTransaction>> reverseTransactionsByReceipt({
+    required String receiptNumber,
+    required String reversalReceipt,
+    Set<String>? onlyOrigins,
+    String descriptionPrefix = 'عكس',
+  }) async {
+    final originals = await getTransactionsByReceiptNumber(receiptNumber);
+    final targets = onlyOrigins == null
+        ? originals
+        : originals.where((t) => onlyOrigins.contains(t.origin)).toList();
+    final now = DateTime.now();
+    final inserted = <LedgerTransaction>[];
+    for (final t in targets) {
+      // لا تعكس صفًا عكسيًا سابقًا — يمنع التضاعف في void/edit متكرر.
+      if (t.origin == 'reversal') continue;
+      final row = await insertTransaction(
+        LedgerTransactionsCompanion.insert(
+          id: '${const Uuid().v4()}_rev',
+          entityType: t.entityType,
+          refId: t.refId,
+          date: now,
+          description: '$descriptionPrefix: ${t.description}',
+          debit: Value(t.credit),
+          credit: Value(t.debit),
+          origin: 'reversal',
+          paymentMethod: Value(t.paymentMethod),
+          receiptNumber: Value(reversalReceipt),
+        ),
+      );
+      inserted.add(row);
+    }
+    return inserted;
   }
 }
 

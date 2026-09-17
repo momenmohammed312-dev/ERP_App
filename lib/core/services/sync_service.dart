@@ -78,6 +78,7 @@ class SyncService {
   static const Map<String, String> _tableNameMap = {
     'products': 'products',
     'customers': 'customers',
+    'suppliers': 'suppliers',
     'invoices': 'invoices',
     'invoice_items': 'invoice_items',
   };
@@ -212,7 +213,25 @@ class SyncService {
     await _pullTable(
       'customers',
       (row) async {
-        await _db.customerDao.upsertFromRemote(row);
+        // Reconciliation (B1): stable-id upsert; unknown ids merge ONLY on
+        // unambiguous normalized phone; ambiguous rows are reported as
+        // conflicts and counted as skipped — history is never auto-merged.
+        final result = await _db.customerDao.reconcileRemoteCustomer(row);
+        if (result.isConflict) {
+          skipped++;
+        } else {
+          pulled++;
+        }
+      },
+      onError: () => failed++,
+    );
+
+    await _pullTable(
+      'suppliers',
+      (row) async {
+        // Same outbox/pull pattern as customers (B3): stable UUID identity,
+        // monotonic-delete replication (see SupplierDao.upsertFromRemote).
+        await _db.supplierDao.upsertFromRemote(row);
         pulled++;
       },
       onError: () => failed++,

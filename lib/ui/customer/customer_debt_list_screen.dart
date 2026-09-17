@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 
-import 'package:drift/drift.dart' hide Column;
-
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/invoice_service.dart';
 import 'package:pos_offline_desktop/ui/customer/customer_statement_screen.dart';
 
 enum DebtFilter { all, dueToday, overdue }
@@ -118,21 +117,24 @@ class _CustomerDebtListScreenState extends State<CustomerDebtListScreen> {
     );
     if (amount == null || amount <= 0 || !mounted) return;
     try {
-      await widget.db.ledgerDao.insertTransaction(
-        LedgerTransactionsCompanion.insert(
-          id: '${DateTime.now().millisecondsSinceEpoch}_pay_${debt.id}',
-          entityType: 'Customer',
-          refId: debt.id,
-          date: DateTime.now(),
-          description: noteCtrl.text.isNotEmpty ? noteCtrl.text : 'سداد آجل',
-          debit: const Value(0.0),
-          credit: Value(amount),
-          origin: 'payment',
-          paymentMethod: Value('cash'),
-        ),
+      // D3: السداد المستقل يمر بالكاتب الموحّد — توزيع FIFO على الفواتير
+      // المفتوحة (فاتورة + invoice_payments + دفتر + يومية في txn واحدة)،
+      // والفائض رصيد مقدم بإيصال ADV صريح (لا null-receipt جديدة).
+      final applied = await InvoiceService(widget.db).recordCustomerPayment(
+        customerId: debt.id,
+        amount: amount,
+        paymentMethod: 'cash',
+        notes: noteCtrl.text.isNotEmpty ? noteCtrl.text : null,
       );
       _load();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل السداد'), backgroundColor: Colors.green));
+      if (mounted) {
+        final msg = applied.isEmpty
+            ? 'تم تسجيل السداد كرصيد مقدم (لا فواتير مفتوحة)'
+            : 'تم تسجيل السداد وتوزيعه على ${applied.length} فاتورة';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.green),
+        );
+      }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red));
     }

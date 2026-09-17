@@ -1911,6 +1911,19 @@ class _CustomersPageContentState extends State<_CustomersPageContent> {
     try {
       final allCustomers = await widget.db.customerDao.getAllActiveCustomers();
 
+      // B5: فلتر "مدين" من دفتر الأستاذ (مصدر الحقيقة) — مدين = رصيد موجب
+      // (opening + debit − credit)، مطابق لشاشة الأرصدة الموحدة. أعمدة
+      // totalDebt/totalPaid legacy ولا تُستخدم هنا.
+      Set<String>? debtorIds;
+      if (_selectedFilter == 'مدين') {
+        final balances = await widget.db.ledgerDao.getAllCustomerBalances();
+        debtorIds = {
+          for (final b in balances)
+            if (((b['balance'] as num?)?.toDouble() ?? 0.0) > 0.005)
+              (b['id'] as String),
+        };
+      }
+
       // Filter by status
       var filteredCustomers = _selectedFilter == 'الكل'
           ? allCustomers
@@ -1921,7 +1934,7 @@ class _CustomersPageContentState extends State<_CustomersPageContent> {
                 case 'غير نشط':
                   return c.isActive == false;
                 case 'مدين':
-                  return (c.openingBalance + c.totalDebt - c.totalPaid) < 0;
+                  return debtorIds!.contains(c.id);
                 default:
                   return true;
               }

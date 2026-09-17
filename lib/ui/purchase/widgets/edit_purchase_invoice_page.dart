@@ -105,7 +105,7 @@ class _EditPurchaseInvoicePageState extends State<EditPurchaseInvoicePage> {
             quantity: item.quantity,
             costPrice: item.unitPrice,
             sellingPrice: product?.price ?? item.unitPrice,
-            unit: item.unit ?? product?.unit ?? 'قطعة',
+            unit: item.unit,
           ),
         );
       }
@@ -164,7 +164,10 @@ class _EditPurchaseInvoicePageState extends State<EditPurchaseInvoicePage> {
     if (picked != null && mounted) {
       setState(() {
         _lines[index].product = picked;
-        _lines[index].costPrice = picked.costPrice > 0 ? picked.costPrice : picked.price;
+        _lines[index].costPrice =
+            (picked.costPrice != null && picked.costPrice! > 0)
+                ? picked.costPrice!
+                : picked.price;
         _lines[index].sellingPrice = picked.price;
         _lines[index].unit = picked.unit ?? 'قطعة';
       });
@@ -739,7 +742,7 @@ class _ProductSelectionDialogState extends State<_ProductSelectionDialog> {
                   return ListTile(
                     title: Text(p.name, style: const TextStyle(color: Colors.white)),
                     subtitle: Text(
-                      'سعر الشراء: ${p.costPrice.toStringAsFixed(2)} | المخزون الحالي: ${p.quantity}',
+                      'سعر الشراء: ${p.costPrice?.toStringAsFixed(2) ?? "0.00"} | المخزون الحالي: ${p.quantity}',
                       style: const TextStyle(color: _textMuted, fontSize: 12),
                     ),
                     trailing: Text(

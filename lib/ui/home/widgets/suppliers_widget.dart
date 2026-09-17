@@ -11,13 +11,41 @@ import 'package:pos_offline_desktop/ui/supplier/supplier_statement_screen.dart';
 import 'package:pos_offline_desktop/ui/home/widgets/transaction_detail_dialog.dart';
 import 'package:pos_offline_desktop/ui/supplier/add_edit_supplier_page.dart';
 
-class SuppliersWidget extends ConsumerWidget {
+class SuppliersWidget extends ConsumerStatefulWidget {
   final AppDatabase db;
 
   const SuppliersWidget({super.key, required this.db});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SuppliersWidget> createState() => _SuppliersWidgetState();
+}
+
+class _SuppliersWidgetState extends ConsumerState<SuppliersWidget> {
+  /// Status filter mirroring the customer list behavior: all | active |
+  /// inactive | debt. Only 'Active'/'Inactive' exist in the suppliers table
+  /// (verified in supplier_table.dart + SupplierStatus).
+  String _statusFilter = 'all';
+
+  AppDatabase get db => widget.db;
+
+  Stream<List<Supplier>> _supplierStream() {
+    switch (_statusFilter) {
+      case 'active':
+        return db.supplierDao.watchActiveSuppliers();
+      case 'inactive':
+        return db.supplierDao.watchInactiveSuppliers();
+      case 'debt':
+        // Debt needs per-row balances; stream active rows and hide settled
+        // ones client-side below.
+        return db.supplierDao.watchActiveSuppliers();
+      case 'all':
+      default:
+        return db.select(db.suppliers).watch();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -110,6 +138,7 @@ class SuppliersWidget extends ConsumerWidget {
               ),
               const Gap(12), // Reduced gap
               DropdownButton<String>(
+                value: _statusFilter,
                 items: [
                   DropdownMenuItem(value: 'all', child: Text(l10n.all)),
                   DropdownMenuItem(value: 'active', child: Text(l10n.active)),
@@ -120,7 +149,7 @@ class SuppliersWidget extends ConsumerWidget {
                   DropdownMenuItem(value: 'debt', child: Text(l10n.has_debt)),
                 ],
                 onChanged: (value) {
-                  // Filter suppliers
+                  if (value != null) setState(() => _statusFilter = value);
                 },
               ),
               const Gap(12), // Reduced gap
@@ -139,7 +168,7 @@ class SuppliersWidget extends ConsumerWidget {
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 600),
             child: StreamBuilder<List<Supplier>>(
-              stream: db.select(db.suppliers).watch(),
+              stream: _supplierStream(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -174,6 +203,13 @@ class SuppliersWidget extends ConsumerWidget {
                       future: db.ledgerDao.getSupplierBalance(supplier.id),
                       builder: (context, balanceSnapshot) {
                         final balance = balanceSnapshot.data ?? 0.0;
+                        // 'debt' filter: hide settled rows client-side
+                        // (ledger balance is authoritative).
+                        if (_statusFilter == 'debt' &&
+                            balanceSnapshot.hasData &&
+                            balance.abs() < 0.01) {
+                          return const SizedBox.shrink();
+                        }
                         return _SupplierCard(
                           supplier: supplier,
                           totalPurchases: balance > 0 ? balance : 0.0,
@@ -644,8 +680,8 @@ class _SupplierCard extends StatelessWidget {
                         onPressed: () {
                           _showDeleteSupplierDialog(supplier);
                         },
-                        icon: const Icon(Icons.delete),
-                        label: Text('حذف'),
+                        icon: const Icon(Icons.block),
+                        label: const Text('تعطيل'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.red,
                         ),
@@ -711,6 +747,7 @@ class _SupplierCard extends StatelessWidget {
           origin: 'purchase',
           paymentMethod: purchase['payment_method']?.toString(),
           receiptNumber: invNumber,
+          createdAt: DateTime.tryParse(purchase['purchase_date']?.toString() ?? '') ?? DateTime.now(),
         );
 
     if (!ctx.mounted) return;
@@ -743,23 +780,27 @@ class _SupplierCard extends StatelessWidget {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: Text('حذف المورد'),
-          content: Text('هل أنت متأكد من حذف المورد "${supplier.name}"؟'),
+          title: const Text('تعطيل المورد'),
+          content: Text(
+            'سيتم تعطيل المورد "${supplier.name}" (إخفاؤه من القوائم) '
+            'مع الاحتفاظ الكامل بسجل حساباته. هل أنت متأكد؟',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: Text('إلغاء'),
+              child: const Text('إلغاء'),
             ),
             ElevatedButton(
               onPressed: () async {
                 try {
-                  await db.supplierDao.deleteSupplier(supplier.id);
+                  // Soft-delete only: never hard-delete an active supplier.
+                  await db.supplierDao.deactivateSupplier(supplier.id);
 
                   if (dialogContext.mounted) {
                     Navigator.pop(dialogContext);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('تم حذف المورد بنجاح'),
+                      const SnackBar(
+                        content: Text('تم تعطيل المورد بنجاح (السجل محفوظ)'),
                         backgroundColor: Colors.green,
                       ),
                     );
@@ -780,7 +821,7 @@ class _SupplierCard extends StatelessWidget {
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
               ),
-              child: Text('حذف'),
+              child: const Text('تعطيل'),
             ),
           ],
         );

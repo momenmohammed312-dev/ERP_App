@@ -3,6 +3,68 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/staff_management_dao.dart';
 
+/// ── C1: ONE AUTHORITATIVE LATENESS PATH ──────────────────────────────
+/// Every lateness display and every payroll input in the app MUST derive
+/// late minutes from [computeLateness] below — no inline `ci - start`
+/// arithmetic anywhere else.
+///
+/// GRACE RULE (locked — do not "fix" without a migration + test update):
+/// - A check-in is late IFF it is STRICTLY after scheduleStart + graceMinutes
+///   (at grace exactly == on time).
+/// - lateMinutes are counted FROM schedule start (grace-INCLUSIVE), NOT from
+///   grace end. E.g. start 09:00 + grace 15: 09:15 → 0 min, 09:16 → 16 min.
+///
+/// Evidence for this choice (attendance_page was deemed correct + golden
+/// tests lock it):
+/// - `AttendanceCalculationEngine.calculateAttendance` (this file):
+///   `checkInMinutes <= graceEnd → present`, else `lateMinutes = checkIn - start`.
+/// - `attendance_page.dart` summary + row display: `if (ci > gEnd) lateM = ci - sMin`.
+/// - `monthly_payroll_golden_test.dart` STAFFL1: 10:30 check-in with 09:00
+///   start ⇒ 90 min = 1.5 h (75 min from grace end would fail that test).
+/// - `weekly_payroll_test.dart`: "40min late from work start".
+int computeLateness({
+  required DateTime? checkInTime,
+  required int scheduleStartMinutes,
+  required int graceMinutes,
+}) {
+  if (checkInTime == null) return 0;
+  final ci = checkInTime.hour * 60 + checkInTime.minute;
+  if (ci <= scheduleStartMinutes + graceMinutes) return 0;
+  return ci - scheduleStartMinutes;
+}
+
+/// Day-count predicate shared by every late counter (dashboard card,
+/// attendance summary cards, payroll summary, report generators) so that a
+/// displayed late day always corresponds to a payroll-input late day.
+/// Mirrors the counting rule frozen in `getAttendanceSummary`:
+/// - fully excused (`excused && excusedHours <= 0`) ⇒ never late (waived);
+/// - `status == 'late'` ⇒ late only when timed (untimed permission rows
+///   carry no lateness evidence — their effect, if any, flows through the
+///   permission ×1.0 path, never through late minutes);
+/// - `status == 'present'` ⇒ late iff [computeLateness] > 0;
+/// - anything else (absent/leave/early_leave) ⇒ not a late day
+///   (early checkout is tracked separately and intentionally untouched here).
+bool isEffectiveLateDay({
+  required String status,
+  required DateTime? checkInTime,
+  required int scheduleStartMinutes,
+  required int graceMinutes,
+  required bool excused,
+  required double excusedHours,
+}) {
+  if (excused && excusedHours <= 0) return false; // معفي بالكامل — لا يُحسب
+  if (status == 'late') return checkInTime != null;
+  if (status == 'present') {
+    return computeLateness(
+          checkInTime: checkInTime,
+          scheduleStartMinutes: scheduleStartMinutes,
+          graceMinutes: graceMinutes,
+        ) >
+        0;
+  }
+  return false;
+}
+
 /// Work schedule configuration for an employee
 class ScheduleConfig {
   final int workStartHour;
@@ -197,22 +259,22 @@ class AttendanceCalculationEngine {
     DateTime? checkOutTime,
     required ScheduleConfig schedule,
   }) {
-    final checkInMinutes = checkInTime.hour * 60 + checkInTime.minute;
     final scheduleStart = schedule.workStartMinutesSinceMidnight;
     final scheduleEnd = schedule.workEndMinutesSinceMidnight;
-    final graceEnd = scheduleStart + schedule.gracePeriodMinutes;
+    // Kept for the overtime working-hours branch below (byte-identical math).
+    final checkInMinutes = checkInTime.hour * 60 + checkInTime.minute;
 
-    // Determine status
+    // Determine status — late minutes come from the single C1 path above.
     String status;
-    int lateMinutes = 0;
-
-    if (checkInMinutes <= scheduleStart) {
-      status = 'present';
-    } else if (checkInMinutes <= graceEnd) {
-      status = 'present'; // Within grace period
-    } else {
+    final lateMinutes = computeLateness(
+      checkInTime: checkInTime,
+      scheduleStartMinutes: scheduleStart,
+      graceMinutes: schedule.gracePeriodMinutes,
+    );
+    if (lateMinutes > 0) {
       status = 'late';
-      lateMinutes = checkInMinutes - scheduleStart;
+    } else {
+      status = 'present';
     }
 
     // Calculate working hours and overtime

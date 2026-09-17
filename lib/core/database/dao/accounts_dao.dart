@@ -16,8 +16,25 @@ class AccountsDao extends DatabaseAccessor<AppDatabase> with _$AccountsDaoMixin 
   Future<Account?> getById(String id) =>
       (select(accounts)..where((a) => a.id.equals(id))).getSingleOrNull();
 
-  Future<Account?> getByCode(String code) =>
-      (select(accounts)..where((a) => a.code.equals(code))).getSingleOrNull();
+  /// Deterministic under duplicate codes (pre-v71 drift): system account
+  /// first, then oldest. v71 adds a UNIQUE index on code so duplicates
+  /// cannot recur; this ordering is belt-and-braces for legacy DBs.
+  Future<Account?> getByCode(String code) async {
+    Future<Account?> pick() => (select(accounts)
+          ..where((a) => a.code.equals(code))
+          ..orderBy([
+            (a) => OrderingTerm.desc(a.isSystem),
+            (a) => OrderingTerm.asc(a.createdAt),
+          ])
+          ..limit(1))
+        .getSingleOrNull();
+    var account = await pick();
+    if (account == null) {
+      await db.ensureSystemAccounts();
+      account = await pick();
+    }
+    return account;
+  }
 
   Future<List<Account>> getByType(String type) =>
       (select(accounts)..where((a) => a.type.equals(type))).get();

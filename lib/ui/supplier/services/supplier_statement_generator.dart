@@ -8,6 +8,9 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/ledger_dao.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
 import 'package:pos_offline_desktop/core/utils/pdf_bidi_helper.dart';
+// Shared single normalizer + label rule (defined in the customer generator).
+import 'package:pos_offline_desktop/ui/customer/services/enhanced_customer_statement_generator.dart'
+    show StatementHelpers;
 
 class SupplierStatementGenerator {
   static Future<Map<String, pw.Font?>> _loadFonts() async {
@@ -46,13 +49,27 @@ class SupplierStatementGenerator {
   /// Apply Bidi reordering for correct Arabic rendering in PDF.
   static String _b(String text) => PdfBidiHelper.reorder(text);
 
-  /// Extract purchase ID from ledger description.
-  static String? _extractPurchaseId(String description) {
-    final match = RegExp(r'PUR-\d+').firstMatch(description);
-    return match?.group(0);
+  /// Pre-fetch stored purchase invoice numbers keyed by receiptNumber, so the
+  /// PDF prints the canonical 'فاتورة مشتريات N' label for linked rows and
+  /// the stored description verbatim otherwise. Resolution uses ONLY the
+  /// structured receiptNumber link — NEVER the free-text description (the old
+  /// `PUR-\d+`-in-description regex is retired).
+  static Future<Map<String, String>> _fetchPurchaseNumbers(
+    AppDatabase db,
+    List<LedgerTransactionWithBalance> transactions,
+  ) async {
+    final result = <String, String>{};
+    for (final txw in transactions) {
+      final rn = txw.transaction.receiptNumber;
+      if (rn == null || rn.isEmpty || result.containsKey(rn)) continue;
+      final number = await StatementHelpers.resolvePurchaseNumber(db, rn);
+      if (number != null) result[rn] = number;
+    }
+    return result;
   }
 
-  /// Pre-fetch purchase items for all purchase (credit) transactions.
+  /// Pre-fetch purchase items for all purchase (credit) transactions, keyed
+  /// by the purchase id resolved via the receiptNumber link.
   static Future<Map<String, List<_PurchaseItemInfo>>> _fetchPurchaseItems(
     AppDatabase db,
     List<LedgerTransactionWithBalance> transactions,
@@ -61,13 +78,25 @@ class SupplierStatementGenerator {
     for (final txw in transactions) {
       final tx = txw.transaction;
       if (tx.credit <= 0) continue;
-      final purchaseId = _extractPurchaseId(tx.description);
-      if (purchaseId == null) continue;
-      if (result.containsKey(purchaseId)) continue;
+      final rn = tx.receiptNumber;
+      if (rn == null || rn.isEmpty || result.containsKey(rn)) continue;
 
       try {
-        final items = await db.purchaseDao.getItemsWithProductsByPurchase(purchaseId);
-        result[purchaseId] = items.map((pair) {
+        // Resolve the purchase via the stable receiptNumber link first
+        // (two sequential lookups; no drift `|` import needed here).
+        var purchase = await (db.select(db.purchases)
+              ..where((p) => p.invoiceNumber.equals(rn)))
+            .getSingleOrNull();
+        purchase ??= await (db.select(db.purchases)
+              ..where((p) => p.id.equals(rn)))
+            .getSingleOrNull();
+        if (purchase == null) {
+          result[rn] = [];
+          continue;
+        }
+        final items =
+            await db.purchaseDao.getItemsWithProductsByPurchase(purchase.id);
+        result[rn] = items.map((pair) {
           final item = pair.$1;
           final product = pair.$2;
           return _PurchaseItemInfo(
@@ -78,7 +107,7 @@ class SupplierStatementGenerator {
           );
         }).toList();
       } catch (_) {
-        result[purchaseId] = [];
+        result[rn] = [];
       }
     }
     return result;
@@ -94,18 +123,27 @@ class SupplierStatementGenerator {
     required DateTime toDate,
     required double openingBalance,
     required double currentBalance,
+    List<LedgerTransactionWithBalance>? transactions,
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
 
-    final transactions = await db.ledgerDao.getTransactionsWithRunningBalance(
-      'Supplier',
-      supplierId,
-      fromDate,
-      toDate,
-    );
+    // Same signature pattern as the customer export: the screen passes its
+    // filtered rows; the generator only re-queries as a fallback.
+    final (fromDateNormalized, normalizedToDate) =
+        StatementHelpers.normalizeRange(fromDate, toDate);
 
-    final purchaseItems = await _fetchPurchaseItems(db, transactions);
+    final effectiveTransactions = transactions ??
+        await db.ledgerDao.getTransactionsWithRunningBalance(
+          'Supplier',
+          supplierId,
+          fromDateNormalized,
+          normalizedToDate,
+        );
+
+    final purchaseItems = await _fetchPurchaseItems(db, effectiveTransactions);
+    final purchaseNumbers =
+        await _fetchPurchaseNumbers(db, effectiveTransactions);
 
     final businessName = await SettingsService.getBusinessName();
     final taxNumber = await SettingsService.getTaxNumber();
@@ -134,17 +172,23 @@ class SupplierStatementGenerator {
             fonts,
             openingBalance: openingBalance,
             currentBalance: currentBalance,
-            totalCredit: transactions.fold<double>(
+            totalCredit: effectiveTransactions.fold<double>(
               0,
               (s, t) => s + t.transaction.credit,
             ),
-            totalDebit: transactions.fold<double>(
+            totalDebit: effectiveTransactions.fold<double>(
               0,
               (s, t) => s + t.transaction.debit,
             ),
           ),
           pw.SizedBox(height: 12),
-          _buildDetailedTable(transactions, fonts, openingBalance, purchaseItems),
+          _buildDetailedTable(
+            effectiveTransactions,
+            fonts,
+            openingBalance,
+            purchaseItems,
+            purchaseNumbers,
+          ),
         ],
       ),
     );
@@ -166,27 +210,32 @@ class SupplierStatementGenerator {
     required DateTime toDate,
     required double openingBalance,
     required double currentBalance,
+    List<LedgerTransactionWithBalance>? transactions,
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
 
-    final transactions = await db.ledgerDao.getTransactionsWithRunningBalance(
-      'Supplier',
-      supplierId,
-      fromDate,
-      toDate,
-    );
+    final (fromDateNormalized, normalizedToDate) =
+        StatementHelpers.normalizeRange(fromDate, toDate);
+
+    final effectiveTransactions = transactions ??
+        await db.ledgerDao.getTransactionsWithRunningBalance(
+          'Supplier',
+          supplierId,
+          fromDateNormalized,
+          normalizedToDate,
+        );
 
     final businessName = await SettingsService.getBusinessName();
     final taxNumber = await SettingsService.getTaxNumber();
     final logoPath = await SettingsService.getBusinessLogoPath();
 
-    final totalCredit =
-        transactions.fold<double>(0, (s, t) => s + t.transaction.credit);
-    final totalDebit =
-        transactions.fold<double>(0, (s, t) => s + t.transaction.debit);
+    final totalCredit = effectiveTransactions.fold<double>(
+        0, (s, t) => s + t.transaction.credit);
+    final totalDebit = effectiveTransactions.fold<double>(
+        0, (s, t) => s + t.transaction.debit);
 
-    final monthlyData = _aggregateByMonth(transactions);
+    final monthlyData = _aggregateByMonth(effectiveTransactions);
 
     pdf.addPage(
       pw.MultiPage(
@@ -374,6 +423,7 @@ class SupplierStatementGenerator {
     Map<String, pw.Font?> fonts,
     double openingBalance,
     Map<String, List<_PurchaseItemInfo>> purchaseItems,
+    Map<String, String> purchaseNumbers,
   ) {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.black, width: 1),
@@ -394,8 +444,17 @@ class SupplierStatementGenerator {
           final tx = txw.transaction;
           final rows = <pw.TableRow>[];
 
-          // Main row
-          final isPurchase = tx.credit > 0;
+          // Main row — label rule (StatementHelpers): purchase-linked row
+          // with a known stored number → exactly 'فاتورة مشتريات N';
+          // everything else → stored description verbatim (legacy untouched).
+          final desc = _b(
+            StatementHelpers.supplierRowLabel(
+              tx,
+              purchaseNumber: tx.receiptNumber == null
+                  ? null
+                  : purchaseNumbers[tx.receiptNumber],
+            ),
+          );
           rows.add(pw.TableRow(
             children: [
               _cell('${i + 1}', fonts['arabic'], centered: true),
@@ -404,7 +463,7 @@ class SupplierStatementGenerator {
                 fonts['arabic'],
                 centered: true,
               ),
-              _cell(_b(tx.description), fonts['arabic']),
+              _cell(desc, fonts['arabic']),
               _cell(
                 tx.debit > 0 ? _fmt(tx.debit) : '',
                 fonts['arabic'],
@@ -424,11 +483,15 @@ class SupplierStatementGenerator {
             ],
           ));
 
-          // Sub-rows for purchase items
+          // Sub-rows for purchase items (nested stay), keyed by receiptNumber
+          // (stable link) instead of the retired description regex.
+          final isPurchase = tx.credit > 0;
           if (isPurchase) {
-            final purchaseId = _extractPurchaseId(tx.description);
-            if (purchaseId != null && purchaseItems.containsKey(purchaseId)) {
-              final items = purchaseItems[purchaseId]!;
+            final rn = tx.receiptNumber;
+            if (rn != null &&
+                rn.isNotEmpty &&
+                purchaseItems.containsKey(rn)) {
+              final items = purchaseItems[rn]!;
               for (final item in items) {
                 final lineTotal = (item.quantity * item.unitPrice) - item.discount;
                 final itemDesc = item.discount > 0
