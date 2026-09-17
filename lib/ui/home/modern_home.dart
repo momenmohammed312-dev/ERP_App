@@ -32,7 +32,11 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  static const int _tabCount = 7;
+  /// Tab count follows the staff flag (staff tab present or not).
+  int get _tabCount => AppFeatures.hasStaffModule ? 7 : 6;
+
+  /// Cashier tab index shifts when the staff tab is hidden.
+  int get _cashierTabIndex => AppFeatures.hasStaffModule ? 5 : 4;
 
   bool _licenseWarningShown = false;
 
@@ -84,8 +88,9 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
       Tab(icon: const Icon(Icons.people_outline), text: l10n.customer_list),
       // Index 3
       Tab(icon: const Icon(Icons.inventory_outlined), text: l10n.suppliers),
-      // Index 4
-      const Tab(icon: Icon(Icons.badge_outlined), text: 'الموظفين'),
+      // Staff tab — hidden in builds without the staff module.
+      if (AppFeatures.hasStaffModule)
+        const Tab(icon: Icon(Icons.badge_outlined), text: 'الموظفين'),
       // Index 5
       Tab(
         icon: const Icon(Icons.account_balance_wallet_outlined),
@@ -135,7 +140,9 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                             backgroundColor: Colors.red,
                             action: SnackBarAction(
                               label: 'الذهاب للكاشير',
-                              onPressed: () => _tabController.animateTo(5),
+                              onPressed: () => _tabController.animateTo(
+                                _cashierTabIndex,
+                              ),
                             ),
                           ),
                         );
@@ -166,9 +173,10 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                     Colors.orange,
                     () => _tabController.animateTo(1),
                   ),
-                  // Staff Management Button - Guarded
-                  FeatureGuard(
-                    featureName: 'staff_management',
+                  // Staff Management Button - Guarded + hidden without module
+                  if (AppFeatures.hasStaffModule)
+                    FeatureGuard(
+                      featureName: 'staff_management',
                     lockedWidget: _buildLauncherButton(
                       context,
                       'الموظفين (مغلق)',
@@ -199,16 +207,17 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                       );
                     },
                   ),
-                  // Damaged Items Button
-                  _buildLauncherButton(
-                    context,
-                    'الهالك',
-                    Icons.delete_sweep,
-                    Colors.redAccent,
-                    () {
-                      context.push('/damaged-items');
-                    },
-                  ),
+                  // Damaged Items Button — hidden without the module.
+                  if (AppFeatures.hasDamagedModule)
+                    _buildLauncherButton(
+                      context,
+                      'الهالك',
+                      Icons.delete_sweep,
+                      Colors.redAccent,
+                      () {
+                        context.push('/damaged-items');
+                      },
+                    ),
                   // Barneka (Returnable Containers) Button — vegetable-market
                   // feature, hidden in the factory (base) flavor.
                   if (AppFeatures.hasEmptyContainerTracking)
@@ -275,14 +284,16 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
       CustomerTransactionsWidget(db: widget.db),
       // Index 3: Suppliers
       SuppliersWidget(db: widget.db),
-      // Index 4: Staff — Dashboard first
-      FeatureGuard(
-        featureName: 'staff_management',
-        child: const EmployeeDashboardPage(),
-      ),
-      // Index 5: Cash
+      // Staff — Dashboard first (absent without the module; cash/reports
+      // indices shift accordingly and _cashierTabIndex tracks it).
+      if (AppFeatures.hasStaffModule)
+        FeatureGuard(
+          featureName: 'staff_management',
+          child: const EmployeeDashboardPage(),
+        ),
+      // Cash
       const CashierPage(),
-      // Index 6: Reports
+      // Reports
       ReportsPage(),
     ];
 
