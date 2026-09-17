@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/ui/product/widgets/product_form.dart';
 import 'package:pos_offline_desktop/ui/customer/add_edit_customer_page.dart';
@@ -816,7 +817,8 @@ class _OverviewPageContentState extends State<_OverviewPageContent> {
                     ]
                   : invoices.map((invoice) {
                       final invoiceNumber =
-                          invoice.invoiceNumber ?? 'غير معروف';
+                          displayInvoiceNumber(invoice.invoiceNumber, invoice.id) ??
+                          'غير معروف';
                       final customerName = invoice.customerName ?? 'عميل نقدي';
                       final amount =
                           '${invoice.totalAmount?.toStringAsFixed(2) ?? '0.00'} ج.م';

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/database/app_database.dart';
+import '../../core/services/invoice_number_formatter.dart';
 import '../../core/models/user_model.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../core/services/unified_print_service.dart' as ups;
@@ -600,7 +601,8 @@ class _DayManagementScreenState extends ConsumerState<DayManagementScreen>
       for (final invoice in invoices.take(3)) {
         recentTransactions.add({
           'type': 'sale',
-          'description': 'فاتورة مبيعات ${invoice.invoiceNumber}',
+          'description':
+              'فاتورة ${displayInvoiceNumber(invoice.invoiceNumber, invoice.id) ?? ''}',
           'amount': invoice.totalAmount,
           'date': invoice.date,
         });

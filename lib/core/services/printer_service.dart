@@ -10,6 +10,7 @@ import 'package:pos_offline_desktop/ui/customer/services/enhanced_customer_state
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/database/dao/ledger_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/customer_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/invoice_dao.dart';
@@ -148,7 +149,9 @@ class PrinterService {
                       ),
                       pw.SizedBox(height: 5),
                       pw.Text(
-                        'Invoice #: ${invoice['invoiceNumber']}',
+                        // Display audit: stored value verbatim, else
+                        // id-derived short format (never a timestamp).
+                        'Invoice #: ${displayInvoiceNumber(invoice['invoiceNumber'], invoice['id']) ?? ''}',
                         style: _getTextStyle(fontSize: 12),
                       ),
                       pw.Text(
@@ -848,11 +851,12 @@ class PrinterService {
       items: items,
       totalAmount: invoice['totalAmount'] ?? 0.0,
       paymentMethod: invoice['paymentMethod'] ?? 'cash',
+      // Display audit: receipt fallback is id-based, never timestamp-based.
       receiptNumber:
-          invoice['invoiceNumber'] ??
-          'INV-${DateTime.now().millisecondsSinceEpoch}',
+          invoice['invoiceNumber']?.toString() ??
+          (invoice['id'] == null ? 'INV-?' : 'INV-${invoice['id']}'),
       date: invoice['date'] ?? DateTime.now(),
-      customerName: invoice['customerName'] ?? 'عميل',
+      customerName: invoice['customerName'] ?? 'O1U.USU,',
     );
   }
 
@@ -1353,7 +1357,7 @@ class PrinterService {
       final invoiceModel = ups.Invoice(
         id: invoice['id'] ?? 0,
         invoiceNumber:
-            invoice['invoiceNumber']?.toString() ?? invoice['id'].toString(),
+            displayInvoiceNumber(invoice['invoiceNumber'], invoice['id']) ?? '',
         customerName: invoice['customerName'] ?? 'عميل نقدي',
         customerPhone: invoice['customerPhone'] ?? 'N/A',
         customerZipCode: '',

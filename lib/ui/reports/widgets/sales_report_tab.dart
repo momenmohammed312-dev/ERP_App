@@ -4,6 +4,7 @@ import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/database/dao/sales_returns_dao.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
@@ -325,7 +326,7 @@ class _SalesReportTabState extends State<SalesReportTab> {
 
       for (final invoice in _invoices) {
         data.add({
-          'رقم الفاتورة': invoice.invoiceNumber ?? invoice.id.toString(),
+          'رقم الفاتورة': displayInvoiceNumber(invoice.invoiceNumber, invoice.id) ?? '',
           'اسم العميل': invoice.customerName ?? 'عميل غير محدد',
           'المبلغ الإجمالي': invoice.totalAmount,
           'المدفوع': invoice.paidAmount,
@@ -664,7 +665,7 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
         title: Row(
           children: [
             Text(
-              widget.invoice.invoiceNumber ?? widget.invoice.id.toString(),
+              displayInvoiceNumber(widget.invoice.invoiceNumber, widget.invoice.id) ?? '',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.white, // White text for dark theme
@@ -991,7 +992,7 @@ class _ReturnDialogState extends State<_ReturnDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('الفاتورة: ${widget.invoice.invoiceNumber ?? widget.invoice.id}'),
+              Text('الفاتورة: ${displayInvoiceNumber(widget.invoice.invoiceNumber, widget.invoice.id) ?? ''}'),
               const SizedBox(height: 8),
               Text('العميل: ${widget.invoice.customerName ?? 'غير محدد'}'),
               const SizedBox(height: 16),

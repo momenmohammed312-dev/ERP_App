@@ -34,7 +34,7 @@ class InvoicePreviewDialog extends StatelessWidget {
             // Header with Close Button
             AppBar(
               title: Text(
-                'عرض الفاتورة #${invoice.invoiceNumber ?? invoice.id}',
+                'عرض الفاتورة ${displayInvoiceNumber(invoice.invoiceNumber, invoice.id) ?? ''}',
               ),
               leading: IconButton(
                 icon: const Icon(Icons.close),

@@ -7,6 +7,7 @@ import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/ui/widgets/invoice_items_table.dart';
 import 'package:pos_offline_desktop/ui/customer/edit_payment_dialog.dart';
 import 'package:pos_offline_desktop/ui/invoice/edit_invoice_page.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 
 const Color _bgDark = Color(0xFF0D1117);
 const Color _gold = Color(0xFFC9A84C);
@@ -504,7 +505,7 @@ class _InvoiceDetailViewState extends State<_InvoiceDetailView> {
                   children: [
                     if (_invoice != null) ...[
                       _row('رقم الفاتورة',
-                          _invoice!.invoiceNumber ?? '${_invoice!.id}'),
+                          displayInvoiceNumber(_invoice!.invoiceNumber, _invoice!.id) ?? '...'),
                       _row('العميل', _invoice!.customerName ?? '—'),
                       _row('التاريخ',
                           DateFormat('yyyy/MM/dd HH:mm').format(_invoice!.date)),

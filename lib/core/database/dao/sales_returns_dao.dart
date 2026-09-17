@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 import '../app_database.dart';
 import '../tables/sales_returns_table.dart';
+import '../../services/invoice_number_formatter.dart';
 
 part 'sales_returns_dao.g.dart';
 
@@ -112,7 +113,10 @@ class SalesReturnsDao extends DatabaseAccessor<AppDatabase>
             entityType: 'Customer',
             refId: invoice.customerId!,
             date: now,
-            description: 'مرتجع فاتورة #${invoice.invoiceNumber ?? invoice.id}',
+            // Display audit (forward-only write): short فاتورة format for
+            // new return rows; historical rows untouched.
+            description:
+                'مرتجع فاتورة ${displayInvoiceNumber(invoice.invoiceNumber, invoice.id) ?? ''}',
             debit: const Value(0.0),
             credit: Value(returnAmount),
             origin: 'reversal',

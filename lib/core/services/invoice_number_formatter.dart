@@ -25,3 +25,13 @@ int? parsePurchaseNumber(String? s) {
   final m = RegExp(r'PUR-(\d+)').firstMatch(s);
   return m == null ? null : int.tryParse(m.group(1) ?? '');
 }
+
+/// Display helper (display-only audit): stored value verbatim when present,
+/// else id-derived `000001` format, else null so the caller keeps its own
+/// placeholder. Never rewrites stored data; never touches receiptNumber.
+String? displayInvoiceNumber(Object? storedNumber, Object? id) {
+  final s = storedNumber?.toString();
+  if (s != null && s.isNotEmpty) return s;
+  final n = id is int ? id : int.tryParse(id?.toString() ?? '');
+  return n == null ? null : formatInvoiceNumber(n);
+}
