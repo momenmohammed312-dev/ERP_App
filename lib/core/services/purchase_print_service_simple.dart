@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart';
 import '../database/app_database.dart';
 import '../database/dao/enhanced_purchase_dao.dart';
+import '../database/dao/purchase_dao.dart';
+import 'invoice_number_formatter.dart';
+import 'settings_service.dart';
+import 'unified_print_service.dart' as ups;
 
 class PurchasePrintService {
   final EnhancedPurchaseDao _purchaseDao;
@@ -54,6 +58,79 @@ class PurchasePrintService {
     } catch (e) {
       throw Exception('خطأ في طباعة إيصال المشتريات: $e');
     }
+  }
+
+  /// Prints a TEXT-id supplier purchase (the live `purchases` table) via the
+  /// same SOP thermal layout the purchase page uses. Shared by the create
+  /// page and the purchase detail dialog so reprints look identical.
+  Future<void> printTextPurchase({
+    required AppDatabase db,
+    required String purchaseId,
+  }) async {
+    final purchase = await (db.select(db.purchases)
+          ..where((t) => t.id.equals(purchaseId)))
+        .getSingleOrNull();
+    if (purchase == null) throw Exception('فاتورة المشتريات غير موجودة');
+
+    final pairs = await PurchaseDao(db).getItemsWithProductsByPurchase(
+      purchaseId,
+    );
+    String supplierName = 'مورد غير محدد';
+    String supplierPhone = '';
+    if (purchase.supplierId != null) {
+      final supplier = await db.supplierDao.getSupplierById(
+        purchase.supplierId!,
+      );
+      if (supplier != null) {
+        supplierName = supplier.name;
+        supplierPhone = supplier.phone ?? '';
+      }
+    }
+
+    final items = pairs
+        .map(
+          (pair) => ups.InvoiceItem(
+            id: 0,
+            invoiceId: 0,
+            description: pair.$2?.name ?? 'منتج غير محدد',
+            unit: pair.$1.unit,
+            quantity: pair.$1.quantity,
+            unitPrice: pair.$1.unitPrice,
+            totalPrice: pair.$1.totalPrice,
+          ),
+        )
+        .toList();
+
+    final data = ups.InvoiceData(
+      invoice: ups.Invoice(
+        id: 0,
+        invoiceNumber:
+            displayInvoiceNumber(purchase.invoiceNumber, null) ?? '',
+        customerName: supplierName,
+        customerPhone: supplierPhone,
+        customerZipCode: '',
+        customerState: '',
+        invoiceDate: purchase.purchaseDate,
+        subtotal: purchase.totalAmount,
+        isCreditAccount: purchase.paymentMethod != 'cash',
+        previousBalance: 0.0,
+        totalAmount: purchase.totalAmount,
+      ),
+      items: items,
+      storeInfo: ups.StoreInfo(
+        storeName: await SettingsService.getBusinessName(),
+        phone: await SettingsService.getBusinessPhone(),
+        zipCode: '',
+        state: await SettingsService.getBusinessAddress(),
+        taxNumber: await SettingsService.getTaxNumber(),
+        logoPath: await SettingsService.getBusinessLogoPath(),
+      ),
+    );
+
+    await ups.UnifiedPrintService.printToThermalPrinter(
+      documentType: ups.DocumentType.salesInvoice, // Reuse for now
+      data: data,
+    );
   }
 
   Map<String, dynamic> _createPurchaseInvoiceData(
