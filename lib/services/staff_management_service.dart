@@ -390,6 +390,13 @@ class StaffManagementService {
           lateDays++;
           presentDays++; // Late counts as present
           break;
+        // Bug 5: إذن — excused days count as present, never as late,
+        // so the flat late fine (lateDays × setting) skips them while
+        // HR still sees them distinctly in the attendance list.
+        case 'excused':
+        case 'excused_late':
+          presentDays++;
+          break;
       }
 
       totalHours += record.workingHours ?? 0.0;
