@@ -107,15 +107,22 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
   }
 
   Staff? _findSmartMatch(DeviceEnrolledUser user) {
-    // Try matching externalUserId with staff numeric/code part
+    // 1. بالـ ID المباشر أو الرقم فقط (حالة شيت "1" و STAFF0001)
     for (final staff in _allStaff) {
-      if (staff.staffId.replaceAll(RegExp(r'[^0-9]'), '') == user.externalUserId) {
-        return staff;
-      }
-      if (user.name != null &&
-          user.name!.trim().isNotEmpty &&
-          staff.name.trim().toLowerCase() == user.name!.trim().toLowerCase()) {
-        return staff;
+      if (staff.staffId.toLowerCase() == user.externalUserId.toLowerCase()) return staff;
+      if (staff.staffId.replaceAll(RegExp(r'[^0-9]'), '') == user.externalUserId) return staff;
+      // تحقق من الخرائط الحالية: لو الموظف مربوط مسبقاً بنفس externalUserId عبر أي جهاز
+      final mappedIds = _existingMappingsByExternalId.values.where((m) => m.staffId == staff.staffId).map((m) => m.externalUserId);
+      if (mappedIds.contains(user.externalUserId)) return staff;
+    }
+    // 2. بالاسم (اسم البصمة على الجهاز مقابل اسم الموظف أو اسم البصمة المحفوظ)
+    for (final staff in _allStaff) {
+      final devName = user.name?.trim().toLowerCase() ?? '';
+      if (devName.isNotEmpty) {
+        if (staff.name.trim().toLowerCase() == devName) return staff;
+        // ابحث في الخرائط عن deviceUserName مطابق
+        final devNames = _existingMappingsByExternalId.values.where((m) => m.staffId == staff.staffId).map((m) => m.deviceUserName?.toLowerCase() ?? '');
+        if (devNames.contains(devName)) return staff;
       }
     }
     return null;
@@ -153,22 +160,22 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
 
     try {
       if (existing != null) {
-        // Update existing mapping
         await dao.updateMapping(
           existing.copyWith(
             staffId: staffId,
             cardNumber: Value(user.cardNumber),
+            deviceUserName: Value(user.name),
             enrollmentStatus: 'enrolled',
             updatedAt: DateTime.now(),
           ),
         );
       } else {
-        // Insert new mapping
         await dao.addMapping(
           StaffBiometricMappingsCompanion.insert(
             staffId: staffId,
             deviceId: widget.device.id,
             externalUserId: user.externalUserId,
+            deviceUserName: Value(user.name),
             cardNumber: Value(user.cardNumber),
             enrollmentStatus: 'enrolled',
             enrolledAt: Value(DateTime.now()),
@@ -216,6 +223,7 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
             existing.copyWith(
               staffId: staffId,
               cardNumber: Value(u.cardNumber),
+              deviceUserName: Value(u.name),
               enrollmentStatus: 'enrolled',
               updatedAt: DateTime.now(),
             ),
@@ -226,6 +234,7 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
               staffId: staffId,
               deviceId: widget.device.id,
               externalUserId: u.externalUserId,
+              deviceUserName: Value(u.name),
               cardNumber: Value(u.cardNumber),
               enrollmentStatus: 'enrolled',
               enrolledAt: Value(DateTime.now()),

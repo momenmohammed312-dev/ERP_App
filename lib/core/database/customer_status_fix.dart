@@ -13,6 +13,32 @@ class CustomerStatusFix {
           .customSelect('PRAGMA table_info(customers)')
           .get();
 
+      // Drifted DB without the table at all (beforeOpen repair path):
+      // create it canonically instead of crashing startup with ALTER.
+      if (result.isEmpty) {
+        log('customers table missing. Creating it...');
+        await db.customStatement('''
+          CREATE TABLE IF NOT EXISTS customers (
+            id TEXT NOT NULL PRIMARY KEY,
+            name TEXT NOT NULL,
+            phone TEXT,
+            address TEXT,
+            gstin_number TEXT,
+            email TEXT,
+            opening_balance REAL DEFAULT 0.0,
+            total_debt REAL DEFAULT 0.0,
+            total_paid REAL DEFAULT 0.0,
+            created_at INTEGER,
+            updated_at INTEGER,
+            notes TEXT,
+            is_active INTEGER DEFAULT 1,
+            status TEXT DEFAULT 'Active'
+          )
+        ''');
+        log('✅ customers table created successfully');
+        return;
+      }
+
       bool hasStatusColumn = false;
       bool isIntegerType = false;
 

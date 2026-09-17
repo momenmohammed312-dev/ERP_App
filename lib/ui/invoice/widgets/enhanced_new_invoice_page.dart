@@ -13,6 +13,7 @@ import 'package:pos_offline_desktop/ui/invoice/widgets/product_selection_modal.d
 import 'package:pos_offline_desktop/ui/invoice/widgets/order_line_item.dart';
 import 'package:pos_offline_desktop/ui/invoice/models/product_entry.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/services/business_date_service.dart';
 import 'package:pos_offline_desktop/core/services/invoice_service.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
@@ -83,7 +84,6 @@ class _EnhancedNewInvoicePageState
   bool _isLoading = true;
   bool _showInvoiceTypeModal = true;
   Timer? _searchDebounce;
-  String? _invoiceNumber;
 
   // Vegetable-flavor: record empty crates issued to the customer on sale.
   bool _registerEmptyBarnika = true;
@@ -145,7 +145,8 @@ class _EnhancedNewInvoicePageState
 
   Future<void> _checkDayStatus() async {
     try {
-      final isOpen = await widget.db.dayDao.isDayOpen();
+      // Authoritative day state: `days` is the single source of truth.
+      final isOpen = await BusinessDateService(widget.db).isBusinessDayOpen();
       if (mounted) {
         setState(() {
           _isDayOpen = isOpen;
@@ -167,8 +168,8 @@ class _EnhancedNewInvoicePageState
         return;
       }
 
-      // Check day status first
-      bool isOpen = await widget.db.dayDao.isDayOpen();
+      // Check day status first (authoritative `days` state, not the session)
+      bool isOpen = await BusinessDateService(widget.db).isBusinessDayOpen();
 
       if (!isOpen) {
         if (mounted) {
@@ -189,8 +190,8 @@ class _EnhancedNewInvoicePageState
       final products = await widget.db.productDao.getAllProducts();
       final customers = await widget.db.customerDao.getAllActiveCustomers();
 
-      // Generate invoice number
-      _invoiceNumber = '${DateTime.now().millisecondsSinceEpoch}';
+      // The canonical invoice number is assigned by InvoiceService inside the
+      // create transaction — never pre-generated here.
 
       if (!mounted) return;
       setState(() {
@@ -277,6 +278,19 @@ class _EnhancedNewInvoicePageState
 
   Future<void> _handleBarcodeScanned(String barcode) async {
     try {
+      // باركود صنف (لون/فئة) أولًا — يفتح اختيار المنتج الأب والصنف محدد مسبقًا.
+      final variant = await widget.db.productVariantDao.getVariantByBarcode(
+        barcode,
+      );
+      if (variant != null) {
+        final parent = await widget.db.productDao.getProductById(
+          variant.productId,
+        );
+        if (parent != null && mounted) {
+          _showProductSelectionModal(parent, initialVariant: variant);
+          return;
+        }
+      }
       final product = await widget.db.productDao.getProductByBarcode(barcode);
       if (product != null) {
         _showProductSelectionModal(product);
@@ -384,13 +398,26 @@ class _EnhancedNewInvoicePageState
     setState(() {});
   }
 
-  void _showProductSelectionModal(Product product) {
+  void _showProductSelectionModal(
+    Product product, {
+    ProductVariant? initialVariant,
+  }) {
     showDialog(
       context: context,
       builder: (context) => ProductSelectionModal(
         product: product,
-        onConfirm: (quantity, unit, unitPrice, discount, tax) {
-          _addProductEntry(product, quantity, unit, unitPrice, discount, tax);
+        db: widget.db,
+        initialVariant: initialVariant,
+        onConfirm: (quantity, unit, unitPrice, discount, tax, variant) {
+          _addProductEntry(
+            product,
+            quantity,
+            unit,
+            unitPrice,
+            discount,
+            tax,
+            variant,
+          );
         },
       ),
     );
@@ -403,8 +430,10 @@ class _EnhancedNewInvoicePageState
     double unitPrice,
     double discount,
     double tax,
+    ProductVariant? variant,
   ) {
-    final needsPriceOverride = unitPrice != product.price;
+    final defaultPrice = variant?.price ?? product.price;
+    final needsPriceOverride = unitPrice != defaultPrice;
     if (needsPriceOverride) {
       final currentUser = ref.read(authProvider);
       if (currentUser == null || !currentUser.hasPermission(Permission.editSale)) {
@@ -418,18 +447,19 @@ class _EnhancedNewInvoicePageState
             ),
           );
         }
-        unitPrice = product.price;
+        unitPrice = defaultPrice;
       }
     }
 
     setState(() {
       final entry = ProductEntry(product: product)
+        ..selectedVariant = variant
         ..quantity = quantity
         ..unit = unit
         ..unitPrice = unitPrice
         ..discount = discount
         ..tax = tax
-        ..priceOverride = unitPrice != product.price;
+        ..priceOverride = unitPrice != (variant?.price ?? product.price);
 
       _productEntries.add(entry);
       _calculateTotals();
@@ -590,12 +620,13 @@ class _EnhancedNewInvoicePageState
     try {
       final db = widget.db;
       final now = DateTime.now();
-      final draftNumber = _invoiceNumber ?? 'DRAFT_${now.millisecondsSinceEpoch}';
+      // Drafts persist with invoice_number = NULL until posted through
+      // InvoiceService.createInvoice (canonical number assigned in-txn).
+      // No DRAFT_/timestamp numbers are ever persisted (v70 contract).
       final customerName = _selectedCustomer?.name ?? 'عميل نقدي';
 
       final invoiceId = await db.invoiceDao.insertInvoice(
         InvoicesCompanion(
-          invoiceNumber: Value(draftNumber),
           customerId: Value(_selectedCustomerId),
           customerName: Value(customerName),
           customerContact: Value(_selectedCustomer?.phone ?? ''),
@@ -618,6 +649,7 @@ class _EnhancedNewInvoicePageState
             price: Value(entry.unitPrice),
             discount: Value(entry.discount),
             unitCostAtTime: Value(entry.product!.costPrice),
+            variantId: Value(entry.selectedVariant?.id),
           ),
         );
       }
@@ -709,7 +741,7 @@ class _EnhancedNewInvoicePageState
 
                 try {
                   final db = widget.db;
-                  final isOpen = await db.dayDao.isDayOpen();
+                  final isOpen = await BusinessDateService(db).isBusinessDayOpen();
                   if (!isOpen) {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
@@ -899,6 +931,7 @@ class _EnhancedNewInvoicePageState
             discount: subDiscount,
             unitCostAtTime: e.product!.costPrice,
             shipmentId: allocation.shipmentId,
+            variantId: e.selectedVariant?.id,
           ));
 
           if (allocation.quantity > primaryQuantity) {
@@ -919,15 +952,12 @@ class _EnhancedNewInvoicePageState
           ctn: ctn,
           discount: e.discount,
           unitCostAtTime: e.product!.costPrice,
+          variantId: e.selectedVariant?.id,
         ));
       }
     }
 
-    final productSummary = _productEntries
-        .map((e) => e.product?.name ?? '')
-        .where((n) => n.isNotEmpty)
-        .join(', ');
-    final ledgerDescription = 'بيع #$_invoiceNumber ($productSummary)';
+    // Ledger wording comes from InvoiceNumberService inside createInvoice.
 
     final result = await InvoiceService(db).createInvoice(
       customerId: customerId == 'cash' ? null : customerId,
@@ -938,13 +968,13 @@ class _EnhancedNewInvoicePageState
       totalAmount: _grandTotal,
       paidAmount: _paidAmount,
       status: status,
-      invoiceNumber: _invoiceNumber,
       items: items,
-      ledgerDescription: ledgerDescription,
       primaryShipmentId: primaryShipmentId,
     );
 
     final invoiceId = result.invoiceId;
+    // Canonical number assigned atomically by the service.
+    final newInvoiceNumber = result.invoice.invoiceNumber ?? 'INV$invoiceId';
 
     // Vegetable flavor: record empty crates issued to a real customer.
     // Uses ShipmentAllocationService to record barnika out.
@@ -969,7 +999,7 @@ class _EnhancedNewInvoicePageState
         .map((e) => ups.InvoiceItem(
               id: e.product!.id,
               invoiceId: invoiceId,
-              description: e.product!.name,
+              description: e.displayName,
               unit: e.unit,
               quantity: e.quantity,
               unitPrice: e.unitPrice,
@@ -988,7 +1018,7 @@ class _EnhancedNewInvoicePageState
 
     final invoiceModel = ups.Invoice(
       id: invoiceId,
-      invoiceNumber: _invoiceNumber ?? 'INV$invoiceId',
+      invoiceNumber: newInvoiceNumber,
       customerName: customerName,
       customerPhone: selectedCustomer?.phone ?? 'N/A',
       customerZipCode: '',
@@ -1161,7 +1191,8 @@ class _EnhancedNewInvoicePageState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _invoiceNumber ?? 'جاري الإنشاء...',
+                  // The canonical number is assigned on save by the service.
+                  'فاتورة جديدة',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,

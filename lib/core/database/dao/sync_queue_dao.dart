@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../tables/sync_queue_table.dart';
 import '../app_database.dart';
 import '../../services/settings_service.dart';
+import '../../config/app_features.dart';
 
 part 'sync_queue_dao.g.dart';
 
@@ -24,6 +25,8 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
     required String operation,
     required Map<String, dynamic> payload,
   }) async {
+    if (!AppFeatures.hasMultiDeviceSync) return;
+
     final deviceName = await _resolveDeviceName();
     await into(syncQueue).insert(
       SyncQueueCompanion.insert(

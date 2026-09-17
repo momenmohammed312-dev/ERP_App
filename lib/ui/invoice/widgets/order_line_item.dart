@@ -67,6 +67,7 @@ class _OrderLineItemState extends State<OrderLineItem> {
 
   void _updateEntry() {
     final updatedEntry = ProductEntry(product: widget.entry.product)
+      ..selectedVariant = widget.entry.selectedVariant
       ..quantity = int.tryParse(_quantityController.text) ?? 1
       ..unit = widget.entry.unit
       ..unitPrice = double.tryParse(_priceController.text) ?? 0.0
@@ -74,7 +75,7 @@ class _OrderLineItemState extends State<OrderLineItem> {
       ..tax = double.tryParse(_taxController.text) ?? 0.0
       ..priceOverride =
           (double.tryParse(_priceController.text) ?? 0.0) !=
-          widget.entry.product?.price
+          widget.entry.defaultPrice
       // Preserve shipment allocation state across edits
       ..allocations = widget.entry.allocations
       ..shipmentsById = widget.entry.shipmentsById
@@ -104,13 +105,51 @@ class _OrderLineItemState extends State<OrderLineItem> {
               vertical: 4,
             ),
             title: Text(
-              widget.entry.product?.name ?? 'Unknown Product',
+              widget.entry.displayName,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (widget.entry.selectedVariant != null)
+                  Builder(
+                    builder: (context) {
+                      final isDark =
+                          Theme.of(context).brightness == Brightness.dark;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.purple.shade900
+                                    .withValues(alpha: 0.5)
+                                : Colors.purple.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.purple.shade700
+                                  : Colors.purple.shade200,
+                            ),
+                          ),
+                          child: Text(
+                            'الصنف: ${widget.entry.selectedVariant!.name} — متاح: ${widget.entry.selectedVariant!.quantity}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? Colors.purple.shade100
+                                  : Colors.purple.shade800,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 Row(
                   children: [
                     Container(

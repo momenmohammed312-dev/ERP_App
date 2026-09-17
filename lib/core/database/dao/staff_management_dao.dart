@@ -86,8 +86,60 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
       (select(attendanceTable)..where((a) => a.id.equals(id)))
           .getSingleOrNull();
 
+  /// Returns all attendance records for a staff member on a specific day
+  Future<List<Attendance>> getAttendanceOnDate(
+    String staffId,
+    DateTime date,
+  ) async {
+    final day = DateTime(date.year, date.month, date.day);
+    final nextDay = day.add(const Duration(days: 1));
+    final records = await (select(attendanceTable)
+          ..where((a) => a.staffId.equals(staffId))
+          ..where((a) => a.date.isBetweenValues(day, nextDay)))
+        .get();
+    return records
+        .where((a) => DateTime(a.date.year, a.date.month, a.date.day) == day)
+        .toList();
+  }
+
+  /// Deletes all attendance records for a staff member on a specific day.
+  /// Returns the number of deleted rows.
+  Future<int> deleteAttendanceByDate(String staffId, DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    final nextDay = day.add(const Duration(days: 1));
+    return (delete(attendanceTable)
+          ..where((a) => a.staffId.equals(staffId))
+          ..where((a) => a.date.isBetweenValues(day, nextDay)))
+        .go();
+  }
+
   Future<void> updateAttendance(Attendance entry) =>
       update(attendanceTable).replace(entry);
+
+  Future<void> deleteAttendance(int id) =>
+      (delete(attendanceTable)..where((a) => a.id.equals(id))).go();
+
+  Future<int> deleteAttendanceByStaffAndSource(String staffId, String source) =>
+      (delete(attendanceTable)..where((a) => a.staffId.equals(staffId) & a.source.equals(source))).go();
+
+  /// يحذف كل حضور لموظف في فترة محددة (أي مصدر) — لفك التعارض قبل إعادة الاستيراد
+  Future<int> deleteAttendanceByStaffInRange(String staffId, DateTime start, DateTime end) {
+    final s = DateTime(start.year, start.month, start.day);
+    final e = DateTime(end.year, end.month, end.day).add(const Duration(days: 1));
+    return (delete(attendanceTable)
+          ..where((a) => a.staffId.equals(staffId))
+          ..where((a) => a.date.isBetweenValues(s, e)))
+        .go();
+  }
+
+  /// يحذف سجلات الغياب التلقائية المستقبلية (بعد اليوم) — إصلاح لمشكلة توليد غياب لآخر الشهر مقدماً
+  Future<int> deleteFutureAutoAbsences() {
+    final tomorrow = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day).add(const Duration(days: 1));
+    return (delete(attendanceTable)
+          ..where((a) => a.source.equals('auto_generated'))
+          ..where((a) => a.date.isBiggerThanValue(tomorrow)))
+        .go();
+  }
 
   Future<void> checkIn(
     String staffId, {
@@ -96,6 +148,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
     int? sourceDeviceId,
     int? rawEventId,
     String status = 'present',
+    int? lateMinutes,
   }) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -117,6 +170,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
         sourceDeviceId: Value(sourceDeviceId),
         rawEventId: Value(rawEventId),
         status: status,
+        lateMinutes: lateMinutes ?? record.lateMinutes,
         updatedAt: now,
       ));
     } else {
@@ -130,6 +184,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
           source: Value(source),
           sourceDeviceId: Value(sourceDeviceId),
           rawEventId: Value(rawEventId),
+          lateMinutes: Value(lateMinutes ?? 0),
           createdAt: now,
           updatedAt: now,
         ),
@@ -147,6 +202,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
     double? workingHours,
     double? overtimeHours,
     String? status,
+    int? lateMinutes,
   }) async {
     final now = DateTime.now();
     // Find today's attendance record
@@ -185,6 +241,7 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
         workingHours: Value(finalWorkingHours),
         overtimeHours: finalOvertimeHours ?? 0,
         status: finalStatus,
+        lateMinutes: lateMinutes ?? record.lateMinutes,
         source: Value(source),
         sourceDeviceId: Value(sourceDeviceId),
         rawEventId: Value(rawEventId),
@@ -236,6 +293,44 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> addAdvance(StaffAdvancesCompanion entry) =>
       into(staffAdvances).insert(entry);
+
+  Future<void> approveAdvance(int advanceId, String approvedBy) =>
+      (update(staffAdvances)..where((a) => a.id.equals(advanceId))).write(
+        StaffAdvancesCompanion(
+          status: const Value('approved'),
+          approvedBy: Value(approvedBy),
+          approvedAt: Value(DateTime.now()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Future<void> rejectAdvance(int advanceId, String approvedBy, String reason) =>
+      (update(staffAdvances)..where((a) => a.id.equals(advanceId))).write(
+        StaffAdvancesCompanion(
+          status: const Value('rejected'),
+          approvedBy: Value(approvedBy),
+          approvedAt: Value(DateTime.now()),
+          rejectionReason: Value(reason),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  /// Records a payroll deduction against an advance. When the cumulative
+  /// deducted amount covers the full advance, it is marked 'settled' so all
+  /// future payrolls exclude it automatically. Must run in the same
+  /// transaction as the payroll insert.
+  Future<void> applyAdvanceDeduction({
+    required int advanceId,
+    required double newPaidAmount,
+    required bool settled,
+  }) =>
+      (update(staffAdvances)..where((a) => a.id.equals(advanceId))).write(
+        StaffAdvancesCompanion(
+          paidAmount: Value(newPaidAmount),
+          status: settled ? const Value('settled') : const Value.absent(),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
   // PAYROLL MANAGEMENT
 

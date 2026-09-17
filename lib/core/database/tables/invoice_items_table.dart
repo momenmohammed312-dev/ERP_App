@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'invoice_table.dart';
 import 'product_table.dart';
+import 'product_variants_table.dart';
 import 'vegetable_shipments_table.dart';
 
 class InvoiceItems extends Table {
@@ -10,6 +11,11 @@ class InvoiceItems extends Table {
       integer().references(Invoices, #id)(); // FK to Invoices
   IntColumn get productId =>
       integer().references(Products, #id)(); // FK to Products
+
+  /// صنف المنتج (لون/فئة) — nullable عشان الفواتير القديمة والمنتجات
+  /// اللي مالهاش أصناف تفضل شغالة بدون تغيير.
+  IntColumn get variantId =>
+      integer().nullable().references(ProductVariants, #id)();
 
   IntColumn get quantity => integer().withDefault(const Constant(1))();
   IntColumn get ctn => integer().nullable()();

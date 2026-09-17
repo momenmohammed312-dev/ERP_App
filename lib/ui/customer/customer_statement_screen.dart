@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/dao/ledger_dao.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/ui/customer/edit_payment_dialog.dart';
 import 'package:pos_offline_desktop/ui/customer/services/enhanced_customer_statement_generator.dart';
@@ -47,7 +48,8 @@ class _CustomerStatementScreenState
   final TextEditingController _searchController = TextEditingController();
 
   final _nf = NumberFormat('#,##0.00');
-  static final _invReceipt = RegExp(r'^INV(\d+)$');
+  // Invoice identity is resolved ONLY via the structured receiptNumber
+  // column (StatementHelpers.extractInvoiceId) — never from free text.
 
   @override
   void initState() {
@@ -65,16 +67,21 @@ class _CustomerStatementScreenState
     setState(() => _isLoading = true);
     final db = ref.read(appDatabaseProvider);
 
+    // ONE shared normalizer (StatementHelpers): inclusive day boundaries for
+    // the screen, the customer PDF and the supplier statement alike.
+    final (from, to) = StatementHelpers.normalizeRange(_fromDate, _toDate);
+
     final txs = await db.ledgerDao.getCustomerTransactionsByDateRange(
       widget.customer.id,
-      DateTime(_fromDate.year, _fromDate.month, _fromDate.day),
-      DateTime(_toDate.year, _toDate.month, _toDate.day, 23, 59, 59),
+      from,
+      to,
     );
 
+    // Opening balance: canonical getRunningBalance up-to from−1s helper.
     final prevBalance = await db.ledgerDao.getRunningBalance(
       'Customer',
       widget.customer.id,
-      upToDate: _fromDate.subtract(const Duration(seconds: 1)),
+      upToDate: StatementHelpers.openingCutoff(_fromDate),
     );
 
     double purchases = 0;
@@ -87,17 +94,12 @@ class _CustomerStatementScreenState
       if (tx.origin == 'sale') {
         purchases += tx.debit;
         invoices++;
-        if (tx.receiptNumber != null) {
-          final m = _invReceipt.firstMatch(tx.receiptNumber!);
-          if (m != null) {
-            final id = int.tryParse(m.group(1) ?? '');
-            if (id != null) {
-              final items =
-                  await db.invoiceDao.getItemsWithProductsByInvoice(id);
-              for (final it in items) {
-                discounts += it.$1.discount;
-              }
-            }
+        final id = StatementHelpers.extractInvoiceId(tx.receiptNumber);
+        if (id != null) {
+          final items =
+              await db.invoiceDao.getItemsWithProductsByInvoice(id);
+          for (final it in items) {
+            discounts += it.$1.discount;
           }
         }
       } else if (tx.origin == 'payment') {
@@ -145,28 +147,44 @@ class _CustomerStatementScreenState
     setState(() => _isExporting = true);
     try {
       final db = ref.read(appDatabaseProvider);
-      final currentBalance =
-          await db.ledgerDao.getCustomerBalance(widget.customer.id);
+      final finalBalance =
+          _rows.isEmpty ? _openingBalance : _rows.last.balance;
+
+      final exportTransactions = _filteredRows
+          .map(
+            (r) => LedgerTransactionWithBalance(
+              transaction: r.tx,
+              runningBalance: r.balance,
+            ),
+          )
+          .toList();
+
+      final fromDateNormalized =
+          StatementHelpers.startOfDay(_fromDate);
+      final toDateNormalized =
+          StatementHelpers.endOfDay(_toDate);
 
       if (_isDetailed) {
         await EnhancedCustomerStatementGenerator.generateStatement(
           db: db,
           customerId: widget.customer.id,
           customerName: widget.customer.name,
-          fromDate: _fromDate,
-          toDate: _toDate,
+          fromDate: fromDateNormalized,
+          toDate: toDateNormalized,
           openingBalance: _openingBalance,
-          currentBalance: currentBalance,
+          currentBalance: finalBalance,
+          transactions: exportTransactions,
         );
       } else {
         await EnhancedCustomerStatementGenerator.generateSummaryStatement(
           db: db,
           customerId: widget.customer.id,
           customerName: widget.customer.name,
-          fromDate: _fromDate,
-          toDate: _toDate,
+          fromDate: fromDateNormalized,
+          toDate: toDateNormalized,
           openingBalance: _openingBalance,
-          currentBalance: currentBalance,
+          currentBalance: finalBalance,
+          transactions: exportTransactions,
         );
       }
     } catch (e) {
@@ -229,8 +247,9 @@ class _CustomerStatementScreenState
         ),
         body: Column(
           children: [
+            // Screen order (B6–B9): Name → Period → Transactions (+nested) →
+            // Balance/Summary.
             _buildCustomerInfo(cardBg, textColor, subTextColor, goldColor),
-            _buildSummaryCards(cardBg, textColor, subTextColor, goldColor),
             _buildDateFilter(cardBg, textColor, goldColor),
             _buildFilters(cardBg, textColor, goldColor),
             _buildStatementToggle(cardBg, textColor, goldColor),
@@ -262,6 +281,7 @@ class _CustomerStatementScreenState
                           },
                         ),
             ),
+            _buildSummaryCards(cardBg, textColor, subTextColor, goldColor),
             _buildFooter(
               finalBalance,
               textColor,
@@ -797,12 +817,8 @@ class _StatementRowState extends State<_StatementRow> {
   bool get _isPayment => widget.data.tx.origin == 'payment';
   bool get _isReturn => widget.data.tx.origin == 'reversal';
 
-  int? get _invoiceId {
-    final rn = widget.data.tx.receiptNumber;
-    if (rn == null) return null;
-    final m = RegExp(r'^INV(\d+)$').firstMatch(rn);
-    return m != null ? int.tryParse(m.group(1) ?? '') : null;
-  }
+  int? get _invoiceId =>
+      StatementHelpers.extractInvoiceId(widget.data.tx.receiptNumber);
 
   int? get _returnId {
     final rn = widget.data.tx.receiptNumber;

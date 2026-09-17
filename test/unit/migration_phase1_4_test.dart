@@ -170,7 +170,7 @@ void main() {
       // Verify schema was upgraded to 52.
       final versionRow = await db.customSelect('PRAGMA user_version').getSingle();
       final version = versionRow.read<int>('user_version');
-      expect(version, 52, reason: 'schema should be upgraded to 52');
+      expect(version, 71, reason: 'schema should be upgraded to current (71)');
 
       // Verify vegetable_shipments table was created by v51 migration.
       final shipmentTables = await db.customSelect(

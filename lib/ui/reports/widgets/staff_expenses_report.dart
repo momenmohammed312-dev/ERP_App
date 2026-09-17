@@ -74,6 +74,13 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
             date: p.paymentDate ?? p.updatedAt,
             period: p.payrollPeriod,
             source: 'payroll',
+            lateHours: p.lateHours,
+            lateDeduction: p.lateDeduction,
+            permissionHours: p.permissionHours,
+            permissionDeduction: p.permissionDeduction,
+            overtimeHours: p.overtimeHours,
+            overtimePay: p.overtimePay,
+            advances: p.advances,
           ));
         }
       }
@@ -187,7 +194,15 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
       final data = list.map((e) {
         return {
           'name': e.staffName,
-          'amount': e.amount.toStringAsFixed(2),
+          'basic': e.amount.toStringAsFixed(2),
+          'overtime_hours': e.overtimeHours.toStringAsFixed(1),
+          'overtime_pay': e.overtimePay.toStringAsFixed(2),
+          'late_hours': e.lateHours.toStringAsFixed(1),
+          'late_deduction': e.lateDeduction.toStringAsFixed(2),
+          'permission_hours': e.permissionHours.toStringAsFixed(1),
+          'permission_deduction': e.permissionDeduction.toStringAsFixed(2),
+          'advances': e.advances.toStringAsFixed(2),
+          'net': e.amount.toStringAsFixed(2),
           'date': DateFormat('yyyy/MM/dd').format(e.date),
           'period': e.period.isEmpty ? '-' : e.period,
         };
@@ -195,8 +210,8 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
       await _exportService.exportToPDF(
         title: single != null ? 'إيصال مرتب' : 'تقرير المرتبات المصروفة',
         data: data,
-        headers: const ['الموظف', 'المبلغ', 'التاريخ', 'الفترة'],
-        columns: const ['name', 'amount', 'date', 'period'],
+        headers: const ['الموظف', 'أساسي', 'ساعات اضافي', 'قيمة اضافي', 'ساعات تأخير', 'خصم تأخير', 'ساعات إذن', 'خصم إذن', 'سلف', 'الصافي', 'التاريخ', 'الفترة'],
+        columns: const ['name', 'basic', 'overtime_hours', 'overtime_pay', 'late_hours', 'late_deduction', 'permission_hours', 'permission_deduction', 'advances', 'net', 'date', 'period'],
       );
     } catch (e) {
       if (mounted) {
@@ -595,6 +610,13 @@ class _SalaryEntry {
   final DateTime date;
   final String period;
   final String source;
+  final double lateHours;
+  final double lateDeduction;
+  final double permissionHours;
+  final double permissionDeduction;
+  final double overtimeHours;
+  final double overtimePay;
+  final double advances;
 
   _SalaryEntry({
     required this.staffId,
@@ -603,5 +625,12 @@ class _SalaryEntry {
     required this.date,
     required this.period,
     required this.source,
+    this.lateHours = 0,
+    this.lateDeduction = 0,
+    this.permissionHours = 0,
+    this.permissionDeduction = 0,
+    this.overtimeHours = 0,
+    this.overtimePay = 0,
+    this.advances = 0,
   });
 }

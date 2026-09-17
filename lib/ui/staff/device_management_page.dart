@@ -52,20 +52,46 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
 
       await _loadDevices();
       if (mounted) {
-        if (updatedDevice?.lastSyncStatus == 'success') {
+        // Truthful message from the latest run counters: success vs
+        // success_no_new_records vs partial vs failed (never a bare "نجاح").
+        final lastLog = await dao.getLatestSyncLogForDevice(device.id);
+        final fetched = lastLog?.eventsFetched ?? 0;
+        final matched = lastLog?.eventsMatched ?? 0;
+        final unmatched = lastLog?.eventsUnmatched ?? 0;
+        final status = updatedDevice?.lastSyncStatus;
+        if (status == 'success' && unmatched == 0) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تمت المزامنة بنجاح')),
+            SnackBar(
+              content: Text(fetched == 0
+                  ? 'تمت المزامنة بنجاح — لا بصمات جديدة'
+                  : 'تمت المزامنة بنجاح: $fetched جديدة • $matched مطابقة'),
+            ),
+          );
+        } else if (status == 'partial' || (status == 'success' && unmatched > 0)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'مزامنة جزئية: $matched مطابقة • $unmatched تحتاج مراجعة (صفحة البصمات غير المطابقة)'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
           );
         } else {
+          final err = updatedDevice?.lastSyncError;
+          final isNetIssue = err != null && (err.contains('timeout') || err.contains('مهلة') || err.contains('شبكة'));
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('فشلت المزامنة'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text(err != null && err.length < 120 ? err : 'فشلت المزامنة — ${isNetIssue ? 'الشبكة غير مستقرة، سيعاد تلقائياً كل 5 دقائق والحضور محفوظ محلياً' : 'راجع تفاصيل الجهاز'}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('فشلت المزامنة'), backgroundColor: Colors.red),
+          SnackBar(content: Text('فشلت المزامنة: $e — ستتم إعادة المحاولة تلقائياً'), backgroundColor: Colors.red, duration: const Duration(seconds: 5)),
         );
       }
     }
@@ -91,7 +117,7 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
         ipAddress: device.ipAddress!,
         port: device.port!,
         authToken: device.authToken,
-        timeout: const Duration(seconds: 5),
+        timeout: const Duration(seconds: 15),
       );
 
       final connected = await source.connect();
@@ -137,6 +163,8 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
         );
       } else {
         if (!mounted) return;
+        final detail = source.lastError ?? 'تعذر الوصول إلى الجهاز في ${device.ipAddress}:${device.port}';
+        final isPacketLoss = detail.contains('timeout') || detail.contains('مهلة') || detail.contains('packet');
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -147,12 +175,28 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
                 Text('فشل الاتصال بالجهاز'),
               ],
             ),
-            content: Text(
-              'تعذر الوصول إلى الجهاز في ${device.ipAddress}:${device.port}.\n'
-              'يرجى التأكد من:\n'
-              '1. تشغيل الجهاز وتوصيله بالشبكة المحلية.\n'
-              '2. صحة الـ IP والمنفذ (4370).\n'
-              '3. صحة مفتاح الاتصال (Communication Key) إن وجد.',
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(detail, style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                const Text(
+                  'يرجى التأكد من:\n'
+                  '1. تشغيل الجهاز وتوصيله بالشبكة المحلية.\n'
+                  '2. صحة الـ IP والمنفذ (4370).\n'
+                  '3. صحة مفتاح الاتصال (Communication Key) إن وجد.',
+                ),
+                if (isPacketLoss) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(8)),
+                    child: const Text('تنبيه: الشبكة غير مستقرة (Wi-Fi/فقد حزم). البرنامج سيعيد المحاولة تلقائياً في الخلفية، والحضور محفوظ محلياً حتى مع انقطاع النت.',
+                        style: TextStyle(fontSize: 12, color: Colors.white)),
+                  ),
+                ],
+              ],
             ),
             actions: [
               TextButton(
@@ -264,7 +308,18 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
                         child: ListTile(
                           leading: const Icon(Icons.device_hub),
                           title: Text(device.name),
-                          subtitle: Text('${device.connectionType} - ${device.ipAddress ?? "N/A"}'),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('${device.connectionType} - ${device.ipAddress ?? "N/A"}'),
+                              if (device.lastSyncStatus == 'failed' && device.lastSyncError != null)
+                                Text(device.lastSyncError!.length > 60 ? '${device.lastSyncError!.substring(0, 60)}…' : device.lastSyncError!,
+                                    style: const TextStyle(fontSize: 11, color: Colors.red)),
+                              if (device.lastSyncAt != null)
+                                Text('آخر مزامنة: ${device.lastSyncAt!.toString().substring(0, 16)}',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                            ],
+                          ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -273,13 +328,17 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
                                     ? 'لم يتم المزامنة'
                                     : device.lastSyncStatus == 'success'
                                         ? 'متصل'
-                                        : 'مفصول/خطأ',
+                                        : device.lastSyncStatus == 'partial'
+                                            ? 'جزئي — راجع غير المطابق'
+                                            : 'مفصول/خطأ',
                                 style: TextStyle(
                                   color: device.lastSyncStatus == null
                                       ? Colors.grey
                                       : device.lastSyncStatus == 'success'
                                           ? Colors.green
-                                          : Colors.red,
+                                          : device.lastSyncStatus == 'partial'
+                                              ? Colors.orange
+                                              : Colors.red,
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -418,9 +477,9 @@ class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
                 decoration: const InputDecoration(labelText: 'نوع الاتصال *'),
                 items: const [
                   DropdownMenuItem(value: 'tcp_ip', child: Text('TCP/IP')),
-                  DropdownMenuItem(value: 'usb_import', child: Text('استيراد USB')),
-                  DropdownMenuItem(value: 'sdk', child: Text('SDK')),
-                  DropdownMenuItem(value: 'file_import', child: Text('استيراد ملف')),
+                  DropdownMenuItem(enabled: false, value: 'usb_import', child: Text('استيراد USB (قريباً)')),
+                  DropdownMenuItem(enabled: false, value: 'sdk', child: Text('SDK (قريباً)')),
+                  DropdownMenuItem(enabled: false, value: 'file_import', child: Text('استيراد ملف (قريباً)')),
                 ],
                 onChanged: (v) {
                   if (v != null) setState(() => _connectionType = v);

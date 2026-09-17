@@ -13,6 +13,10 @@ import 'package:pos_offline_desktop/ui/reports/widgets/purchase_by_product_repor
 import 'package:pos_offline_desktop/ui/reports/widgets/purchase_vs_sales_report.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/daily_report_page.dart';
 import 'package:pos_offline_desktop/ui/analytics/consolidated_accounts_screen.dart';
+import 'package:pos_offline_desktop/ui/reports/financial/balance_sheet_screen.dart';
+import 'package:pos_offline_desktop/ui/reports/financial/profit_loss_screen.dart';
+import 'package:pos_offline_desktop/ui/reports/financial/equity_statement_screen.dart';
+import 'package:pos_offline_desktop/ui/reports/financial/general_ledger_screen.dart';
 
 class ReportsPage extends ConsumerStatefulWidget {
   const ReportsPage({super.key});
@@ -637,6 +641,80 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                           MaterialPageRoute(
                             builder: (context) => const ConsolidatedAccountsScreen(),
                           ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const Gap(20),
+              // ── Financial Reports (Phase 8) — gated by viewFinancialReports ──
+              Text(
+                'التقارير المالية',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              const Gap(15),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildActionCard(
+                      'الميزانية العمومية',
+                      'الأصول = الالتزامات + حقوق الملكية',
+                      Icons.balance,
+                      Colors.teal,
+                      () {
+                        final db = ref.read(appDatabaseProvider);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => BalanceSheetScreen(db: db)),
+                        );
+                      },
+                    ),
+                  ),
+                  const Gap(15),
+                  Expanded(
+                    child: _buildActionCard(
+                      'قائمة الأرباح والخسائر',
+                      'الإيرادات - التكاليف = صافي الربح',
+                      Icons.trending_up,
+                      Colors.green,
+                      () {
+                        final db = ref.read(appDatabaseProvider);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => ProfitLossScreen(db: db)),
+                        );
+                      },
+                    ),
+                  ),
+                  const Gap(15),
+                  Expanded(
+                    child: _buildActionCard(
+                      'كشف حقوق الملكية',
+                      'رأس المال والمسحوبات',
+                      Icons.pie_chart,
+                      Colors.purple,
+                      () {
+                        final db = ref.read(appDatabaseProvider);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => EquityStatementScreen(db: db)),
+                        );
+                      },
+                    ),
+                  ),
+                  const Gap(15),
+                  Expanded(
+                    child: _buildActionCard(
+                      'دفتر الأستاذ العام',
+                      'حركة كل حساب بالتفصيل',
+                      Icons.menu_book,
+                      Colors.brown,
+                      () {
+                        final db = ref.read(appDatabaseProvider);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => GeneralLedgerScreen(db: db)),
                         );
                       },
                     ),

@@ -666,10 +666,15 @@ class ExportService {
       final description = transaction['description']?.toString() ?? '';
       final receiptNumber = transaction['receiptNumber']?.toString();
 
-      // Check if this is a sale transaction by looking for invoice ID pattern
+      // Check if this is a sale transaction by looking for invoice ID pattern.
+      // Matches legacy 'فاتورة مبيعات ...' rows AND new canonical 'فاتورة 000001'
+      // rows (schema v70+). Payment ('سداد'/'دفع') and commission rows are
+      // deliberately excluded so product details attach to sales only.
+      final isSaleRow = description.contains('فاتورة مبيعات') ||
+          RegExp(r'^فاتورة \d{6}$').hasMatch(description);
       if (receiptNumber != null &&
           RegExp(r'\d+').hasMatch(receiptNumber) &&
-          description.contains('فاتورة مبيعات')) {
+          isSaleRow) {
         // Extract invoice ID
         final match = RegExp(r'\d+').firstMatch(receiptNumber);
         final invoiceId = match != null

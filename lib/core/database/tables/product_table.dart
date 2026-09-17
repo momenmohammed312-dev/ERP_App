@@ -17,6 +17,11 @@ class Products extends Table {
   IntColumn get minStockLevel => integer().withDefault(const Constant(0))();
   BoolColumn get barneka => boolean().withDefault(const Constant(false))(); // Returnable container (برنيكه)
 
+  /// Manufacturing: distinguishes raw material / semi-finished / finished product.
+  /// NULL = standard/retail product (default, 100% backward compatible).
+  /// Values: 'raw_material' | 'semi_finished' | 'finished_product'
+  TextColumn get productType => text().nullable()();
+
   /// Sync identity used only for multi-device sync (local int `id` stays for FKs).
   TextColumn get syncId => text().nullable()();
   DateTimeColumn get createdAt => dateTime().nullable()();

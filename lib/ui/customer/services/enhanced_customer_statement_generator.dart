@@ -9,6 +9,128 @@ import 'package:pos_offline_desktop/core/database/dao/ledger_dao.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
 import 'package:pos_offline_desktop/core/utils/pdf_bidi_helper.dart';
 
+/// Shared statement helpers used by the customer screen + customer PDF +
+/// supplier screen + supplier PDF (B6–B9: ONE normalizer, ONE label rule).
+///
+/// ## Display-number contract (consumed, not redefined)
+/// Invoice display number = stored `invoice.invoiceNumber` (Agent 1 owns
+/// numbering). New-ledger descriptions read 'فاتورة NNNNNN' / 'سداد NNNNNN' /
+/// 'عمولة NNNNNN' (Agent 1); legacy rows keep old text.
+///
+/// ## Label rule (defined once here)
+///  - a row linked to an invoice/purchase whose stored number is known →
+///    EXACTLY `فاتورة NUMBER` (customer) / `فاتورة مشتريات NUMBER`
+///    (supplier). The link is resolved ONLY via the structured
+///    `receiptNumber`/`refId` columns — NEVER by parsing free-text
+///    descriptions;
+///  - every other row → the stored description VERBATIM (legacy untouched,
+///    canonical new rows already carry their exact text).
+abstract final class StatementHelpers {
+  /// Canonical customer invoice label, e.g. 'فاتورة 000001'.
+  static String invoiceLabel(String number) => 'فاتورة $number';
+
+  /// Canonical supplier purchase label, e.g. 'فاتورة مشتريات PUR-001'.
+  /// (Supplier rows are purchases/payments, so the purchase word is part of
+  /// the exact label — defined once here.)
+  static String purchaseLabel(String number) => 'فاتورة مشتريات $number';
+
+  /// Already-canonical descriptions (Agent 1 new format) pass through
+  /// untouched. Anything else is legacy → also verbatim.
+  static final canonicalDescription =
+      RegExp(r'^(فاتورة|سداد|عمولة)(\s|$)');
+
+  /// Day-truncated start (00:00:00) — inclusive lower bound.
+  static DateTime startOfDay(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  /// Day-truncated end (23:59:59) — inclusive upper bound.
+  static DateTime endOfDay(DateTime d) =>
+      DateTime(d.year, d.month, d.day, 23, 59, 59);
+
+  /// Normalizes a UI date range to inclusive day boundaries. Used by
+  /// screen queries AND both PDF generators so all three always agree.
+  static (DateTime, DateTime) normalizeRange(DateTime from, DateTime to) =>
+      (startOfDay(from), endOfDay(to));
+
+  /// Opening-balance cutoff: one second before the (normalized) period
+  /// start. Unifies the divergent `customer_report_tab` path (which used
+  /// `start − 1 day`) to the canonical `getRunningBalance up-to from−1s`.
+  static DateTime openingCutoff(DateTime from) =>
+      startOfDay(from).subtract(const Duration(seconds: 1));
+
+  /// Display label for a CUSTOMER ledger row.
+  /// [invoiceNumber] is the stored `invoice.invoiceNumber` resolved via the
+  /// stable `receiptNumber → invoice` link (null when unresolvable).
+  static String customerRowLabel(
+    LedgerTransaction tx, {
+    String? invoiceNumber,
+  }) {
+    if (tx.origin == 'sale' &&
+        invoiceNumber != null &&
+        invoiceNumber.isNotEmpty) {
+      return invoiceLabel(invoiceNumber);
+    }
+    return tx.description;
+  }
+
+  /// Display label for a SUPPLIER ledger row.
+  /// [purchaseNumber] is the stored `purchase.invoiceNumber` resolved via the
+  /// stable `receiptNumber → purchase` link (null when unresolvable).
+  static String supplierRowLabel(
+    LedgerTransaction tx, {
+    String? purchaseNumber,
+  }) {
+    if ((tx.origin == 'purchase' || tx.origin == 'opening') &&
+        purchaseNumber != null &&
+        purchaseNumber.isNotEmpty) {
+      return purchaseLabel(purchaseNumber);
+    }
+    return tx.description;
+  }
+
+  /// Resolves the stored invoice display number via the stable
+  /// `receiptNumber = INV + localId` link. Returns null when the row is not
+  /// invoice-linked or the invoice is gone (caller falls back to verbatim).
+  /// NEVER parses the free-text description.
+  static Future<String?> resolveInvoiceNumber(
+    AppDatabase db,
+    String? receiptNumber,
+  ) async {
+    final id = extractInvoiceId(receiptNumber);
+    if (id == null) return null;
+    final inv = await db.invoiceDao.getInvoiceById(id);
+    final n = inv?.invoiceNumber;
+    return (n == null || n.isEmpty) ? null : n;
+  }
+
+  /// Resolves the stored purchase invoice number via the stable
+  /// `receiptNumber == purchase.id|invoiceNumber` link. Null → verbatim.
+  /// NEVER parses the free-text description.
+  static Future<String?> resolvePurchaseNumber(
+    AppDatabase db,
+    String? receiptNumber,
+  ) async {
+    if (receiptNumber == null || receiptNumber.isEmpty) return null;
+    // Two sequential lookups (no drift `|` import needed in this file).
+    var purchase = await (db.select(db.purchases)
+          ..where((p) => p.invoiceNumber.equals(receiptNumber)))
+        .getSingleOrNull();
+    purchase ??= await (db.select(db.purchases)
+          ..where((p) => p.id.equals(receiptNumber)))
+        .getSingleOrNull();
+    final n = purchase?.invoiceNumber;
+    return (n == null || n.isEmpty) ? null : n;
+  }
+
+  /// Extracts the local invoice id from the structured `receiptNumber`
+  /// column (`INV` followed by the id). This parses a STABLE LINK column,
+  /// not free text.
+  static int? extractInvoiceId(String? receiptNumber) {
+    if (receiptNumber == null || receiptNumber.isEmpty) return null;
+    if (!receiptNumber.startsWith('INV')) return null;
+    return int.tryParse(receiptNumber.substring(3));
+  }
+}
+
 class EnhancedCustomerStatementGenerator {
   static Future<Map<String, pw.Font?>> _loadFonts() async {
     pw.Font? arabicFont;
@@ -45,13 +167,11 @@ class EnhancedCustomerStatementGenerator {
 
   static String _b(String text) => PdfBidiHelper.reorder(text);
 
-  /// Extract invoice ID from receipt number (format: INV followed by integer).
-  static int? _extractInvoiceId(String? receiptNumber) {
-    if (receiptNumber == null || receiptNumber.isEmpty) return null;
-    if (!receiptNumber.startsWith('INV')) return null;
-    final idStr = receiptNumber.substring(3);
-    return int.tryParse(idStr);
-  }
+  /// Extract invoice ID from the structured receiptNumber column
+  /// (format: INV followed by integer). Delegates to the single shared
+  /// definition in [StatementHelpers].
+  static int? _extractInvoiceId(String? receiptNumber) =>
+      StatementHelpers.extractInvoiceId(receiptNumber);
 
   /// Pre-fetch invoice items for all sale transactions.
   static Future<Map<int, List<_InvoiceItemInfo>>> _fetchInvoiceItems(
@@ -86,7 +206,22 @@ class EnhancedCustomerStatementGenerator {
     return result;
   }
 
-  // ─── DETAILED STATEMENT ───────────────────────────────────────────
+  /// Pre-fetch stored invoice display numbers keyed by receiptNumber, so the
+  /// PDF prints the canonical 'فاتورة NNNNNN' label for linked rows and the
+  /// stored description verbatim for everything else (legacy untouched).
+  static Future<Map<String, String>> _fetchInvoiceNumbers(
+    AppDatabase db,
+    List<LedgerTransactionWithBalance> transactions,
+  ) async {
+    final result = <String, String>{};
+    for (final txw in transactions) {
+      final rn = txw.transaction.receiptNumber;
+      if (rn == null || rn.isEmpty || result.containsKey(rn)) continue;
+      final number = await StatementHelpers.resolveInvoiceNumber(db, rn);
+      if (number != null) result[rn] = number;
+    }
+    return result;
+  }
 
   static Future<void> generateStatement({
     required AppDatabase db,
@@ -96,18 +231,27 @@ class EnhancedCustomerStatementGenerator {
     required DateTime toDate,
     required double openingBalance,
     required double currentBalance,
+    List<LedgerTransactionWithBalance>? transactions,
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
 
-    final transactions = await db.ledgerDao.getTransactionsWithRunningBalance(
-      'Customer',
-      customerId,
-      fromDate,
-      toDate,
-    );
+    final (fromDateNormalized, normalizedToDate) =
+        StatementHelpers.normalizeRange(fromDate, toDate);
 
-    final invoiceItems = await _fetchInvoiceItems(db, transactions);
+    final effectiveTransactions = transactions ??
+        await db.ledgerDao.getTransactionsWithRunningBalance(
+          'Customer',
+          customerId,
+          fromDateNormalized,
+          normalizedToDate,
+        );
+
+    final invoiceItems = await _fetchInvoiceItems(db, effectiveTransactions);
+    final invoiceNumbers = await _fetchInvoiceNumbers(
+      db,
+      effectiveTransactions,
+    );
 
     final businessName = await SettingsService.getBusinessName();
     final taxNumber = await SettingsService.getTaxNumber();
@@ -136,17 +280,23 @@ class EnhancedCustomerStatementGenerator {
             fonts,
             openingBalance: openingBalance,
             currentBalance: currentBalance,
-            totalDebit: transactions.fold<double>(
+            totalDebit: effectiveTransactions.fold<double>(
               0,
               (s, t) => s + t.transaction.debit,
             ),
-            totalCredit: transactions.fold<double>(
+            totalCredit: effectiveTransactions.fold<double>(
               0,
               (s, t) => s + t.transaction.credit,
             ),
           ),
           pw.SizedBox(height: 12),
-          _buildDetailedTable(transactions, fonts, openingBalance, invoiceItems),
+          _buildDetailedTable(
+            effectiveTransactions,
+            fonts,
+            openingBalance,
+            invoiceItems,
+            invoiceNumbers,
+          ),
         ],
       ),
     );
@@ -168,27 +318,32 @@ class EnhancedCustomerStatementGenerator {
     required DateTime toDate,
     required double openingBalance,
     required double currentBalance,
+    List<LedgerTransactionWithBalance>? transactions,
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
 
-    final transactions = await db.ledgerDao.getTransactionsWithRunningBalance(
-      'Customer',
-      customerId,
-      fromDate,
-      toDate,
-    );
+    final (fromDateNormalized, normalizedToDate) =
+        StatementHelpers.normalizeRange(fromDate, toDate);
+
+    final effectiveTransactions = transactions ??
+        await db.ledgerDao.getTransactionsWithRunningBalance(
+          'Customer',
+          customerId,
+          fromDateNormalized,
+          normalizedToDate,
+        );
 
     final businessName = await SettingsService.getBusinessName();
     final taxNumber = await SettingsService.getTaxNumber();
     final logoPath = await SettingsService.getBusinessLogoPath();
 
     final totalDebit =
-        transactions.fold<double>(0, (s, t) => s + t.transaction.debit);
+        effectiveTransactions.fold<double>(0, (s, t) => s + t.transaction.debit);
     final totalCredit =
-        transactions.fold<double>(0, (s, t) => s + t.transaction.credit);
+        effectiveTransactions.fold<double>(0, (s, t) => s + t.transaction.credit);
 
-    final monthlyData = _aggregateByMonth(transactions);
+    final monthlyData = _aggregateByMonth(effectiveTransactions);
 
     pdf.addPage(
       pw.MultiPage(
@@ -373,6 +528,7 @@ class EnhancedCustomerStatementGenerator {
     Map<String, pw.Font?> fonts,
     double openingBalance,
     Map<int, List<_InvoiceItemInfo>> invoiceItems,
+    Map<String, String> invoiceNumbers,
   ) {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.black, width: 1),
@@ -393,13 +549,17 @@ class EnhancedCustomerStatementGenerator {
           final tx = txw.transaction;
           final rows = <pw.TableRow>[];
 
-          // Main row
-          final isCredit = tx.credit > 0;
-          final desc = isCredit
-              ? (tx.description.isNotEmpty
-                  ? _b('سداد فاتورة #${tx.receiptNumber ?? ''}')
-                  : _b('سداد'))
-              : _b(tx.description);
+          // Main row — label rule (StatementHelpers): linked invoice with a
+          // known stored number → exactly 'فاتورة NNNNNN'; everything else
+          // (legacy or new-canonical) → stored description verbatim.
+          final desc = _b(
+            StatementHelpers.customerRowLabel(
+              tx,
+              invoiceNumber: tx.receiptNumber == null
+                  ? null
+                  : invoiceNumbers[tx.receiptNumber],
+            ),
+          );
 
           rows.add(pw.TableRow(
             children: [
@@ -429,7 +589,9 @@ class EnhancedCustomerStatementGenerator {
             ],
           ));
 
-          // Sub-rows for invoice items (only for sale transactions)
+          // Sub-rows for invoice items (only for sale transactions).
+          // Nested items stay — resolved via the stable receiptNumber link.
+          final isCredit = tx.credit > 0;
           if (!isCredit && tx.receiptNumber != null && tx.receiptNumber!.isNotEmpty) {
             final invoiceId = _extractInvoiceId(tx.receiptNumber);
             if (invoiceId != null && invoiceItems.containsKey(invoiceId)) {

@@ -3,6 +3,7 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/ui/accounting/accounting_hub_screen.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 import 'package:pos_offline_desktop/ui/product/product.dart';
@@ -32,15 +33,21 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  static const int _tabCount = 7;
-
   bool _licenseWarningShown = false;
+
+  /// Computed tab count: clothing hides staff tab.
+  static int get _computeTabCount {
+    // Base: Dashboard, Products, Customers, Suppliers, Cash, Reports = 6
+    // + Staff = 7 (if enabled)
+    int count = 6;
+    if (AppFeatures.hasStaffManagement) count += 1;
+    return count;
+  }
 
   @override
   void initState() {
     super.initState();
-    // Length MUST equal TabBar tabs count AND TabBarView children count
-    _tabController = TabController(length: _tabCount, vsync: this);
+    _tabController = TabController(length: _computeTabCount, vsync: this);
     _checkLicenseWarning();
   }
 
@@ -76,22 +83,23 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     final l10n = AppLocalizations.of(context);
 
     final tabs = <Tab>[
-      // Index 0
+      // Dashboard
       Tab(icon: const Icon(Icons.dashboard_outlined), text: l10n.dashboard),
-      // Index 1
+      // Products
       Tab(icon: const Icon(Icons.shopping_bag_outlined), text: l10n.products),
-      // Index 2
+      // Customers
       Tab(icon: const Icon(Icons.people_outline), text: l10n.customer_list),
-      // Index 3
+      // Suppliers
       Tab(icon: const Icon(Icons.inventory_outlined), text: l10n.suppliers),
-      // Index 4
-      const Tab(icon: Icon(Icons.badge_outlined), text: 'الموظفين'),
-      // Index 5
+      // Staff — hidden for clothing distribution
+      if (AppFeatures.hasStaffManagement)
+        const Tab(icon: Icon(Icons.badge_outlined), text: 'الموظفين'),
+      // Cash
       Tab(
         icon: const Icon(Icons.account_balance_wallet_outlined),
         text: l10n.cash,
       ),
-      // Index 6
+      // Reports
       Tab(icon: const Icon(Icons.analytics), text: l10n.reports),
     ];
 
@@ -135,7 +143,9 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                             backgroundColor: Colors.red,
                             action: SnackBarAction(
                               label: 'الذهاب للكاشير',
-                              onPressed: () => _tabController.animateTo(5),
+                              onPressed: () => _tabController.animateTo(
+                                AppFeatures.hasStaffManagement ? 5 : 4,
+                              ),
                             ),
                           ),
                         );
@@ -166,49 +176,56 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                     Colors.orange,
                     () => _tabController.animateTo(1),
                   ),
-                  // Staff Management Button - Guarded
-                  FeatureGuard(
-                    featureName: 'staff_management',
-                    lockedWidget: _buildLauncherButton(
-                      context,
-                      'الموظفين (مغلق)',
-                      Icons.badge_outlined,
-                      Colors.grey,
-                      () => _tabController.animateTo(4),
-                    ),
-                    child: _buildLauncherButton(
-                      context,
-                      'الموظفين',
-                      Icons.badge_outlined,
-                      Colors.indigo,
-                      () => _tabController.animateTo(4),
-                    ),
-                  ),
-                  // Backup Button
-                  _buildLauncherButton(
-                    context,
-                    'النسخ الاحتياطي',
-                    Icons.backup,
-                    Colors.purple,
-                    () {
-                      Navigator.push(
+                  // Staff Management Button - Guarded — hidden for clothing
+                  if (AppFeatures.hasStaffManagement)
+                    FeatureGuard(
+                      featureName: 'staff_management',
+                      lockedWidget: _buildLauncherButton(
                         context,
-                        MaterialPageRoute(
-                          builder: (context) => EnhancedBackupScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  // Damaged Items Button
-                  _buildLauncherButton(
-                    context,
-                    'الهالك',
-                    Icons.delete_sweep,
-                    Colors.redAccent,
-                    () {
-                      context.push('/damaged-items');
-                    },
-                  ),
+                        'الموظفين (مغلق)',
+                        Icons.badge_outlined,
+                        Colors.grey,
+                        () {},
+                      ),
+                      child: _buildLauncherButton(
+                        context,
+                        'الموظفين',
+                        Icons.badge_outlined,
+                        Colors.indigo,
+                        () {
+                          // Find the staff tab index dynamically
+                          final staffIdx = AppFeatures.hasStaffManagement ? 4 : -1;
+                          if (staffIdx >= 0) _tabController.animateTo(staffIdx);
+                        },
+                      ),
+                    ),
+                  // Backup Button
+                  if (AppFeatures.hasBackupLauncher)
+                    _buildLauncherButton(
+                      context,
+                      'النسخ الاحتياطي',
+                      Icons.backup,
+                      Colors.purple,
+                      () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EnhancedBackupScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  // Damaged Items Button — hidden for clothing distribution
+                  if (AppFeatures.hasDamagedItems)
+                    _buildLauncherButton(
+                      context,
+                      'الهالك',
+                      Icons.delete_sweep,
+                      Colors.redAccent,
+                      () {
+                        context.push('/damaged-items');
+                      },
+                    ),
                   // Barneka (Returnable Containers) Button — vegetable-market
                   // feature, hidden in the factory (base) flavor.
                   if (AppFeatures.hasEmptyContainerTracking)
@@ -262,6 +279,63 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                         context.push('/excel-import');
                       },
                     ),
+                  // ── Manufacturing ──
+                  if (AppFeatures.hasManufacturing)
+                    _buildLauncherButton(
+                      context,
+                      'وصفات التصنيع',
+                      Icons.receipt_long,
+                      Colors.teal.shade600,
+                      () {
+                        context.push('/manufacturing/bom');
+                      },
+                    ),
+                  if (AppFeatures.hasManufacturing)
+                    _buildLauncherButton(
+                      context,
+                      'أوامر التصنيع',
+                      Icons.precision_manufacturing,
+                      Colors.indigo,
+                      () {
+                        context.push('/manufacturing/orders');
+                      },
+                    ),
+                  if (AppFeatures.hasManufacturing)
+                    _buildLauncherButton(
+                      context,
+                      'تقارير التصنيع',
+                      Icons.assessment,
+                      Colors.deepOrange,
+                      () {
+                        context.push('/manufacturing/reports');
+                      },
+                    ),
+                  if (AppFeatures.hasEquity)
+                    _buildLauncherButton(
+                      context,
+                      'رأس المال والشركاء',
+                      Icons.account_balance,
+                      Colors.green.shade700,
+                      () {
+                        context.push('/equity');
+                      },
+                    ),
+                  if (AppFeatures.hasAccountingHub)
+                    _buildLauncherButton(
+                      context,
+                      'المركز المحاسبي',
+                      Icons.account_tree,
+                      Colors.indigo.shade700,
+                      () {
+                        // Navigator مباشر حتى لا يحتاج Hot Restart لـ GoRouter
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => AccountingHubScreen(db: widget.db),
+                          ),
+                        );
+                      },
+                    ),
+
                 ],
               ),
               const Gap(40),
@@ -275,14 +349,15 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
       CustomerTransactionsWidget(db: widget.db),
       // Index 3: Suppliers
       SuppliersWidget(db: widget.db),
-      // Index 4: Staff — Dashboard first
-      FeatureGuard(
-        featureName: 'staff_management',
-        child: const EmployeeDashboardPage(),
-      ),
-      // Index 5: Cash
+      // Staff — hidden for clothing distribution
+      if (AppFeatures.hasStaffManagement)
+        FeatureGuard(
+          featureName: 'staff_management',
+          child: const EmployeeDashboardPage(),
+        ),
+      // Cash
       const CashierPage(),
-      // Index 6: Reports
+      // Reports
       ReportsPage(),
     ];
 

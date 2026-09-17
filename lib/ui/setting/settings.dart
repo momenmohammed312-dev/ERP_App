@@ -9,6 +9,7 @@ import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/ui/user/user_management_page.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/services/auth_service.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
 
 // ignore_for_file: deprecated_member_use
 
@@ -33,6 +34,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _addressController = TextEditingController();
   final _taxController = TextEditingController();
   final _footerController = TextEditingController();
+  final _pageUrlController = TextEditingController();
   final _locationIdController = TextEditingController();
   String _lastSyncedText = 'لم تتم المزامنة بعد';
   String _lastPeriodicRunText = 'لم تتم بعد';
@@ -62,6 +64,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _addressController.text = info['address'] ?? '';
         _taxController.text = info['taxNumber'] ?? '';
         _footerController.text = info['footer'] ?? '';
+        _pageUrlController.text = info['pageUrl'] ?? '';
       });
     });
 
@@ -69,12 +72,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       setState(() => _logoPath = path);
     });
 
-    _loadSyncState();
+    if (AppFeatures.hasMultiDeviceSync) {
+      _loadSyncState();
 
-    // Live-update the "آخر مزامنة تلقائية" label whenever the periodic timer
-    // fires, with no manual refresh or restart needed. Same syncServiceProvider
-    // mechanism the pending-count uses.
-    ref.read(syncServiceProvider).lastPeriodicRunAt.addListener(_onPeriodicRun);
+      // Live-update the "آخر مزامنة تلقائية" label whenever the periodic timer
+      // fires, with no manual refresh or restart needed. Same syncServiceProvider
+      // mechanism the pending-count uses.
+      ref.read(syncServiceProvider).lastPeriodicRunAt.addListener(_onPeriodicRun);
+    }
   }
 
   void _onPeriodicRun() {
@@ -108,8 +113,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _addressController.dispose();
     _taxController.dispose();
     _footerController.dispose();
+    _pageUrlController.dispose();
     _locationIdController.dispose();
-    ref.read(syncServiceProvider).lastPeriodicRunAt.removeListener(_onPeriodicRun);
+    if (AppFeatures.hasMultiDeviceSync) {
+      ref.read(syncServiceProvider).lastPeriodicRunAt.removeListener(_onPeriodicRun);
+    }
     super.dispose();
   }
 
@@ -352,15 +360,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _buildBusinessInfoSection(textColor, subTextColor, goldColor, cardBg, borderColor, isDark),
           Divider(color: borderColor, height: 32),
 
-          _buildSectionTitle('مزامنة متعددة الأجهزة', goldColor),
-          const Gap(10),
-          Text(
-            'استخدم نفس الحساب على أكثر من جهاز لمزامنة المنتجات والفواتير والمخزون تلقائياً.',
-            style: TextStyle(color: subTextColor, fontSize: 13),
-          ),
-          const Gap(12),
-          _buildSyncSection(textColor, subTextColor, goldColor, cardBg, borderColor),
-          Divider(color: borderColor, height: 32),
+          if (AppFeatures.hasMultiDeviceSync) ...[
+            _buildSectionTitle('مزامنة متعددة الأجهزة', goldColor),
+            const Gap(10),
+            Text(
+              'استخدم نفس الحساب على أكثر من جهاز لمزامنة المنتجات والفواتير والمخزون تلقائياً.',
+              style: TextStyle(color: subTextColor, fontSize: 13),
+            ),
+            const Gap(12),
+            _buildSyncSection(textColor, subTextColor, goldColor, cardBg, borderColor),
+            Divider(color: borderColor, height: 32),
+          ],
 
           _buildSectionTitle('إدارة المستخدمين', goldColor),
           const Gap(10),
@@ -487,6 +497,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
             enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
             prefixIcon: Icon(Icons.message, color: goldColor),
+            filled: true,
+            fillColor: cardBg,
+          ),
+        ),
+        const Gap(10),
+        TextFormField(
+          controller: _pageUrlController,
+          style: TextStyle(color: textColor),
+          textDirection: TextDirection.ltr,
+          decoration: InputDecoration(
+            labelText: 'لينك صفحة المحل (للطباعة كـ QR على الملصقات)',
+            labelStyle: TextStyle(color: subTextColor),
+            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            prefixIcon: Icon(Icons.qr_code, color: goldColor),
             filled: true,
             fillColor: cardBg,
           ),
@@ -643,6 +668,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await SettingsService.setBusinessAddress(_addressController.text);
       await SettingsService.setTaxNumber(_taxController.text);
       await SettingsService.setReceiptFooter(_footerController.text);
+      await SettingsService.setBusinessPageUrl(_pageUrlController.text);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

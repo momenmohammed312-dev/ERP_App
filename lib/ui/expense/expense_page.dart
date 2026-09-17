@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
+import 'package:pos_offline_desktop/core/services/accounting_service.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 import 'package:pos_offline_desktop/widgets/permission_guard.dart';
@@ -107,34 +108,64 @@ class _ExpensePageState extends State<ExpensePage> {
     }
 
     setState(() => _isLoading = true);
+    String? insertedExpenseId;
     try {
-      await widget.db.expenseDao.insertExpense(
-        ExpensesCompanion(
-          description: Value(_descriptionController.text),
-          amount: Value(double.tryParse(_amountController.text) ?? 0.0),
-          date: Value(_selectedDate),
-          category: Value(_selectedCategory),
-          paymentMethod: Value(_selectedPaymentMethod),
-          notes: Value(
-            _notesController.text.isEmpty ? null : _notesController.text,
+      await widget.db.transaction(() async {
+        final expenseId = await widget.db.expenseDao.insertExpense(
+          ExpensesCompanion(
+            description: Value(_descriptionController.text),
+            amount: Value(double.tryParse(_amountController.text) ?? 0.0),
+            date: Value(_selectedDate),
+            category: Value(_selectedCategory),
+            paymentMethod: Value(_selectedPaymentMethod),
+            notes: Value(
+              _notesController.text.isEmpty ? null : _notesController.text,
+            ),
           ),
-        ),
-      );
+        );
+        insertedExpenseId = expenseId.toString();
 
-      // Always add to ledger for tracking financial flow
-      await widget.db.ledgerDao.insertTransaction(
-        LedgerTransactionsCompanion.insert(
-          id: '${DateTime.now().millisecondsSinceEpoch}_expense',
-          entityType: _selectedSupplier != null ? 'Supplier' : 'Expense',
-          refId: _selectedSupplier?.id ?? 'general_expense',
+        // Ledger (unchanged, now inside same transaction)
+        await widget.db.ledgerDao.insertTransaction(
+          LedgerTransactionsCompanion.insert(
+            id: '${DateTime.now().millisecondsSinceEpoch}_expense',
+            entityType: _selectedSupplier != null ? 'Supplier' : 'Expense',
+            refId: _selectedSupplier?.id ?? 'general_expense',
+            date: _selectedDate,
+            description: '$_selectedCategory: ${_descriptionController.text}',
+            debit: const Value(0.0),
+            credit: Value(double.tryParse(_amountController.text) ?? 0.0),
+            origin: 'expense',
+            paymentMethod: Value(_selectedPaymentMethod),
+          ),
+        );
+
+        // ── Headless Accounting: Journal (Phase 4) ──
+        final accounting = AccountingService(widget.db);
+        Future<String> accId(String code) async {
+          final a = await widget.db.accountsDao.getByCode(code);
+          if (a == null) throw Exception('Account $code not found');
+          return a.id;
+        }
+
+        final expenseIdAcc = await accId('5100');
+        final cashId = await accId('1000');
+        final bankId = await accId('1010');
+        final apId = await accId('2000');
+        final amount = double.tryParse(_amountController.text) ?? 0.0;
+        final creditAccountId = _selectedSupplier != null
+            ? apId
+            : (_selectedPaymentMethod == 'cash' ? cashId : bankId);
+
+        await accounting.postExpense(
+          sourceId: insertedExpenseId!,
           date: _selectedDate,
+          amount: amount,
+          expenseAccountId: expenseIdAcc,
+          creditAccountId: creditAccountId,
           description: '$_selectedCategory: ${_descriptionController.text}',
-          debit: const Value(0.0), // Expense is a credit (money out)
-          credit: Value(double.tryParse(_amountController.text) ?? 0.0),
-          origin: 'expense',
-          paymentMethod: Value(_selectedPaymentMethod),
-        ),
-      );
+        );
+      });
 
       _clearForm();
       await _loadExpenses();

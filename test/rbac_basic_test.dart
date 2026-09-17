@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_offline_desktop/core/config/app_flavor.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
 
 // Create a mock AuthService for testing
@@ -23,6 +24,8 @@ class MockAuthService {
 final mockAuthService = MockAuthService();
 
 void main() {
+  // Test env has no app_bootstrap (production always initializes at startup).
+  AppFlavor.initialize(Flavor.base);
   group('RBAC Basic Tests', () {
     test('should have correct role display names', () {
       expect(

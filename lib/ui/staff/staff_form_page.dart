@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
@@ -28,13 +29,19 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   final _departmentController = TextEditingController();
   final _basicSalaryController = TextEditingController();
   final _hourlyRateController = TextEditingController();
+  final _weeklySalaryController = TextEditingController();
   final _bankNameController = TextEditingController();
   final _bankAccountController = TextEditingController();
   final _emergencyContactController = TextEditingController();
   final _emergencyPhoneController = TextEditingController();
   final _notesController = TextEditingController();
+  final _fingerprintIdController = TextEditingController();
+  final _fingerprintNameController = TextEditingController();
+  int? _selectedDeviceId;
 
   String _selectedEmploymentType = 'full_time';
+  // دورة القبض — مستقلة عن نوع التوظيف (شهري افتراضياً)
+  String _selectedPayFrequency = 'monthly';
   DateTime? _hireDate;
   DateTime? _contractEndDate;
   bool _isLoading = false;
@@ -60,7 +67,35 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     _service = StaffManagementService(StaffManagementDao(db), db);
     if (widget.staff != null) {
       _populateForm(widget.staff!);
+      _loadFingerprintId();
+    } else {
+      _loadDevices();
     }
+  }
+
+  Future<void> _loadDevices() async {
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final devices = await db.attendanceDeviceDao.getAllDevices();
+      if (devices.isNotEmpty && mounted) setState(() => _selectedDeviceId = devices.first.id);
+    } catch (_) {}
+  }
+
+  Future<void> _loadFingerprintId() async {
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final mappings = await db.attendanceDeviceDao.getAllMappings();
+      final m = mappings.where((e) => e.staffId == widget.staff!.staffId).toList();
+      if (m.isNotEmpty && mounted) {
+        setState(() {
+          _fingerprintIdController.text = m.first.externalUserId;
+          _fingerprintNameController.text = m.first.deviceUserName ?? '';
+          _selectedDeviceId = m.first.deviceId;
+        });
+      } else {
+        _loadDevices();
+      }
+    } catch (_) {}
   }
 
   void _populateForm(Staff staff) {
@@ -73,7 +108,9 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     _departmentController.text = staff.department ?? '';
     _basicSalaryController.text = staff.basicSalary.toString();
     _hourlyRateController.text = staff.hourlyRate?.toString() ?? '';
+    _weeklySalaryController.text = staff.weeklySalary?.toString() ?? '';
     _selectedEmploymentType = staff.employmentType;
+    _selectedPayFrequency = staff.payFrequency;
     _hireDate = staff.hireDate;
     _contractEndDate = staff.contractEndDate;
     _bankNameController.text = staff.bankName ?? '';
@@ -122,6 +159,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     _departmentController.dispose();
     _basicSalaryController.dispose();
     _hourlyRateController.dispose();
+    _weeklySalaryController.dispose();
     _bankNameController.dispose();
     _bankAccountController.dispose();
     _emergencyContactController.dispose();
@@ -141,6 +179,12 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
+          if (widget.staff != null)
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.redAccent),
+              tooltip: 'حذف الموظف',
+              onPressed: _isLoading ? null : _deleteStaff,
+            ),
           TextButton(
             onPressed: _isLoading ? null : _saveForm,
             child: _isLoading
@@ -174,6 +218,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               _buildBankInfo(),
               const SizedBox(height: 16),
               _buildNotes(),
+              const SizedBox(height: 16),
+              _buildBiometricInfo(),
               const SizedBox(height: 16),
               _buildWorkScheduleSection(),
             ],
@@ -237,23 +283,64 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               },
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _basicSalaryController,
-              keyboardType: TextInputType.number,
+            DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
+              value: _selectedPayFrequency,
               decoration: _buildInputDecoration(
-                'الراتب الأساسي',
-                Icons.attach_money,
+                'دورة القبض',
+                Icons.calendar_view_week,
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'هذا الحقل مطلوب';
-                }
-                if (double.tryParse(value) == null) {
-                  return 'يرجى إدخال رقم صحيح';
-                }
-                return null;
+              items: const [
+                DropdownMenuItem(value: 'monthly', child: Text('شهري')),
+                DropdownMenuItem(value: 'weekly', child: Text('أسبوعي (سبت–خميس)')),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _selectedPayFrequency = value!;
+                });
               },
             ),
+            if (_selectedPayFrequency == 'weekly') ...[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _weeklySalaryController,
+                keyboardType: TextInputType.number,
+                decoration: _buildInputDecoration(
+                  'الأجر الأسبوعي (مبلغ مستقل)',
+                  Icons.payments,
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'الأجر الأسبوعي مطلوب للدورة الأسبوعية';
+                  }
+                  if (double.tryParse(value) == null) {
+                    return 'يرجى إدخال رقم صحيح';
+                  }
+                  return null;
+                },
+              ),
+            ],
+            const SizedBox(height: 12),
+            // الراتب الأساسي للشهري فقط — الأسبوعي له أجر مستقل ولا يستخدمه
+            if (_selectedPayFrequency == 'monthly') ...[
+              TextFormField(
+                controller: _basicSalaryController,
+                keyboardType: TextInputType.number,
+                decoration: _buildInputDecoration(
+                  'الراتب الأساسي (شهري)',
+                  Icons.attach_money,
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'هذا الحقل مطلوب';
+                  }
+                  if (double.tryParse(value) == null) {
+                    return 'يرجى إدخال رقم صحيح';
+                  }
+                  return null;
+                },
+              ),
+            ],
             if (_selectedEmploymentType == 'part_time') ...[
               const SizedBox(height: 12),
               TextFormField(
@@ -489,6 +576,34 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     );
   }
 
+  Widget _buildBiometricInfo() {
+    return Card(
+      color: const Color(0xFF3A3A3A),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('بيانات البصمة', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.blue[400], fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _fingerprintIdController,
+            style: const TextStyle(color: Colors.white),
+            decoration: _buildInputDecoration('ID البصمة (رقم الجهاز)', Icons.fingerprint),
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _fingerprintNameController,
+            style: const TextStyle(color: Colors.white),
+            decoration: _buildInputDecoration('اسم البصمة على الجهاز (مثل: الياس)', Icons.badge),
+          ),
+          const SizedBox(height: 8),
+          const Text('الاسم على الجهاز قد يختلف عن الاسم في النظام — يُربط تلقائياً بأول جهاز نشط', style: TextStyle(color: Colors.white54, fontSize: 12)),
+        ]),
+      ),
+    );
+  }
+
   Widget _buildWorkScheduleSection() {
     return Card(
       color: const Color(0xFF3A3A3A),
@@ -628,6 +743,34 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     }
   }
 
+  Future<void> _deleteStaff() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تأكيد الحذف'),
+        content: Text('هل أنت متأكد من حذف الموظف "${widget.staff!.name}" نهائيا؟ لا يمكن التراجع.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _isLoading = true);
+    try {
+      final user = ref.read(authProvider);
+      await _service.deleteStaffCompletely(user, widget.staff!.staffId);
+      if (mounted) {
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الموظف'), backgroundColor: Colors.green));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل الحذف: $e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _saveForm() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -640,13 +783,24 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       if (_nameController.text.trim().isEmpty) {
         throw Exception('اسم الموظف مطلوب');
       }
-      if (_basicSalaryController.text.trim().isEmpty) {
+      if (_basicSalaryController.text.trim().isEmpty &&
+          _selectedPayFrequency == 'monthly') {
         throw Exception('الراتب الأساسي مطلوب');
       }
 
-      final salary = double.tryParse(_basicSalaryController.text);
-      if (salary == null || salary <= 0) {
+      // الأسبوعي: الأجر الأسبوعي هو المرجع الوحيد، والأساسي يُخزن 0
+      final salary = _selectedPayFrequency == 'weekly'
+          ? 0.0
+          : double.tryParse(_basicSalaryController.text);
+      if (salary == null || (salary <= 0 && _selectedPayFrequency == 'monthly')) {
         throw Exception('الراتب الأساسي يجب أن يكون رقماً موجباً');
+      }
+      double? weeklySalary;
+      if (_selectedPayFrequency == 'weekly') {
+        weeklySalary = double.tryParse(_weeklySalaryController.text);
+        if (weeklySalary == null || weeklySalary <= 0) {
+          throw Exception('الأجر الأسبوعي يجب أن يكون رقماً موجباً');
+        }
       }
 
       if (widget.staff == null) {
@@ -658,6 +812,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
           position: _positionController.text.trim(),
           employmentType: _selectedEmploymentType,
           basicSalary: salary,
+          payFrequency: _selectedPayFrequency,
+          weeklySalary: weeklySalary,
           nationalId: _nationalIdController.text.trim().isEmpty
               ? null
               : _nationalIdController.text.trim(),
@@ -713,6 +869,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               : _departmentController.text.trim(),
           employmentType: _selectedEmploymentType,
           basicSalary: salary,
+          payFrequency: _selectedPayFrequency,
+          weeklySalary: weeklySalary,
           hourlyRate: _hourlyRateController.text.trim().isEmpty
               ? null
               : double.tryParse(_hourlyRateController.text),
@@ -749,6 +907,28 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               : _workDays.entries.where((e) => e.value).map((e) => e.key).join(','),
           weekendDay: _useDefaultSchedule ? null : _weekendDay,
         );
+      }
+      // حفظ ID البصمة إن وجد
+      final fpId = _fingerprintIdController.text.trim();
+      if (fpId.isNotEmpty) {
+        try {
+          final db = ref.read(appDatabaseProvider);
+          final deviceId = _selectedDeviceId ?? (await db.attendanceDeviceDao.getAllDevices()).firstOrNull?.id;
+          if (deviceId != null) {
+            final staffId = widget.staff?.staffId ?? (await db.staffManagementDao.getAllStaff()).last.staffId;
+            final existing = await db.attendanceDeviceDao.getAllMappings();
+            final already = existing.where((m) => m.staffId == staffId && m.externalUserId == fpId).isNotEmpty;
+            if (!already) {
+              await db.attendanceDeviceDao.addMapping(StaffBiometricMappingsCompanion.insert(
+                staffId: staffId, deviceId: deviceId, externalUserId: fpId, deviceUserName: Value(_fingerprintNameController.text.trim().isEmpty ? null : _fingerprintNameController.text.trim()), enrollmentStatus: 'enrolled', createdAt: DateTime.now(), updatedAt: DateTime.now(),
+              ));
+            } else {
+              // تحديث اسم البصمة إن تغير
+              final existing = (await db.attendanceDeviceDao.getAllMappings()).firstWhere((m) => m.staffId == staffId && m.externalUserId == fpId);
+              await db.attendanceDeviceDao.updateMapping(existing.copyWith(deviceUserName: Value(_fingerprintNameController.text.trim().isEmpty ? null : _fingerprintNameController.text.trim()), updatedAt: DateTime.now()));
+            }
+          }
+        } catch (_) {}
       }
 
       if (mounted) {

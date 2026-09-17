@@ -3,7 +3,6 @@ import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/utils/logger.dart';
-import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/ui/customer/customer_statement_screen.dart';
 import 'package:pos_offline_desktop/ui/supplier/supplier_statement_screen.dart';
 
@@ -275,48 +274,61 @@ class _ConsolidatedAccountsScreenState
           ),
           onTap: () {
             if (type == 'Customer') {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => CustomerStatementScreen(
-                    customer: Customer(
-                      id: item['id'] as String,
-                      name: item['name'] as String,
-                      phone: item['phone'] as String?,
-                      address: null,
-                      gstinNumber: null,
-                      email: null,
-                      openingBalance: (item['openingBalance'] as num?)?.toDouble() ?? 0.0,
-                      totalDebt: (item['totalDebt'] as num?)?.toDouble() ?? 0.0,
-                      totalPaid: (item['totalPaid'] as num?)?.toDouble() ?? 0.0,
-                      createdAt: null,
-                      updatedAt: null,
-                      notes: null,
-                      isActive: true,
-                      status: 'Active',
-                    ),
-                  ),
-                ),
-              );
+              // B6: pass the stable id and re-fetch the FULL row — never
+              // rebuild a lossy Customer from the balances map (it lacks
+              // openingBalance/totalDebt/totalPaid/address/...). Both entry
+              // paths (Customer List, Unified Balances) then build the
+              // statement from the same by-id ledger queries.
+              _openCustomerStatement(context, item['id'] as String);
             } else {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => SupplierStatementScreen(
-                    supplier: Supplier(
-                      id: item['id'] as String,
-                      name: item['name'] as String,
-                      phone: item['phone'] as String?,
-                      address: null,
-                      openingBalance: (item['openingBalance'] as num?)?.toDouble() ?? 0.0,
-                      createdAt: DateTime.now(),
-                      status: 'Active',
-                    ),
-                  ),
-                ),
-              );
+              _openSupplierStatement(context, item['id'] as String);
             }
           },
         );
       },
+    );
+  }
+
+  /// Opens the customer statement by stable id: re-fetches the full row so
+  /// the statement screen sees the same data as the Customer List path.
+  Future<void> _openCustomerStatement(
+    BuildContext context,
+    String customerId,
+  ) async {
+    final db = ref.read(appDatabaseProvider);
+    final customer = await db.customerDao.getCustomerById(customerId);
+    if (!context.mounted) return;
+    if (customer == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('العميل غير موجود')),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CustomerStatementScreen(customer: customer),
+      ),
+    );
+  }
+
+  /// Opens the supplier statement by stable id (same re-fetch rule).
+  Future<void> _openSupplierStatement(
+    BuildContext context,
+    String supplierId,
+  ) async {
+    final db = ref.read(appDatabaseProvider);
+    final supplier = await db.supplierDao.getSupplierById(supplierId);
+    if (!context.mounted) return;
+    if (supplier == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('المورد غير موجود')),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SupplierStatementScreen(supplier: supplier),
+      ),
     );
   }
 }

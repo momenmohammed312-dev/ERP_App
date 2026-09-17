@@ -10,6 +10,7 @@ import 'package:pos_offline_desktop/core/database/dao/expense_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/invoice_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/ledger_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/product_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/product_variant_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/purchase_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/sales_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/supplier_dao.dart';
@@ -35,6 +36,7 @@ import 'package:pos_offline_desktop/core/database/tables/invoice_items_table.dar
 import 'package:pos_offline_desktop/core/database/tables/invoice_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/ledger_transactions_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/product_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/product_variants_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/purchase_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/purchase_items_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/sales_table.dart';
@@ -56,13 +58,28 @@ import 'package:pos_offline_desktop/core/database/tables/damaged_items_table.dar
 import 'package:pos_offline_desktop/core/database/tables/sales_returns_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/attendance_device_tables.dart';
 import 'package:pos_offline_desktop/core/database/tables/attendance_settings_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/monthly_attendance_summary_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/empty_barnika_tracking_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/sync_queue_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_cost_components_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/accounts_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/journal_entries_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/journal_lines_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/partners_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/equity_transactions_table.dart';
 import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/sync_queue_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/vegetable_shipment_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/empty_barnika_tracking_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/bom_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/manufacturing_cost_component_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/accounts_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/journal_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/equity_dao.dart';
 import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
@@ -73,6 +90,7 @@ part 'app_database.g.dart';
 @DriftDatabase(
   tables: [
     Products,
+    ProductVariants,
     Customers,
     Suppliers,
     LedgerTransactions,
@@ -124,12 +142,23 @@ part 'app_database.g.dart';
     AttendanceRawEvents,
     AttendanceSyncLogs,
     AttendanceSettings,
+    MonthlyAttendanceSummaryTable,
     VegetableShipments,
     EmptyBarnikaTracking,
     SyncQueue,
+    BillOfMaterials,
+    BomItems,
+    ManufacturingOrders,
+    ManufacturingCostComponents,
+    Accounts,
+    JournalEntries,
+    JournalLines,
+    Partners,
+    EquityTransactions,
   ],
   daos: [
     ProductDao,
+    ProductVariantDao,
     CustomerDao,
     SupplierDao,
     LedgerDao,
@@ -155,6 +184,12 @@ part 'app_database.g.dart';
     VegetableShipmentDao,
     EmptyBarnikaTrackingDao,
     SyncQueueDao,
+    BomDao,
+    ManufacturingOrderDao,
+    ManufacturingCostComponentDao,
+    AccountsDao,
+    JournalDao,
+    EquityDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -165,7 +200,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 55;
+  int get schemaVersion => 71;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -173,9 +208,62 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
       await _ensureStaffTables(m);
       await _ensureCriticalColumns(m);
+      await ensureSystemAccounts();
+      // Fresh installs also need the unique indexes (Drift doesn't emit them from uniqueKeys)
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_staff_date ON attendance_table(staff_id, date)');
+      } catch (e) {
+        log('onCreate attendance index warning: $e');
+      }
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_payroll_staff_period ON payroll_table(staff_id, payroll_period)');
+      } catch (e) {
+        log('onCreate payroll index warning: $e');
+      }
+      // Fresh installs need the same day-guard and numbering objects that the
+      // v44/v45/v70 migrations create on upgrade paths (m.createAll emits
+      // neither triggers nor partial unique indexes).
+      try {
+        await customStatement('''
+          CREATE TRIGGER IF NOT EXISTS trg_prevent_multi_open
+          BEFORE INSERT ON days
+          WHEN NEW.is_open = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'يوجد يوم مفتوح بالفعل')
+            WHERE EXISTS (SELECT 1 FROM days WHERE is_open = 1);
+          END
+        ''');
+      } catch (e) {
+        log('onCreate day trigger warning: $e');
+      }
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_days_one_open ON days(is_open) WHERE is_open = 1');
+      } catch (e) {
+        log('onCreate day index warning: $e');
+      }
+      try {
+        await customStatement(
+          'CREATE TABLE IF NOT EXISTS invoice_number_sequence (id INTEGER PRIMARY KEY CHECK (id = 1), next_value INTEGER NOT NULL)',
+        );
+        await customStatement(
+          'INSERT OR IGNORE INTO invoice_number_sequence (id, next_value) VALUES (1, 1)',
+        );
+      } catch (e) {
+        log('onCreate invoice sequence warning: $e');
+      }
+      try {
+        await customStatement(
+          "CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_canonical_number ON invoices(invoice_number) WHERE invoice_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'",
+        );
+      } catch (e) {
+        log('onCreate canonical invoice index warning: $e');
+      }
     },
     onUpgrade: (Migrator m, int from, int to) async {
       log('Migration: from $from to $to');
+
+      // The log table must exist before ANY _logMigrationStep call below.
+      await _ensureMigrationLogTable();
 
       // 1. Initial migrations (v2 - v20)
       if (from < 20) {
@@ -271,6 +359,89 @@ class AppDatabase extends _$AppDatabase {
       // 4q. Schema v55 — staff biometric index
       if (from < 55) {
         await _runV55Migrations(m);
+      }
+
+      // 4r. Schema v56 — manufacturing foundation (Phase 1: productType)
+      if (from < 56) {
+        await _runV56Migrations(m);
+      }
+
+      // 4s. Schema v57 — headless accounting core (Accounts + Journal)
+      if (from < 57) {
+        await _runV57Migrations(m);
+      }
+
+      // 4t. Schema v58 — unique constraints for attendance and payroll (A3)
+      if (from < 58) {
+        await _runV58Migrations(m);
+      }
+
+      // 4u. Schema v59 — equity / partners (Phase 6)
+      if (from < 59) {
+        await _runV59Migrations(m);
+      }
+
+      // 4v. Schema v60 — attendance excused (إذن/عذر) flag
+      if (from < 60) {
+        await _runV60Migrations(m);
+      }
+
+      // 4w. Schema v61 — attendance excused_hours (خصم تناسبي بالساعة)
+      if (from < 61) {
+        await _runV61Migrations(m);
+      }
+
+      // 4x. Schema v62 — monthly attendance summary (تأخير/إضافي/إذن/غياب ملخص)
+      if (from < 62) {
+        await _runV62Migrations(m);
+      }
+
+      // 4y. Schema v63 — late/permission tracking for payroll
+      if (from < 63) {
+        await _runV63Migrations(m);
+      }
+
+      // 4z. Schema v64 — إصلاح مرتبات قديمة محسوبة بدون خصم (late_deduction 0)
+      if (from < 64) {
+        await _runV64Migrations(m);
+      }
+
+      // 4aa. Schema v65 — أصناف المنتج (ألوان/فئات) + invoice_items.variant_id
+      if (from < 65) {
+        await _runV65Migrations(m);
+      }
+
+      // 4ab. Schema v66 — Weekly Payroll: فصل Pay Frequency عن نوع العقد
+      if (from < 66) {
+        await _runV66Migrations(m);
+      }
+
+      // 4ac. Schema v67 — مهلة بدء الوقت الإضافي (overtime_grace_minutes)
+      if (from < 67) {
+        await _runV67Migrations(m);
+      }
+
+      // 4ab2. Schema v68 — نهاية دورة السلفة (تراكمي المخصوم + settled)
+      if (from < 68) {
+        await _runV68Migrations(m);
+      }
+
+      // 4ab3. Schema v69 — تعيين السلفة لفترة (أسبوع محدد للأسبوعي)
+      if (from < 69) {
+        await _runV69Migrations(m);
+      }
+
+      // 4ab4. Schema v70 — day-state repair + global invoice numbering
+      // (forward-only: never rewrites V42..V69 steps or existing numbers).
+      if (from < 70) {
+        await _runV70Migrations(m);
+      }
+
+      // 4ab5. Schema v71 — accounts dedup + UNIQUE(code), supplier
+      // legacy opening-row dedup (flag/row repair only, never rewrites
+      // financial meaning: only exact-duplicate rows are removed).
+      if (from < 71) {
+        await _runV71Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -508,6 +679,9 @@ class AppDatabase extends _$AppDatabase {
       try {
         await customStatement('ALTER TABLE staff_table ADD COLUMN use_default_schedule INTEGER NOT NULL DEFAULT 1');
       } catch (_) {}
+      try {
+        await customStatement('ALTER TABLE staff_biometric_mappings ADD COLUMN device_user_name TEXT');
+      } catch (_) {}
 
       // Safety check for biometric attendance tables
       try {
@@ -631,8 +805,184 @@ class AppDatabase extends _$AppDatabase {
 
       // Safety check for staff-related tables (missing in some DBs)
       await _ensureStaffTablesSafetyCheck();
+
+      // Ensure system accounts and accounting tables exist
+      await ensureSystemAccounts();
+
+      // Day-state + numbering safety net (idempotent; never throws — an
+      // open failure here must not brick app startup, migration is the
+      // authoritative path and it propagates there).
+      await _repairDayStateAndSequence();
     },
   );
+
+  /// beforeOpen safety net for day state + invoice numbering.
+  /// Mirrors the v70 guarantees for databases that reached v70 through an
+  /// unusual path (restored backup, interrupted upgrade): V42 `days` columns,
+  /// the V44 trigger + V45 partial index, duplicate-open reconciliation, the
+  /// sequence table + seed, and the canonical partial unique index.
+  /// Each step is check-then-act / IF NOT EXISTS and logs instead of throwing.
+  Future<void> _repairDayStateAndSequence() async {
+    // V42 days columns.
+    try {
+      if (await _tableExists('days')) {
+        final cols = await _columnNames('days');
+        const repairs = {
+          'opened_by': 'TEXT',
+          'closed_by': 'TEXT',
+          'reopened_at': 'TEXT',
+          'reopened_by': 'TEXT',
+        };
+        for (final entry in repairs.entries) {
+          if (!cols.contains(entry.key)) {
+            await customStatement(
+              'ALTER TABLE days ADD COLUMN ${entry.key} ${entry.value}',
+            );
+            log('beforeOpen repair: added days.${entry.key}');
+          }
+        }
+      }
+    } catch (e) {
+      log('beforeOpen repair (days columns): $e');
+    }
+
+    // V44 trigger + duplicate-open reconciliation + V45 index.
+    try {
+      await customStatement('''
+        CREATE TRIGGER IF NOT EXISTS trg_prevent_multi_open
+        BEFORE INSERT ON days
+        WHEN NEW.is_open = 1
+        BEGIN
+          SELECT RAISE(ABORT, 'يوجد يوم مفتوح بالفعل')
+          WHERE EXISTS (SELECT 1 FROM days WHERE is_open = 1);
+        END
+      ''');
+      final openRows = await customSelect(
+        'SELECT id FROM days WHERE is_open = 1 ORDER BY id ASC',
+      ).get();
+      if (openRows.length > 1) {
+        final keepId = openRows.first.read<int>('id');
+        await customStatement(
+          'UPDATE days SET is_open = 0 WHERE is_open = 1 AND id != ?',
+          [keepId],
+        );
+        log('beforeOpen repair: reconciled ${openRows.length} open days (kept id=$keepId)');
+      }
+      await customStatement(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_days_one_open '
+        'ON days(is_open) WHERE is_open = 1',
+      );
+    } catch (e) {
+      log('beforeOpen repair (day guards): $e');
+    }
+
+    // Sequence table + seed + canonical index.
+    try {
+      await customStatement(
+        'CREATE TABLE IF NOT EXISTS invoice_number_sequence '
+        '(id INTEGER PRIMARY KEY CHECK (id = 1), next_value INTEGER NOT NULL)',
+      );
+      final seqRows = await customSelect(
+        'SELECT next_value FROM invoice_number_sequence WHERE id = 1',
+      ).get();
+      if (seqRows.isEmpty) {
+        final maxRow = await customSelect(
+          "SELECT MAX(CAST(invoice_number AS INTEGER)) AS max_n FROM invoices "
+          "WHERE invoice_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'",
+        ).getSingle();
+        final v = maxRow.data['max_n'];
+        final maxN = v is int ? v : (v is num ? v.toInt() : 0);
+        await customStatement(
+          'INSERT INTO invoice_number_sequence (id, next_value) VALUES (1, ?)',
+          [maxN + 1],
+        );
+        log('beforeOpen repair: seeded invoice_number_sequence next_value=${maxN + 1}');
+      }
+      await customStatement(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_canonical_number "
+        "ON invoices(invoice_number) "
+        "WHERE invoice_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'",
+      );
+    } catch (e) {
+      log('beforeOpen repair (numbering): $e');
+    }
+  }
+
+  /// Ensures that headless accounting core tables and 12 baseline system accounts exist.
+  Future<void> ensureSystemAccounts() async {
+    try {
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS accounts (
+          id TEXT PRIMARY KEY,
+          code TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL,
+          normal_balance TEXT NOT NULL,
+          is_system INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL
+        )
+      ''');
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS journal_entries (
+          id TEXT PRIMARY KEY,
+          date INTEGER NOT NULL,
+          description TEXT NOT NULL,
+          reference TEXT,
+          source_type TEXT NOT NULL,
+          source_id TEXT,
+          posting_key TEXT UNIQUE,
+          created_at INTEGER NOT NULL
+        )
+      ''');
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS journal_lines (
+          id TEXT PRIMARY KEY,
+          entry_id TEXT NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+          account_id TEXT NOT NULL REFERENCES accounts(id),
+          debit REAL NOT NULL DEFAULT 0.0,
+          credit REAL NOT NULL DEFAULT 0.0,
+          memo TEXT
+        )
+      ''');
+      try {
+        await customStatement(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_journal_entries_posting_key ON journal_entries(posting_key)',
+        );
+      } catch (e) {
+        log('Index idx_journal_entries_posting_key note: $e');
+      }
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final systemAccounts = [
+        ['1000', 'الصندوق (نقدية)', 'asset', 'debit'],
+        ['1010', 'البنك', 'asset', 'debit'],
+        ['1100', 'ذمم العملاء', 'asset', 'debit'],
+        ['1200', 'المخزون', 'asset', 'debit'],
+        ['2000', 'ذمم الموردين', 'liability', 'credit'],
+        ['3000', 'رأس المال', 'equity', 'credit'],
+        ['3100', 'مسحوبات الشريك', 'equity', 'debit'],
+        ['3200', 'الأرباح المرحلة', 'equity', 'credit'],
+        ['4000', 'إيرادات المبيعات', 'revenue', 'credit'],
+        ['4100', 'مردودات المبيعات', 'revenue', 'debit'],
+        ['5000', 'تكلفة البضاعة المباعة', 'expense', 'debit'],
+        ['5100', 'مصروفات تشغيلية', 'expense', 'debit'],
+      ];
+      for (final acc in systemAccounts) {
+        final id = const Uuid().v4();
+        try {
+          await customStatement(
+            "INSERT OR IGNORE INTO accounts (id, code, name, type, normal_balance, is_system, is_active, created_at) VALUES (?, ?, ?, ?, ?, 1, 1, ?)",
+            [id, acc[0], acc[1], acc[2], acc[3], now],
+          );
+        } catch (e) {
+          log('ensureSystemAccounts seed ${acc[0]} note: $e');
+        }
+      }
+    } catch (e) {
+      log('Error in ensureSystemAccounts: $e');
+    }
+  }
 
   Future<void> _runLegacyMigrations(Migrator m, int from) async {
     // Grouped legacy column additions
@@ -1348,13 +1698,24 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'products', 'column': 'cost_price',   'type': 'REAL'},
       {'table': 'products', 'column': 'min_stock_level', 'type': 'INTEGER DEFAULT 0'},
       {'table': 'products', 'column': 'barneka', 'type': 'INTEGER NOT NULL DEFAULT 0'},
+      {'table': 'products', 'column': 'product_type', 'type': 'TEXT'},
       {'table': 'invoice_items', 'column': 'discount', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'commission', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'unit_cost_at_time', 'type': 'REAL'},
+      {'table': 'invoice_items', 'column': 'variant_id', 'type': 'INTEGER'},
+      {'table': 'sales_return_items', 'column': 'variant_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'source', 'type': 'TEXT'},
       {'table': 'attendance_table', 'column': 'source_device_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'raw_event_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'override_reason', 'type': 'TEXT'},
+      {'table': 'attendance_table', 'column': 'excused', 'type': 'INTEGER NOT NULL DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'excused_hours', 'type': 'REAL NOT NULL DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'late_minutes', 'type': 'INTEGER DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'permission_hours', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'late_hours', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'late_deduction', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'permission_hours', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'permission_deduction', 'type': 'REAL DEFAULT 0.0'},
       {'table': 'audit_log', 'column': 'old_value', 'type': 'TEXT'},
       {'table': 'audit_log', 'column': 'new_value', 'type': 'TEXT'},
       // Invoice void support columns
@@ -1364,6 +1725,13 @@ class AppDatabase extends _$AppDatabase {
       // Expenses extra columns
       {'table': 'expenses', 'column': 'user_id', 'type': 'TEXT'},
       {'table': 'expenses', 'column': 'day_id', 'type': 'TEXT'},
+      // Weekly Payroll (v66): pay frequency + independent weekly salary
+      {'table': 'staff_table', 'column': 'pay_frequency', 'type': "TEXT NOT NULL DEFAULT 'monthly'"},
+      {'table': 'staff_table', 'column': 'weekly_salary', 'type': 'REAL'},
+      // Advance lifecycle (v68): cumulative deducted amount
+      {'table': 'staff_advances', 'column': 'paid_amount', 'type': 'REAL NOT NULL DEFAULT 0'},
+      // Advance deduct period (v69): explicit start period, weekly week picker
+      {'table': 'staff_advances', 'column': 'deduct_on_period', 'type': 'TEXT'},
       // Multi-device sync columns (v53)
       {'table': 'products', 'column': 'sync_id', 'type': 'TEXT'},
       {'table': 'products', 'column': 'created_at', 'type': 'INTEGER'},
@@ -1397,6 +1765,7 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'products', 'column': 'cost_price', 'type': 'REAL'},
       {'table': 'products', 'column': 'min_stock_level', 'type': 'INTEGER DEFAULT 0'},
       {'table': 'products', 'column': 'barneka', 'type': 'INTEGER NOT NULL DEFAULT 0'},
+      {'table': 'products', 'column': 'product_type', 'type': 'TEXT'},
       {'table': 'invoices', 'column': 'customer_id', 'type': 'TEXT'},
       {'table': 'invoices', 'column': 'total_amount', 'type': 'REAL DEFAULT 0.0'},
       {'table': 'invoices', 'column': 'paid_amount', 'type': 'REAL DEFAULT 0.0'},
@@ -1406,10 +1775,20 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'invoice_items', 'column': 'discount', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'commission', 'type': 'REAL DEFAULT 0'},
       {'table': 'invoice_items', 'column': 'unit_cost_at_time', 'type': 'REAL'},
+      {'table': 'invoice_items', 'column': 'variant_id', 'type': 'INTEGER'},
+      {'table': 'sales_return_items', 'column': 'variant_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'source', 'type': 'TEXT'},
       {'table': 'attendance_table', 'column': 'source_device_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'raw_event_id', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'override_reason', 'type': 'TEXT'},
+      {'table': 'attendance_table', 'column': 'excused', 'type': 'INTEGER NOT NULL DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'excused_hours', 'type': 'REAL NOT NULL DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'late_minutes', 'type': 'INTEGER DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'permission_hours', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'late_hours', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'late_deduction', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'permission_hours', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'permission_deduction', 'type': 'REAL DEFAULT 0.0'},
       {'table': 'audit_log', 'column': 'old_value', 'type': 'TEXT'},
       {'table': 'audit_log', 'column': 'new_value', 'type': 'TEXT'},
       // Invoice void support columns
@@ -1536,6 +1915,10 @@ class AppDatabase extends _$AppDatabase {
           leave_type TEXT,
           notes TEXT,
           overtime_hours REAL NOT NULL DEFAULT 0,
+          late_minutes INTEGER NOT NULL DEFAULT 0,
+          permission_hours REAL NOT NULL DEFAULT 0.0,
+          excused INTEGER NOT NULL DEFAULT 0,
+          excused_hours REAL NOT NULL DEFAULT 0,
           approved_by TEXT,
           approved_at INTEGER,
           created_at INTEGER NOT NULL,
@@ -1616,6 +1999,10 @@ class AppDatabase extends _$AppDatabase {
           rewards_total REAL NOT NULL DEFAULT 0.0,
           penalties_total REAL NOT NULL DEFAULT 0.0,
           expense_ref_id TEXT,
+          late_hours REAL NOT NULL DEFAULT 0.0,
+          late_deduction REAL NOT NULL DEFAULT 0.0,
+          permission_hours REAL NOT NULL DEFAULT 0.0,
+          permission_deduction REAL NOT NULL DEFAULT 0.0,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
         )
@@ -1846,6 +2233,663 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(55, 'biometric_mapping_index', 'failed', error: e.toString());
       rethrow;
     }
+  }
+
+  /// Schema v56 — Manufacturing foundation (Phase 1: productType only).
+  /// Purely additive: one nullable column, no data rewrite.
+  /// Manufacturing foundation: productType + BOM tables.
+  /// Purely additive, safe to re-run.
+  Future<void> _runV56Migrations(Migrator m) async {
+    await _logMigrationStep(56, 'manufacturing_foundation', 'started');
+    try {
+      try {
+        await customStatement('ALTER TABLE products ADD COLUMN product_type TEXT');
+        log('v56: Added products.product_type column');
+      } catch (e) {
+        log('v56: products.product_type likely already exists: $e');
+      }
+      try {
+        await m.createTable(billOfMaterials);
+        log('v56: Created bill_of_materials table');
+      } catch (e) {
+        log('v56: bill_of_materials likely already exists: $e');
+      }
+      try {
+        await m.createTable(bomItems);
+        log('v56: Created bom_items table');
+      } catch (e) {
+        log('v56: bom_items likely already exists: $e');
+      }
+      try {
+        await m.createTable(manufacturingOrders);
+        log('v56: Created manufacturing_orders table');
+      } catch (e) {
+        log('v56: manufacturing_orders likely already exists: $e');
+      }
+      try {
+        await m.createTable(manufacturingCostComponents);
+        log('v56: Created manufacturing_cost_components table');
+      } catch (e) {
+        log('v56: manufacturing_cost_components likely already exists: $e');
+      }
+      await _logMigrationStep(56, 'manufacturing_foundation', 'completed');
+    } catch (e) {
+      await _logMigrationStep(56, 'manufacturing_foundation', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v57 — Headless Accounting Core (Accounts + Journal double-entry)
+  Future<void> _runV57Migrations(Migrator m) async {
+    await _logMigrationStep(57, 'accounting_core', 'started');
+    try {
+      try {
+        await m.createTable(accounts);
+        log('v57: Created accounts table');
+      } catch (e) {
+        log('v57: accounts table likely already exists: $e');
+      }
+      try {
+        await m.createTable(journalEntries);
+        log('v57: Created journal_entries table');
+      } catch (e) {
+        log('v57: journal_entries table likely already exists: $e');
+      }
+      try {
+        await m.createTable(journalLines);
+        log('v57: Created journal_lines table');
+      } catch (e) {
+        log('v57: journal_lines table likely already exists: $e');
+      }
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_journal_entries_posting_key ON journal_entries(posting_key)');
+        log('v57: Created unique index on journal_entries.posting_key');
+      } catch (e) {
+        log('v57: posting_key index likely already exists: $e');
+      }
+      // Seed system accounts (INSERT OR IGNORE by code)
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final systemAccounts = [
+        ['1000', 'الصندوق (نقدية)', 'asset', 'debit'],
+        ['1010', 'البنك', 'asset', 'debit'],
+        ['1100', 'ذمم العملاء', 'asset', 'debit'],
+        ['1200', 'المخزون', 'asset', 'debit'],
+        ['2000', 'ذمم الموردين', 'liability', 'credit'],
+        ['3000', 'رأس المال', 'equity', 'credit'],
+        ['3100', 'مسحوبات الشريك', 'equity', 'debit'],
+        ['3200', 'الأرباح المرحلة', 'equity', 'credit'],
+        ['4000', 'إيرادات المبيعات', 'revenue', 'credit'],
+        ['4100', 'مردودات المبيعات', 'revenue', 'debit'],
+        ['5000', 'تكلفة البضاعة المباعة', 'expense', 'debit'],
+        ['5100', 'مصروفات تشغيلية', 'expense', 'debit'],
+      ];
+      for (final acc in systemAccounts) {
+        final id = const Uuid().v4();
+        try {
+          await customStatement(
+            "INSERT OR IGNORE INTO accounts (id, code, name, type, normal_balance, is_system, is_active, created_at) VALUES (?, ?, ?, ?, ?, 1, 1, ?)",
+            [id, acc[0], acc[1], acc[2], acc[3], now],
+          );
+        } catch (e) {
+          log('v57: seed account ${acc[0]} failed: $e');
+        }
+      }
+      log('v57: Seeded system accounts');
+      await _logMigrationStep(57, 'accounting_core', 'completed');
+    } catch (e) {
+      await _logMigrationStep(57, 'accounting_core', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> _runV58Migrations(Migrator m) async {
+    await _logMigrationStep(58, 'attendance_payroll_unique', 'started');
+    try {
+      // Clean duplicate attendance (keep latest per staffId+date)
+      try {
+        await customStatement('''
+          DELETE FROM attendance_table WHERE id NOT IN (
+            SELECT MAX(id) FROM attendance_table GROUP BY staff_id, date
+          )
+        ''');
+        log('v58: Cleaned duplicate attendance');
+      } catch (e) {
+        log('v58 attendance dedup warning: $e');
+      }
+      // Clean duplicate payroll (keep latest per staffId+payroll_period)
+      try {
+        await customStatement('''
+          DELETE FROM payroll_table WHERE id NOT IN (
+            SELECT MAX(id) FROM payroll_table GROUP BY staff_id, payroll_period
+          )
+        ''');
+        log('v58: Cleaned duplicate payroll');
+      } catch (e) {
+        log('v58 payroll dedup warning: $e');
+      }
+      // Create unique indexes
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_staff_date ON attendance_table(staff_id, date)');
+        log('v58: Created idx_attendance_staff_date');
+      } catch (e) {
+        log('v58 attendance index warning: $e');
+      }
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_payroll_staff_period ON payroll_table(staff_id, payroll_period)');
+        log('v58: Created idx_payroll_staff_period');
+      } catch (e) {
+        log('v58 payroll index warning: $e');
+      }
+      await _logMigrationStep(58, 'attendance_payroll_unique', 'completed');
+    } catch (e) {
+      await _logMigrationStep(58, 'attendance_payroll_unique', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v59 — equity / partners (Phase 6)
+  Future<void> _runV59Migrations(Migrator m) async {
+    await _logMigrationStep(59, 'equity_partners', 'started');
+    try {
+      try {
+        await m.createTable(partners);
+        log('v59: Created partners table');
+      } catch (e) {
+        log('v59: partners table likely already exists: $e');
+      }
+      try {
+        await m.createTable(equityTransactions);
+        log('v59: Created equity_transactions table');
+      } catch (e) {
+        log('v59: equity_transactions table likely already exists: $e');
+      }
+      await _logMigrationStep(59, 'equity_partners', 'completed');
+    } catch (e) {
+      await _logMigrationStep(59, 'equity_partners', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v60 — attendance excused (إذن/عذر) flag
+  Future<void> _runV60Migrations(Migrator m) async {
+    await _logMigrationStep(60, 'attendance_excused', 'started');
+    try {
+      try {
+        await customStatement('ALTER TABLE attendance_table ADD COLUMN excused INTEGER NOT NULL DEFAULT 0');
+        log('v60: Added excused column to attendance_table');
+      } catch (e) {
+        log('v60 warning: excused column likely already exists: $e');
+      }
+      await _logMigrationStep(60, 'attendance_excused', 'completed');
+    } catch (e) {
+      await _logMigrationStep(60, 'attendance_excused', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v61 — attendance excused_hours (الخصم التناسبي بالساعة للإذن/العذر)
+  Future<void> _runV61Migrations(Migrator m) async {
+    await _logMigrationStep(61, 'attendance_excused_hours', 'started');
+    try {
+      try {
+        await customStatement('ALTER TABLE attendance_table ADD COLUMN excused_hours REAL NOT NULL DEFAULT 0');
+        log('v61: Added excused_hours column to attendance_table');
+      } catch (e) {
+        log('v61 warning: excused_hours column likely already exists: $e');
+      }
+      await _logMigrationStep(61, 'attendance_excused_hours', 'completed');
+    } catch (e) {
+      await _logMigrationStep(61, 'attendance_excused_hours', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> _runV62Migrations(Migrator m) async {
+    await _logMigrationStep(62, 'monthly_summary', 'started');
+    try {
+      try {
+        await m.createTable(monthlyAttendanceSummaryTable);
+        log('v62: Created monthly_attendance_summary_table');
+      } catch (e) {
+        log('v62 monthly summary likely already exists: $e');
+      }
+      try {
+        await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_monthly_summary_staff_period ON monthly_attendance_summary_table(staff_id, period)');
+      } catch (_) {}
+      await _logMigrationStep(62, 'monthly_summary', 'completed');
+    } catch (e) {
+      await _logMigrationStep(62, 'monthly_summary', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v63 — late/permission tracking for payroll
+  Future<void> _runV63Migrations(Migrator m) async {
+    await _logMigrationStep(63, 'late_permission_columns', 'started');
+    try {
+      final columns = [
+        'ALTER TABLE attendance_table ADD COLUMN late_minutes INTEGER DEFAULT 0',
+        'ALTER TABLE attendance_table ADD COLUMN permission_hours REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN late_hours REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN late_deduction REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN permission_hours REAL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN permission_deduction REAL DEFAULT 0.0',
+      ];
+      for (final sql in columns) {
+        try {
+          await customStatement(sql);
+        } catch (e) {
+          log('63 migration warning (column may exist): $e');
+        }
+      }
+      await _logMigrationStep(63, 'late_permission_columns', 'completed');
+    } catch (e) {
+      await _logMigrationStep(63, 'late_permission_columns', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> _runV64Migrations(Migrator m) async {
+    await _logMigrationStep(64, 'fix_old_payroll_deduction', 'started');
+    try {
+      // احذف مرتبات محسوبة قديمة (قبل v63) كانت late_deduction=0 — عشان تتحسب تاني صح (لا يمس المدفوعة)
+      try {
+        await customStatement("DELETE FROM payroll_table WHERE status='calculated' AND late_deduction=0 AND late_hours=0 AND payroll_period IN ('2026-08','2026-09')");
+        log('v64: Deleted old calculated payrolls for 2026-08/09 for recalc');
+      } catch (e) {
+        log('v64 delete old payrolls warning: $e');
+      }
+      await _logMigrationStep(64, 'fix_old_payroll_deduction', 'completed');
+    } catch (e) {
+      await _logMigrationStep(64, 'fix_old_payroll_deduction', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v65 — أصناف المنتج (ألوان/فئات لكل منتج).
+  /// Purely additive: جدول جديد + عمود nullable واحد، لا يمس بيانات موجودة.
+  /// المنتجات اللي مالهاش أصناف والفواتير القديمة (variant_id = NULL)
+  /// تفضل شغالة بالمسار القديم 100%.
+  Future<void> _runV65Migrations(Migrator m) async {
+    await _logMigrationStep(65, 'product_variants', 'started');
+    try {
+      // 1. جدول الأصناف الجديد
+      try {
+        await m.createTable(productVariants);
+        log('v65: Created product_variants table');
+      } catch (e) {
+        log('v65: product_variants table likely already exists: $e');
+      }
+
+      // 2. عمود variantId على سطور الفواتير (nullable FK، آمن على القديم)
+      try {
+        await customStatement(
+          'ALTER TABLE invoice_items ADD COLUMN variant_id INTEGER REFERENCES product_variants(id)',
+        );
+        log('v65: Added variant_id to invoice_items');
+      } catch (e) {
+        log('v65: invoice_items.variant_id likely already exists: $e');
+      }
+
+      // 3. فهارس الأداء: جلب أصناف منتج + بحث باركود الصنف + فلترة سطور الفواتير
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_variants_product ON product_variants(product_id)',
+        );
+        log('v65: Created idx_variants_product');
+      } catch (e) {
+        log('v65 index warning idx_variants_product: $e');
+      }
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_invoice_items_variant ON invoice_items(variant_id)',
+        );
+        log('v65: Created idx_invoice_items_variant');
+      } catch (e) {
+        log('v65 index warning idx_invoice_items_variant: $e');
+      }
+
+      // 4. عمود variantId على أصناف المرتجعات (nullable، آمن على القديم) —
+      //    عشان المرتجع يرجع المخزون للصنف الصح مش للأب فقط.
+      try {
+        await customStatement(
+          'ALTER TABLE sales_return_items ADD COLUMN variant_id INTEGER REFERENCES product_variants(id)',
+        );
+        log('v65: Added variant_id to sales_return_items');
+      } catch (e) {
+        log('v65: sales_return_items.variant_id likely already exists: $e');
+      }
+
+      await _logMigrationStep(65, 'product_variants', 'completed');
+    } catch (e) {
+      await _logMigrationStep(65, 'product_variants', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v66 — Weekly Payroll: فصل Pay Frequency عن نوع العقد.
+  /// Purely additive: عمودان على staff_table فقط (default آمن + nullable)،
+  /// لا يمس أي بيانات موجودة — كل الموظفين الحاليين يبقوا 'monthly'.
+  Future<void> _runV66Migrations(Migrator m) async {
+    await _logMigrationStep(66, 'weekly_payroll_columns', 'started');
+    try {
+      final columns = [
+        "ALTER TABLE staff_table ADD COLUMN pay_frequency TEXT NOT NULL DEFAULT 'monthly'",
+        'ALTER TABLE staff_table ADD COLUMN weekly_salary REAL',
+      ];
+      for (final sql in columns) {
+        try {
+          await customStatement(sql);
+        } catch (e) {
+          log('66 migration warning (column may exist): $e');
+        }
+      }
+      await _logMigrationStep(66, 'weekly_payroll_columns', 'completed');
+    } catch (e) {
+      await _logMigrationStep(66, 'weekly_payroll_columns', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v67 — مهلة بدء الوقت الإضافي بعد الانصراف (افتراضي 30 دقيقة).
+  /// بذرة فقط (INSERT OR IGNORE) — القيمة الفعلية تُقرأ من attendance_settings
+  /// مع fallback داخلي، فغياب الصف لا يكسر الحساب.
+  Future<void> _runV67Migrations(Migrator m) async {
+    await _logMigrationStep(67, 'overtime_grace_setting', 'started');
+    try {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      try {
+        await customStatement('''
+          INSERT OR IGNORE INTO attendance_settings (setting_key, setting_value, description, created_at, updated_at)
+          VALUES ('overtime_grace_minutes', '30', 'مهلة بدء الوقت الإضافي بعد الانصراف (دقائق)', $now, $now)
+        ''');
+        log('v67: Seeded overtime_grace_minutes default');
+      } catch (e) {
+        log('v67 warning (seed may exist): $e');
+      }
+      await _logMigrationStep(67, 'overtime_grace_setting', 'completed');
+    } catch (e) {
+      await _logMigrationStep(67, 'overtime_grace_setting', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v68 — نهاية دورة السلفة: عمود تراكمي واحد، والسلفة المستوفاة
+  /// تُوسم settled فتُستبعد من كل المرتبات التالية تلقائياً.
+  /// Purely additive (DEFAULT 0): الصفوف القديمة تبدأ من صفر وتُستهلك تدريجياً.
+  Future<void> _runV68Migrations(Migrator m) async {
+    await _logMigrationStep(68, 'advance_lifecycle', 'started');
+    try {
+      try {
+        await customStatement(
+          'ALTER TABLE staff_advances ADD COLUMN paid_amount REAL NOT NULL DEFAULT 0',
+        );
+        log('v68: Added paid_amount to staff_advances');
+      } catch (e) {
+        log('v68: staff_advances.paid_amount likely already exists: $e');
+      }
+      await _logMigrationStep(68, 'advance_lifecycle', 'completed');
+    } catch (e) {
+      await _logMigrationStep(68, 'advance_lifecycle', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v69 — تعيين السلفة لفترة استحقاق (للأسبوعي: أي أسبوع تُخصم منه).
+  /// Purely additive nullable: الصفوف القديمة (null) تحتفظ بالسلوك الحالي.
+  Future<void> _runV69Migrations(Migrator m) async {
+    await _logMigrationStep(69, 'advance_deduct_period', 'started');
+    try {
+      try {
+        await customStatement(
+          'ALTER TABLE staff_advances ADD COLUMN deduct_on_period TEXT',
+        );
+        log('v69: Added deduct_on_period to staff_advances');
+      } catch (e) {
+        log('v69: staff_advances.deduct_on_period likely already exists: $e');
+      }
+      await _logMigrationStep(69, 'advance_deduct_period', 'completed');
+    } catch (e) {
+      await _logMigrationStep(69, 'advance_deduct_period', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v70 — single-open day repair + global invoice numbering.
+  /// Forward-only: V42..V69 steps are never edited. Check-then-act
+  /// (PRAGMA / sqlite_master reads) instead of exception-driven idempotency;
+  /// any structural failure propagates (throws) so the schema version cannot
+  /// advance on a partial migration.
+  /// a) Repair V42 `days` audit columns (add only if PRAGMA shows missing).
+  /// b) Verify V44 trigger + V45 partial index exist, then reconcile
+  ///    duplicate open days (keep oldest open id, flag-only repair).
+  /// c) `invoice_number_sequence` table, seeded from max(canonical) + 1.
+  /// d) Partial unique index on canonical 6-digit invoice numbers only.
+  Future<void> _runV70Migrations(Migrator m) async {
+    await _logMigrationStep(70, 'v70_repair_numbering', 'started');
+    try {
+      // ── a) V42 days columns ──
+      if (await _tableExists('days')) {
+        final dayCols = await _columnNames('days');
+        const v42Repairs = {
+          'opened_by': 'TEXT',
+          'closed_by': 'TEXT',
+          'reopened_at': 'TEXT',
+          'reopened_by': 'TEXT',
+        };
+        for (final entry in v42Repairs.entries) {
+          if (!dayCols.contains(entry.key)) {
+            await customStatement(
+              'ALTER TABLE days ADD COLUMN ${entry.key} ${entry.value}',
+            );
+            log('v70: Repaired missing days.${entry.key}');
+          }
+        }
+      } else {
+        await m.createTable(days);
+        log('v70: days table was missing — created');
+      }
+
+      // ── b) V44 trigger (INSERT-only; safe with duplicates present) ──
+      await customStatement('''
+        CREATE TRIGGER IF NOT EXISTS trg_prevent_multi_open
+        BEFORE INSERT ON days
+        WHEN NEW.is_open = 1
+        BEGIN
+          SELECT RAISE(ABORT, 'يوجد يوم مفتوح بالفعل')
+          WHERE EXISTS (SELECT 1 FROM days WHERE is_open = 1);
+        END
+      ''');
+      log('v70: Verified trg_prevent_multi_open');
+
+      // ── b2) Reconcile duplicate open days BEFORE the unique index:
+      // keep the oldest open row (MIN id), clear the flag on the rest.
+      // Rows are preserved — flag-only repair.
+      final openRows = await customSelect(
+        'SELECT id FROM days WHERE is_open = 1 ORDER BY id ASC',
+      ).get();
+      if (openRows.length > 1) {
+        final keepId = openRows.first.read<int>('id');
+        await customStatement(
+          'UPDATE days SET is_open = 0 WHERE is_open = 1 AND id != ?',
+          [keepId],
+        );
+        log('v70: Reconciled ${openRows.length} open days — kept id=$keepId, '
+            'closed ${openRows.length - 1} (flag-only, rows preserved)');
+        await _logMigrationStep(
+          70,
+          'days_reconcile_multi_open',
+          'completed(${openRows.length - 1} closed, kept id=$keepId)',
+        );
+      }
+
+      // ── b3) V45 partial unique index (backstop, incl. reopenDay UPDATEs) ──
+      await customStatement(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_days_one_open '
+        'ON days(is_open) WHERE is_open = 1',
+      );
+      log('v70: Verified idx_days_one_open');
+
+      // ── c) Invoice sequence table + seed (never rewrites numbers) ──
+      // A drifted DB can lack `invoices` entirely; create it canonically
+      // first so the seed query and partial index below cannot brick the
+      // upgrade (an empty table seeds 1 and loses no history).
+      if (!await _tableExists('invoices')) {
+        try {
+          await m.createTable(invoices);
+          log('v70: invoices table was missing — created');
+        } catch (e) {
+          log('v70: invoices create note: $e');
+        }
+      }
+      await customStatement(
+        'CREATE TABLE IF NOT EXISTS invoice_number_sequence '
+        '(id INTEGER PRIMARY KEY CHECK (id = 1), next_value INTEGER NOT NULL)',
+      );
+      final seqRows = await customSelect(
+        'SELECT next_value FROM invoice_number_sequence WHERE id = 1',
+      ).get();
+      if (seqRows.isEmpty) {
+        final maxRow = await customSelect(
+          "SELECT MAX(CAST(invoice_number AS INTEGER)) AS max_n FROM invoices "
+          "WHERE invoice_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'",
+        ).getSingle();
+        final v = maxRow.data['max_n'];
+        final maxN = v is int ? v : (v is num ? v.toInt() : 0);
+        await customStatement(
+          'INSERT INTO invoice_number_sequence (id, next_value) VALUES (1, ?)',
+          [maxN + 1],
+        );
+        log('v70: Seeded invoice_number_sequence next_value=${maxN + 1}');
+      } else {
+        log('v70: invoice_number_sequence already seeded');
+      }
+
+      // ── d) Partial unique index: canonical 6-digit numbers only ──
+      // Legacy timestamp / DRAFT_ / prefixed rows are unaffected.
+      await customStatement(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_canonical_number "
+        "ON invoices(invoice_number) "
+        "WHERE invoice_number GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'",
+      );
+      log('v70: Verified idx_invoices_canonical_number');
+
+      await _logMigrationStep(70, 'v70_repair_numbering', 'completed');
+    } catch (e) {
+      await _logMigrationStep(70, 'v70_repair_numbering', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v71 — forward-only repair, no historical rewrite.
+  ///
+  /// 1. `accounts` dedup by `code` (legacy `ensureSystemAccounts` ran on
+  ///    every startup without a UNIQUE guard, so drifted DBs can hold
+  ///    several rows per system code, which makes `getByCode` throw
+  ///    "Too many elements"). Survivor per code: system row first, else
+  ///    oldest `created_at`. `journal_lines` reference `account_id` (not
+  ///    code), so loser rows are repointed to the survivor before delete —
+  ///    no journal meaning changes. Afterwards a UNIQUE index on
+  ///    `accounts(code)` prevents recurrence.
+  /// 2. Supplier legacy opening-row dedup: the old supplier form wrote BOTH
+  ///    `suppliers.opening_balance` AND an `origin='opening'` ledger credit
+  ///    whose id is deterministically `<supplierUuid>_opening` (verified:
+  ///    no other writer uses that id pattern). Those rows are
+  ///    auto-created mirrors of the column — including stale ones left
+  ///    behind when the opening was later edited (column-only edit).
+  ///    Removal rule: entity/origin match + id pattern + referenced
+  ///    supplier still exists. Orphans and every other opening row are
+  ///    kept (conservative).
+  /// Structural failures propagate (no swallow) so the version cannot
+  /// advance on a partial repair.
+  Future<void> _runV71Migrations(Migrator m) async {
+    await _logMigrationStep(71, 'v71_accounts_supplier_opening', 'started');
+    try {
+      // ── 1) accounts dedup ──
+      if (await _tableExists('accounts')) {
+        final dupCodes = await customSelect(
+          'SELECT code FROM accounts GROUP BY code HAVING COUNT(*) > 1',
+        ).get();
+        for (final row in dupCodes) {
+          final code = row.read<String>('code');
+          final ordered = await customSelect(
+            'SELECT id FROM accounts WHERE code = ? '
+            'ORDER BY is_system DESC, created_at ASC',
+            variables: [Variable.withString(code)],
+          ).get();
+          if (ordered.length < 2) continue;
+          final survivor = ordered.first.read<String>('id');
+          for (final loser in ordered.skip(1)) {
+            final loserId = loser.read<String>('id');
+            if (await _tableExists('journal_lines')) {
+              await customUpdate(
+                'UPDATE journal_lines SET account_id = ? WHERE account_id = ?',
+                variables: [
+                  Variable.withString(survivor),
+                  Variable.withString(loserId),
+                ],
+              );
+            }
+            await customUpdate(
+              'DELETE FROM accounts WHERE id = ?',
+              variables: [Variable.withString(loserId)],
+            );
+            log('v71: Merged duplicate account code=$code loser=$loserId '
+                'into $survivor');
+          }
+        }
+        await customStatement(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_code '
+          'ON accounts(code)',
+        );
+        log('v71: Verified idx_accounts_code');
+      }
+
+      // ── 2) supplier legacy opening dedup (exact-duplicate only) ──
+      if (await _tableExists('ledger_transactions') &&
+          await _tableExists('suppliers')) {
+        final removed = await customUpdate(
+          "DELETE FROM ledger_transactions "
+          "WHERE entity_type = 'Supplier' AND origin = 'opening' "
+          "AND id GLOB '*_opening' "
+          "AND EXISTS (SELECT 1 FROM suppliers s "
+          "WHERE s.id = ledger_transactions.ref_id)",
+          variables: const [],
+        );
+        log('v71: Removed $removed auto-created supplier opening rows '
+            '(<uuid>_opening mirrors of suppliers.opening_balance)');
+        await _logMigrationStep(
+          71,
+          'supplier_opening_dedup',
+          'completed($removed removed)',
+        );
+      }
+
+      await _logMigrationStep(71, 'v71_accounts_supplier_opening', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        71,
+        'v71_accounts_supplier_opening',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// sqlite_master existence probe for check-then-act migrations.
+  Future<bool> _tableExists(String table) async {
+    final rows = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      variables: [Variable.withString(table)],
+    ).get();
+    return rows.isNotEmpty;
+  }
+
+  /// PRAGMA column-name probe for check-then-act migrations.
+  Future<Set<String>> _columnNames(String table) async {
+    final rows = await customSelect('PRAGMA table_info($table)').get();
+    return rows.map((r) => r.read<String>('name')).toSet();
   }
 
   /// Backfills `sync_id` (a fresh UUID per row) plus `created_at`/`updated_at`

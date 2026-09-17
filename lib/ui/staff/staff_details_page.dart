@@ -158,7 +158,9 @@ class _StaffDetailsPageState extends State<StaffDetailsPage>
               Icon(Icons.attach_money, color: Colors.white70, size: 20),
               const SizedBox(width: 8),
               Text(
-                CurrencyHelper.formatCurrency(widget.staff.basicSalary),
+                widget.staff.payFrequency == 'weekly' && widget.staff.weeklySalary != null
+                    ? '${CurrencyHelper.formatCurrency(widget.staff.weeklySalary!)} / أسبوع'
+                    : CurrencyHelper.formatCurrency(widget.staff.basicSalary),
                 style: const TextStyle(color: Colors.white70),
               ),
             ],
@@ -197,6 +199,7 @@ class _StaffDetailsPageState extends State<StaffDetailsPage>
           _buildInfoSection('المعلومات الشخصية', [
             _buildInfoRow('الاسم الكامل', widget.staff.name),
             _buildInfoRow('الرقم الوظيفي', widget.staff.staffId),
+            _buildInfoRow('ID البصمة', 'يُعرض في نموذج التعديل'),
             _buildInfoRow(
               'الرقم القومي',
               widget.staff.nationalId ?? 'غير محدد',
@@ -225,10 +228,18 @@ class _StaffDetailsPageState extends State<StaffDetailsPage>
                 'تاريخ نهاية العقد',
                 '${widget.staff.contractEndDate!.day}/${widget.staff.contractEndDate!.month}/${widget.staff.contractEndDate!.year}',
               ),
-            _buildInfoRow(
-              'الراتب الأساسي',
-              CurrencyHelper.formatCurrency(widget.staff.basicSalary),
-            ),
+            if (widget.staff.payFrequency == 'weekly')
+              _buildInfoRow(
+                'الأجر الأسبوعي',
+                widget.staff.weeklySalary != null
+                    ? CurrencyHelper.formatCurrency(widget.staff.weeklySalary!)
+                    : 'غير محدد',
+              )
+            else
+              _buildInfoRow(
+                'الراتب الأساسي',
+                CurrencyHelper.formatCurrency(widget.staff.basicSalary),
+              ),
             if (widget.staff.hourlyRate != null)
               _buildInfoRow(
                 'الساعة بالساعة',

@@ -28,10 +28,16 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
 
   // Grace & penalties
   int _gracePeriodMinutes = 15;
-  double _latePenaltyAmount = 0;
-  double _absencePenaltyAmount = 0;
+  double _latePenaltyAmount = 0; // Legacy or per-instance
+  double _latePenaltyPerHour = 0; // خصم التأخير لكل ساعة تأخير
+  double _absencePenaltyAmount = 0; // غرامة يوم الغياب (مبلغ ثابت)
+  double _absenceMultiplier = 1.0; // مضاعف خصم يوم الغياب (1 = يوم، 1.5 = يوم ونص)
+  double _earlyPenaltyPerHour = 0; // مضاعف خصم الانصراف المبكر لكل ساعة
   double _overtimeRateMultiplier = 1.5;
   double _overtimeThresholdHours = 8;
+  int _overtimeGraceMinutes = 30; // مهلة بدء الإضافي بعد الانصراف (دقائق)
+  int _breakMinutes = 60; // استراحة (فاصل) بالدقائق تُخصم من ساعات العمل
+  double _perfectAttendanceBonus = 200; // مكافأة الحضور الكامل (بصمة كاملة بدون غياب)
 
   // Absence generation
   int _absencesGenerated = 0;
@@ -65,12 +71,24 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             _gracePeriodMinutes = int.tryParse(s.settingValue) ?? 15;
           case 'late_penalty_amount':
             _latePenaltyAmount = double.tryParse(s.settingValue) ?? 0;
+          case 'late_penalty_per_hour':
+            _latePenaltyPerHour = double.tryParse(s.settingValue) ?? 0;
           case 'absence_penalty_amount':
             _absencePenaltyAmount = double.tryParse(s.settingValue) ?? 0;
+          case 'absence_penalty_days_multiplier':
+            _absenceMultiplier = double.tryParse(s.settingValue) ?? 1.0;
+          case 'early_leave_penalty_per_hour':
+            _earlyPenaltyPerHour = double.tryParse(s.settingValue) ?? 0;
+          case 'overtime_grace_minutes':
+            _overtimeGraceMinutes = int.tryParse(s.settingValue) ?? 30;
           case 'overtime_rate_multiplier':
             _overtimeRateMultiplier = double.tryParse(s.settingValue) ?? 1.5;
           case 'overtime_threshold_hours':
             _overtimeThresholdHours = double.tryParse(s.settingValue) ?? 8;
+          case 'break_minutes':
+            _breakMinutes = int.tryParse(s.settingValue) ?? 60;
+          case 'perfect_attendance_bonus':
+            _perfectAttendanceBonus = double.tryParse(s.settingValue) ?? 200;
         }
       }
     } catch (e) {
@@ -104,9 +122,15 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         'default_weekend': _weekendDay,
         'grace_period_minutes': _gracePeriodMinutes.toString(),
         'late_penalty_amount': _latePenaltyAmount.toString(),
+        'late_penalty_per_hour': _latePenaltyPerHour.toString(),
         'absence_penalty_amount': _absencePenaltyAmount.toString(),
+        'absence_penalty_days_multiplier': _absenceMultiplier.toString(),
+        'early_leave_penalty_per_hour': _earlyPenaltyPerHour.toString(),
+        'overtime_grace_minutes': _overtimeGraceMinutes.toString(),
         'overtime_rate_multiplier': _overtimeRateMultiplier.toString(),
         'overtime_threshold_hours': _overtimeThresholdHours.toString(),
+        'break_minutes': _breakMinutes.toString(),
+        'perfect_attendance_bonus': _perfectAttendanceBonus.toString(),
       };
 
       for (final entry in settingsMap.entries) {
@@ -210,6 +234,30 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
           SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
         );
       }
+    }
+  }
+
+  Future<void> _cleanFutureAbsences() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تنظيف الغياب المستقبلي؟'),
+        content: const Text('سيتم حذف كل سجلات الغياب التلقائية التي تاريخها بعد اليوم (مثل 28-30 سبتمبر في الصورة) مرة واحدة. لا يمس الحضور الحقيقي أو الإجازات اليدوية.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final deleted = await db.staffManagementDao.deleteFutureAutoAbsences();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(deleted == 0 ? 'لا يوجد غياب مستقبلي للحذف' : 'تم حذف $deleted سجل غياب مستقبلي'), backgroundColor: deleted == 0 ? Colors.grey : Colors.green));
+      setState(() => _absencesGenerated = 0);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red));
     }
   }
 
@@ -383,6 +431,40 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         ),
         const Divider(height: 1),
         ListTile(
+          title: const Text('ساعات الراحة (الاستراحة)'),
+          subtitle: Text('$_breakMinutes دقيقة — تُخصم من ساعات العمل اليومية'),
+          trailing: const Icon(Icons.hotel),
+          onTap: () async {
+            final controller = TextEditingController(text: _breakMinutes.toString());
+            final result = await showDialog<int>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('ساعات الراحة (دقائق)'),
+                content: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    suffixText: 'دقيقة',
+                    hintText: '60 = ساعة راحة',
+                  ),
+                ),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(
+                    onPressed: () {
+                      final val = int.tryParse(controller.text);
+                      if (val != null) Navigator.pop(ctx, val);
+                    },
+                    child: const Text('موافق'),
+                  ),
+                ],
+              ),
+            );
+            if (result != null) setState(() => _breakMinutes = result);
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
           title: const Text('غرامة التأخير'),
           subtitle: Text(_latePenaltyAmount > 0 ? '${_latePenaltyAmount.toStringAsFixed(0)} ج.م' : 'بدون غرامة'),
           trailing: const Icon(Icons.money_off),
@@ -419,6 +501,50 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         ),
         const Divider(height: 1),
         ListTile(
+          title: const Text('مضاعف خصم التأخير لكل ساعة'),
+          subtitle: Text(_latePenaltyPerHour > 0 ? 'x${_latePenaltyPerHour.toStringAsFixed(1)} — ساعة تأخير = ${_latePenaltyPerHour}x أجر الساعة' : 'بدون احتساب بالساعة'),
+          trailing: const Icon(Icons.timer_outlined),
+          onTap: () async {
+            final controller = TextEditingController(
+              text: _latePenaltyPerHour > 0 ? _latePenaltyPerHour.toString() : '',
+            );
+            final result = await showDialog<double>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('مضاعف خصم التأخير لكل ساعة'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      hintText: '1.5 = ساعة ونص',
+                      suffixText: 'x',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, children: [
+                    ActionChip(label: const Text('1x'), onPressed: () => Navigator.pop(ctx, 1.0)),
+                    ActionChip(label: const Text('1.5x'), onPressed: () => Navigator.pop(ctx, 1.5)),
+                    ActionChip(label: const Text('2x'), onPressed: () => Navigator.pop(ctx, 2.0)),
+                  ]),
+                ]),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(
+                    onPressed: () {
+                      final val = double.tryParse(controller.text) ?? 0;
+                      Navigator.pop(ctx, val);
+                    },
+                    child: const Text('موافق'),
+                  ),
+                ],
+              ),
+            );
+            if (result != null) setState(() => _latePenaltyPerHour = result);
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
           title: const Text('غرامة الغياب'),
           subtitle: Text(_absencePenaltyAmount > 0 ? '${_absencePenaltyAmount.toStringAsFixed(0)} ج.م' : 'بدون غرامة'),
           trailing: const Icon(Icons.money_off),
@@ -451,6 +577,142 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
               ),
             );
             if (result != null) setState(() => _absencePenaltyAmount = result);
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('مضاعف خصم الغياب (أيام)'),
+          subtitle: Text('x${_absenceMultiplier.toStringAsFixed(1)} يوم${_absenceMultiplier > 1 ? ' — مثال: يوم غياب = ${(_absenceMultiplier).toStringAsFixed(1)} يوم خصم' : ''}'),
+          trailing: const Icon(Icons.calendar_today),
+          onTap: () async {
+            final controller = TextEditingController(text: _absenceMultiplier.toString());
+            final result = await showDialog<double>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('مضاعف خصم الغياب'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(controller: controller, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '1 = يوم بيوم', suffixText: 'x')),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, children: [
+                    ActionChip(label: const Text('1x'), onPressed: () => Navigator.pop(ctx, 1.0)),
+                    ActionChip(label: const Text('1.5x'), onPressed: () => Navigator.pop(ctx, 1.5)),
+                    ActionChip(label: const Text('2x'), onPressed: () => Navigator.pop(ctx, 2.0)),
+                  ]),
+                ]),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(onPressed: () { final v = double.tryParse(controller.text); if (v != null && v >= 0) Navigator.pop(ctx, v); }, child: const Text('موافق')),
+                ],
+              ),
+            );
+            if (result != null) setState(() => _absenceMultiplier = result);
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('مكافأة الحضور الكامل (بدون غياب)'),
+          subtitle: Text(_perfectAttendanceBonus > 0 ? '${_perfectAttendanceBonus.toStringAsFixed(0)} ج.م — تُضاف للموظف اللي مأخدش غياب أو إجازة بالشهر' : 'معطلة (0)'),
+          trailing: const Icon(Icons.emoji_events_outlined),
+          onTap: () async {
+            final controller = TextEditingController(
+              text: _perfectAttendanceBonus > 0 ? _perfectAttendanceBonus.toString() : '200',
+            );
+            final result = await showDialog<double>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('مكافأة الحضور الكامل (ج.م)'),
+                content: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    hintText: '0 = بدون مكافأة',
+                    suffixText: 'ج.م',
+                  ),
+                ),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(
+                    onPressed: () {
+                      final val = double.tryParse(controller.text) ?? 0;
+                      Navigator.pop(ctx, val);
+                    },
+                    child: const Text('موافق'),
+                  ),
+                ],
+              ),
+            );
+            if (result != null) setState(() => _perfectAttendanceBonus = result);
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('مضاعف خصم الانصراف المبكر لكل ساعة'),
+          subtitle: Text(_earlyPenaltyPerHour > 0 ? 'x${_earlyPenaltyPerHour.toStringAsFixed(1)} — ساعة بدري = ${_earlyPenaltyPerHour}x أجر الساعة' : 'بدون خصم للانصراف المبكر'),
+          trailing: const Icon(Icons.logout),
+          onTap: () async {
+            final controller = TextEditingController(text: _earlyPenaltyPerHour > 0 ? _earlyPenaltyPerHour.toString() : '');
+            final result = await showDialog<double>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('مضاعف خصم الانصراف المبكر'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(controller: controller, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '1 = ساعة بساعة، 1.5 = ساعة ونص', suffixText: 'x')),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, children: [
+                    ActionChip(label: const Text('1x'), onPressed: () => Navigator.pop(ctx, 1.0)),
+                    ActionChip(label: const Text('1.5x'), onPressed: () => Navigator.pop(ctx, 1.5)),
+                    ActionChip(label: const Text('2x'), onPressed: () => Navigator.pop(ctx, 2.0)),
+                  ]),
+                ]),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(onPressed: () { final v = double.tryParse(controller.text) ?? 0; Navigator.pop(ctx, v); }, child: const Text('موافق')),
+                ],
+              ),
+            );
+            if (result != null) setState(() => _earlyPenaltyPerHour = result);
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('مهلة بدء الوقت الإضافي'),
+          subtitle: Text('$_overtimeGraceMinutes دقيقة بعد الانصراف — قبلها لا يُحسب إضافي'),
+          trailing: const Icon(Icons.more_time),
+          onTap: () async {
+            final controller = TextEditingController(text: _overtimeGraceMinutes.toString());
+            final result = await showDialog<int>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('مهلة بدء الإضافي (دقائق)'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      hintText: '30 = الإضافي بعد نص ساعة من الانصراف',
+                      suffixText: 'دقيقة',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, children: [
+                    ActionChip(label: const Text('15'), onPressed: () => Navigator.pop(ctx, 15)),
+                    ActionChip(label: const Text('30'), onPressed: () => Navigator.pop(ctx, 30)),
+                    ActionChip(label: const Text('60'), onPressed: () => Navigator.pop(ctx, 60)),
+                  ]),
+                ]),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(
+                    onPressed: () {
+                      final val = int.tryParse(controller.text);
+                      if (val != null && val >= 0) Navigator.pop(ctx, val);
+                    },
+                    child: const Text('موافق'),
+                  ),
+                ],
+              ),
+            );
+            if (result != null) setState(() => _overtimeGraceMinutes = result);
           },
         ),
         const Divider(height: 1),
@@ -530,6 +792,20 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             title: Text('تم توليد $_absencesGenerated سجل غياب'),
           ),
         ],
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('حذف الغياب المستقبلي (تنظيف)'),
+          subtitle: const Text('يحذف كل الغياب التلقائي بعد اليوم مرة واحدة'),
+          trailing: ElevatedButton.icon(
+            onPressed: _cleanFutureAbsences,
+            icon: const Icon(Icons.cleaning_services),
+            label: const Text('تنظيف'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ),
       ],
     );
   }

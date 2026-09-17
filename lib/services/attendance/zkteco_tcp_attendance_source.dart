@@ -14,11 +14,19 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
   @override
   AttendanceSourceStatus get status => _status;
 
+  String? _lastError;
+  String? get lastError => _lastError ?? _client.lastError;
+
+  /// Diagnostics of the most recent fetch (records/rawBytes/dropped/fetchOk).
+  /// Null before the first fetch. Used by the sync service to distinguish
+  /// fetchFailed from fetchOkEmpty and to log parser mismatch.
+  ZkFetchReport? get lastFetchReport => _client.lastFetchReport;
+
   ZKTecoTcpAttendanceSource({
     required this.ipAddress,
     required this.port,
     this.authToken,
-    Duration timeout = const Duration(seconds: 8),
+    Duration timeout = const Duration(seconds: 15),
   })  : _client = ZKTecoClient(
           host: ipAddress,
           port: port,
@@ -30,6 +38,7 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
   @override
   Future<bool> connect() async {
     _status = AttendanceSourceStatus.connecting;
+    _lastError = null;
     try {
       final success = await _client.connect();
       if (success) {
@@ -37,10 +46,12 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
         return true;
       } else {
         _status = AttendanceSourceStatus.error;
+        _lastError = _client.lastError ?? 'فشل الاتصال بالجهاز $ipAddress:$port (تحقق من الشبكة وفقد الحزم)';
         return false;
       }
-    } catch (_) {
+    } catch (e) {
       _status = AttendanceSourceStatus.error;
+      _lastError = e.toString();
       return false;
     }
   }
@@ -58,16 +69,26 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
   Future<List<RawAttendanceEvent>> fetchEvents({DateTime? since}) async {
     _status = AttendanceSourceStatus.fetching;
     try {
-      final records = await _client.getAttendanceRecords(since: since);
+      // Throws ZkTransportException on timeout/truncation: propagates as
+      // fetchFailed and must never be converted to an empty list here.
+      final report = await _client.fetchAttendanceReport(since: since);
       _status = AttendanceSourceStatus.connected;
 
-      return records.map((r) {
+      return report.records.map((r) {
+        // Truncate to seconds: dedupHash is second-precision, ms jitter
+        // would break idempotent re-ingest of the same device event.
+        final t = r.timestamp;
+        final eventTime = DateTime(t.year, t.month, t.day, t.hour, t.minute, t.second);
+        // NOTE: r.eventType (device status 0/1) is preserved for audit only.
+        // It is NOT trusted for check-in/out decisions (parser byte-overlap
+        // makes it unreliable) — see the processor policy in
+        // attendance_sync_service.dart.
         return RawAttendanceEvent(
           externalUserId: r.userId,
-          eventTime: r.timestamp,
+          eventTime: eventTime,
           eventType: r.eventType,
           rawPayload:
-              '{"userId":"${r.userId}","time":"${r.timestamp.toIso8601String()}","status":${r.status},"verifyType":${r.verifyType}}',
+              '{"userId":"${r.userId}","time":"${eventTime.toIso8601String()}","status":${r.status},"verifyType":${r.verifyType}}',
         );
       }).toList();
     } catch (e) {
@@ -77,21 +98,8 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
   }
 
   @override
-  Future<List<DeviceEnrolledUser>> fetchEnrolledUsers() async {
-    try {
-      final users = await _client.getUsers();
-      return users.map((u) {
-        return DeviceEnrolledUser(
-          externalUserId: u.userId,
-          name: u.name,
-          cardNumber: u.card,
-        );
-      }).toList();
-    } catch (_) {
-      return [];
-    }
-  }
+  Future<List<DeviceEnrolledUser>> fetchEnrolledUsers() async => [];
 
-  /// Direct access to device info (Firmware, serial number, device time)
   Future<ZkDeviceInfo> getDeviceInfo() => _client.getDeviceInfo();
+  Future<bool> setDeviceTime(DateTime dt) => _client.setDeviceTime(dt);
 }

@@ -3,6 +3,7 @@ import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
+import 'package:pos_offline_desktop/core/services/business_date_service.dart';
 import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/ui/day/close_day_dialog.dart';
 import '../../core/database/app_database.dart';
@@ -36,9 +37,13 @@ class _CashierPageState extends ConsumerState<CashierPage> {
   Future<void> _loadCurrentDay() async {
     setState(() => _isLoading = true);
     try {
-      final service = ref.read(businessDateServiceProvider);
+      final BusinessDateService service =
+          ref.read(businessDateServiceProvider);
       final session = await service.getCurrentSession();
-      
+      // The open/closed badge is authoritative on `days` (single source of
+      // truth) — the session below stays as the detail display only.
+      final dayOpen = await service.isBusinessDayOpen();
+
       if (session != null && session.status == 'open') {
         final today = DateTime.now();
         final db = ref.read(appDatabaseProvider);
@@ -75,7 +80,7 @@ class _CashierPageState extends ConsumerState<CashierPage> {
 
         setState(() {
           _currentSession = session;
-          _isDayOpen = true;
+          _isDayOpen = dayOpen;
           _transactions = allTransactions;
           _openingBalance = session.openingBalance;
 
@@ -86,7 +91,7 @@ class _CashierPageState extends ConsumerState<CashierPage> {
       } else {
         setState(() {
           _currentSession = null;
-          _isDayOpen = false;
+          _isDayOpen = dayOpen;
           _transactions = [];
           _openingBalance = 0;
           _totalIncome = 0;

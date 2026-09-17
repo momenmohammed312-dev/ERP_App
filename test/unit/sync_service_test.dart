@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:pos_offline_desktop/core/config/app_flavor.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
 import 'package:pos_offline_desktop/core/services/sync_service.dart';
@@ -12,6 +13,9 @@ import 'package:pos_offline_desktop/core/services/sync_service.dart';
 /// and it must report the length of the pending outbox.
 void main() {
   setUpAll(() {
+    // Outbox enqueue reads the flavor device name; the test env has no
+    // app_bootstrap (production always initializes at startup).
+    AppFlavor.initialize(Flavor.base);
     SharedPreferences.setMockInitialValues({});
   });
 

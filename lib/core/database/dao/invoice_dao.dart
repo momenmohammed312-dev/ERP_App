@@ -42,29 +42,51 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
   }
 
   Future updateInvoice(Insertable<Invoice> invoice) async {
-    Insertable<Invoice> decorated = invoice;
-    int? localId;
+    // D3/D4/D7 (Agent 4): partial-companion SAFE update. `replace()` with a
+    // partial `InvoicesCompanion` wipes every absent column to its default
+    // (proved: PAY wrote totalAmount=0 via replace) — so companions go through
+    // keyed `write()` (only present fields), full `Invoice` objects via replace.
     if (invoice is InvoicesCompanion) {
-      decorated = invoice.copyWith(updatedAt: Value(DateTime.now()));
-      localId = invoice.id.value;
-    } else if (invoice is Invoice) {
-      decorated = invoice.copyWith(updatedAt: Value(DateTime.now()));
-      localId = invoice.id;
-    }
-    await update(invoices).replace(decorated);
-    if (localId != null) {
+      if (!invoice.id.present) throw Exception('updateInvoice requires id');
+      final localId = invoice.id.value;
+      await (update(invoices)..where((t) => t.id.equals(localId))).write(
+        invoice.copyWith(updatedAt: Value(DateTime.now())),
+      );
       await _enqueueInvoice(localId, 'update');
+      return;
     }
+    Invoice decorated = invoice as Invoice;
+    decorated = decorated.copyWith(updatedAt: Value(DateTime.now()));
+    await update(invoices).replace(decorated);
+    await _enqueueInvoice(decorated.id, 'update');
   }
 
   Future deleteInvoice(Insertable<Invoice> invoice) =>
       delete(invoices).delete(invoice);
 
+  /// إلغاء فاتورة ذري + idempotent (D5 — Agent 4).
+  ///
+  /// أول void: حارس الحالة، ثم عكس الآثار المالية باتساق مع قرار D4 (صفوف
+  /// ledger عكسية append-only + عكوس يومية — لا حذف فيزيائي لتاريخ مرحّل)،
+  /// واسترجاع المخزون مرة واحدة، وعكس عدّادات الشحنة، وإرجاع البرنيكة المطابقة،
+  /// مع بقاء المدفوعات history (النقدية المستلمة لا تُعكس ضمنيًا — الاسترداد
+  /// حركة صريحة منفصلة). كل ذلك في transaction واحدة.
+  /// ثاني void: صفر آثار (return مبكر قبل أي كتابة).
+  /// الإلغاء على فاتورة عليها مرتجعات مرفوض (ازدواج استرجاع).
   Future<void> voidInvoice(int invoiceId, String reason, String voidedBy) async {
     return transaction(() async {
       final invoice = await (select(invoices)..where((t) => t.id.equals(invoiceId))).getSingleOrNull();
       if (invoice == null) throw Exception('Invoice not found');
-      
+      // Idempotency guard: second void = zero side effects.
+      if (invoice.status == 'voided') return;
+
+      final priorReturns = await db.salesReturnsDao.getReturnsForInvoice(
+        invoiceId,
+      );
+      if (priorReturns.isNotEmpty) {
+        throw Exception('لا يمكن إلغاء فاتورة عليها مرتجعات مسجلة');
+      }
+
       await (update(invoices)..where((t) => t.id.equals(invoiceId))).write(
         InvoicesCompanion(
           status: const Value('voided'),
@@ -76,14 +98,127 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
 
       final items = await getItemsByInvoiceId(invoiceId);
       final productsTable = attachedDatabase.products;
+      final ref = invoice.invoiceNumber ?? 'INV$invoiceId';
       for (final item in items) {
-        final product = await (select(productsTable)..where((p) => p.id.equals(item.productId))).getSingleOrNull();
-        if (product != null) {
-          await (update(productsTable)..where((p) => p.id.equals(product.id))).write(
-            ProductsCompanion(
-              quantity: Value(product.quantity + item.quantity),
-            ),
+        final prevProduct =
+            await (select(productsTable)..where((p) => p.id.equals(item.productId)))
+                .getSingleOrNull();
+        // سطر مباع عبر صنف (لون/فئة): الاسترجاع للصنف + إعادة حساب مجموع الأب.
+        if (item.variantId != null) {
+          final variant = await db.productVariantDao.getVariantById(
+            item.variantId!,
           );
+          if (variant != null) {
+            await db.productVariantDao.updateVariantQuantity(
+              variant.id,
+              variant.quantity + item.quantity,
+            );
+            final total = await db.productVariantDao
+                .getTotalQuantityByProduct(item.productId);
+            await (update(productsTable)
+                  ..where((p) => p.id.equals(item.productId)))
+                .write(ProductsCompanion(quantity: Value(total)));
+          } else {
+            // الصنف اتحذف نهائيًا — نكمل للاسترجاع المباشر للأب تحت.
+            final product =
+                await (select(productsTable)..where((p) => p.id.equals(item.productId)))
+                    .getSingleOrNull();
+            if (product != null) {
+              await (update(productsTable)..where((p) => p.id.equals(product.id))).write(
+                ProductsCompanion(
+                  quantity: Value(product.quantity + item.quantity),
+                ),
+              );
+            }
+          }
+        } else {
+          final product =
+              await (select(productsTable)..where((p) => p.id.equals(item.productId)))
+                  .getSingleOrNull();
+          if (product != null) {
+            await (update(productsTable)..where((p) => p.id.equals(product.id))).write(
+              ProductsCompanion(
+                quantity: Value(product.quantity + item.quantity),
+              ),
+            );
+          }
+        }
+        // D9: حركة إرجاع حقيقية (موجبة) مرتبطة برقم الفاتورة.
+        final afterProduct =
+            await (select(productsTable)..where((p) => p.id.equals(item.productId)))
+                .getSingleOrNull();
+        await db.inventoryMovementDao.createMovementWithTimestamp(
+          productId: item.productId,
+          movementType: 'return',
+          quantity: item.quantity,
+          unitCost: item.unitCostAtTime ?? 0,
+          totalValue: (item.unitCostAtTime ?? 0) * item.quantity,
+          movementDate: DateTime.now(),
+          reference: ref,
+          referenceType: 'sale_invoice',
+          previousQuantity: prevProduct?.quantity ?? 0,
+          newQuantity:
+              afterProduct?.quantity ??
+              ((prevProduct?.quantity ?? 0) + item.quantity),
+          notes: item.variantId != null
+              ? 'void variant:${item.variantId}'
+              : 'void',
+        );
+        // عكس عدّادات الشحنة ( clamp عند الصفر — لا سالب أبدًا).
+        if (item.shipmentId != null) {
+          final shipment = await db.vegetableShipmentDao.getById(
+            item.shipmentId!,
+          );
+          if (shipment != null) {
+            await db.vegetableShipmentDao.updateShipment(
+              shipment.copyWith(
+                barnikaSoldCount:
+                    (shipment.barnikaSoldCount - item.quantity).clamp(0, 1 << 62),
+                barnikaRemainingCount:
+                    shipment.barnikaRemainingCount + item.quantity,
+              ),
+            );
+          }
+        }
+      }
+
+      // عكس دفتري append-only لصفوف البيع فقط (عميل + مورد) — المدفوعات تبقى.
+      await db.ledgerDao.reverseTransactionsByReceipt(
+        receiptNumber: 'INV$invoiceId',
+        reversalReceipt: 'REV-INV$invoiceId',
+        onlyOrigins: const {'sale'},
+      );
+
+      // عكوس اليومية للبيع والتكلفة (تُتخطى الغائبة/المعكوسة — idempotent).
+      for (final key in ['sale:INV$invoiceId', 'sale_cogs:INV$invoiceId']) {
+        final existing = await db.journalDao.getByPostingKey(key);
+        if (existing != null && existing.status != 'reversed') {
+          await db.journalDao.reverseEntry(originalEntryId: existing.id);
+        }
+      }
+
+      // D10: إرجاع البرنيكة المطابقة (أفضل جهد + status-machine — لا ازدواج).
+      final custId = invoice.customerId;
+      if (custId != null && custId != 'cash' && custId.isNotEmpty) {
+        final totalQty = items.fold<int>(0, (s, e) => s + e.quantity);
+        if (totalQty > 0) {
+          final outstanding = await db.emptyBarnikaTrackingDao
+              .getOutstandingByCustomer(custId);
+          final matches = outstanding.where((r) {
+            if (r.quantityOut != totalQty) return false;
+            return r.dateOut.difference(invoice.date).abs() <=
+                const Duration(hours: 24);
+          }).toList();
+          if (matches.length == 1) {
+            final missing =
+                matches.first.quantityOut - matches.first.quantityReturned;
+            if (missing > 0) {
+              await db.emptyBarnikaTrackingDao.recordReturn(
+                id: matches.first.id,
+                quantityReturned: missing,
+              );
+            }
+          }
         }
       }
     });

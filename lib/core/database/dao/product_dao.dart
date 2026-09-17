@@ -256,4 +256,44 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
 
     return query.get();
   }
+
+  // ── Manufacturing: productType helpers (Phase 1) ──
+
+  /// Returns products filtered by [productType].
+  /// Pass null or 'all' to get all non-deleted products.
+  /// Values: 'raw_material' | 'semi_finished' | 'finished_product' | null
+  Future<List<Product>> getProductsByType(String? productType) {
+    if (productType == null || productType == 'all') {
+      return getAllProducts();
+    }
+    if (productType == 'standard') {
+      // Products with NULL productType = legacy standard products
+      return (select(products)
+            ..where((p) => (p.status.equals('Deleted').not() | p.status.isNull()) & p.productType.isNull()))
+          .get();
+    }
+    return (select(products)
+          ..where((p) => (p.status.equals('Deleted').not() | p.status.isNull()) & p.productType.equals(productType)))
+        .get();
+  }
+
+  Stream<List<Product>> watchProductsByType(String? productType) {
+    if (productType == null || productType == 'all') {
+      return watchAllProducts();
+    }
+    if (productType == 'standard') {
+      return (select(products)
+            ..where((p) => (p.status.equals('Deleted').not() | p.status.isNull()) & p.productType.isNull()))
+          .watch();
+    }
+    return (select(products)
+          ..where((p) => (p.status.equals('Deleted').not() | p.status.isNull()) & p.productType.equals(productType)))
+        .watch();
+  }
+
+  /// Convenience: only raw materials
+  Future<List<Product>> getRawMaterials() => getProductsByType('raw_material');
+
+  /// Convenience: only finished products
+  Future<List<Product>> getFinishedProducts() => getProductsByType('finished_product');
 }

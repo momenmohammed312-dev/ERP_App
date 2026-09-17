@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'invoice_table.dart';
 import 'product_table.dart';
+import 'product_variants_table.dart';
 
 /// جدول مرتجعات المبيعات الرئيسي
 @DataClassName('SalesReturn')
@@ -31,6 +32,8 @@ class SalesReturnItems extends Table {
     onDelete: KeyAction.cascade,
   )();
   IntColumn get productId => integer().references(Products, #id)();
+  IntColumn get variantId =>
+      integer().nullable().references(ProductVariants, #id)();
   TextColumn get productName => text()(); // snapshot of name
   IntColumn get quantity => integer()();
   RealColumn get unitPrice => real()();

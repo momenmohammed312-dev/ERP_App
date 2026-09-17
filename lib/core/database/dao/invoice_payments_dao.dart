@@ -28,10 +28,39 @@ class InvoicePaymentsDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// حذف كل دفعات فاتورة (عند إلغاء الفاتورة)
+  ///
+  /// تحذير تدقيق (D5): لا تستدعِ هذا في الـvoid — المدفوعات history نقدي
+  /// يبقى؛ الحذف الفيزيائي يُستخدم فقط لمسودات لم تُرحّل. أُبقيت الدالة
+  /// للتوافق، لكن مسارات الـlifecycle الجديدة لا تمسح المدفوعات أبدًا.
   Future<int> deletePaymentsForInvoice(int invoiceId) =>
       (delete(invoicePayments)
             ..where((t) => t.invoiceId.equals(invoiceId)))
           .go();
+
+  /// هل توجد دفعة مطابقة (نفس الفاتورة + المبلغ + الطريقة) داخل نافذة زمنية؟
+  /// تشخيصية فقط (D3) — لا يستخدمها الكاتب الموحّد (تكبت دفعات مشروعة متتالية؛
+  /// الحماية عبر حارس التجاوز + مفاتيح اليومية الفريدة). تعمل داخل transaction المستدعي.
+  Future<bool> hasDuplicatePayment({
+    required int invoiceId,
+    required double amount,
+    required String paymentMethod,
+    required DateTime around,
+    Duration window = const Duration(seconds: 30),
+  }) async {
+    final from = around.subtract(window);
+    final to = around.add(window);
+    final rows =
+        await (select(invoicePayments)
+              ..where(
+                (t) =>
+                    t.invoiceId.equals(invoiceId) &
+                    t.amount.equals(amount) &
+                    t.paymentMethod.equals(paymentMethod) &
+                    t.paidAt.isBetweenValues(from, to),
+              ))
+            .get();
+    return rows.isNotEmpty;
+  }
 
   /// إجمالي الدفعات بطريقة دفع معينة في فترة زمنية
   Future<double> getTotalByMethodAndDateRange(

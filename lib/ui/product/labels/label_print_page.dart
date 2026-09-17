@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/label_print_service.dart';
@@ -24,8 +25,20 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   final Map<int, TextEditingController> _barcodeCtrls = {};
 
   final _companyCtrl = TextEditingController();
+  final _pageUrlCtrl = TextEditingController();
+  final _customWidthCtrl = TextEditingController();
+  final _customHeightCtrl = TextEditingController();
   bool _showPrice = true;
+  bool _showQr = false;
   bool _loading = true;
+  // أصناف المنتجات (ألوان/فئات) لطباعة ملصق لكل صنف بباركوده الخاص.
+  final Map<int, List<ProductVariant>> _variantsByProduct = {};
+  final Map<int, bool> _variantsLoading = {};
+  final Set<int> _expanded = {};
+  final Map<int, bool> _variantSelected = {};
+  final Map<int, int> _variantCopies = {};
+  final Map<int, TextEditingController> _variantCopyCtrls = {};
+  final Map<int, TextEditingController> _variantBarcodeCtrls = {};
   String? _detectedPrinter;
   String? _detectedSizeText;
   String _selectedPreset = '1.5×1.0in (38×25mm)';
@@ -38,6 +51,7 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
 
   static const _presets = {
     '1.5×1.0in (38×25mm)': [38.1, 25.4],
+    '2.2×1.0in (56×25mm)': [55.88, 25.4],
     '50×30mm': [50.0, 30.0],
     '50×50mm': [50.0, 50.0],
     '58×30mm': [58.0, 30.0],
@@ -50,12 +64,18 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   @override
   void initState() {
     super.initState();
+    _customWidthCtrl.text = _customWidth.toString();
+    _customHeightCtrl.text = _customHeight.toString();
     _init();
   }
 
   Future<void> _init() async {
     final company = await SettingsService.getBusinessName();
     _companyCtrl.text = company;
+    final pageUrl = await SettingsService.getBusinessPageUrl();
+    _pageUrlCtrl.text = pageUrl;
+    // لو فيه لينك محفوظ — فعّل الـ QR افتراضيًا (المستخدم يقدر يطفيه).
+    if (pageUrl.trim().isNotEmpty) _showQr = true;
 
     final products = await widget.db.productDao.getAllProducts();
     // لو فيه منتجات قديمة لسه مالهاش باركود محفوظ — نولّد ونحفظ لها باركود
@@ -110,16 +130,40 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
       _customSize = true;
       _customWidth = size.widthMm;
       _customHeight = size.heightMm;
+      _syncCustomCtrls();
     });
+  }
+
+  /// مزامنة حقلي المخصص مع القيم الحالية (بعد قراءة تلقائية أو اختيار يدوي).
+  void _syncCustomCtrls() {
+    _customWidthCtrl.text = _customWidth.toString();
+    _customHeightCtrl.text = _customHeight.toString();
+  }
+
+  /// يقبل أي رقم موجب (نقطة أو فاصلة) — ويرفض الصفر/السالب/الفارغ
+  /// بإبقاء القيمة السابقة بدل الاستبدال الصامت برقم افتراضي.
+  double? _parseCustomMm(String v) {
+    final parsed = double.tryParse(v.trim().replaceAll(',', '.'));
+    if (parsed == null || parsed <= 0 || !parsed.isFinite) return null;
+    return parsed;
   }
 
   @override
   void dispose() {
     _companyCtrl.dispose();
+    _pageUrlCtrl.dispose();
+    _customWidthCtrl.dispose();
+    _customHeightCtrl.dispose();
     for (final c in _barcodeCtrls.values) {
       c.dispose();
     }
     for (final c in _copyCtrls.values) {
+      c.dispose();
+    }
+    for (final c in _variantBarcodeCtrls.values) {
+      c.dispose();
+    }
+    for (final c in _variantCopyCtrls.values) {
       c.dispose();
     }
     super.dispose();
@@ -128,7 +172,55 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   List<Product> get _selectedProducts =>
       _products.where((p) => _selected[p.id] == true).toList();
 
-  bool get _hasSelection => _selected.values.any((v) => v);
+  bool get _hasSelection =>
+      _selected.values.any((v) => v) ||
+      _variantSelected.values.any((v) => v);
+
+  /// عدّاد نسخ مدمج (منتجات وأصناف) — نفس السلوك: كتابة مباشرة + حد أدنى 1.
+  Widget _copiesStepper({
+    required int value,
+    required TextEditingController controller,
+    required ValueChanged<int> onChanged,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('نسخ', style: TextStyle(fontSize: 10)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.remove_circle_outline, size: 20),
+              onPressed: value > 1 ? () => onChanged(value - 1) : null,
+            ),
+            // حقل يسمح بكتابة العدد مباشرة (مثلاً 500) بدل الضغط المتكرر
+            SizedBox(
+              width: 52,
+              child: TextField(
+                controller: controller,
+                textAlign: TextAlign.center,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                ),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 12),
+                onChanged: (v) => onChanged(int.tryParse(v) ?? 1),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline, size: 20),
+              onPressed: () => onChanged(value + 1),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 
   double get _currentWidth => _customSize ? _customWidth : _presets[_selectedPreset]![0];
   double get _currentHeight => _customSize ? _customHeight : _presets[_selectedPreset]![1];
@@ -154,35 +246,155 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
     });
   }
 
+  /// تحميل أصناف منتج عند فرد صفه (lazy — استعلام واحد لكل منتج يُفرد فقط).
+  Future<void> _loadVariants(int productId) async {
+    if (_variantsByProduct.containsKey(productId) ||
+        _variantsLoading[productId] == true) {
+      return;
+    }
+    setState(() => _variantsLoading[productId] = true);
+    try {
+      final variants = await widget.db.productVariantDao.getVariantsByProduct(
+        productId,
+      );
+      // backfill: أي صنف قديم بلا باركود يتولد له ويتحفظ (نفس قاعدة الـ DAO).
+      for (final v in variants) {
+        if ((v.barcode?.trim() ?? '').isEmpty) {
+          await widget.db.productVariantDao.updateVariant(
+            v.copyWith(barcode: Value('${20000000 + v.id}')),
+          );
+        }
+      }
+      final fresh = await widget.db.productVariantDao.getVariantsByProduct(
+        productId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _variantsByProduct[productId] = fresh;
+        for (final v in fresh) {
+          _variantCopies.putIfAbsent(v.id, () => 1);
+          _variantCopyCtrls.putIfAbsent(
+            v.id,
+            () => TextEditingController(text: '1'),
+          );
+          _variantBarcodeCtrls.putIfAbsent(
+            v.id,
+            () => TextEditingController(text: v.barcode?.trim() ?? ''),
+          );
+        }
+        _variantsLoading[productId] = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _variantsLoading[productId] = false);
+    }
+  }
+
+  void _toggleExpand(int productId) {
+    setState(() {
+      if (_expanded.contains(productId)) {
+        _expanded.remove(productId);
+      } else {
+        _expanded.add(productId);
+      }
+    });
+    if (_expanded.contains(productId)) _loadVariants(productId);
+  }
+
+  void _setVariantCopies(int variantId, int value) {
+    final v = value < 1 ? 1 : value;
+    setState(() {
+      _variantCopies[variantId] = v;
+      final ctrl = _variantCopyCtrls[variantId];
+      if (ctrl != null && ctrl.text != '$v') {
+        ctrl.text = '$v';
+      }
+    });
+  }
+
+  /// مهام الملصقات المحددة: منتجات (الأب) + أصناف (كل لون بباركوده).
+  List<ProductLabelJob> _selectedJobs() {
+    final jobs = <ProductLabelJob>[];
+    final byId = {for (final p in _products) p.id: p};
+    for (final p in _products) {
+      if (_selected[p.id] == true) {
+        jobs.add(
+          ProductLabelJob(
+            product: p,
+            copies: _copies[p.id] ?? 1,
+            barcode: _barcodeCtrls[p.id]?.text.trim() ?? '',
+          ),
+        );
+      }
+    }
+    for (final variants in _variantsByProduct.values) {
+      for (final v in variants) {
+        if (_variantSelected[v.id] == true) {
+          final parent = byId[v.productId];
+          if (parent == null) continue;
+          jobs.add(
+            ProductLabelJob(
+              product: parent,
+              variant: v,
+              copies: _variantCopies[v.id] ?? 1,
+              barcode: _variantBarcodeCtrls[v.id]?.text.trim() ?? '',
+            ),
+          );
+        }
+      }
+    }
+    return jobs;
+  }
+
   Future<void> _print() async {
-    final selected = _selectedProducts;
-    if (selected.isEmpty) return;
+    final jobs = _selectedJobs();
+    if (jobs.isEmpty) return;
 
-    final copies = <int, int>{};
-
-    // فحص تعارضات الباركود قبل الطباعة: لو الكود مستخدم بالفعل لمنتج آخر
+    // فحص تعارضات الباركود قبل الطباعة: لو الكود مستخدم بالفعل لمنتج/صنف آخر
     // نمنع طباعة كود خاطئ على الملصق (الكود مش هيتحفظ ولا هيتطبع).
-    final conflictedIds = <int>{};
-    final newBarcodes = <int, String>{};
-    for (final p in selected) {
+    final conflictedProductIds = <int>{};
+    final newProductBarcodes = <int, String>{};
+    final conflictedVariantIds = <int>{};
+    final newVariantBarcodes = <int, String>{};
+    final conflictsText = StringBuffer();
+
+    for (final job in jobs.where((j) => j.variant == null)) {
+      final p = job.product;
       final inputBarcode = _barcodeCtrls[p.id]?.text.trim() ?? '';
       if (inputBarcode.isEmpty || inputBarcode == p.barcode?.trim()) continue;
-      final existing = await widget.db.productDao.getProductByBarcode(
+      final existingP = await widget.db.productDao.getProductByBarcode(
         inputBarcode,
       );
-      if (existing != null && existing.id != p.id) {
-        conflictedIds.add(p.id);
+      final existingV = await widget.db.productVariantDao.getVariantByBarcode(
+        inputBarcode,
+      );
+      if ((existingP != null && existingP.id != p.id) || existingV != null) {
+        conflictedProductIds.add(p.id);
+        conflictsText.writeln('«${p.name}» → كود $inputBarcode');
       } else {
-        newBarcodes[p.id] = inputBarcode;
+        newProductBarcodes[p.id] = inputBarcode;
+      }
+    }
+
+    for (final job in jobs.where((j) => j.variant != null)) {
+      final v = job.variant!;
+      final inputBarcode = _variantBarcodeCtrls[v.id]?.text.trim() ?? '';
+      if (inputBarcode.isEmpty || inputBarcode == v.barcode?.trim()) continue;
+      final existingP = await widget.db.productDao.getProductByBarcode(
+        inputBarcode,
+      );
+      final existingV = await widget.db.productVariantDao.getVariantByBarcode(
+        inputBarcode,
+      );
+      if (existingP != null || (existingV != null && existingV.id != v.id)) {
+        conflictedVariantIds.add(v.id);
+        conflictsText.writeln('«${job.displayName}» → كود $inputBarcode');
+      } else {
+        newVariantBarcodes[v.id] = inputBarcode;
       }
     }
 
     if (!mounted) return;
-    if (conflictedIds.isNotEmpty) {
-      final conflictsText = conflictedIds.map((id) {
-        final p = selected.firstWhere((x) => x.id == id);
-        return '«${p.name}» → كود ${_barcodeCtrls[id]?.text.trim()}';
-      }).join('\n');
+    if (conflictedProductIds.isNotEmpty || conflictedVariantIds.isNotEmpty) {
       final proceed = await showDialog<bool>(
         context: context,
         builder: (context) => Directionality(
@@ -190,7 +402,7 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
           child: AlertDialog(
             title: const Text('تعارض في الباركود'),
             content: Text(
-              'الباركودات التالية مستخدمة بالفعل لمنتجات أخرى ولن تُطبع على الملصقات:\n\n$conflictsText\n\nهل تريد الاستمرار؟',
+              'الباركودات التالية مستخدمة بالفعل لمنتجات/أصناف أخرى ولن تُطبع على الملصقات:\n\n$conflictsText\nهل تريد الاستمرار؟',
             ),
             actions: [
               TextButton(
@@ -208,12 +420,31 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
       if (proceed != true || !mounted) return;
     }
 
-    final barcodeData = <int, String>{};
-    for (final p in selected) {
-      copies[p.id] = _copies[p.id] ?? 1;
-      barcodeData[p.id] = conflictedIds.contains(p.id)
-          ? ''
-          : (_barcodeCtrls[p.id]?.text.trim() ?? '');
+    // الباركودات النهائية: المتعارض يُطبع بلا باركود (نفس سلوك المسار القديم).
+    final finalJobs = <ProductLabelJob>[];
+    for (final job in jobs) {
+      if (job.variant == null) {
+        finalJobs.add(
+          ProductLabelJob(
+            product: job.product,
+            copies: job.copies,
+            barcode: conflictedProductIds.contains(job.product.id)
+                ? ''
+                : (_barcodeCtrls[job.product.id]?.text.trim() ?? ''),
+          ),
+        );
+      } else {
+        finalJobs.add(
+          ProductLabelJob(
+            product: job.product,
+            variant: job.variant,
+            copies: job.copies,
+            barcode: conflictedVariantIds.contains(job.variant!.id)
+                ? ''
+                : (_variantBarcodeCtrls[job.variant!.id]?.text.trim() ?? ''),
+          ),
+        );
+      }
     }
 
     // إعادة قراءة مقاس الويندوز عند الطباعة حتى لو اتغير بعد فتح الصفحة.
@@ -240,18 +471,25 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
 
     try {
       // حفظ الباركودات الجديدة أو المعدلة في قاعدة البيانات لتصبح قابلة للمسح والتعرف عليها في الكاشير
-      for (final e in newBarcodes.entries) {
+      for (final e in newProductBarcodes.entries) {
         await widget.db.productDao.updateProductBarcode(e.key, e.value);
       }
+      for (final e in newVariantBarcodes.entries) {
+        final v = await widget.db.productVariantDao.getVariantById(e.key);
+        if (v != null) {
+          await widget.db.productVariantDao.updateVariant(
+            v.copyWith(barcode: Value(e.value)),
+          );
+        }
+      }
 
-      await LabelPrintService.printProductLabels(
-        products: selected,
-        copiesPerProduct: copies,
+      await LabelPrintService.printLabelJobs(
+        jobs: finalJobs,
         companyName: _companyCtrl.text,
         showPrice: _showPrice,
-        barcodeData: barcodeData,
         widthMm: _currentWidth,
         heightMm: _currentHeight,
+        qrData: _showQr ? _pageUrlCtrl.text.trim() : null,
       );
       if (mounted) {
         Navigator.of(context).pop(); // إغلاق مؤشر التحميل
@@ -334,6 +572,76 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
             onChanged: (v) => setState(() => _showPrice = v),
             contentPadding: EdgeInsets.zero,
           ),
+          SwitchListTile(
+            title: const Text('QR بجانب الباركود (لينك الصفحة)'),
+            value: _showQr,
+            onChanged: (v) => setState(() => _showQr = v),
+            contentPadding: EdgeInsets.zero,
+          ),
+          if (_showQr) ...[
+            TextField(
+              controller: _pageUrlCtrl,
+              textDirection: TextDirection.ltr,
+              decoration: const InputDecoration(
+                labelText: 'لينك الصفحة',
+                hintText: 'https://facebook.com/...',
+                prefixIcon: Icon(Icons.qr_code),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const Gap(8),
+            if (_currentWidth < 50)
+              Builder(
+                builder: (context) {
+                  final isDark =
+                      Theme.of(context).brightness == Brightness.dark;
+                  return Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.orange.shade900.withValues(alpha: 0.5)
+                          : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.orange.shade700
+                            : Colors.orange.shade300,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber,
+                          size: 18,
+                          color: isDark
+                              ? Colors.orange.shade200
+                              : Colors.orange.shade800,
+                        ),
+                        const Gap(6),
+                        Expanded(
+                          child: Text(
+                            'المقاس ضيق على باركود + QR معًا — انصح بمقاس 50×30 أو أكبر، أو لينك أقصر.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? Colors.orange.shade100
+                                  : Colors.orange.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              )
+            else
+              const Text(
+                'نصيحة: كلما كان اللينك أقصر كان الـ QR أوضح وأسرع في المسح.',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+          ],
           const Gap(8),
 
           Text('مقاس الملصق', style: theme.textTheme.labelLarge),
@@ -359,6 +667,7 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
             onSelected: (_) => setState(() {
               _customSize = true;
               _manualSize = true;
+              _syncCustomCtrls();
             }),
           ),
           if (_customSize) ...[
@@ -367,16 +676,20 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
               children: [
                 Expanded(
                   child: TextField(
+                    controller: _customWidthCtrl,
                     decoration: const InputDecoration(
                       labelText: 'عرض (mm)',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    keyboardType: TextInputType.number,
-                    controller: TextEditingController(text: _customWidth.toString()),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     onChanged: (v) {
+                      final parsed = _parseCustomMm(v);
+                      if (parsed == null) return;
                       setState(() {
-                        _customWidth = double.tryParse(v) ?? 50;
+                        _customWidth = parsed;
                         _manualSize = true;
                       });
                     },
@@ -385,16 +698,20 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
                 const Gap(8),
                 Expanded(
                   child: TextField(
+                    controller: _customHeightCtrl,
                     decoration: const InputDecoration(
                       labelText: 'ارتفاع (mm)',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    keyboardType: TextInputType.number,
-                    controller: TextEditingController(text: _customHeight.toString()),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     onChanged: (v) {
+                      final parsed = _parseCustomMm(v);
+                      if (parsed == null) return;
                       setState(() {
-                        _customHeight = double.tryParse(v) ?? 30;
+                        _customHeight = parsed;
                         _manualSize = true;
                       });
                     },
@@ -427,9 +744,11 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   }
 
   Widget _buildPreview(ThemeData theme) {
-    final barcodeValue = _selectedProducts.isNotEmpty
-        ? (_barcodeCtrls[_selectedProducts.first.id]?.text ?? '')
-        : '1234567890';
+    // المعاينة لأول مهمة محددة (منتج أو صنف) — بنفس الاسم والسعر والباركود
+    // اللي هيتطبعوا فعليًا.
+    final jobs = _selectedJobs();
+    final previewJob = jobs.isEmpty ? null : jobs.first;
+    final barcodeValue = previewJob?.barcode ?? '1234567890';
 
     return Container(
       width: double.infinity,
@@ -450,9 +769,9 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-          if (_selectedProducts.isNotEmpty)
+          if (previewJob != null)
             Text(
-              _selectedProducts.first.name,
+              previewJob.displayName,
               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black),
               textAlign: TextAlign.center,
               maxLines: 2,
@@ -463,9 +782,9 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
               'اسم المنتج',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade400),
             ),
-          if (_showPrice && _selectedProducts.isNotEmpty)
+          if (_showPrice && previewJob != null)
             Text(
-              '${_selectedProducts.first.price.toStringAsFixed(2)} ج.م',
+              '${previewJob.price.toStringAsFixed(2)} ج.م',
               style: const TextStyle(fontSize: 10, color: Colors.black),
             )
           else if (_showPrice)
@@ -475,14 +794,40 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
             ),
           const Gap(4),
           if (barcodeValue.isNotEmpty)
-            BarcodeWidget(
-              barcode: Barcode.code128(),
-              data: barcodeValue,
-              width: 200,
-              height: 50,
-              drawText: true,
-              style: const TextStyle(fontSize: 10),
-            )
+            if (_showQr && _pageUrlCtrl.text.trim().isNotEmpty)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: BarcodeWidget(
+                      barcode: Barcode.code128(),
+                      data: barcodeValue,
+                      width: 140,
+                      height: 50,
+                      drawText: true,
+                      style: const TextStyle(fontSize: 9),
+                    ),
+                  ),
+                  const Gap(6),
+                  BarcodeWidget(
+                    barcode: Barcode.qrCode(),
+                    data: _pageUrlCtrl.text.trim(),
+                    width: 64,
+                    height: 64,
+                    drawText: false,
+                  ),
+                ],
+              )
+            else
+              BarcodeWidget(
+                barcode: Barcode.code128(),
+                data: barcodeValue,
+                width: 200,
+                height: 50,
+                drawText: true,
+                style: const TextStyle(fontSize: 10),
+              )
           else
             Container(
               width: 200,
@@ -503,7 +848,8 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              Text('المنتجات (${_selectedProducts.length}/${_products.length})',
+              Text('المنتجات (${_selectedProducts.length}/${_products.length})'
+                  '${_variantSelected.values.any((v) => v) ? ' • ${_variantSelected.values.where((v) => v).length} صنف' : ''}',
                   style: theme.textTheme.titleSmall),
               const Spacer(),
               TextButton.icon(
@@ -525,79 +871,58 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
                 color: isSelected ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3) : null,
                 child: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: Row(
+                  child: Column(
                     children: [
-                      Checkbox(
-                        value: isSelected,
-                        onChanged: (v) => setState(() => _selected[p.id] = v ?? false),
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            Text('${p.price} ج.م',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                          ],
-                        ),
-                      ),
-                      if (isSelected) ...[
-                        SizedBox(
-                          width: 120,
-                          child: TextField(
-                            controller: _barcodeCtrls[p.id],
-                            decoration: const InputDecoration(
-                              labelText: 'الباركود',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            ),
-                            style: const TextStyle(fontSize: 12),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: isSelected,
+                            onChanged: (v) => setState(() => _selected[p.id] = v ?? false),
                           ),
-                        ),
-                        const Gap(8),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('نسخ', style: TextStyle(fontSize: 10)),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+                          IconButton(
+                            icon: Icon(
+                              _expanded.contains(p.id)
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              size: 20,
+                            ),
+                            tooltip: 'الأصناف (ألوان/فئات)',
+                            onPressed: () => _toggleExpand(p.id),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                IconButton(
-                                  icon: const Icon(Icons.remove_circle_outline, size: 20),
-                                  onPressed: (_copies[p.id] ?? 1) > 1
-                                      ? () => _setCopies(p.id, (_copies[p.id] ?? 1) - 1)
-                                      : null,
-                                ),
-                                // حقل يسمح بكتابة العدد مباشرة (مثلاً 500) بدل الضغط المتكرر
-                                SizedBox(
-                                  width: 52,
-                                  child: TextField(
-                                    controller: _copyCtrls[p.id],
-                                    textAlign: TextAlign.center,
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                                    decoration: const InputDecoration(
-                                      border: OutlineInputBorder(),
-                                      isDense: true,
-                                      contentPadding:
-                                          EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                    ),
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold, fontSize: 12),
-                                    onChanged: (v) =>
-                                        _setCopies(p.id, int.tryParse(v) ?? 1),
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.add_circle_outline, size: 20),
-                                  onPressed: () => _setCopies(p.id, (_copies[p.id] ?? 1) + 1),
-                                ),
+                                Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                Text('${p.price} ج.م',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                               ],
                             ),
+                          ),
+                          if (isSelected) ...[
+                            SizedBox(
+                              width: 120,
+                              child: TextField(
+                                controller: _barcodeCtrls[p.id],
+                                decoration: const InputDecoration(
+                                  labelText: 'الباركود',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                ),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                            const Gap(8),
+                            _copiesStepper(
+                              value: _copies[p.id] ?? 1,
+                              controller: _copyCtrls[p.id]!,
+                              onChanged: (v) => _setCopies(p.id, v),
+                            ),
                           ],
-                        ),
-                      ],
+                        ],
+                      ),
+                      if (_expanded.contains(p.id)) _buildVariantRows(p, theme),
                     ],
                   ),
                 ),
@@ -609,10 +934,96 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
     );
   }
 
+  /// صفوف أصناف منتج (كل لون بباركوده ونسخه) — تُحمّل عند الفرد فقط.
+  Widget _buildVariantRows(Product p, ThemeData theme) {
+    if (_variantsLoading[p.id] == true) {
+      return const Padding(
+        padding: EdgeInsets.all(8),
+        child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+      );
+    }
+    final variants = _variantsByProduct[p.id] ?? [];
+    if (variants.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 48, vertical: 4),
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+            'لا توجد أصناف — يُطبع ملصق المنتج فقط.',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(start: 40),
+      child: Column(
+        children: [
+          const Divider(height: 8),
+          for (final v in variants)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: _variantSelected[v.id] == true,
+                    onChanged: (val) =>
+                        setState(() => _variantSelected[v.id] = val ?? false),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          v.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          'متاح: ${v.quantity} • ${(v.price ?? p.price).toStringAsFixed(2)} ج.م',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: 110,
+                    child: TextField(
+                      controller: _variantBarcodeCtrls[v.id],
+                      decoration: const InputDecoration(
+                        labelText: 'باركود الصنف',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      ),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  const Gap(6),
+                  _copiesStepper(
+                    value: _variantCopies[v.id] ?? 1,
+                    controller: _variantCopyCtrls[v.id]!,
+                    onChanged: (val) => _setVariantCopies(v.id, val),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBottomBar(ThemeData theme) {
-    final totalLabels = _selectedProducts.fold<int>(
+    final totalLabels = _selectedJobs().fold<int>(
       0,
-      (sum, p) => sum + (_copies[p.id] ?? 1),
+      (sum, j) => sum + j.copies,
     );
     return Container(
       padding: const EdgeInsets.all(12),

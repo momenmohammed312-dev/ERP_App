@@ -8,32 +8,37 @@ void main() {
 
   group('ArabicTextRasterizer', () {
     test('renders Arabic text to non-empty PNG bytes', () async {
-      final bytes = await ArabicTextRasterizer.render(
+      final raster = await ArabicTextRasterizer.render(
         text: 'تفاح أحمر',
         fontSize: 12,
         fontWeight: FontWeight.bold,
       );
+      expect(raster, isA<RasterizedText>());
+      final bytes = raster.bytes;
       expect(bytes, isA<Uint8List>());
       expect(bytes.length, greaterThan(100));
     });
 
     test('renders English text to non-empty PNG bytes', () async {
-      final bytes = await ArabicTextRasterizer.render(
+      final raster = await ArabicTextRasterizer.render(
         text: 'Apple 123',
         fontSize: 10,
         direction: TextDirection.ltr,
       );
+      expect(raster, isA<RasterizedText>());
+      final bytes = raster.bytes;
       expect(bytes, isA<Uint8List>());
       expect(bytes.length, greaterThan(50));
     });
 
     test('renders long text without throwing', () async {
-      final bytes = await ArabicTextRasterizer.render(
+      final raster = await ArabicTextRasterizer.render(
         text: 'منتج طويل جداً يحتوي على كلام كثير ومفصل بالتفصيل',
         fontSize: 11,
         maxWidth: 150,
       );
-      expect(bytes, isA<Uint8List>());
+      expect(raster, isA<RasterizedText>());
+      expect(raster.bytes, isA<Uint8List>());
     });
   });
 }

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:intl/intl.dart';
 import '../../core/database/app_database.dart';
+import '../../services/payroll_display.dart';
+import '../../services/attendance/attendance_calculation_engine.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
 import 'staff_list_page.dart';
@@ -9,6 +12,7 @@ import 'staff_form_page.dart';
 import 'device_management_page.dart';
 import 'unmatched_attendance_page.dart';
 import 'attendance_settings_page.dart';
+import 'batch_payroll_slips_page.dart';
 
 class EmployeeDashboardPage extends ConsumerStatefulWidget {
   const EmployeeDashboardPage({super.key});
@@ -18,8 +22,7 @@ class EmployeeDashboardPage extends ConsumerStatefulWidget {
       _EmployeeDashboardPageState();
 }
 
-class _EmployeeDashboardPageState
-    extends ConsumerState<EmployeeDashboardPage>
+class _EmployeeDashboardPageState extends ConsumerState<EmployeeDashboardPage>
     with SingleTickerProviderStateMixin {
   late StaffManagementDao _dao;
   late AppDatabase _db;
@@ -30,9 +33,13 @@ class _EmployeeDashboardPageState
   int _absentToday = 0;
   int _lateToday = 0;
   int _onLeaveToday = 0;
+  int _permissionToday = 0;
+  int _overtimeToday = 0;
   int _pendingVacations = 0;
   double _pendingAdvancesTotal = 0.0;
   double _totalSalary = 0.0;
+
+  DateTimeRange? _filterRange;
 
   @override
   void initState() {
@@ -53,40 +60,116 @@ class _EmployeeDashboardPageState
     _absentToday = 0;
     _lateToday = 0;
     _onLeaveToday = 0;
+    _permissionToday = 0;
+    _overtimeToday = 0;
     _pendingVacations = 0;
     _pendingAdvancesTotal = 0;
     try {
       final allStaff = await _dao.getAllStaff();
       _activeStaff = allStaff.where((s) => s.isActive).length;
-      _totalSalary = allStaff.fold<double>(0, (s, e) => s + e.basicSalary);
+      _totalSalary = allStaff.fold<double>(
+        0,
+        (s, e) => s + PayrollDisplay.baseOf(e).base,
+      );
 
-      final today = DateTime.now();
-      final todayStart = DateTime(today.year, today.month, today.day);
+      final now = DateTime.now();
+      final range =
+          _filterRange ??
+          DateTimeRange(
+            start: DateTime(now.year, now.month, 1),
+            end: DateTime(now.year, now.month + 1, 0),
+          );
+      final rangeStart = DateTime(
+        range.start.year,
+        range.start.month,
+        range.start.day,
+      );
+      final rangeEndInclusive = DateTime(
+        range.end.year,
+        range.end.month,
+        range.end.day,
+      );
+      final rangeEndExclusive = rangeEndInclusive.add(const Duration(days: 1));
 
-      final attendanceRows = await _db.customSelect('''
-        SELECT status, COUNT(*) as cnt FROM attendance_table
-        WHERE date >= ? AND date < ?
-        GROUP BY status
-      ''', variables: [
-        drift.Variable.withDateTime(todayStart),
-        drift.Variable.withDateTime(
-          todayStart.add(const Duration(days: 1)),
-        ),
-      ]).get();
-
-      for (final row in attendanceRows) {
-        final status = row.read<String>('status');
-        final cnt = row.read<int>('cnt');
-        switch (status) {
-          case 'present':
-            _presentToday = cnt;
-          case 'absent':
-            _absentToday = cnt;
-          case 'late':
-            _lateToday = cnt;
-          case 'leave':
-            _onLeaveToday = cnt;
+      // C1: late days via the SINGLE authoritative path — the same
+      // predicate + minutes function as the payroll input, with each
+      // employee's own schedule. Counts (not money) are shown, so the card
+      // never implies a deduction payroll did not take.
+      // Note vs. old status-only count: untimed 'late'-status rows (e.g.
+      // permission rows without punch times) are no longer counted as late
+      // days — payroll-input lateDays never counted them either.
+      final attendanceRows = await (_db.select(
+        _db.attendanceTable,
+      )..where(
+        (t) =>
+            t.date.isBiggerOrEqualValue(rangeStart) &
+            t.date.isSmallerThanValue(rangeEndExclusive),
+      ))
+          .get();
+      final engine = AttendanceCalculationEngine(
+        _db,
+        _db.attendanceDeviceDao,
+        _dao,
+      );
+      final schedCache = <String, (int startMin, int grace)>{};
+      Future<(int, int)> schedOf(String staffId) async {
+        final cached = schedCache[staffId];
+        if (cached != null) return cached;
+        try {
+          final s = await engine.getScheduleForStaff(staffId);
+          final v = (s.workStartMinutesSinceMidnight, s.gracePeriodMinutes);
+          schedCache[staffId] = v;
+          return v;
+        } catch (_) {
+          const v = (540, 15);
+          schedCache[staffId] = v;
+          return v;
         }
+      }
+
+      for (final r in attendanceRows) {
+        switch (r.status) {
+          case 'absent':
+            _absentToday++;
+          case 'leave':
+            _onLeaveToday++;
+          default:
+            final (sMin, grace) = await schedOf(r.staffId);
+            if (isEffectiveLateDay(
+              status: r.status,
+              checkInTime: r.checkInTime,
+              scheduleStartMinutes: sMin,
+              graceMinutes: grace,
+              excused: r.excused,
+              excusedHours: r.excusedHours,
+            )) {
+              _lateToday++;
+            } else if (r.status == 'present') {
+              _presentToday++;
+            }
+        }
+      }
+
+      final sumRows = await _db
+          .customSelect(
+            '''
+        SELECT
+          COALESCE(SUM(permission_hours), 0) as perm_hours,
+          COALESCE(SUM(overtime_hours), 0) as ot_hours
+        FROM attendance_table
+        WHERE date >= ? AND date < ?
+      ''',
+            variables: [
+              drift.Variable.withDateTime(rangeStart),
+              drift.Variable.withDateTime(rangeEndExclusive),
+            ],
+          )
+          .get();
+      if (sumRows.isNotEmpty) {
+        final rawPerm = sumRows.first.read<num>('perm_hours');
+        final rawOt = sumRows.first.read<num>('ot_hours');
+        _permissionToday = (rawPerm * 60).round();
+        _overtimeToday = (rawOt * 60).round();
       }
 
       final vacationRows = await _db.customSelect('''
@@ -112,9 +195,9 @@ class _EmployeeDashboardPageState
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ في تحميل البيانات: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('خطأ في تحميل البيانات: $e')));
       }
     }
   }
@@ -127,8 +210,7 @@ class _EmployeeDashboardPageState
     final textColor = isDark ? const Color(0xFFE6EDF3) : Colors.black87;
     final subTextColor = isDark ? const Color(0xFF8B949E) : Colors.black54;
     final goldColor = const Color(0xFFC9A84C);
-    final borderColor =
-        isDark ? const Color(0xFF30363D) : Colors.grey.shade300;
+    final borderColor = isDark ? const Color(0xFF30363D) : Colors.grey.shade300;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -154,19 +236,25 @@ class _EmployeeDashboardPageState
                 children: [
                   _buildSectionHeader(textColor, 'ملخص عام', Icons.dashboard),
                   const SizedBox(height: 12),
-                  _buildSummaryGrid(
-                    textColor, goldColor, cardBg, borderColor),
+                  _buildSummaryGrid(textColor, goldColor, cardBg, borderColor),
                   const SizedBox(height: 20),
-                  _buildSectionHeader(
-                    textColor, 'حضور اليوم', Icons.calendar_today),
+                  _buildAttendanceFilterBar(textColor, cardBg, borderColor),
                   const SizedBox(height: 12),
                   _buildAttendanceCards(cardBg, borderColor),
                   const SizedBox(height: 20),
                   _buildSectionHeader(
-                    textColor, 'إجراءات سريعة', Icons.flash_on),
+                    textColor,
+                    'إجراءات سريعة',
+                    Icons.flash_on,
+                  ),
                   const SizedBox(height: 12),
                   _buildQuickActions(
-                    textColor, goldColor, subTextColor, cardBg, borderColor),
+                    textColor,
+                    goldColor,
+                    subTextColor,
+                    cardBg,
+                    borderColor,
+                  ),
                 ],
               ),
             ),
@@ -191,22 +279,34 @@ class _EmployeeDashboardPageState
   }
 
   Widget _buildSummaryGrid(
-    Color textColor, Color goldColor, Color cardBg, Color borderColor) {
+    Color textColor,
+    Color goldColor,
+    Color cardBg,
+    Color borderColor,
+  ) {
     return Column(
       children: [
         Row(
           children: [
             Expanded(
               child: _buildMetricCard(
-                '$_activeStaff', 'موظفين نشطين', Colors.green,
-                Icons.person, cardBg, borderColor,
+                '$_activeStaff',
+                'موظفين نشطين',
+                Colors.green,
+                Icons.person,
+                cardBg,
+                borderColor,
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _buildMetricCard(
-                '$_pendingVacations', 'إجازات معلقة', Colors.orange,
-                Icons.beach_access, cardBg, borderColor,
+                '$_pendingVacations',
+                'إجازات معلقة',
+                Colors.orange,
+                Icons.beach_access,
+                cardBg,
+                borderColor,
               ),
             ),
           ],
@@ -217,16 +317,22 @@ class _EmployeeDashboardPageState
             Expanded(
               child: _buildMetricCard(
                 '${_pendingAdvancesTotal.toStringAsFixed(0)} ج.م',
-                'سلف معلقة', Colors.redAccent,
-                Icons.money_off, cardBg, borderColor,
+                'سلف معلقة',
+                Colors.redAccent,
+                Icons.money_off,
+                cardBg,
+                borderColor,
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _buildMetricCard(
                 '${_totalSalary.toStringAsFixed(0)} ج.م',
-                'إجمالي المرتبات', goldColor,
-                Icons.attach_money, cardBg, borderColor,
+                'إجمالي المرتبات',
+                goldColor,
+                Icons.attach_money,
+                cardBg,
+                borderColor,
               ),
             ),
           ],
@@ -236,8 +342,12 @@ class _EmployeeDashboardPageState
   }
 
   Widget _buildMetricCard(
-    String value, String label, Color color, IconData icon,
-    Color cardBg, Color borderColor,
+    String value,
+    String label,
+    Color color,
+    IconData icon,
+    Color cardBg,
+    Color borderColor,
   ) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -279,6 +389,82 @@ class _EmployeeDashboardPageState
     );
   }
 
+  Widget _buildAttendanceFilterBar(
+    Color textColor,
+    Color cardBg,
+    Color borderColor,
+  ) {
+    final now = DateTime.now();
+    final range =
+        _filterRange ??
+        DateTimeRange(
+          start: DateTime(now.year, now.month, 1),
+          end: DateTime(now.year, now.month + 1, 0),
+        );
+    final fmt = DateFormat('yyyy/MM/dd');
+    final isManualRange = _filterRange != null;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.calendar_today, size: 18, color: Colors.grey),
+          const SizedBox(width: 8),
+          Text(
+            '${fmt.format(range.start)} - ${fmt.format(range.end)}',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: textColor,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.date_range, size: 18),
+            tooltip: 'اختيار الفترة',
+            onPressed: _pickRange,
+          ),
+          if (isManualRange)
+            IconButton(
+              icon: const Icon(Icons.restart_alt, size: 18),
+              tooltip: 'الفترة الحالية (الشهر)',
+              onPressed: () {
+                setState(() => _filterRange = null);
+                _loadData();
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickRange() async {
+    final now = DateTime.now();
+    final current =
+        _filterRange ??
+        DateTimeRange(
+          start: DateTime(now.year, now.month, 1),
+          end: DateTime(now.year, now.month + 1, 0),
+        );
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 2, 1, 1),
+      lastDate: now,
+      initialDateRange: current,
+      helpText: 'اختر الفترة',
+      saveText: 'تطبيق',
+    );
+    if (picked != null) {
+      setState(() => _filterRange = picked);
+      await _loadData();
+    }
+  }
+
   Widget _buildAttendanceCards(Color cardBg, Color borderColor) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -287,15 +473,44 @@ class _EmployeeDashboardPageState
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: borderColor.withValues(alpha: 0.3)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          _buildAttendanceStat('$_presentToday', 'حاضر', Colors.green),
-          const SizedBox(width: 8),
-          _buildAttendanceStat('$_absentToday', 'غائب', Colors.red),
-          const SizedBox(width: 8),
-          _buildAttendanceStat('$_lateToday', 'متأخر', Colors.orange),
-          const SizedBox(width: 8),
-          _buildAttendanceStat('$_onLeaveToday', 'إجازة', Colors.blue),
+          Row(
+            children: [
+              _buildAttendanceStat('$_presentToday', 'حاضر', Colors.green),
+              const SizedBox(width: 8),
+              _buildAttendanceStat('$_absentToday', 'غائب', Colors.red),
+              const SizedBox(width: 8),
+              _buildAttendanceStat('$_lateToday', 'متأخر', Colors.orange),
+              const SizedBox(width: 8),
+              _buildAttendanceStat('$_onLeaveToday', 'إجازة', Colors.blue),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildAttendanceStat(
+                _fmtShortHM(_permissionToday),
+                'إذن/بدري',
+                Colors.deepOrange,
+              ),
+              const SizedBox(width: 8),
+              _buildAttendanceStat(
+                _fmtShortHM(_overtimeToday),
+                'إضافي',
+                Colors.teal,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // C1 honesty: late counts are attendance evidence (same function as
+          // the payroll input) — money, if any, comes only from the payroll
+          // slip (late×1.5 / permission×1.0), never from this card.
+          Text(
+            'التأخير هنا أيام/دقائق حضور — الخصم (إن وجد) من كشف المرتب فقط',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -323,8 +538,22 @@ class _EmployeeDashboardPageState
     );
   }
 
-  Widget _buildQuickActions(Color textColor, Color goldColor,
-      Color subTextColor, Color cardBg, Color borderColor) {
+  String _fmtShortHM(int totalMinutes) {
+    if (totalMinutes <= 0) return '0';
+    final h = totalMinutes ~/ 60;
+    final m = totalMinutes % 60;
+    if (h == 0) return '$mد';
+    if (m == 0) return '$hس';
+    return '$hس $mد';
+  }
+
+  Widget _buildQuickActions(
+    Color textColor,
+    Color goldColor,
+    Color subTextColor,
+    Color cardBg,
+    Color borderColor,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -343,9 +572,7 @@ class _EmployeeDashboardPageState
                   goldColor,
                   () => Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const StaffListPage(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const StaffListPage()),
                   ),
                 ),
               ),
@@ -358,9 +585,7 @@ class _EmployeeDashboardPageState
                   () async {
                     final result = await Navigator.push<bool>(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const StaffFormPage(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const StaffFormPage()),
                     );
                     if (result == true) _loadData();
                   },
@@ -439,7 +664,19 @@ class _EmployeeDashboardPageState
                 ),
               ),
               const SizedBox(width: 8),
-              const Expanded(child: SizedBox()),
+              Expanded(
+                child: _buildActionBtn(
+                  'المرتبات',
+                  Icons.payments,
+                  Colors.green,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BatchPayrollSlipsPage(),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ],
@@ -448,7 +685,11 @@ class _EmployeeDashboardPageState
   }
 
   Widget _buildActionBtn(
-      String label, IconData icon, Color color, VoidCallback onTap) {
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -540,12 +781,16 @@ class _SectionListSheetState extends State<_SectionListSheet> {
           WHERE v.status = 'pending'
           ORDER BY v.created_at DESC
         ''').get();
-        _items = rows.map((r) => {
-          'id': r.read<int>('id'),
-          'staff_name': r.read<String?>('staff_name') ?? '',
-          'details':
-              '${r.read<String>('vacation_type')} - ${r.read<int>('total_days')} يوم',
-        }).toList();
+        _items = rows
+            .map(
+              (r) => {
+                'id': r.read<int>('id'),
+                'staff_name': r.read<String?>('staff_name') ?? '',
+                'details':
+                    '${r.read<String>('vacation_type')} - ${r.read<int>('total_days')} يوم',
+              },
+            )
+            .toList();
       } else {
         final rows = await widget.db.customSelect('''
           SELECT a.id, a.staff_id, a.amount, a.status, a.request_date,
@@ -555,11 +800,15 @@ class _SectionListSheetState extends State<_SectionListSheet> {
           WHERE a.status IN ('pending', 'approved')
           ORDER BY a.created_at DESC
         ''').get();
-        _items = rows.map((r) => {
-          'id': r.read<int>('id'),
-          'staff_name': r.read<String?>('staff_name') ?? '',
-          'details': '${r.read<double>('amount').toStringAsFixed(0)} ج.م',
-        }).toList();
+        _items = rows
+            .map(
+              (r) => {
+                'id': r.read<int>('id'),
+                'staff_name': r.read<String?>('staff_name') ?? '',
+                'details': '${r.read<double>('amount').toStringAsFixed(0)} ج.م',
+              },
+            )
+            .toList();
       }
       if (mounted) setState(() => _isLoading = false);
     } catch (e) {
@@ -604,33 +853,33 @@ class _SectionListSheetState extends State<_SectionListSheet> {
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _items.isEmpty
-                  ? const Center(child: Text('لا توجد بيانات'))
-                  : ListView.separated(
-                      controller: widget.scrollController,
-                      itemCount: _items.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final item = _items[i];
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: widget.type == 'vacations'
-                                ? Colors.orange.withValues(alpha: 0.2)
-                                : Colors.redAccent.withValues(alpha: 0.2),
-                            child: Icon(
-                              widget.type == 'vacations'
-                                  ? Icons.beach_access
-                                  : Icons.money_off,
-                              color: widget.type == 'vacations'
-                                  ? Colors.orange
-                                  : Colors.redAccent,
-                              size: 20,
-                            ),
-                          ),
-                          title: Text(item['staff_name'] as String),
-                          subtitle: Text(item['details'] as String),
-                        );
-                      },
-                    ),
+              ? const Center(child: Text('لا توجد بيانات'))
+              : ListView.separated(
+                  controller: widget.scrollController,
+                  itemCount: _items.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final item = _items[i];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: widget.type == 'vacations'
+                            ? Colors.orange.withValues(alpha: 0.2)
+                            : Colors.redAccent.withValues(alpha: 0.2),
+                        child: Icon(
+                          widget.type == 'vacations'
+                              ? Icons.beach_access
+                              : Icons.money_off,
+                          color: widget.type == 'vacations'
+                              ? Colors.orange
+                              : Colors.redAccent,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(item['staff_name'] as String),
+                      subtitle: Text(item['details'] as String),
+                    );
+                  },
+                ),
         ),
       ],
     );
