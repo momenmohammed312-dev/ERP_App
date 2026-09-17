@@ -495,6 +495,23 @@ class StaffManagementService {
 
   // PAYROLL MANAGEMENT
 
+  /// Bug 4(b): flat fine per late instance, from the `late_penalty_amount`
+  /// attendance setting. Safe default 0 — a missing or unreadable setting
+  /// leaves payroll exactly as before (never breaks a calculation).
+  Future<double> _latePenaltyPerInstance() async {
+    try {
+      final db = _dao.attachedDatabase;
+      final row = await (db.select(db.attendanceSettings)
+            ..where((t) => t.settingKey.equals('late_penalty_amount')))
+          .getSingleOrNull();
+      if (row == null) return 0.0;
+      final v = double.tryParse(row.settingValue) ?? 0.0;
+      return v < 0 ? 0.0 : v;
+    } catch (_) {
+      return 0.0;
+    }
+  }
+
   Future<void> calculatePayroll(User? user, String staffId, String payrollPeriod) async {
     PermissionValidator.requirePermission(user, Permission.manageSalaries, 'حساب الرواتب');
     final staff = await _dao.getStaffById(staffId);
@@ -572,7 +589,12 @@ class StaffManagementService {
         attendanceSummary.totalOvertime *
         (staff.hourlyRate ?? basicSalary / 160);
 
-    final deductions = totalAdvances + penaltiesTotal;
+    // Bug 4(b): flat fine per late day (status 'late' days only).
+    // Default setting 0 → identical to the old behavior.
+    final lateDeduction =
+        attendanceSummary.lateDays * await _latePenaltyPerInstance();
+
+    final deductions = totalAdvances + penaltiesTotal + lateDeduction;
 
     final netSalary = basicSalary + overtimePay + allowancesTotal + rewardsTotal - deductions;
 
@@ -596,6 +618,8 @@ class StaffManagementService {
             leaveDays: Value(attendanceSummary.leaveDays),
             rewardsTotal: Value(rewardsTotal),
             penaltiesTotal: Value(penaltiesTotal),
+            lateDays: Value(attendanceSummary.lateDays),
+            lateDeduction: Value(lateDeduction),
             status: 'calculated',
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),

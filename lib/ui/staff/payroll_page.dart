@@ -141,6 +141,12 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                 '- ${CurrencyHelper.formatCurrency(payroll.deductions)}',
                 color: Colors.red,
               ),
+            if (payroll.lateDeduction > 0)
+              _buildPayrollDetailRow(
+                'غرامة تأخير (${payroll.lateDays} يوم)',
+                '- ${CurrencyHelper.formatCurrency(payroll.lateDeduction)}',
+                color: Colors.red,
+              ),
             const Divider(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

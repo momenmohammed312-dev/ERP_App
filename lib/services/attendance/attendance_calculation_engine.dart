@@ -200,7 +200,9 @@ class AttendanceCalculationEngine {
       status = 'present'; // Within grace period
     } else {
       status = 'late';
-      lateMinutes = checkInMinutes - scheduleStart;
+      // Bug 4(a): count only minutes past the grace END, not the whole
+      // overage from schedule start (grace minutes are allowed, not late).
+      lateMinutes = checkInMinutes - graceEnd;
     }
 
     // Calculate working hours and overtime

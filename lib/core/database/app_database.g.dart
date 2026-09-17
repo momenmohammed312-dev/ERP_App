@@ -23695,6 +23695,30 @@ class $PayrollTableTable extends PayrollTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _lateDaysMeta = const VerificationMeta(
+    'lateDays',
+  );
+  @override
+  late final GeneratedColumn<int> lateDays = GeneratedColumn<int>(
+    'late_days',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _lateDeductionMeta = const VerificationMeta(
+    'lateDeduction',
+  );
+  @override
+  late final GeneratedColumn<double> lateDeduction = GeneratedColumn<double>(
+    'late_deduction',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -23752,6 +23776,8 @@ class $PayrollTableTable extends PayrollTable
     rewardsTotal,
     penaltiesTotal,
     expenseRefId,
+    lateDays,
+    lateDeduction,
     createdAt,
     updatedAt,
   ];
@@ -24021,6 +24047,21 @@ class $PayrollTableTable extends PayrollTable
         ),
       );
     }
+    if (data.containsKey('late_days')) {
+      context.handle(
+        _lateDaysMeta,
+        lateDays.isAcceptableOrUnknown(data['late_days']!, _lateDaysMeta),
+      );
+    }
+    if (data.containsKey('late_deduction')) {
+      context.handle(
+        _lateDeductionMeta,
+        lateDeduction.isAcceptableOrUnknown(
+          data['late_deduction']!,
+          _lateDeductionMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -24178,6 +24219,14 @@ class $PayrollTableTable extends PayrollTable
         DriftSqlType.string,
         data['${effectivePrefix}expense_ref_id'],
       ),
+      lateDays: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}late_days'],
+      )!,
+      lateDeduction: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}late_deduction'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -24229,6 +24278,8 @@ class Payroll extends DataClass implements Insertable<Payroll> {
   final double rewardsTotal;
   final double penaltiesTotal;
   final String? expenseRefId;
+  final int lateDays;
+  final double lateDeduction;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Payroll({
@@ -24265,6 +24316,8 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     required this.rewardsTotal,
     required this.penaltiesTotal,
     this.expenseRefId,
+    required this.lateDays,
+    required this.lateDeduction,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -24320,6 +24373,8 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     if (!nullToAbsent || expenseRefId != null) {
       map['expense_ref_id'] = Variable<String>(expenseRefId);
     }
+    map['late_days'] = Variable<int>(lateDays);
+    map['late_deduction'] = Variable<double>(lateDeduction);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -24376,6 +24431,8 @@ class Payroll extends DataClass implements Insertable<Payroll> {
       expenseRefId: expenseRefId == null && nullToAbsent
           ? const Value.absent()
           : Value(expenseRefId),
+      lateDays: Value(lateDays),
+      lateDeduction: Value(lateDeduction),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -24422,6 +24479,8 @@ class Payroll extends DataClass implements Insertable<Payroll> {
       rewardsTotal: serializer.fromJson<double>(json['rewardsTotal']),
       penaltiesTotal: serializer.fromJson<double>(json['penaltiesTotal']),
       expenseRefId: serializer.fromJson<String?>(json['expenseRefId']),
+      lateDays: serializer.fromJson<int>(json['lateDays']),
+      lateDeduction: serializer.fromJson<double>(json['lateDeduction']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -24463,6 +24522,8 @@ class Payroll extends DataClass implements Insertable<Payroll> {
       'rewardsTotal': serializer.toJson<double>(rewardsTotal),
       'penaltiesTotal': serializer.toJson<double>(penaltiesTotal),
       'expenseRefId': serializer.toJson<String?>(expenseRefId),
+      'lateDays': serializer.toJson<int>(lateDays),
+      'lateDeduction': serializer.toJson<double>(lateDeduction),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -24502,6 +24563,8 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     double? rewardsTotal,
     double? penaltiesTotal,
     Value<String?> expenseRefId = const Value.absent(),
+    int? lateDays,
+    double? lateDeduction,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Payroll(
@@ -24542,6 +24605,8 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     rewardsTotal: rewardsTotal ?? this.rewardsTotal,
     penaltiesTotal: penaltiesTotal ?? this.penaltiesTotal,
     expenseRefId: expenseRefId.present ? expenseRefId.value : this.expenseRefId,
+    lateDays: lateDays ?? this.lateDays,
+    lateDeduction: lateDeduction ?? this.lateDeduction,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -24624,6 +24689,10 @@ class Payroll extends DataClass implements Insertable<Payroll> {
       expenseRefId: data.expenseRefId.present
           ? data.expenseRefId.value
           : this.expenseRefId,
+      lateDays: data.lateDays.present ? data.lateDays.value : this.lateDays,
+      lateDeduction: data.lateDeduction.present
+          ? data.lateDeduction.value
+          : this.lateDeduction,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -24665,6 +24734,8 @@ class Payroll extends DataClass implements Insertable<Payroll> {
           ..write('rewardsTotal: $rewardsTotal, ')
           ..write('penaltiesTotal: $penaltiesTotal, ')
           ..write('expenseRefId: $expenseRefId, ')
+          ..write('lateDays: $lateDays, ')
+          ..write('lateDeduction: $lateDeduction, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -24706,6 +24777,8 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     rewardsTotal,
     penaltiesTotal,
     expenseRefId,
+    lateDays,
+    lateDeduction,
     createdAt,
     updatedAt,
   ]);
@@ -24746,6 +24819,8 @@ class Payroll extends DataClass implements Insertable<Payroll> {
           other.rewardsTotal == this.rewardsTotal &&
           other.penaltiesTotal == this.penaltiesTotal &&
           other.expenseRefId == this.expenseRefId &&
+          other.lateDays == this.lateDays &&
+          other.lateDeduction == this.lateDeduction &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -24784,6 +24859,8 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
   final Value<double> rewardsTotal;
   final Value<double> penaltiesTotal;
   final Value<String?> expenseRefId;
+  final Value<int> lateDays;
+  final Value<double> lateDeduction;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const PayrollTableCompanion({
@@ -24820,6 +24897,8 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     this.rewardsTotal = const Value.absent(),
     this.penaltiesTotal = const Value.absent(),
     this.expenseRefId = const Value.absent(),
+    this.lateDays = const Value.absent(),
+    this.lateDeduction = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -24857,6 +24936,8 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     this.rewardsTotal = const Value.absent(),
     this.penaltiesTotal = const Value.absent(),
     this.expenseRefId = const Value.absent(),
+    this.lateDays = const Value.absent(),
+    this.lateDeduction = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
   }) : staffId = Value(staffId),
@@ -24902,6 +24983,8 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     Expression<double>? rewardsTotal,
     Expression<double>? penaltiesTotal,
     Expression<String>? expenseRefId,
+    Expression<int>? lateDays,
+    Expression<double>? lateDeduction,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -24940,6 +25023,8 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
       if (rewardsTotal != null) 'rewards_total': rewardsTotal,
       if (penaltiesTotal != null) 'penalties_total': penaltiesTotal,
       if (expenseRefId != null) 'expense_ref_id': expenseRefId,
+      if (lateDays != null) 'late_days': lateDays,
+      if (lateDeduction != null) 'late_deduction': lateDeduction,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -24979,6 +25064,8 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     Value<double>? rewardsTotal,
     Value<double>? penaltiesTotal,
     Value<String?>? expenseRefId,
+    Value<int>? lateDays,
+    Value<double>? lateDeduction,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -25016,6 +25103,8 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
       rewardsTotal: rewardsTotal ?? this.rewardsTotal,
       penaltiesTotal: penaltiesTotal ?? this.penaltiesTotal,
       expenseRefId: expenseRefId ?? this.expenseRefId,
+      lateDays: lateDays ?? this.lateDays,
+      lateDeduction: lateDeduction ?? this.lateDeduction,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -25125,6 +25214,12 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     if (expenseRefId.present) {
       map['expense_ref_id'] = Variable<String>(expenseRefId.value);
     }
+    if (lateDays.present) {
+      map['late_days'] = Variable<int>(lateDays.value);
+    }
+    if (lateDeduction.present) {
+      map['late_deduction'] = Variable<double>(lateDeduction.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -25170,6 +25265,8 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
           ..write('rewardsTotal: $rewardsTotal, ')
           ..write('penaltiesTotal: $penaltiesTotal, ')
           ..write('expenseRefId: $expenseRefId, ')
+          ..write('lateDays: $lateDays, ')
+          ..write('lateDeduction: $lateDeduction, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -58267,6 +58364,8 @@ typedef $$PayrollTableTableCreateCompanionBuilder =
       Value<double> rewardsTotal,
       Value<double> penaltiesTotal,
       Value<String?> expenseRefId,
+      Value<int> lateDays,
+      Value<double> lateDeduction,
       required DateTime createdAt,
       required DateTime updatedAt,
     });
@@ -58305,6 +58404,8 @@ typedef $$PayrollTableTableUpdateCompanionBuilder =
       Value<double> rewardsTotal,
       Value<double> penaltiesTotal,
       Value<String?> expenseRefId,
+      Value<int> lateDays,
+      Value<double> lateDeduction,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -58480,6 +58581,16 @@ class $$PayrollTableTableFilterComposer
 
   ColumnFilters<String> get expenseRefId => $composableBuilder(
     column: $table.expenseRefId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lateDays => $composableBuilder(
+    column: $table.lateDays,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lateDeduction => $composableBuilder(
+    column: $table.lateDeduction,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -58668,6 +58779,16 @@ class $$PayrollTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get lateDays => $composableBuilder(
+    column: $table.lateDays,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get lateDeduction => $composableBuilder(
+    column: $table.lateDeduction,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -58831,6 +58952,14 @@ class $$PayrollTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get lateDays =>
+      $composableBuilder(column: $table.lateDays, builder: (column) => column);
+
+  GeneratedColumn<double> get lateDeduction => $composableBuilder(
+    column: $table.lateDeduction,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -58899,6 +59028,8 @@ class $$PayrollTableTableTableManager
                 Value<double> rewardsTotal = const Value.absent(),
                 Value<double> penaltiesTotal = const Value.absent(),
                 Value<String?> expenseRefId = const Value.absent(),
+                Value<int> lateDays = const Value.absent(),
+                Value<double> lateDeduction = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => PayrollTableCompanion(
@@ -58935,6 +59066,8 @@ class $$PayrollTableTableTableManager
                 rewardsTotal: rewardsTotal,
                 penaltiesTotal: penaltiesTotal,
                 expenseRefId: expenseRefId,
+                lateDays: lateDays,
+                lateDeduction: lateDeduction,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -58973,6 +59106,8 @@ class $$PayrollTableTableTableManager
                 Value<double> rewardsTotal = const Value.absent(),
                 Value<double> penaltiesTotal = const Value.absent(),
                 Value<String?> expenseRefId = const Value.absent(),
+                Value<int> lateDays = const Value.absent(),
+                Value<double> lateDeduction = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
               }) => PayrollTableCompanion.insert(
@@ -59009,6 +59144,8 @@ class $$PayrollTableTableTableManager
                 rewardsTotal: rewardsTotal,
                 penaltiesTotal: penaltiesTotal,
                 expenseRefId: expenseRefId,
+                lateDays: lateDays,
+                lateDeduction: lateDeduction,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),

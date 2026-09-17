@@ -165,7 +165,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 55;
+  int get schemaVersion => 56;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -271,6 +271,15 @@ class AppDatabase extends _$AppDatabase {
       // 4q. Schema v55 — staff biometric index
       if (from < 55) {
         await _runV55Migrations(m);
+      }
+
+      // 4r. Schema v56 — payroll late-fine columns (Bug 4b).
+      // Purely additive with safe defaults; old rows read as zero.
+      // NOTE: another branch once used "v56" for manufacturing tables —
+      // that work never merged to main; if it ever does, its step must be
+      // renamed before merging to avoid two different v56 meanings.
+      if (from < 56) {
+        await _runV56Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -1844,6 +1853,34 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(55, 'biometric_mapping_index', 'completed');
     } catch (e) {
       await _logMigrationStep(55, 'biometric_mapping_index', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v56 — payroll late-fine columns (Bug 4b). Additive only:
+  /// existing rows keep working with lateDays/lateDeduction read as zero.
+  Future<void> _runV56Migrations(Migrator m) async {
+    await _logMigrationStep(56, 'payroll_late_columns', 'started');
+    try {
+      try {
+        await customStatement(
+          'ALTER TABLE payroll_table ADD COLUMN late_days INTEGER DEFAULT 0',
+        );
+        log('v56: Added late_days to payroll_table');
+      } catch (e) {
+        log('v56: late_days likely already exists: $e');
+      }
+      try {
+        await customStatement(
+          'ALTER TABLE payroll_table ADD COLUMN late_deduction REAL DEFAULT 0.0',
+        );
+        log('v56: Added late_deduction to payroll_table');
+      } catch (e) {
+        log('v56: late_deduction likely already exists: $e');
+      }
+      await _logMigrationStep(56, 'payroll_late_columns', 'completed');
+    } catch (e) {
+      await _logMigrationStep(56, 'payroll_late_columns', 'failed', error: e.toString());
       rethrow;
     }
   }

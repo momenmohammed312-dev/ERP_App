@@ -276,6 +276,13 @@ class PayrollTable extends Table {
   RealColumn get penaltiesTotal => real().withDefault(const Constant(0.0))();
   TextColumn get expenseRefId => text().nullable()();
 
+  // Bug 4(b): flat fine per late instance (late_penalty_amount setting).
+  // Additive v56 columns with safe defaults — old rows read as zero.
+  IntColumn get lateDays =>
+      integer().withDefault(const Constant(0))(); // Days with status 'late'
+  RealColumn get lateDeduction =>
+      real().withDefault(const Constant(0.0))(); // lateDays × setting
+
   DateTimeColumn get createdAt => dateTime()();
 
   DateTimeColumn get updatedAt => dateTime()();
