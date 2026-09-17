@@ -65,6 +65,7 @@ import 'package:pos_offline_desktop/core/database/dao/vegetable_shipment_dao.dar
 import 'package:pos_offline_desktop/core/database/dao/empty_barnika_tracking_dao.dart';
 import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
+import 'supplier_ledger_backfill.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
 // import 'package:pos_offline_desktop/core/database/amount_types_fix.dart';
 
@@ -303,6 +304,9 @@ class AppDatabase extends _$AppDatabase {
       await _ensureMigrationLogTable();
       await CustomerStatusFix.fixCustomerStatusColumn(this);
       await CustomerOpeningBalanceFix.fixDuplicateOpeningTransactions(this);
+      // One-time repair: supplier purchases saved before the ledger pair
+      // became mandatory (runs once, guarded by _migration_log).
+      await SupplierLedgerBackfill.run(this);
 
       // Safety check to prevent SQL logic error on missing audit_log
       try {
