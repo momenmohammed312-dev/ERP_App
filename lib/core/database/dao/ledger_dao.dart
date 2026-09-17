@@ -82,6 +82,50 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
         (throw Exception('Failed to insert transaction'));
   }
 
+  /// Supplier purchase pair (single source of truth for purchase postings).
+  ///
+  /// ALWAYS writes the amount-due row (credit = what we owe), plus a payment
+  /// row (debit = what we paid) when [paid] > 0 — for EVERY payment method,
+  /// including cash. Skipping cash purchases used to leave the supplier
+  /// ledger blind while the purchases table showed debt (zero cards bug).
+  /// Runs inside the caller's transaction. Deterministic ids make a retried
+  /// save fail loudly on PK instead of double-posting silently.
+  Future<void> recordSupplierPurchase({
+    required String supplierId,
+    required String invoiceNumber,
+    required double total,
+    required double paid,
+    required DateTime date,
+  }) async {
+    await insertTransaction(
+      LedgerTransactionsCompanion.insert(
+        id: '${invoiceNumber}_ledger',
+        entityType: 'Supplier',
+        refId: supplierId,
+        date: date,
+        description: 'شراء: فاتورة $invoiceNumber',
+        debit: const Value(0.0),
+        credit: Value(total),
+        origin: 'purchase',
+      ),
+    );
+    if (paid > 0) {
+      await insertTransaction(
+        LedgerTransactionsCompanion.insert(
+          id: '${invoiceNumber}_ledger_pay',
+          entityType: 'Supplier',
+          refId: supplierId,
+          date: date,
+          description: 'سداد $invoiceNumber',
+          debit: Value(paid),
+          credit: const Value(0.0),
+          origin: 'payment',
+          paymentMethod: const Value('cash'),
+        ),
+      );
+    }
+  }
+
   Future<LedgerTransaction?> getTransactionById(String id) => (select(
     ledgerTransactions,
   )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();

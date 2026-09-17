@@ -1063,7 +1063,10 @@ class _SupplierCard extends StatelessWidget {
               onPressed: () async {
                 if (amountController.text.isNotEmpty) {
                   try {
-                    // Add payment transaction
+                    // Add payment transaction: paying a supplier REDUCES what
+                    // we owe, so it is a DEBIT (credit would increase the
+                    // debt — the old code had this backwards and each
+                    // payment grew the balance instead of shrinking it).
                     await db.ledgerDao.insertTransaction(
                       LedgerTransactionsCompanion.insert(
                         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -1073,9 +1076,10 @@ class _SupplierCard extends StatelessWidget {
                         description: descriptionController.text.isNotEmpty
                             ? descriptionController.text
                             : 'سداد دفعة للمورد',
-                        credit: Value(
+                        debit: Value(
                           double.tryParse(amountController.text) ?? 0.0,
                         ),
+                        credit: const Value(0.0),
                         origin: 'payment',
                         paymentMethod: const Value('cash'),
                         createdAt: Value(DateTime.now()),

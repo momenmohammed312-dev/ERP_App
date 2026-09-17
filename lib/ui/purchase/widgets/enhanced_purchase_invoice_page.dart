@@ -310,62 +310,61 @@ class _EnhancedPurchaseInvoicePageState
     }
 
     try {
-      // Create purchase invoice
-      final purchaseInvoice = PurchasesCompanion.insert(
-        id: _invoiceNumber!,
-        invoiceNumber: _invoiceNumber!,
-        description: 'فاتورة مشتريات من ${_selectedSupplier!.name}',
-        totalAmount: _grandTotal,
-        purchaseDate: DateTime.now(),
-        createdAt: DateTime.now(),
-        supplierId: Value(_selectedSupplier!.id),
-        paidAmount: Value(_paidAmount),
-        paymentMethod: Value(_paymentMethod.name),
-        status: Value('completed'),
-      );
-
-      await widget.db.into(widget.db.purchases).insert(purchaseInvoice);
-
-      // Add purchase items
-      for (final entry in _productEntries) {
-        await widget.db
-            .into(widget.db.purchaseItems)
-            .insert(
-              PurchaseItemsCompanion.insert(
-                id: '${_invoiceNumber}_${entry.product!.id}',
-                purchaseId: _invoiceNumber!,
-                productId: entry.product!.id.toString(),
-                quantity: entry.quantity,
-                unitPrice: entry.unitPrice,
-                totalPrice: entry.lineTotal,
-                unit: entry.product!.unit ?? 'قطعة',
-                createdAt: DateTime.now(),
-              ),
-            );
-
-        // Update inventory - INCREASE stock for purchases
-        final currentProduct = entry.product!;
-        final updatedProduct = currentProduct.copyWith(
-          quantity: currentProduct.quantity + entry.quantity,
+      // One atomic unit: purchase + items + stock + supplier ledger.
+      // A partial save (e.g. stock updated but ledger missing) used to be
+      // the zero-balance-cards bug — it can no longer happen.
+      await widget.db.transaction(() async {
+        // Create purchase invoice
+        final purchaseInvoice = PurchasesCompanion.insert(
+          id: _invoiceNumber!,
+          invoiceNumber: _invoiceNumber!,
+          description: 'فاتورة مشتريات من ${_selectedSupplier!.name}',
+          totalAmount: _grandTotal,
+          purchaseDate: DateTime.now(),
+          createdAt: DateTime.now(),
+          supplierId: Value(_selectedSupplier!.id),
+          paidAmount: Value(_paidAmount),
+          paymentMethod: Value(_paymentMethod.name),
+          status: Value('completed'),
         );
-        await widget.db.productDao.updateProduct(updatedProduct);
-      }
 
-      // Add to supplier ledger if credit purchase
-      if (_paymentMethod != PaymentMethod.cash && _remainingAmount > 0) {
-        await widget.db.ledgerDao.insertTransaction(
-          LedgerTransactionsCompanion.insert(
-            id: '${_invoiceNumber}_ledger',
-            entityType: 'Supplier',
-            refId: _selectedSupplier!.id,
-            date: DateTime.now(),
-            description: 'شراء آجل: فاتورة $_invoiceNumber',
-            debit: const Value(0.0),
-            credit: Value(_remainingAmount),
-            origin: 'purchase',
-          ),
+        await widget.db.into(widget.db.purchases).insert(purchaseInvoice);
+
+        // Add purchase items
+        for (final entry in _productEntries) {
+          await widget.db
+              .into(widget.db.purchaseItems)
+              .insert(
+                PurchaseItemsCompanion.insert(
+                  id: '${_invoiceNumber}_${entry.product!.id}',
+                  purchaseId: _invoiceNumber!,
+                  productId: entry.product!.id.toString(),
+                  quantity: entry.quantity,
+                  unitPrice: entry.unitPrice,
+                  totalPrice: entry.lineTotal,
+                  unit: entry.product!.unit ?? 'قطعة',
+                  createdAt: DateTime.now(),
+                ),
+              );
+
+          // Update inventory - INCREASE stock for purchases
+          final currentProduct = entry.product!;
+          final updatedProduct = currentProduct.copyWith(
+            quantity: currentProduct.quantity + entry.quantity,
+          );
+          await widget.db.productDao.updateProduct(updatedProduct);
+        }
+
+        // Supplier ledger pair (due + payment) for EVERY payment method —
+        // cash purchases used to skip this and left balances at zero.
+        await widget.db.ledgerDao.recordSupplierPurchase(
+          supplierId: _selectedSupplier!.id,
+          invoiceNumber: _invoiceNumber!,
+          total: _grandTotal,
+          paid: _paidAmount,
+          date: DateTime.now(),
         );
-      }
+      });
 
       // Print invoice
       await _printPurchaseInvoice();
