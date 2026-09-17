@@ -118,11 +118,11 @@ void main() {
       );
       expect(rows, isNotEmpty);
       expect(isCanonicalInvoiceNumber(r.invoice.invoiceNumber), isTrue);
-      // Sale + payment rows both link the same receipt and show the number.
-      expect(
-        rows.every((t) => t.description.contains(r.invoice.invoiceNumber!)),
-        isTrue,
-      );
+      // Bug 2 wording: sale/payment rows use فاتورة/سداد + short number.
+      final sale = rows.firstWhere((t) => t.origin == 'sale');
+      final pay = rows.firstWhere((t) => t.origin == 'payment');
+      expect(sale.description, 'فاتورة ${r.invoice.invoiceNumber}');
+      expect(pay.description, 'سداد ${r.invoice.invoiceNumber}');
     });
   });
 }

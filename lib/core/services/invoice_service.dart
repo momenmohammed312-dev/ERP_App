@@ -191,7 +191,7 @@ class InvoiceService {
       // (Wording of descriptions is Bug 2's commit; numbering only here.)
       final actualInvoiceNumber = invoiceNumber ?? canonicalNumber;
 
-      final desc = ledgerDescription ?? 'بيع #$actualInvoiceNumber';
+      final desc = ledgerDescription ?? 'فاتورة $actualInvoiceNumber';
 
       if (customerId != null && customerId != 'cash' && customerId.isNotEmpty) {
         final ledgerIdSale = '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_sale';
@@ -218,7 +218,7 @@ class InvoiceService {
               entityType: 'Customer',
               refId: customerId,
               date: DateTime.now(),
-              description: 'دفع #$actualInvoiceNumber',
+              description: 'سداد $actualInvoiceNumber',
               debit: const Value(0.0),
               credit: Value(paidAmount),
               origin: 'payment',
@@ -241,7 +241,7 @@ class InvoiceService {
             entityType: 'Supplier',
             refId: acc.supplierId,
             date: DateTime.now(),
-            description: 'عمولة بيع #$actualInvoiceNumber',
+            description: 'عمولة $actualInvoiceNumber',
             debit: Value(supplierDue),
             credit: const Value(0.0),
             origin: 'sale',
@@ -461,7 +461,7 @@ class InvoiceService {
               entityType: 'Customer',
               refId: customerId,
               date: DateTime.now(),
-              description: 'دفع #$actualInvoiceNumber',
+              description: 'سداد $actualInvoiceNumber',
               debit: const Value(0.0),
               credit: Value(paidAmount),
               origin: 'payment',
@@ -483,7 +483,7 @@ class InvoiceService {
             entityType: 'Supplier',
             refId: acc.supplierId,
             date: DateTime.now(),
-            description: 'عمولة بيع #$actualInvoiceNumber',
+            description: 'عمولة $actualInvoiceNumber',
             debit: Value(supplierDue),
             credit: const Value(0.0),
             origin: 'sale',

@@ -932,7 +932,7 @@ class _EnhancedNewInvoicePageState
     // that already carry one. (Bug 2 rewrites the wording itself.)
     final ledgerDescription = _invoiceNumber == null
         ? null
-        : 'بيع #$_invoiceNumber ($productSummary)';
+        : 'فاتورة $_invoiceNumber ($productSummary)';
 
     final result = await InvoiceService(db).createInvoice(
       customerId: customerId == 'cash' ? null : customerId,

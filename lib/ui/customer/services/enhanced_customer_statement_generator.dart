@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/ledger_dao.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/utils/pdf_bidi_helper.dart';
 
 class EnhancedCustomerStatementGenerator {
@@ -46,11 +47,49 @@ class EnhancedCustomerStatementGenerator {
   static String _b(String text) => PdfBidiHelper.reorder(text);
 
   /// Extract invoice ID from receipt number (format: INV followed by integer).
+  /// NOTE: this parses `receiptNumber` (stable `INV<id>` link), never the
+  /// display number — Bug 3's format change cannot silently break it.
   static int? _extractInvoiceId(String? receiptNumber) {
     if (receiptNumber == null || receiptNumber.isEmpty) return null;
     if (!receiptNumber.startsWith('INV')) return null;
     final idStr = receiptNumber.substring(3);
     return int.tryParse(idStr);
+  }
+
+  /// Maps linked invoice ids → stored display numbers (Bug 2 + Bug 3).
+  /// Falls back to the id-derived format when the row predates numbering.
+  static Future<Map<int, String>> _fetchInvoiceNumbers(
+    AppDatabase db,
+    List<LedgerTransactionWithBalance> transactions,
+  ) async {
+    final ids = <int>{};
+    for (final txw in transactions) {
+      final id = _extractInvoiceId(txw.transaction.receiptNumber);
+      if (id != null) ids.add(id);
+    }
+    final result = <int, String>{};
+    for (final id in ids) {
+      try {
+        final inv = await db.invoiceDao.getInvoiceById(id);
+        if (inv != null) {
+          result[id] = inv.invoiceNumber ?? formatInvoiceNumber(inv.id);
+        }
+      } catch (_) {}
+    }
+    return result;
+  }
+
+  /// Payment-row wording (Bug 2): `سداد 000001` from the linked invoice;
+  /// legacy receipt string only when the invoice row itself is gone.
+  static String _paymentDesc(
+    LedgerTransaction tx,
+    Map<int, String> invoiceNumbers,
+  ) {
+    if (tx.description.isEmpty) return _b('سداد');
+    final linkedId = _extractInvoiceId(tx.receiptNumber);
+    final number = linkedId == null ? null : invoiceNumbers[linkedId];
+    if (number == null) return _b('سداد فاتورة #${tx.receiptNumber ?? ''}');
+    return _b('سداد $number');
   }
 
   /// Pre-fetch invoice items for all sale transactions.
@@ -108,6 +147,7 @@ class EnhancedCustomerStatementGenerator {
     );
 
     final invoiceItems = await _fetchInvoiceItems(db, transactions);
+    final invoiceNumbers = await _fetchInvoiceNumbers(db, transactions);
 
     final businessName = await SettingsService.getBusinessName();
     final taxNumber = await SettingsService.getTaxNumber();
@@ -146,7 +186,13 @@ class EnhancedCustomerStatementGenerator {
             ),
           ),
           pw.SizedBox(height: 12),
-          _buildDetailedTable(transactions, fonts, openingBalance, invoiceItems),
+          _buildDetailedTable(
+            transactions,
+            fonts,
+            openingBalance,
+            invoiceItems,
+            invoiceNumbers,
+          ),
         ],
       ),
     );
@@ -373,6 +419,7 @@ class EnhancedCustomerStatementGenerator {
     Map<String, pw.Font?> fonts,
     double openingBalance,
     Map<int, List<_InvoiceItemInfo>> invoiceItems,
+    Map<int, String> invoiceNumbers,
   ) {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.black, width: 1),
@@ -396,9 +443,7 @@ class EnhancedCustomerStatementGenerator {
           // Main row
           final isCredit = tx.credit > 0;
           final desc = isCredit
-              ? (tx.description.isNotEmpty
-                  ? _b('سداد فاتورة #${tx.receiptNumber ?? ''}')
-                  : _b('سداد'))
+              ? _paymentDesc(tx, invoiceNumbers)
               : _b(tx.description);
 
           rows.add(pw.TableRow(
