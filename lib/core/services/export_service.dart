@@ -17,48 +17,6 @@ import 'package:pos_offline_desktop/ui/customer/services/enhanced_customer_state
 class ExportService {
   static const String _branding = 'Developed by MO2';
 
-  // Helper method to get invoice items with products
-  static Future<List<Map<String, dynamic>>> _getInvoiceItemsWithProducts(
-    AppDatabase db,
-    int invoiceId,
-  ) async {
-    try {
-      final items = await db.invoiceDao.getItemsWithProductsByInvoice(
-        invoiceId,
-      );
-      return items.map((itemWithProduct) {
-        final item = itemWithProduct.$1;
-        final product = itemWithProduct.$2;
-        final unitPrice = item.quantity > 0 ? item.price / item.quantity : 0.0;
-
-        return {
-          'productName': product?.name ?? 'منتج ${item.productId}',
-          'quantity': item.quantity,
-          'unitPrice': unitPrice,
-          'total': item.price,
-        };
-      }).toList();
-    } catch (e) {
-      debugPrint('Error in _getInvoiceItemsWithProducts: $e');
-      return [];
-    }
-  }
-
-  // Helper method to build detailed description
-  static String _buildDetailedDescription(List<Map<String, dynamic>> items) {
-    if (items.isEmpty) return '';
-
-    final itemDescriptions = items.map((item) {
-      final name = item['productName'] as String;
-      final quantity = item['quantity'] as int;
-      final unitPrice = (item['unitPrice'] as double).toStringAsFixed(2);
-
-      return '$name ($quantity × $unitPrice ج.م)';
-    }).toList();
-
-    return itemDescriptions.join(' + ');
-  }
-
   // Generic PDF Export (Legacy / General Use)
   Future<void> exportToPDF({
     required String title,
@@ -523,31 +481,6 @@ class ExportService {
   }
 
   // Helper methods with font parameters
-  pw.Widget _buildTableHeaderCell(
-    String text, {
-    pw.Font? arabicFont,
-    pw.Font? arabicBoldFont,
-    pw.Font? latinFont,
-  }) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(8),
-      child: pw.Text(
-        ArabicHelper.reshapedText(text),
-        style: pw.TextStyle(
-          fontWeight: pw.FontWeight.bold,
-          font: arabicBoldFont ?? latinFont,
-          fontFallback: [
-            if (arabicBoldFont != null) arabicBoldFont,
-            latinFont ?? pw.Font.courier(),
-            pw.Font.courier(),
-          ],
-        ),
-        textAlign: pw.TextAlign.center,
-        textDirection: pw.TextDirection.rtl,
-      ),
-    );
-  }
-
   pw.Widget _buildTableCell(
     String text, {
     bool isBalance = false,
@@ -574,11 +507,18 @@ class ExportService {
     );
   }
 
-  // Customer Statement PDF - Using EnhancedAccountStatementGenerator
+  // Customer Statement PDF - Using EnhancedAccountStatementGenerator.
+  //
+  // The generator re-queries the ledger by the customer's REAL id, so
+  // callers must pass [customerId] (never the name) plus the exact
+  // user-selected [fromDate]/[toDate]. Failures are rethrown loudly —
+  // there is intentionally no silent fallback to another PDF layout.
   Future<void> exportCustomerStatement({
     required AppDatabase db,
+    required String customerId,
     required String customerName,
-    required List<Map<String, dynamic>> transactions,
+    required DateTime fromDate,
+    required DateTime toDate,
     required double openingBalance,
     required double currentBalance,
   }) async {
@@ -586,12 +526,10 @@ class ExportService {
       // Generate PDF using the new enhanced customer statement generator
       await EnhancedCustomerStatementGenerator.generateStatement(
         db: db,
-        customerId: customerName, // Use customer name as ID for export
+        customerId: customerId,
         customerName: customerName,
-        fromDate: DateTime.now().subtract(
-          Duration(days: 365),
-        ), // Default to last year
-        toDate: DateTime.now(),
+        fromDate: fromDate,
+        toDate: toDate,
         openingBalance: openingBalance,
         currentBalance: currentBalance,
       );
@@ -599,366 +537,8 @@ class ExportService {
       // Note: The new generator handles PDF saving internally
       debugPrint('Customer statement generated successfully');
     } catch (e) {
-      debugPrint('Error in exportCustomerStatement: $e');
-      // Fallback to old method if new one fails
-      await _exportCustomerStatementLegacy(
-        db: db,
-        customerName: customerName,
-        transactions: transactions,
-        openingBalance: openingBalance,
-        currentBalance: currentBalance,
-      );
-    }
-  }
-
-  // Legacy fallback method
-  Future<void> _exportCustomerStatementLegacy({
-    required AppDatabase db,
-    required String customerName,
-    required List<Map<String, dynamic>> transactions,
-    required double openingBalance,
-    required double currentBalance,
-  }) async {
-    if (kIsWeb) {
-      throw Exception(
-        'Customer statement export not supported on web platform',
-      );
-    }
-    // Validate inputs
-    final safeCustomerName = customerName.isNotEmpty
-        ? customerName
-        : 'عميل غير محدد';
-    final safeTransactions = transactions.cast<Map<String, dynamic>>().toList();
-
-    final safeCurrentBalance = currentBalance.isNaN ? 0.0 : currentBalance;
-
-    final pdf = pw.Document();
-
-    // Load Arabic fonts
-    pw.Font? arabicFont;
-    try {
-      final fontData = await rootBundle.load(
-        'assets/fonts/NotoNaskhArabic-Regular.ttf',
-      );
-      if (fontData.lengthInBytes > 100) {
-        arabicFont = pw.Font.ttf(fontData);
-      }
-    } catch (e) {
-      debugPrint('Failed to load Arabic font: $e');
-    }
-    pw.Font? arabicBoldFont;
-    try {
-      final fontData = await rootBundle.load(
-        'assets/fonts/NotoNaskhArabic-Regular.ttf',
-      );
-      if (fontData.lengthInBytes > 100) {
-        arabicBoldFont = pw.Font.ttf(fontData);
-      }
-    } catch (e) {
-      debugPrint('Failed to load Arabic bold font: $e');
-    }
-
-    final latinFont = pw.Font.helvetica(); // Used as fallback
-
-    // Enhanced transaction processing for sales with product details
-    List<Map<String, dynamic>> enhancedTransactions = [];
-    for (final transaction in safeTransactions) {
-      final description = transaction['description']?.toString() ?? '';
-      final receiptNumber = transaction['receiptNumber']?.toString();
-
-      // Check if this is a sale transaction by looking for invoice ID pattern
-      if (receiptNumber != null &&
-          RegExp(r'\d+').hasMatch(receiptNumber) &&
-          description.contains('فاتورة مبيعات')) {
-        // Extract invoice ID
-        final match = RegExp(r'\d+').firstMatch(receiptNumber);
-        final invoiceId = match != null
-            ? int.tryParse(match.group(0) ?? '')
-            : null;
-
-        if (invoiceId != null) {
-          try {
-            // Fetch invoice items with product details
-            final items = await _getInvoiceItemsWithProducts(db, invoiceId);
-            if (items.isNotEmpty) {
-              // Build detailed description with product breakdown
-              final detailedDescription = _buildDetailedDescription(items);
-              enhancedTransactions.add({
-                ...transaction,
-                'description': detailedDescription,
-                'hasProductDetails': true,
-                'items': items,
-              });
-              continue;
-            }
-          } catch (e) {
-            debugPrint('Error fetching invoice items for $invoiceId: $e');
-          }
-        }
-      }
-
-      // Fallback to original description if no enhancement needed
-      enhancedTransactions.add({...transaction, 'hasProductDetails': false});
-    }
-
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: pw.EdgeInsets.all(32),
-        build: (pw.Context context) => pw.Column(
-          children: [
-            // Header
-            pw.Center(
-              child: pw.Column(
-                children: [
-                  pw.Text(
-                    ArabicHelper.reshapedText('كشف حساب عميل'),
-                    style: pw.TextStyle(
-                      fontSize: 24,
-                      fontWeight: pw.FontWeight.bold,
-                      font: arabicBoldFont,
-                    ),
-                    textDirection: pw.TextDirection.rtl,
-                  ),
-                  pw.Text(
-                    _branding,
-                    style: pw.TextStyle(
-                      fontSize: 10,
-                      fontStyle: pw.FontStyle.italic,
-                      font: pw.Font.courier(),
-                    ),
-                  ),
-                  pw.SizedBox(height: 16),
-                ],
-              ),
-            ),
-
-            // Customer Info
-            pw.Container(
-              padding: const pw.EdgeInsets.all(12),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(),
-                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-              ),
-              child: pw.Column(
-                crossAxisAlignment:
-                    pw.CrossAxisAlignment.center, // Center align
-                children: [
-                  // Name & Date
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text(
-                        ArabicHelper.reshapedText(
-                          'التاريخ: ${DateFormat('yyyy/MM/dd').format(DateTime.now())}',
-                        ),
-                        style: pw.TextStyle(
-                          font: arabicFont,
-                          fontFallback: [pw.Font.helvetica()],
-                        ),
-                        textDirection: pw.TextDirection.rtl,
-                      ),
-                      pw.Text(
-                        ArabicHelper.reshapedText(
-                          'اسم العميل: $safeCustomerName',
-                        ),
-                        style: pw.TextStyle(
-                          font: arabicBoldFont,
-                          fontFallback: [pw.Font.helvetica()],
-                          fontSize: 14,
-                        ),
-                        textDirection: pw.TextDirection.rtl,
-                      ),
-                    ],
-                  ),
-                  pw.SizedBox(height: 10),
-
-                  // Owed Amount (Red)
-                  pw.Text(
-                    ArabicHelper.reshapedText(
-                      'المبلغ المستحق: ${_formatCurrency(safeCurrentBalance)}',
-                    ),
-                    style: pw.TextStyle(
-                      font: arabicBoldFont,
-                      fontFallback: [pw.Font.helvetica()],
-                      fontSize: 18,
-                      color: PdfColors.red,
-                    ),
-                    textDirection: pw.TextDirection.rtl,
-                  ),
-                ],
-              ),
-            ),
-            pw.SizedBox(height: 20),
-
-            // Transactions Table
-            pw.Table(
-              border: pw.TableBorder.all(),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(1.2), // Date
-                1: const pw.FlexColumnWidth(1.2), // Receipt#
-                2: const pw.FlexColumnWidth(2.5), // Description
-                3: const pw.FlexColumnWidth(1), // Debit
-                4: const pw.FlexColumnWidth(1), // Credit
-                5: const pw.FlexColumnWidth(1.2), // Balance
-              },
-              children: [
-                // Header
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-                  children: [
-                    _buildTableHeaderCell(
-                      'التاريخ',
-                      arabicFont: arabicFont,
-                      arabicBoldFont: arabicBoldFont,
-                      latinFont: latinFont,
-                    ),
-                    _buildTableHeaderCell(
-                      'رقم الإيصال',
-                      arabicFont: arabicFont,
-                      arabicBoldFont: arabicBoldFont,
-                      latinFont: latinFont,
-                    ),
-                    _buildTableHeaderCell(
-                      'البيان',
-                      arabicFont: arabicFont,
-                      arabicBoldFont: arabicBoldFont,
-                      latinFont: latinFont,
-                    ),
-                    _buildTableHeaderCell(
-                      'مدين',
-                      arabicFont: arabicFont,
-                      arabicBoldFont: arabicBoldFont,
-                      latinFont: latinFont,
-                    ),
-                    _buildTableHeaderCell(
-                      'دائن',
-                      arabicFont: arabicFont,
-                      arabicBoldFont: arabicBoldFont,
-                      latinFont: latinFont,
-                    ),
-                    _buildTableHeaderCell(
-                      'الرصيد',
-                      arabicFont: arabicFont,
-                      arabicBoldFont: arabicBoldFont,
-                      latinFont: latinFont,
-                    ),
-                  ],
-                ),
-                // Data
-                ...safeTransactions.map((transaction) {
-                  final index = safeTransactions.indexOf(transaction);
-                  return pw.TableRow(
-                    decoration: pw.BoxDecoration(
-                      color: index % 2 == 0
-                          ? PdfColors.white
-                          : PdfColors.grey50,
-                    ),
-                    children: [
-                      _buildTableCell(
-                        DateFormat('yyyy/MM/dd').format(transaction['date']),
-                        arabicFont: arabicFont,
-                        latinFont: latinFont,
-                      ),
-                      _buildTableCell(
-                        transaction['receiptNumber']?.toString() ?? '-',
-                        arabicFont: arabicFont,
-                        latinFont: latinFont,
-                      ),
-                      _buildTableCell(
-                        transaction['description']?.toString() ?? '',
-                        arabicFont: arabicFont,
-                        latinFont: latinFont,
-                      ),
-                      _buildTableCell(
-                        _formatCurrency(transaction['debit'] ?? 0),
-                        arabicFont: arabicFont,
-                        latinFont: latinFont,
-                      ),
-                      _buildTableCell(
-                        _formatCurrency(transaction['credit'] ?? 0),
-                        arabicFont: arabicFont,
-                        latinFont: latinFont,
-                      ),
-                      _buildTableCell(
-                        _formatCurrency(transaction['balance'] ?? 0),
-                        isBalance: true,
-                        arabicFont: arabicFont,
-                        latinFont: latinFont,
-                      ),
-                    ],
-                  );
-                }),
-              ],
-            ),
-
-            pw.Expanded(child: pw.Container()),
-
-            // Footer
-            pw.Center(
-              child: pw.Column(
-                children: [
-                  pw.Text(
-                    _branding,
-                    style: pw.TextStyle(
-                      font: arabicFont,
-                    ), // Apply Arabic font to footer
-                  ),
-                  pw.Text(
-                    'تم الإنشاء في ${DateFormat('yyyy/MM/dd HH:mm').format(DateTime.now())}',
-                    style: pw.TextStyle(
-                      fontSize: 8,
-                      font: arabicFont,
-                    ), // Apply Arabic font to footer
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async {
-          final output = await pdf.save();
-          return output;
-        },
-        name: 'كشف حساب $safeCustomerName.pdf',
-      ).timeout(
-        const Duration(seconds: 30),
-        onTimeout: () async {
-          // Fallback: save to file
-          final directory = await getApplicationDocumentsDirectory();
-          final filePath = path.join(
-            directory.path,
-            'customer_statement_${DateTime.now().millisecondsSinceEpoch}.pdf',
-          );
-          final file = File(filePath);
-          final output = await pdf.save();
-          await file.writeAsBytes(output);
-          debugPrint('PDF saved to: $filePath');
-          return false; // Return false to indicate fallback was used
-        },
-      );
-    } catch (e) {
-      debugPrint('Error in exportCustomerStatement: $e');
-      // Fallback: save to file if layout fails
-      try {
-        final directory = await getApplicationDocumentsDirectory();
-        final filePath = path.join(
-          directory.path,
-          'customer_statement_${DateTime.now().millisecondsSinceEpoch}.pdf',
-        );
-        final file = File(filePath);
-        final output = await pdf.save();
-        await file.writeAsBytes(output);
-        debugPrint('PDF saved to: $filePath');
-      } catch (saveError) {
-        debugPrint('Error saving PDF: $saveError');
-        rethrow;
-      }
+      debugPrint('SEVERE exportCustomerStatement failed for $customerId: $e');
+      rethrow;
     }
   }
 

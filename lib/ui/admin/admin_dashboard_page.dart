@@ -2273,28 +2273,6 @@ class _CustomersPageContentState extends State<_CustomersPageContent> {
     try {
       final now = DateTime.now();
       final startOfMonth = DateTime(now.year, now.month, 1);
-      final transactionsWithBalance = await widget.db.ledgerDao
-          .getTransactionsWithRunningBalance(
-        'Customer',
-        customer.id,
-        startOfMonth,
-        now,
-      );
-
-      final transactionData = transactionsWithBalance
-          .map(
-            (tx) => {
-              'date': tx.transaction.date,
-              'description': tx.transaction.description,
-              'debit': tx.transaction.debit,
-              'credit': tx.transaction.credit,
-              'balance': tx.runningBalance,
-              'receiptNumber': tx.transaction.receiptNumber,
-              'paymentMethod': tx.transaction.paymentMethod,
-            },
-          )
-          .toList();
-
       final openingBalance = await widget.db.ledgerDao.getRunningBalance(
         'Customer',
         customer.id,
@@ -2310,8 +2288,10 @@ class _CustomersPageContentState extends State<_CustomersPageContent> {
       final exportService = ExportService();
       await exportService.exportCustomerStatement(
         db: widget.db,
+        customerId: customer.id,
         customerName: customer.name,
-        transactions: transactionData,
+        fromDate: startOfMonth,
+        toDate: now,
         openingBalance: openingBalance,
         currentBalance: currentBalance,
       );
