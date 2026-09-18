@@ -15,6 +15,24 @@ import 'package:pos_offline_desktop/core/services/settings_service.dart';
 class UnifiedPrintService {
   static const String _logoAssetPath = 'assets/receipt/receipt_logo.png';
 
+  /// Summary-box math for invoice PDFs: returns
+  /// (discountTotal, paidTotal, remainingTotal).
+  /// - subtotal is already NET (discounts applied at save time), so the
+  ///   discount row is informational and remaining never subtracts twice;
+  /// - per-line discount is derived (qty*price - line total) because
+  ///   InvoiceItem carries no discount field.
+  static (double, double, double) invoiceSummaryTotals({
+    required List<InvoiceItem> items,
+    required double subtotal,
+    required double paid,
+  }) {
+    final discount = items.fold<double>(
+      0,
+      (s, it) => s + (it.quantity * it.unitPrice - it.totalPrice),
+    );
+    return (discount, paid, subtotal - paid);
+  }
+
   /// 1. GENERATE UNIFIED DOCUMENT
   /// Central method for all document types (Sales, Purchases, Customers, Suppliers)
   static Future<pw.Document> generateUnifiedDocument({
@@ -279,6 +297,19 @@ class UnifiedPrintService {
     final isSales = documentType == DocumentType.salesInvoice;
     final invoiceData = data as InvoiceData;
 
+    // Summary-box math (computed once, before the tree — package:pdf has
+    // no Builder widget). See [invoiceSummaryTotals] for the rules.
+    final totals = UnifiedPrintService.invoiceSummaryTotals(
+      items: invoiceData.items,
+      subtotal: invoiceData.subtotal,
+      paid: ((additionalData?['paidAmount'] ??
+              invoiceData.invoice.paidAmount) as num)
+          .toDouble(),
+    );
+    final discountTotal = totals.$1;
+    final paidTotal = totals.$2;
+    final remainingTotal = totals.$3;
+
     return [
       /// Header with Company Name and Title
       pw.Container(
@@ -385,6 +416,26 @@ class UnifiedPrintService {
             _buildTotalRow(
               'إجمالي الفاتورة',
               invoiceData.subtotal,
+              font: arabicFont,
+            ),
+            // Discount / paid / remaining rows (see math note above).
+            if (discountTotal > 0.005)
+              _buildTotalRow(
+                'الخصم',
+                discountTotal,
+                font: arabicFont,
+                fontSize: 10,
+              ),
+            if (paidTotal > 0)
+              _buildTotalRow(
+                'المدفوع',
+                paidTotal,
+                font: arabicFont,
+                fontSize: 10,
+              ),
+            _buildTotalRow(
+              'المتبقي',
+              remainingTotal,
               font: arabicFont,
             ),
             if (additionalData?['cashAmount'] != null ||
