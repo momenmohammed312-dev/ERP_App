@@ -130,6 +130,9 @@ class SupplierStatementGenerator {
         ),
         footer: (pw.Context context) => _buildFooter(fonts, context),
         build: (pw.Context context) => [
+          _buildDetailedTable(
+              transactions, fonts, openingBalance, purchaseItems),
+          pw.SizedBox(height: 12),
           _buildFinancialSummary(
             fonts,
             openingBalance: openingBalance,
@@ -143,8 +146,6 @@ class SupplierStatementGenerator {
               (s, t) => s + t.transaction.debit,
             ),
           ),
-          pw.SizedBox(height: 12),
-          _buildDetailedTable(transactions, fonts, openingBalance, purchaseItems),
         ],
       ),
     );
@@ -207,6 +208,8 @@ class SupplierStatementGenerator {
         ),
         footer: (pw.Context context) => _buildFooter(fonts, context),
         build: (pw.Context context) => [
+          _buildSummaryTable(monthlyData, fonts, openingBalance),
+          pw.SizedBox(height: 12),
           _buildFinancialSummary(
             fonts,
             openingBalance: openingBalance,
@@ -214,8 +217,6 @@ class SupplierStatementGenerator {
             totalCredit: totalCredit,
             totalDebit: totalDebit,
           ),
-          pw.SizedBox(height: 12),
-          _buildSummaryTable(monthlyData, fonts, openingBalance),
         ],
       ),
     );

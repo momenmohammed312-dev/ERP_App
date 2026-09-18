@@ -172,6 +172,14 @@ class EnhancedCustomerStatementGenerator {
         ),
         footer: (pw.Context context) => _buildFooter(fonts, context),
         build: (pw.Context context) => [
+          _buildDetailedTable(
+            transactions,
+            fonts,
+            openingBalance,
+            invoiceItems,
+            invoiceNumbers,
+          ),
+          pw.SizedBox(height: 12),
           _buildFinancialSummary(
             fonts,
             openingBalance: openingBalance,
@@ -184,14 +192,6 @@ class EnhancedCustomerStatementGenerator {
               0,
               (s, t) => s + t.transaction.credit,
             ),
-          ),
-          pw.SizedBox(height: 12),
-          _buildDetailedTable(
-            transactions,
-            fonts,
-            openingBalance,
-            invoiceItems,
-            invoiceNumbers,
           ),
         ],
       ),
@@ -255,6 +255,8 @@ class EnhancedCustomerStatementGenerator {
         ),
         footer: (pw.Context context) => _buildFooter(fonts, context),
         build: (pw.Context context) => [
+          _buildSummaryTable(monthlyData, fonts, openingBalance),
+          pw.SizedBox(height: 12),
           _buildFinancialSummary(
             fonts,
             openingBalance: openingBalance,
@@ -262,8 +264,6 @@ class EnhancedCustomerStatementGenerator {
             totalDebit: totalDebit,
             totalCredit: totalCredit,
           ),
-          pw.SizedBox(height: 12),
-          _buildSummaryTable(monthlyData, fonts, openingBalance),
         ],
       ),
     );
