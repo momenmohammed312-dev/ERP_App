@@ -66,9 +66,10 @@ class ZKTecoClient {
 
       // 2. لو الجهاز طلب مصادقة (2005) أو فيه CommKey مدخل — نعمل AUTH
       if (reply.command == ZkCommand.ackUnauthorized || commKey > 0) {
-        // لو التوكن 0 والجهاز طالب كلمة سر — جرّب 0 أولاً، لو فشل هيرجع false ويظهر للعميل
-        final keyToTry = commKey;
-        final authSuccess = await _authenticate(keyToTry);
+        var authSuccess = await _authenticate(commKey);
+        if (!authSuccess && commKey != 0) {
+          authSuccess = await _authenticate(0);
+        }
         if (!authSuccess) {
           await disconnect();
           return false;
@@ -105,23 +106,10 @@ class ZKTecoClient {
 
   /// Authenticates with the device using Communication Key
   Future<bool> _authenticate(int key) async {
-    // Scramble comm key
-    int scrambled = 0;
-    for (int i = 0; i < 32; i++) {
-      if ((key & (1 << i)) != 0) {
-        scrambled = (scrambled << 1) | 1;
-      } else {
-        scrambled = (scrambled << 1);
-      }
-    }
-    scrambled += _sessionId;
-
-    final payload = ByteData(4);
-    payload.setUint32(0, scrambled, Endian.little);
-
+    final payload = ZkPacketCodec.makeCommKey(key, _sessionId);
     final reply = await _sendCommand(
       ZkCommand.cmdAuth,
-      payload: payload.buffer.asUint8List(),
+      payload: payload,
     );
     return reply != null && reply.isSuccess;
   }

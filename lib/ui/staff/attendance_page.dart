@@ -21,6 +21,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
   List<Attendance> _attendanceList = [];
   bool _isLoading = true;
 
+  double _latePenalty = 0.0;
+  double _absencePenalty = 0.0;
+
   @override
   void initState() {
     super.initState();
@@ -33,8 +36,28 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     final dao = StaffManagementDao(db);
     try {
       final attendance = await dao.getAttendanceByStaff(widget.staff.staffId);
+
+      double latePen = 0.0;
+      double absPen = 0.0;
+      try {
+        final lateRow = await (db.select(db.attendanceSettings)
+              ..where((t) => t.settingKey.equals('late_penalty_amount')))
+            .getSingleOrNull();
+        if (lateRow != null) {
+          latePen = double.tryParse(lateRow.settingValue) ?? 0.0;
+        }
+        final absRow = await (db.select(db.attendanceSettings)
+              ..where((t) => t.settingKey.equals('absence_penalty_amount')))
+            .getSingleOrNull();
+        if (absRow != null) {
+          absPen = double.tryParse(absRow.settingValue) ?? 0.0;
+        }
+      } catch (_) {}
+
       setState(() {
         _attendanceList = attendance.reversed.toList();
+        _latePenalty = latePen;
+        _absencePenalty = absPen;
         _isLoading = false;
       });
     } catch (e) {
@@ -42,26 +65,50 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('خطأ في تحميل سجل الحضور')));
+      ).showSnackBar(SnackBar(content: Text('خطأ في تحميل سجل الحضور: $e')));
     }
   }
 
   bool _isChecking = false;
 
-  Future<void> _showManualEntryDialog() async {
-    DateTime selectedDate = DateTime.now();
-    TimeOfDay checkInTime = TimeOfDay.now();
-    TimeOfDay? checkOutTime;
-    String status = 'present';
-    String notes = '';
-    final statusOptions = ['present', 'absent', 'late', 'leave'];
-    final statusLabels = ['حاضر', 'غائب', 'متأخر', 'إجازة'];
+  Future<void> _showManualEntryDialog([Attendance? initialRecord]) async {
+    final statusOptions = [
+      'present',
+      'absent',
+      'late',
+      'leave',
+      'excused',
+      'excused_late',
+    ];
+    final statusLabels = [
+      'حاضر',
+      'غائب',
+      'متأخر',
+      'إجازة',
+      'إذن (معفي)',
+      'متأخر بإذن',
+    ];
+
+    DateTime selectedDate = initialRecord?.date ?? DateTime.now();
+    TimeOfDay? checkInTime = initialRecord != null
+        ? (initialRecord.checkInTime != null
+            ? TimeOfDay.fromDateTime(initialRecord.checkInTime!)
+            : null)
+        : TimeOfDay.now();
+    TimeOfDay? checkOutTime = initialRecord?.checkOutTime != null
+        ? TimeOfDay.fromDateTime(initialRecord!.checkOutTime!)
+        : null;
+    String status = (initialRecord != null &&
+            statusOptions.contains(initialRecord.status))
+        ? initialRecord.status
+        : 'present';
+    String notes = initialRecord?.notes ?? '';
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) {
         DateTime date = selectedDate;
-        TimeOfDay inTime = checkInTime;
+        TimeOfDay? inTime = checkInTime;
         TimeOfDay? outTime = checkOutTime;
         String selStatus = status;
         final noteCtrl = TextEditingController(text: notes);
@@ -69,7 +116,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
 
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            title: const Text('تسجيل حضور يدوي'),
+            title: Text(initialRecord != null ? 'تعديل سجل حضور / إذن' : 'تسجيل حضور يدوي'),
             content: Form(
               key: formKey,
               child: SingleChildScrollView(
@@ -87,7 +134,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                           context: context,
                           initialDate: date,
                           firstDate: DateTime(2020),
-                          lastDate: DateTime(2030),
+                          lastDate: DateTime(2035),
                         );
                         if (picked != null) {
                           setDialogState(() => date = picked);
@@ -97,12 +144,26 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                     const Divider(),
                     ListTile(
                       title: const Text('وقت الحضور'),
-                      subtitle: Text(inTime.format(context)),
-                      trailing: const Icon(Icons.access_time),
+                      subtitle: Text(
+                        inTime?.format(context) ?? 'لم يتم التسجيل (اختياري للإذن)',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (inTime != null)
+                            IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              tooltip: 'مسح وقت الحضور',
+                              onPressed: () =>
+                                  setDialogState(() => inTime = null),
+                            ),
+                          const Icon(Icons.access_time),
+                        ],
+                      ),
                       onTap: () async {
                         final picked = await showTimePicker(
                           context: context,
-                          initialTime: inTime,
+                          initialTime: inTime ?? TimeOfDay.now(),
                         );
                         if (picked != null) {
                           setDialogState(() => inTime = picked);
@@ -121,6 +182,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                           if (outTime != null)
                             IconButton(
                               icon: const Icon(Icons.clear, size: 18),
+                              tooltip: 'مسح وقت الانصراف',
                               onPressed: () =>
                                   setDialogState(() => outTime = null),
                             ),
@@ -158,15 +220,15 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                     TextFormField(
                       controller: noteCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'ملاحظات',
+                        labelText: 'ملاحظات / سبب الإذن',
                         border: OutlineInputBorder(),
                       ),
                       maxLines: 2,
                     ),
                     const SizedBox(height: 8),
-                    if (outTime != null)
+                    if (inTime != null && outTime != null)
                       Text(
-                        'إجمالي ساعات العمل: ${_calcHours(inTime, outTime!)}',
+                        'إجمالي ساعات العمل: ${_calcHours(inTime!, outTime!)}',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.blueGrey,
@@ -209,14 +271,18 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       setState(() => _isChecking = true);
       try {
         final dt = result['date'] as DateTime;
-        final ci = result['checkIn'] as TimeOfDay;
+        final ci = result['checkIn'] as TimeOfDay?;
         final co = result['checkOut'] as TimeOfDay?;
         final st = result['status'] as String;
         final nt = result['notes'] as String;
 
-        final checkInDateTime = DateTime(
-          dt.year, dt.month, dt.day, ci.hour, ci.minute,
-        );
+        DateTime? checkInDateTime;
+        if (ci != null) {
+          checkInDateTime = DateTime(
+            dt.year, dt.month, dt.day, ci.hour, ci.minute,
+          );
+        }
+
         DateTime? checkOutDateTime;
         double? workingHours;
 
@@ -224,11 +290,13 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
           checkOutDateTime = DateTime(
             dt.year, dt.month, dt.day, co.hour, co.minute,
           );
-          if (checkOutDateTime.isBefore(checkInDateTime)) {
-            checkOutDateTime = checkOutDateTime.add(const Duration(days: 1));
+          if (checkInDateTime != null) {
+            if (checkOutDateTime.isBefore(checkInDateTime)) {
+              checkOutDateTime = checkOutDateTime.add(const Duration(days: 1));
+            }
+            workingHours =
+                checkOutDateTime.difference(checkInDateTime).inMinutes / 60.0;
           }
-          workingHours =
-              checkOutDateTime.difference(checkInDateTime).inMinutes / 60.0;
         }
 
         final service = ref.read(staffManagementServiceProvider);
@@ -245,8 +313,10 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
         await _loadAttendance();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('تم تسجيل الحضور يدوياً'),
+            SnackBar(
+              content: Text(initialRecord != null
+                  ? 'تم تحديث السجل بنجاح'
+                  : 'تم تسجيل الحضور يدوياً'),
               backgroundColor: Colors.green,
             ),
           );
@@ -259,6 +329,68 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
         }
       } finally {
         if (mounted) setState(() => _isChecking = false);
+      }
+    }
+  }
+
+  Future<void> _editRecord(Attendance record) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'تعديل سجل: ${DateFormat('yyyy/MM/dd - EEEE', 'ar').format(record.date)}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.blueGrey,
+                  child: Icon(Icons.edit_calendar, color: Colors.white),
+                ),
+                title: const Text('تعديل يدوي / تسجيل إذن'),
+                subtitle: const Text('تغيير الحالة إلى إذن، متأخر بإذن، حاضر، إلخ'),
+                onTap: () => Navigator.pop(ctx, 'manual'),
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.redAccent,
+                  child: Icon(Icons.admin_panel_settings, color: Colors.white),
+                ),
+                title: const Text('تعديل مراقب رسمي'),
+                subtitle: const Text('تعديل إداري مع توثيق سبب التعديل للمراقبين'),
+                onTap: () => Navigator.pop(ctx, 'override'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (action == 'manual') {
+      await _showManualEntryDialog(record);
+    } else if (action == 'override') {
+      if (!mounted) return;
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (_) => ManualOverrideDialog(
+          staff: widget.staff,
+          initialDate: record.date,
+          initialStatus: record.status,
+          initialCheckInTime: record.checkInTime,
+          initialCheckOutTime: record.checkOutTime,
+          initialNotes: record.notes,
+        ),
+      );
+      if (result == true) {
+        _loadAttendance();
       }
     }
   }
@@ -397,9 +529,92 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _attendanceList.isEmpty
-          ? _buildEmptyState()
-          : _buildAttendanceList(),
+          : Column(
+              children: [
+                _buildSummaryCards(),
+                Expanded(
+                  child: _attendanceList.isEmpty
+                      ? _buildEmptyState()
+                      : _buildAttendanceList(),
+                ),
+              ],
+            ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryCards() {
+    final list = _attendanceList;
+    final absentDays = list.where((r) => r.status == 'absent').length;
+    final lateDays = list.where((r) => r.status == 'late').length;
+    final excusedDays = list
+        .where((r) => r.status == 'excused' || r.status == 'excused_late')
+        .length;
+    final totalOvertime = list.fold<double>(0.0, (s, r) => s + r.overtimeHours);
+    final totalDeductions =
+        (lateDays * _latePenalty) + (absentDays * _absencePenalty);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: _summaryCard('غياب', '$absentDays يوم', Icons.person_off, Colors.red),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _summaryCard('تأخير', '$lateDays يوم', Icons.timer, Colors.amber),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _summaryCard('إذن', '$excusedDays يوم', Icons.assignment_turned_in, Colors.teal),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _summaryCard('إضافي', '${totalOvertime.toStringAsFixed(1)}س', Icons.more_time, Colors.blue),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _summaryCard('خصومات', '${totalDeductions.toStringAsFixed(0)} ج.م', Icons.money_off, Colors.deepOrange),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryCard(String title, String value, IconData icon, Color color) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                color: isDark ? Colors.grey.shade400 : Colors.grey[600],
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -437,70 +652,108 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      DateFormat('EEEE, d MMMM yyyy', 'ar').format(record.date),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _editRecord(record),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        DateFormat('EEEE, d MMMM yyyy', 'ar').format(record.date),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: statusColor),
-                      ),
-                      child: Text(
-                        _getStatusText(record.status),
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
                         ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: statusColor),
+                        ),
+                        child: Text(
+                          _getStatusText(record.status),
+                          style: TextStyle(
+                            color: statusColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (record.workingHours != null)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '${record.workingHours!.toStringAsFixed(1)} ساعة',
+                              style: TextStyle(
+                                color: Colors.blue[700],
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const Text(
+                              'ساعات العمل',
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.edit_note, size: 22),
+                        tooltip: 'تعديل السجل / إذن',
+                        onPressed: () => _editRecord(record),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (record.notes != null && record.notes!.trim().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.notes, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        record.notes!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.brightness == Brightness.dark
+                              ? Colors.grey[400]
+                              : Colors.grey[700],
+                          fontStyle: FontStyle.italic,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
-                if (record.workingHours != null)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '${record.workingHours!.toStringAsFixed(1)} ساعة',
-                        style: TextStyle(
-                          color: Colors.blue[700],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Text(
-                        'ساعات العمل',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ],
-                  ),
               ],
-            ),
-            const Divider(height: 24),
-            Row(
-              children: [
-                _buildTimeInfo(Icons.login, 'حضور', record.checkInTime),
-                const Spacer(),
-                _buildTimeInfo(Icons.logout, 'انصراف', record.checkOutTime),
-              ],
-            ),
-          ],
+              const Divider(height: 20),
+              Row(
+                children: [
+                  _buildTimeInfo(Icons.login, 'حضور', record.checkInTime),
+                  const Spacer(),
+                  _buildTimeInfo(Icons.logout, 'انصراف', record.checkOutTime),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -538,6 +791,10 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
         return Colors.orange;
       case 'late':
         return Colors.amber;
+      case 'excused':
+        return Colors.teal;
+      case 'excused_late':
+        return Colors.deepOrange;
       default:
         return Colors.grey;
     }
@@ -553,6 +810,10 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
         return 'إجازة';
       case 'late':
         return 'متأخر';
+      case 'excused':
+        return 'معفي بإذن';
+      case 'excused_late':
+        return 'متأخر بإذن';
       default:
         return status;
     }

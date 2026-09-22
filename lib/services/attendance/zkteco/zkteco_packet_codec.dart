@@ -194,4 +194,38 @@ class ZkPacketCodec {
     final timeSeconds = dt.hour * 3600 + dt.minute * 60 + dt.second;
     return dateDays + timeSeconds;
   }
+
+  /// Scrambles communication key and session ID according to ZKTeco Standalone protocol (MakeKey from commpro.c)
+  static Uint8List makeCommKey(int key, int sessionId, [int ticks = 50]) {
+    int k = 0;
+    for (int i = 0; i < 32; i++) {
+      if ((key & (1 << i)) != 0) {
+        k = (k << 1) | 1;
+      } else {
+        k = k << 1;
+      }
+    }
+    k = (k + sessionId) & 0xFFFFFFFF;
+
+    final b = ByteData(4)..setUint32(0, k, Endian.little);
+    final b0 = b.getUint8(0) ^ 0x5A; // 'Z'
+    final b1 = b.getUint8(1) ^ 0x4B; // 'K'
+    final b2 = b.getUint8(2) ^ 0x53; // 'S'
+    final b3 = b.getUint8(3) ^ 0x4F; // 'O'
+
+    // Swap the two 16-bit words (b2, b3, b0, b1)
+    final t0 = b2;
+    final t1 = b3;
+    final t2 = b0;
+    final t3 = b1;
+
+    final bVal = ticks & 0xFF;
+    final res = Uint8List(4);
+    res[0] = t0 ^ bVal;
+    res[1] = t1 ^ bVal;
+    res[2] = bVal;
+    res[3] = t3 ^ bVal;
+
+    return res;
+  }
 }

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:drift/drift.dart' as drift;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
-import 'package:pos_offline_desktop/core/database/dao/sales_returns_dao.dart';
 import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/ui/widgets/invoice_items_table.dart';
 import 'package:pos_offline_desktop/ui/customer/edit_payment_dialog.dart';
 import 'package:pos_offline_desktop/ui/invoice/edit_invoice_page.dart';
+import 'package:pos_offline_desktop/ui/invoice/widgets/invoice_partial_return_dialog.dart';
 import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 
 const Color _bgDark = Color(0xFF0D1117);
@@ -291,110 +290,18 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
 
   void _refundInvoice(BuildContext context, int? invoiceId) async {
     if (invoiceId == null) return;
-
-    final reasonController = TextEditingController();
-    final confirm = await showDialog<bool>(
+    // مرتجع جزئي على مستوى الصنف — اختيار كمية لكل صنف
+    final done = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('استرجاع الفاتورة'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('سيتم إرجاع كل أصناف الفاتورة للمخزون وتخفيض رصيد العميل.'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'سبب الاسترجاع',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('تأكيد الاسترجاع'),
-          ),
-        ],
+      builder: (ctx) => InvoicePartialReturnDialog(
+        db: widget.db,
+        invoiceId: invoiceId,
+        onDone: _notifyChanged,
       ),
     );
-
-    if (confirm != true) return;
-
-    try {
-      final invoice = await widget.db.invoiceDao.getInvoiceById(invoiceId);
-      if (invoice == null) throw Exception('الفاتورة غير موجودة');
-      final itemsWithProducts = await widget.db.invoiceDao
-          .getItemsWithProductsByInvoice(invoiceId);
-
-      final returnItems = <SalesReturnItemsCompanion>[];
-      double totalReturn = 0.0;
-      for (final entry in itemsWithProducts) {
-        final item = entry.$1;
-        final product = entry.$2;
-        final unitPrice =
-            item.quantity > 0 ? item.price / item.quantity : item.price;
-        totalReturn += item.price;
-        returnItems.add(
-          SalesReturnItemsCompanion.insert(
-            returnId: 0,
-            productId: item.productId,
-            productName: product?.name ?? 'منتج ${item.productId}',
-            quantity: item.quantity,
-            unitPrice: unitPrice,
-            totalPrice: item.price,
-          ),
-        );
-      }
-
-      final returnCompanion = SalesReturnsCompanion.insert(
-        returnNumber:
-            'RTR-${invoice.invoiceNumber ?? invoice.id}-${DateTime.now().millisecondsSinceEpoch}',
-        originalInvoiceId: invoice.id,
-        customerId: (invoice.customerId?.isNotEmpty == true)
-            ? drift.Value(invoice.customerId!)
-            : const drift.Value.absent(),
-        customerName: invoice.customerName ?? 'عميل غير محدد',
-        returnDate: DateTime.now(),
-        totalAmount: totalReturn,
-        returnReason: reasonController.text.trim().isNotEmpty
-            ? reasonController.text.trim()
-            : 'استرجاع من صفحة العميل',
-        notes: const drift.Value.absent(),
-        status: const drift.Value('completed'),
-        processedBy: const drift.Value.absent(),
-      );
-
-      final returnDao = SalesReturnsDao(widget.db);
-      await returnDao.processReturn(
-        returnCompanion: returnCompanion,
-        items: returnItems,
-      );
-
-      _notifyChanged();
-      if (context.mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم استرجاع الفاتورة بنجاح'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ في الاسترجاع: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+    if (done == true && context.mounted) {
+      // إغلاق ديالوج التفاصيل بعد نجاح المرتجع ليتحدث الـ list
+      Navigator.pop(context);
     }
   }
 }
@@ -533,6 +440,27 @@ class _InvoiceDetailViewState extends State<_InvoiceDetailView> {
             icon: const Icon(Icons.print, size: 18),
             label: const Text('طباعة'),
             style: TextButton.styleFrom(foregroundColor: _gold),
+          ),
+        if (_invoice != null && _invoice!.status != 'voided' && _invoice!.status != 'draft')
+          TextButton.icon(
+            onPressed: () async {
+              final done = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => InvoicePartialReturnDialog(
+                  db: widget.db,
+                  invoiceId: widget.invoiceId,
+                ),
+              );
+              if (done == true && context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم تسجيل المرتجع'), backgroundColor: Colors.green),
+                );
+              }
+            },
+            icon: const Icon(Icons.undo, size: 18),
+            label: const Text('مرتجع جزئي'),
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
           ),
         TextButton(
           onPressed: () => Navigator.pop(context),

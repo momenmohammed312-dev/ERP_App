@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/widgets/permission_guard.dart';
 
 class ReturnsReportScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class ReturnsReportScreen extends StatefulWidget {
 class _ReturnsReportScreenState extends State<ReturnsReportScreen> {
   List<SalesReturn> _returns = [];
   Map<int, List<SalesReturnItem>> _returnItems = {};
+  Map<int, String> _invoiceNumbers = {}; // returnId -> رقم الفاتورة الأصلية
   bool _isLoading = true;
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _endDate = DateTime.now();
@@ -36,12 +38,21 @@ class _ReturnsReportScreenState extends State<ReturnsReportScreen> {
         _endDate,
       );
       final items = <int, List<SalesReturnItem>>{};
+      final invoiceNumbers = <int, String>{};
       for (final ret in returns) {
         items[ret.id] = await widget.database.salesReturnsDao.getItemsForReturn(ret.id);
+        final invoice = await widget.database.invoiceDao.getInvoiceById(
+          ret.originalInvoiceId,
+        );
+        invoiceNumbers[ret.id] = invoice != null
+            ? (displayInvoiceNumber(invoice.invoiceNumber, invoice.id) ??
+                (invoice.invoiceNumber ?? 'فاتورة رقم ${invoice.id}'))
+            : 'فاتورة ${ret.originalInvoiceId}';
       }
       setState(() {
         _returns = returns;
         _returnItems = items;
+        _invoiceNumbers = invoiceNumbers;
         _isLoading = false;
       });
     } catch (e) {
@@ -90,14 +101,15 @@ class _ReturnsReportScreenState extends State<ReturnsReportScreen> {
       title: 'تقرير مرتجعات المبيعات',
       data: _returns.map((r) => {
         'رقم المرتجع': r.returnNumber,
+        'الفاتورة الأصلية': _invoiceNumbers[r.id] ?? '',
         'العميل': r.customerName,
         'التاريخ': DateFormat('yyyy/MM/dd').format(r.returnDate),
         'المبلغ': r.totalAmount.toStringAsFixed(2),
         'السبب': _getReasonText(r.returnReason),
         'الحالة': r.status,
       }).toList(),
-      headers: ['رقم المرتجع', 'العميل', 'التاريخ', 'المبلغ', 'السبب', 'الحالة'],
-      columns: ['رقم المرتجع', 'العميل', 'التاريخ', 'المبلغ', 'السبب', 'الحالة'],
+      headers: ['رقم المرتجع', 'الفاتورة الأصلية', 'العميل', 'التاريخ', 'المبلغ', 'السبب', 'الحالة'],
+      columns: ['رقم المرتجع', 'الفاتورة الأصلية', 'العميل', 'التاريخ', 'المبلغ', 'السبب', 'الحالة'],
       fileName: 'returns_report_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
     if (mounted) {
@@ -184,7 +196,7 @@ class _ReturnsReportScreenState extends State<ReturnsReportScreen> {
                                 child: const Icon(Icons.replay, color: Colors.teal),
                               ),
                               title: Text(ret.returnNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('${ret.customerName} • ${DateFormat('yyyy/MM/dd').format(ret.returnDate)}'),
+                              subtitle: Text('${ret.customerName} • ${DateFormat('yyyy/MM/dd').format(ret.returnDate)} • فاتورة ${_invoiceNumbers[ret.id] ?? ''}'),
                               trailing: Text('${ret.totalAmount.toStringAsFixed(2)} ج.م',
                                 style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
                               children: [

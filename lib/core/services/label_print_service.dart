@@ -27,6 +27,11 @@ class LabelPrintService {
   };
 
   /// اطبع ملصقات باركود لمنتجات مختارة.
+  ///
+  /// [qrData]: لينك/نص اختياري يُطبع كـ QR code جنب الباركود (layout أفقي).
+  /// فارغ أو null = المسار القديم (باركود فقط بعرض الملصق).
+  /// ملاحظة المساحة: الـ QR يحتاج ~15مم على الأقل للمسح الموثوق — المقاسات
+  /// الأصغر من 50مم عرضًا تُطبع لكن بجودة مسح أقل (واجهة الملصقات تحذر).
   static Future<void> printProductLabels({
     required List<Product> products,
     required Map<int, int> copiesPerProduct,
@@ -35,6 +40,7 @@ class LabelPrintService {
     Map<int, String>? barcodeData,
     double? widthMm,
     double? heightMm,
+    String? qrData,
   }) async {
     final labelWidth = widthMm ?? await SettingsService.getLabelWidthMm();
     final labelHeight = heightMm ?? await SettingsService.getLabelHeightMm();
@@ -61,6 +67,21 @@ class LabelPrintService {
     final bcHeightPts = (usableHeightPts * 0.35).clamp(14.0, 22.0);
     const double gapPts = 0.5;
 
+    final qrValue = (qrData != null && qrData.trim().isNotEmpty)
+        ? qrData.trim()
+        : null;
+
+    // مقاسات صف الأكواد الفعلية (الـ QR أطول من الباركود) — تُحجز مسبقًا من
+    // الارتفاع قبل توزيع النصوص، وإلا تجاوز المحتوى الارتفاع المتاح وقُصّت
+    // الأكواد بصمت من أسفل الملصق (كانت تُحسب ب.bcHeight فقط).
+    final metrics = LabelLayoutMetrics.resolve(
+      usableWidthPts: usableWidthPts,
+      usableHeightPts: usableHeightPts,
+      barcodeHeightPts: bcHeightPts,
+      hasQr: qrValue != null,
+    );
+    final codesRowPts = metrics.codesRowPts;
+
     // نولّد كل صور النصوص العربية الأول (الـPDF build مش بيستقبل async)
     final companyRaster = (companyName != null && companyName.trim().isNotEmpty)
         ? await _renderFitted(
@@ -81,7 +102,7 @@ class LabelPrintService {
       final int presentCount =
           (companyRaster != null ? 1 : 0) + 1 + (showPrice ? 1 : 0) + 1;
       var remainingPts =
-          usableHeightPts - bcHeightPts - (presentCount - 1) * gapPts;
+          usableHeightPts - codesRowPts - (presentCount - 1) * gapPts;
       if (companyRaster != null) {
         remainingPts -= companyRaster.heightPts;
       }
@@ -113,6 +134,10 @@ class LabelPrintService {
 
     final pdf = pw.Document();
     final bc = Barcode.code128();
+    // QR بمستوى تصحيح M (يتحمل 15% تلف — مناسب للملصقات المتداولة).
+    final qr = Barcode.qrCode(
+      errorCorrectLevel: BarcodeQRCorrectionLevel.medium,
+    );
 
     for (final product in products) {
       final copies = copiesPerProduct[product.id] ?? 1;
@@ -136,6 +161,8 @@ class LabelPrintService {
               bcHeightPts: bcHeightPts,
               usableWidthPts: usableWidthPts,
               usableHeightPts: usableHeightPts,
+              qrValue: qrValue,
+              qr: qr,
             ),
           ),
         );
@@ -164,6 +191,8 @@ class LabelPrintService {
     required double bcHeightPts,
     required double usableWidthPts,
     required double usableHeightPts,
+    required String? qrValue,
+    required Barcode qr,
   }) {
     final children = <pw.Widget>[];
 
@@ -206,21 +235,64 @@ class LabelPrintService {
     }
 
     if (barcodeValue != null && barcodeValue.isNotEmpty) {
-      children.add(
-        pw.Center(
-          child: pw.BarcodeWidget(
-            barcode: barcode,
-            data: barcodeValue,
-            color: PdfColors.black,
-            width: usableWidthPts,
-            height: bcHeightPts,
-            drawText: true,
-            // النص تحت الباركود أكبر (7pt) عشان يبقى مقروء ويتم التأكد من
-            // الكود المرتبط بالمنتج.
-            textStyle: pw.TextStyle(fontSize: 7),
+      if (qrValue != null) {
+        // Layout أفقي: الباركود شمال + QR مربع يمين — نفس المقاسات المحجوزة
+        // في حساب الارتفاع (LabelLayoutMetrics) عشان مفيش قصّ صامت.
+        final m = LabelLayoutMetrics.resolve(
+          usableWidthPts: usableWidthPts,
+          usableHeightPts: usableHeightPts,
+          barcodeHeightPts: bcHeightPts,
+          hasQr: true,
+        );
+        final qrSizePts = m.qrSizePts;
+        final barcodeWidthPts = (usableWidthPts - qrSizePts - 4.0).clamp(
+          40.0,
+          usableWidthPts,
+        );
+        children.add(
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.center,
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              pw.BarcodeWidget(
+                barcode: barcode,
+                data: barcodeValue,
+                color: PdfColors.black,
+                width: barcodeWidthPts,
+                height: bcHeightPts,
+                drawText: true,
+                // النص أصغر (6pt) عشان يتسع جنب الـ QR.
+                textStyle: pw.TextStyle(fontSize: 6),
+              ),
+              pw.SizedBox(width: 4),
+              pw.BarcodeWidget(
+                barcode: qr,
+                data: qrValue,
+                color: PdfColors.black,
+                width: qrSizePts,
+                height: qrSizePts,
+                drawText: false,
+              ),
+            ],
           ),
-        ),
-      );
+        );
+      } else {
+        children.add(
+          pw.Center(
+            child: pw.BarcodeWidget(
+              barcode: barcode,
+              data: barcodeValue,
+              color: PdfColors.black,
+              width: usableWidthPts,
+              height: bcHeightPts,
+              drawText: true,
+              // النص تحت الباركود أكبر (7pt) عشان يبقى مقروء ويتم التأكد من
+              // الكود المرتبط بالمنتج.
+              textStyle: pw.TextStyle(fontSize: 7),
+            ),
+          ),
+        );
+      }
     }
 
     return pw.Container(
@@ -275,6 +347,45 @@ class LabelPrintService {
     }
 
     return raster;
+  }
+}
+
+/// مقاسات صف الأكواد (باركود + QR) — مصدر واحد للحساب في البناء والمعاينة.
+///
+/// القاعدة: ارتفاع الصف = الأطول بين الباركود والـ QR، وحجم الـ QR يتكيف
+/// مع الورقة طولًا وعرضًا (لا يتجاوز العرض ناقص مساحة الباركود الدنيا).
+class LabelLayoutMetrics {
+  /// حجم ضلع الـ QR بالنقاط (0 = لا يوجد QR).
+  final double qrSizePts;
+
+  /// الارتفاع الفعلي المحجوز لصف الأكواد — يُخصم من ميزانية الارتفاع
+  /// قبل توزيع النصوص حتى لا تُقصّ الأكواد بصمت.
+  final double codesRowPts;
+
+  const LabelLayoutMetrics({
+    required this.qrSizePts,
+    required this.codesRowPts,
+  });
+
+  static LabelLayoutMetrics resolve({
+    required double usableWidthPts,
+    required double usableHeightPts,
+    required double barcodeHeightPts,
+    required bool hasQr,
+  }) {
+    if (!hasQr) {
+      return LabelLayoutMetrics(
+        qrSizePts: 0,
+        codesRowPts: barcodeHeightPts,
+      );
+    }
+    var qr = usableHeightPts * 0.5;
+    // سقف العرض: نسيب 40pt للباركود + 4pt فاصل.
+    final maxByWidth = usableWidthPts - 44.0;
+    if (qr > maxByWidth) qr = maxByWidth;
+    qr = qr.clamp(28.0, 72.0);
+    final codes = qr > barcodeHeightPts ? qr : barcodeHeightPts;
+    return LabelLayoutMetrics(qrSizePts: qr, codesRowPts: codes);
   }
 }
 

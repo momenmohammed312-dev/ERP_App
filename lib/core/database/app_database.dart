@@ -166,7 +166,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 56;
+  int get schemaVersion => 57;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -281,6 +281,11 @@ class AppDatabase extends _$AppDatabase {
       // renamed before merging to avoid two different v56 meanings.
       if (from < 56) {
         await _runV56Migrations(m);
+      }
+
+      // 4s. Schema v57 — partial item returns (invoice_item_id + discount/shipment/reason).
+      if (from < 57) {
+        await _runV57Migrations(m);
       }
 
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
@@ -466,12 +471,34 @@ class AppDatabase extends _$AppDatabase {
             product_name TEXT NOT NULL,
             quantity INTEGER NOT NULL,
             unit_price REAL NOT NULL,
-            total_price REAL NOT NULL
+            total_price REAL NOT NULL,
+            invoice_item_id INTEGER REFERENCES invoice_items(id),
+            discount REAL NOT NULL DEFAULT 0.0,
+            commission REAL NOT NULL DEFAULT 0.0,
+            shipment_id INTEGER REFERENCES vegetable_shipments(id),
+            return_reason TEXT NOT NULL DEFAULT 'customer_request'
           )
         ''');
       } catch (e) {
         log('Error creating sales_return_items table: $e');
       }
+      // Ensure partial-return columns exist on upgraded DBs that used the old create above
+      for (final s in [
+        'ALTER TABLE sales_return_items ADD COLUMN invoice_item_id INTEGER REFERENCES invoice_items(id)',
+        'ALTER TABLE sales_return_items ADD COLUMN discount REAL DEFAULT 0.0',
+        'ALTER TABLE sales_return_items ADD COLUMN commission REAL DEFAULT 0.0',
+        'ALTER TABLE sales_return_items ADD COLUMN shipment_id INTEGER REFERENCES vegetable_shipments(id)',
+        'ALTER TABLE sales_return_items ADD COLUMN return_reason TEXT DEFAULT \'customer_request\'',
+      ]) {
+        try {
+          await customStatement(s);
+        } catch (_) {}
+      }
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_sales_return_items_invoice_item ON sales_return_items(invoice_item_id)',
+        );
+      } catch (_) {}
 
       // Safety check for app_notifications table
       try {
@@ -1444,6 +1471,72 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'invoice_items', 'column': 'sync_id', 'type': 'TEXT'},
       {'table': 'invoice_items', 'column': 'created_at', 'type': 'INTEGER'},
       {'table': 'invoice_items', 'column': 'updated_at', 'type': 'INTEGER'},
+      // Payroll table columns (v43, v56, and runtime safety for existing client DBs)
+      {'table': 'payroll_table', 'column': 'bonus', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'commission', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'incentives', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'rewards_total', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'penalties_total', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'expense_ref_id', 'type': 'TEXT'},
+      {'table': 'payroll_table', 'column': 'late_days', 'type': 'INTEGER DEFAULT 0'},
+      {'table': 'payroll_table', 'column': 'late_deduction', 'type': 'REAL DEFAULT 0.0'},
+      {'table': 'payroll_table', 'column': 'notes', 'type': 'TEXT'},
+      {'table': 'payroll_table', 'column': 'payment_date', 'type': 'INTEGER'},
+      {'table': 'payroll_table', 'column': 'payment_method', 'type': 'TEXT'},
+      {'table': 'payroll_table', 'column': 'transaction_reference', 'type': 'TEXT'},
+      {'table': 'payroll_table', 'column': 'approved_by', 'type': 'TEXT'},
+      {'table': 'payroll_table', 'column': 'approved_at', 'type': 'INTEGER'},
+      // Attendance table extra columns
+      {'table': 'attendance_table', 'column': 'overtime_hours', 'type': 'REAL DEFAULT 0'},
+      {'table': 'attendance_table', 'column': 'approved_by', 'type': 'TEXT'},
+      {'table': 'attendance_table', 'column': 'approved_at', 'type': 'INTEGER'},
+      {'table': 'attendance_table', 'column': 'leave_type', 'type': 'TEXT'},
+      {'table': 'attendance_table', 'column': 'notes', 'type': 'TEXT'},
+      {'table': 'attendance_table', 'column': 'check_in_location', 'type': 'TEXT'},
+      {'table': 'attendance_table', 'column': 'check_out_location', 'type': 'TEXT'},
+      {'table': 'attendance_table', 'column': 'working_hours', 'type': 'REAL'},
+      // Staff table schedule & profile columns
+      {'table': 'staff_table', 'column': 'is_active', 'type': 'INTEGER DEFAULT 1'},
+      {'table': 'staff_table', 'column': 'work_schedule_start', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'work_schedule_end', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'work_days', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'weekend_day', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'use_default_schedule', 'type': 'INTEGER DEFAULT 1'},
+      {'table': 'staff_table', 'column': 'bank_name', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'bank_account', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'emergency_contact', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'emergency_phone', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'notes', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'hourly_rate', 'type': 'REAL'},
+      {'table': 'staff_table', 'column': 'contract_end_date', 'type': 'INTEGER'},
+      {'table': 'staff_table', 'column': 'department', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'national_id', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'phone', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'email', 'type': 'TEXT'},
+      {'table': 'staff_table', 'column': 'address', 'type': 'TEXT'},
+      // Staff advances extra columns
+      {'table': 'staff_advances', 'column': 'rejection_reason', 'type': 'TEXT'},
+      {'table': 'staff_advances', 'column': 'payment_method', 'type': 'TEXT'},
+      {'table': 'staff_advances', 'column': 'transaction_reference', 'type': 'TEXT'},
+      {'table': 'staff_advances', 'column': 'installment_months', 'type': 'INTEGER'},
+      {'table': 'staff_advances', 'column': 'monthly_deduction', 'type': 'REAL'},
+      {'table': 'staff_advances', 'column': 'approved_by', 'type': 'TEXT'},
+      {'table': 'staff_advances', 'column': 'approved_at', 'type': 'INTEGER'},
+      {'table': 'staff_advances', 'column': 'payment_date', 'type': 'INTEGER'},
+      {'table': 'staff_advances', 'column': 'reason', 'type': 'TEXT'},
+      // Vacations extra columns
+      {'table': 'vacations', 'column': 'rejection_reason', 'type': 'TEXT'},
+      {'table': 'vacations', 'column': 'contact_during_vacation', 'type': 'TEXT'},
+      {'table': 'vacations', 'column': 'handover_to', 'type': 'TEXT'},
+      {'table': 'vacations', 'column': 'approved_by', 'type': 'TEXT'},
+      {'table': 'vacations', 'column': 'approved_at', 'type': 'INTEGER'},
+      {'table': 'vacations', 'column': 'reason', 'type': 'TEXT'},
+      // Rewards & penalties extra columns
+      {'table': 'rewards_penalties', 'column': 'description', 'type': 'TEXT'},
+      {'table': 'rewards_penalties', 'column': 'amount', 'type': 'REAL'},
+      {'table': 'rewards_penalties', 'column': 'expiry_date', 'type': 'INTEGER'},
+      {'table': 'rewards_penalties', 'column': 'evidence', 'type': 'TEXT'},
+      {'table': 'rewards_penalties', 'column': 'notes', 'type': 'TEXT'},
     ];
     for (final check in columnChecks) {
       try {
@@ -1629,6 +1722,8 @@ class AppDatabase extends _$AppDatabase {
           rewards_total REAL NOT NULL DEFAULT 0.0,
           penalties_total REAL NOT NULL DEFAULT 0.0,
           expense_ref_id TEXT,
+          late_days INTEGER NOT NULL DEFAULT 0,
+          late_deduction REAL NOT NULL DEFAULT 0.0,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
         )
@@ -1885,6 +1980,47 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(56, 'payroll_late_columns', 'completed');
     } catch (e) {
       await _logMigrationStep(56, 'payroll_late_columns', 'failed', error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Schema v57 — جزئي: إضافة أعمدة للمرتجع على مستوى الصنف.
+  /// كل الأعمدة nullable أو بـ default => آمن على بيانات قديمة.
+  Future<void> _runV57Migrations(Migrator m) async {
+    await _logMigrationStep(57, 'partial_return_columns', 'started');
+    try {
+      final stmts = [
+        'ALTER TABLE sales_return_items ADD COLUMN invoice_item_id INTEGER REFERENCES invoice_items(id)',
+        'ALTER TABLE sales_return_items ADD COLUMN discount REAL DEFAULT 0.0',
+        'ALTER TABLE sales_return_items ADD COLUMN commission REAL DEFAULT 0.0',
+        'ALTER TABLE sales_return_items ADD COLUMN shipment_id INTEGER REFERENCES vegetable_shipments(id)',
+        'ALTER TABLE sales_return_items ADD COLUMN return_reason TEXT DEFAULT \'customer_request\'',
+      ];
+      for (final s in stmts) {
+        try {
+          await customStatement(s);
+          log('v57: $s');
+        } catch (e) {
+          log('v57: column likely exists: $e');
+        }
+      }
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_sales_return_items_invoice_item ON sales_return_items(invoice_item_id)',
+        );
+      } catch (e) {
+        log('v57: index warning: $e');
+      }
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_sales_return_items_return ON sales_return_items(return_id)',
+        );
+      } catch (e) {
+        log('v57: index warning: $e');
+      }
+      await _logMigrationStep(57, 'partial_return_columns', 'completed');
+    } catch (e) {
+      await _logMigrationStep(57, 'partial_return_columns', 'failed', error: e.toString());
       rethrow;
     }
   }

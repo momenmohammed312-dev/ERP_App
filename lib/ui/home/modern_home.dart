@@ -359,6 +359,19 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                     const _LicenseBadge(),
                     const Gap(8),
                     IconButton(
+                      icon: const Icon(Icons.backup_outlined),
+                      tooltip: 'النسخ الاحتياطي',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EnhancedBackupScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    const Gap(4),
+                    IconButton(
                       icon: const Icon(Icons.notifications_outlined),
                       onPressed: () {},
                       tooltip: 'Notifications',

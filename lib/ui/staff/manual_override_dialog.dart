@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
@@ -8,8 +7,21 @@ import 'package:intl/intl.dart';
 
 class ManualOverrideDialog extends ConsumerStatefulWidget {
   final Staff staff;
+  final DateTime? initialDate;
+  final String? initialStatus;
+  final DateTime? initialCheckInTime;
+  final DateTime? initialCheckOutTime;
+  final String? initialNotes;
 
-  const ManualOverrideDialog({super.key, required this.staff});
+  const ManualOverrideDialog({
+    super.key,
+    required this.staff,
+    this.initialDate,
+    this.initialStatus,
+    this.initialCheckInTime,
+    this.initialCheckOutTime,
+    this.initialNotes,
+  });
 
   @override
   ConsumerState<ManualOverrideDialog> createState() => _ManualOverrideDialogState();
@@ -19,12 +31,38 @@ class _ManualOverrideDialogState extends ConsumerState<ManualOverrideDialog> {
   final _reasonController = TextEditingController();
   final _notesController = TextEditingController();
   
-  DateTime _selectedDate = DateTime.now();
+  late DateTime _selectedDate;
   TimeOfDay? _checkInTime;
   TimeOfDay? _checkOutTime;
   String _status = 'present';
   
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = widget.initialDate ?? DateTime.now();
+    const validStatuses = [
+      'present',
+      'absent',
+      'late',
+      'leave',
+      'excused',
+      'excused_late',
+    ];
+    if (widget.initialStatus != null && validStatuses.contains(widget.initialStatus)) {
+      _status = widget.initialStatus!;
+    }
+    if (widget.initialCheckInTime != null) {
+      _checkInTime = TimeOfDay.fromDateTime(widget.initialCheckInTime!);
+    }
+    if (widget.initialCheckOutTime != null) {
+      _checkOutTime = TimeOfDay.fromDateTime(widget.initialCheckOutTime!);
+    }
+    if (widget.initialNotes != null && widget.initialNotes!.isNotEmpty) {
+      _notesController.text = widget.initialNotes!;
+    }
+  }
 
   Future<void> _submit() async {
     if (_reasonController.text.trim().isEmpty) {
@@ -84,7 +122,12 @@ class _ManualOverrideDialogState extends ConsumerState<ManualOverrideDialog> {
               subtitle: Text(dateFormat.format(_selectedDate)),
               trailing: const Icon(Icons.calendar_today),
               onTap: () async {
-                final d = await showDatePicker(context: context, initialDate: _selectedDate, firstDate: DateTime(2000), lastDate: DateTime.now());
+                final d = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedDate,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(2035),
+                );
                 if (d != null) setState(() => _selectedDate = d);
               },
             ),
@@ -95,6 +138,8 @@ class _ManualOverrideDialogState extends ConsumerState<ManualOverrideDialog> {
                 DropdownMenuItem(value: 'absent', child: Text('غائب')),
                 DropdownMenuItem(value: 'late', child: Text('متأخر')),
                 DropdownMenuItem(value: 'leave', child: Text('إجازة')),
+                DropdownMenuItem(value: 'excused', child: Text('إذن (معفي)')),
+                DropdownMenuItem(value: 'excused_late', child: Text('متأخر بإذن')),
               ],
               onChanged: (v) => setState(() => _status = v!),
               decoration: const InputDecoration(labelText: 'الحالة'),
@@ -102,7 +147,18 @@ class _ManualOverrideDialogState extends ConsumerState<ManualOverrideDialog> {
             ListTile(
               title: const Text('وقت الحضور'),
               subtitle: Text(_checkInTime?.format(context) ?? 'غير محدد'),
-              trailing: const Icon(Icons.access_time),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_checkInTime != null)
+                    IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      tooltip: 'مسح وقت الحضور',
+                      onPressed: () => setState(() => _checkInTime = null),
+                    ),
+                  const Icon(Icons.access_time),
+                ],
+              ),
               onTap: () async {
                 final t = await showTimePicker(context: context, initialTime: _checkInTime ?? TimeOfDay.now());
                 if (t != null) setState(() => _checkInTime = t);
@@ -111,7 +167,18 @@ class _ManualOverrideDialogState extends ConsumerState<ManualOverrideDialog> {
             ListTile(
               title: const Text('وقت الانصراف'),
               subtitle: Text(_checkOutTime?.format(context) ?? 'غير محدد'),
-              trailing: const Icon(Icons.access_time),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_checkOutTime != null)
+                    IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      tooltip: 'مسح وقت الانصراف',
+                      onPressed: () => setState(() => _checkOutTime = null),
+                    ),
+                  const Icon(Icons.access_time),
+                ],
+              ),
               onTap: () async {
                 final t = await showTimePicker(context: context, initialTime: _checkOutTime ?? TimeOfDay.now());
                 if (t != null) setState(() => _checkOutTime = t);

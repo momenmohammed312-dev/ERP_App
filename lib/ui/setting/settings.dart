@@ -33,6 +33,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _addressController = TextEditingController();
   final _taxController = TextEditingController();
   final _footerController = TextEditingController();
+  final _pageUrlController = TextEditingController();
   final _locationIdController = TextEditingController();
   String _lastSyncedText = 'لم تتم المزامنة بعد';
   String _lastPeriodicRunText = 'لم تتم بعد';
@@ -62,6 +63,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _addressController.text = info['address'] ?? '';
         _taxController.text = info['taxNumber'] ?? '';
         _footerController.text = info['footer'] ?? '';
+        _pageUrlController.text = info['pageUrl'] ?? '';
       });
     });
 
@@ -108,6 +110,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _addressController.dispose();
     _taxController.dispose();
     _footerController.dispose();
+    _pageUrlController.dispose();
     _locationIdController.dispose();
     ref.read(syncServiceProvider).lastPeriodicRunAt.removeListener(_onPeriodicRun);
     super.dispose();
@@ -491,6 +494,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             fillColor: cardBg,
           ),
         ),
+        const Gap(10),
+        TextFormField(
+          controller: _pageUrlController,
+          style: TextStyle(color: textColor),
+          textDirection: TextDirection.ltr,
+          decoration: InputDecoration(
+            labelText: 'لينك صفحة المحل (للطباعة كـ QR على الملصقات)',
+            labelStyle: TextStyle(color: subTextColor),
+            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+            prefixIcon: Icon(Icons.qr_code, color: goldColor),
+            filled: true,
+            fillColor: cardBg,
+          ),
+        ),
         const Gap(15),
         SizedBox(
           width: double.infinity,
@@ -643,6 +661,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await SettingsService.setBusinessAddress(_addressController.text);
       await SettingsService.setTaxNumber(_taxController.text);
       await SettingsService.setReceiptFooter(_footerController.text);
+      await SettingsService.setBusinessPageUrl(_pageUrlController.text);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

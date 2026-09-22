@@ -36160,6 +36160,70 @@ class $SalesReturnItemsTable extends SalesReturnItems
     type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _invoiceItemIdMeta = const VerificationMeta(
+    'invoiceItemId',
+  );
+  @override
+  late final GeneratedColumn<int> invoiceItemId = GeneratedColumn<int>(
+    'invoice_item_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES invoice_items (id)',
+    ),
+  );
+  static const VerificationMeta _discountMeta = const VerificationMeta(
+    'discount',
+  );
+  @override
+  late final GeneratedColumn<double> discount = GeneratedColumn<double>(
+    'discount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _commissionMeta = const VerificationMeta(
+    'commission',
+  );
+  @override
+  late final GeneratedColumn<double> commission = GeneratedColumn<double>(
+    'commission',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _shipmentIdMeta = const VerificationMeta(
+    'shipmentId',
+  );
+  @override
+  late final GeneratedColumn<int> shipmentId = GeneratedColumn<int>(
+    'shipment_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES vegetable_shipments (id)',
+    ),
+  );
+  static const VerificationMeta _returnReasonMeta = const VerificationMeta(
+    'returnReason',
+  );
+  @override
+  late final GeneratedColumn<String> returnReason = GeneratedColumn<String>(
+    'return_reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('customer_request'),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -36169,6 +36233,11 @@ class $SalesReturnItemsTable extends SalesReturnItems
     quantity,
     unitPrice,
     totalPrice,
+    invoiceItemId,
+    discount,
+    commission,
+    shipmentId,
+    returnReason,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -36236,6 +36305,42 @@ class $SalesReturnItemsTable extends SalesReturnItems
     } else if (isInserting) {
       context.missing(_totalPriceMeta);
     }
+    if (data.containsKey('invoice_item_id')) {
+      context.handle(
+        _invoiceItemIdMeta,
+        invoiceItemId.isAcceptableOrUnknown(
+          data['invoice_item_id']!,
+          _invoiceItemIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('discount')) {
+      context.handle(
+        _discountMeta,
+        discount.isAcceptableOrUnknown(data['discount']!, _discountMeta),
+      );
+    }
+    if (data.containsKey('commission')) {
+      context.handle(
+        _commissionMeta,
+        commission.isAcceptableOrUnknown(data['commission']!, _commissionMeta),
+      );
+    }
+    if (data.containsKey('shipment_id')) {
+      context.handle(
+        _shipmentIdMeta,
+        shipmentId.isAcceptableOrUnknown(data['shipment_id']!, _shipmentIdMeta),
+      );
+    }
+    if (data.containsKey('return_reason')) {
+      context.handle(
+        _returnReasonMeta,
+        returnReason.isAcceptableOrUnknown(
+          data['return_reason']!,
+          _returnReasonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -36273,6 +36378,26 @@ class $SalesReturnItemsTable extends SalesReturnItems
         DriftSqlType.double,
         data['${effectivePrefix}total_price'],
       )!,
+      invoiceItemId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}invoice_item_id'],
+      ),
+      discount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}discount'],
+      )!,
+      commission: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}commission'],
+      )!,
+      shipmentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shipment_id'],
+      ),
+      returnReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}return_reason'],
+      )!,
     );
   }
 
@@ -36290,6 +36415,11 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
   final int quantity;
   final double unitPrice;
   final double totalPrice;
+  final int? invoiceItemId;
+  final double discount;
+  final double commission;
+  final int? shipmentId;
+  final String returnReason;
   const SalesReturnItem({
     required this.id,
     required this.returnId,
@@ -36298,6 +36428,11 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
     required this.quantity,
     required this.unitPrice,
     required this.totalPrice,
+    this.invoiceItemId,
+    required this.discount,
+    required this.commission,
+    this.shipmentId,
+    required this.returnReason,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -36309,6 +36444,15 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
     map['quantity'] = Variable<int>(quantity);
     map['unit_price'] = Variable<double>(unitPrice);
     map['total_price'] = Variable<double>(totalPrice);
+    if (!nullToAbsent || invoiceItemId != null) {
+      map['invoice_item_id'] = Variable<int>(invoiceItemId);
+    }
+    map['discount'] = Variable<double>(discount);
+    map['commission'] = Variable<double>(commission);
+    if (!nullToAbsent || shipmentId != null) {
+      map['shipment_id'] = Variable<int>(shipmentId);
+    }
+    map['return_reason'] = Variable<String>(returnReason);
     return map;
   }
 
@@ -36321,6 +36465,15 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
       quantity: Value(quantity),
       unitPrice: Value(unitPrice),
       totalPrice: Value(totalPrice),
+      invoiceItemId: invoiceItemId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(invoiceItemId),
+      discount: Value(discount),
+      commission: Value(commission),
+      shipmentId: shipmentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shipmentId),
+      returnReason: Value(returnReason),
     );
   }
 
@@ -36337,6 +36490,11 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
       quantity: serializer.fromJson<int>(json['quantity']),
       unitPrice: serializer.fromJson<double>(json['unitPrice']),
       totalPrice: serializer.fromJson<double>(json['totalPrice']),
+      invoiceItemId: serializer.fromJson<int?>(json['invoiceItemId']),
+      discount: serializer.fromJson<double>(json['discount']),
+      commission: serializer.fromJson<double>(json['commission']),
+      shipmentId: serializer.fromJson<int?>(json['shipmentId']),
+      returnReason: serializer.fromJson<String>(json['returnReason']),
     );
   }
   @override
@@ -36350,6 +36508,11 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
       'quantity': serializer.toJson<int>(quantity),
       'unitPrice': serializer.toJson<double>(unitPrice),
       'totalPrice': serializer.toJson<double>(totalPrice),
+      'invoiceItemId': serializer.toJson<int?>(invoiceItemId),
+      'discount': serializer.toJson<double>(discount),
+      'commission': serializer.toJson<double>(commission),
+      'shipmentId': serializer.toJson<int?>(shipmentId),
+      'returnReason': serializer.toJson<String>(returnReason),
     };
   }
 
@@ -36361,6 +36524,11 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
     int? quantity,
     double? unitPrice,
     double? totalPrice,
+    Value<int?> invoiceItemId = const Value.absent(),
+    double? discount,
+    double? commission,
+    Value<int?> shipmentId = const Value.absent(),
+    String? returnReason,
   }) => SalesReturnItem(
     id: id ?? this.id,
     returnId: returnId ?? this.returnId,
@@ -36369,6 +36537,13 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
     quantity: quantity ?? this.quantity,
     unitPrice: unitPrice ?? this.unitPrice,
     totalPrice: totalPrice ?? this.totalPrice,
+    invoiceItemId: invoiceItemId.present
+        ? invoiceItemId.value
+        : this.invoiceItemId,
+    discount: discount ?? this.discount,
+    commission: commission ?? this.commission,
+    shipmentId: shipmentId.present ? shipmentId.value : this.shipmentId,
+    returnReason: returnReason ?? this.returnReason,
   );
   SalesReturnItem copyWithCompanion(SalesReturnItemsCompanion data) {
     return SalesReturnItem(
@@ -36383,6 +36558,19 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
       totalPrice: data.totalPrice.present
           ? data.totalPrice.value
           : this.totalPrice,
+      invoiceItemId: data.invoiceItemId.present
+          ? data.invoiceItemId.value
+          : this.invoiceItemId,
+      discount: data.discount.present ? data.discount.value : this.discount,
+      commission: data.commission.present
+          ? data.commission.value
+          : this.commission,
+      shipmentId: data.shipmentId.present
+          ? data.shipmentId.value
+          : this.shipmentId,
+      returnReason: data.returnReason.present
+          ? data.returnReason.value
+          : this.returnReason,
     );
   }
 
@@ -36395,7 +36583,12 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
           ..write('productName: $productName, ')
           ..write('quantity: $quantity, ')
           ..write('unitPrice: $unitPrice, ')
-          ..write('totalPrice: $totalPrice')
+          ..write('totalPrice: $totalPrice, ')
+          ..write('invoiceItemId: $invoiceItemId, ')
+          ..write('discount: $discount, ')
+          ..write('commission: $commission, ')
+          ..write('shipmentId: $shipmentId, ')
+          ..write('returnReason: $returnReason')
           ..write(')'))
         .toString();
   }
@@ -36409,6 +36602,11 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
     quantity,
     unitPrice,
     totalPrice,
+    invoiceItemId,
+    discount,
+    commission,
+    shipmentId,
+    returnReason,
   );
   @override
   bool operator ==(Object other) =>
@@ -36420,7 +36618,12 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
           other.productName == this.productName &&
           other.quantity == this.quantity &&
           other.unitPrice == this.unitPrice &&
-          other.totalPrice == this.totalPrice);
+          other.totalPrice == this.totalPrice &&
+          other.invoiceItemId == this.invoiceItemId &&
+          other.discount == this.discount &&
+          other.commission == this.commission &&
+          other.shipmentId == this.shipmentId &&
+          other.returnReason == this.returnReason);
 }
 
 class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
@@ -36431,6 +36634,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
   final Value<int> quantity;
   final Value<double> unitPrice;
   final Value<double> totalPrice;
+  final Value<int?> invoiceItemId;
+  final Value<double> discount;
+  final Value<double> commission;
+  final Value<int?> shipmentId;
+  final Value<String> returnReason;
   const SalesReturnItemsCompanion({
     this.id = const Value.absent(),
     this.returnId = const Value.absent(),
@@ -36439,6 +36647,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
     this.quantity = const Value.absent(),
     this.unitPrice = const Value.absent(),
     this.totalPrice = const Value.absent(),
+    this.invoiceItemId = const Value.absent(),
+    this.discount = const Value.absent(),
+    this.commission = const Value.absent(),
+    this.shipmentId = const Value.absent(),
+    this.returnReason = const Value.absent(),
   });
   SalesReturnItemsCompanion.insert({
     this.id = const Value.absent(),
@@ -36448,6 +36661,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
     required int quantity,
     required double unitPrice,
     required double totalPrice,
+    this.invoiceItemId = const Value.absent(),
+    this.discount = const Value.absent(),
+    this.commission = const Value.absent(),
+    this.shipmentId = const Value.absent(),
+    this.returnReason = const Value.absent(),
   }) : returnId = Value(returnId),
        productId = Value(productId),
        productName = Value(productName),
@@ -36462,6 +36680,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
     Expression<int>? quantity,
     Expression<double>? unitPrice,
     Expression<double>? totalPrice,
+    Expression<int>? invoiceItemId,
+    Expression<double>? discount,
+    Expression<double>? commission,
+    Expression<int>? shipmentId,
+    Expression<String>? returnReason,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -36471,6 +36694,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
       if (quantity != null) 'quantity': quantity,
       if (unitPrice != null) 'unit_price': unitPrice,
       if (totalPrice != null) 'total_price': totalPrice,
+      if (invoiceItemId != null) 'invoice_item_id': invoiceItemId,
+      if (discount != null) 'discount': discount,
+      if (commission != null) 'commission': commission,
+      if (shipmentId != null) 'shipment_id': shipmentId,
+      if (returnReason != null) 'return_reason': returnReason,
     });
   }
 
@@ -36482,6 +36710,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
     Value<int>? quantity,
     Value<double>? unitPrice,
     Value<double>? totalPrice,
+    Value<int?>? invoiceItemId,
+    Value<double>? discount,
+    Value<double>? commission,
+    Value<int?>? shipmentId,
+    Value<String>? returnReason,
   }) {
     return SalesReturnItemsCompanion(
       id: id ?? this.id,
@@ -36491,6 +36724,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
       quantity: quantity ?? this.quantity,
       unitPrice: unitPrice ?? this.unitPrice,
       totalPrice: totalPrice ?? this.totalPrice,
+      invoiceItemId: invoiceItemId ?? this.invoiceItemId,
+      discount: discount ?? this.discount,
+      commission: commission ?? this.commission,
+      shipmentId: shipmentId ?? this.shipmentId,
+      returnReason: returnReason ?? this.returnReason,
     );
   }
 
@@ -36518,6 +36756,21 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
     if (totalPrice.present) {
       map['total_price'] = Variable<double>(totalPrice.value);
     }
+    if (invoiceItemId.present) {
+      map['invoice_item_id'] = Variable<int>(invoiceItemId.value);
+    }
+    if (discount.present) {
+      map['discount'] = Variable<double>(discount.value);
+    }
+    if (commission.present) {
+      map['commission'] = Variable<double>(commission.value);
+    }
+    if (shipmentId.present) {
+      map['shipment_id'] = Variable<int>(shipmentId.value);
+    }
+    if (returnReason.present) {
+      map['return_reason'] = Variable<String>(returnReason.value);
+    }
     return map;
   }
 
@@ -36530,7 +36783,12 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
           ..write('productName: $productName, ')
           ..write('quantity: $quantity, ')
           ..write('unitPrice: $unitPrice, ')
-          ..write('totalPrice: $totalPrice')
+          ..write('totalPrice: $totalPrice, ')
+          ..write('invoiceItemId: $invoiceItemId, ')
+          ..write('discount: $discount, ')
+          ..write('commission: $commission, ')
+          ..write('shipmentId: $shipmentId, ')
+          ..write('returnReason: $returnReason')
           ..write(')'))
         .toString();
   }
@@ -44594,6 +44852,29 @@ final class $$VegetableShipmentsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$SalesReturnItemsTable, List<SalesReturnItem>>
+  _salesReturnItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.salesReturnItems,
+    aliasName: $_aliasNameGenerator(
+      db.vegetableShipments.id,
+      db.salesReturnItems.shipmentId,
+    ),
+  );
+
+  $$SalesReturnItemsTableProcessedTableManager get salesReturnItemsRefs {
+    final manager = $$SalesReturnItemsTableTableManager(
+      $_db,
+      $_db.salesReturnItems,
+    ).filter((f) => f.shipmentId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _salesReturnItemsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$VegetableShipmentsTableFilterComposer
@@ -44734,6 +45015,31 @@ class $$VegetableShipmentsTableFilterComposer
           }) => $$InvoiceItemsTableFilterComposer(
             $db: $db,
             $table: $db.invoiceItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> salesReturnItemsRefs(
+    Expression<bool> Function($$SalesReturnItemsTableFilterComposer f) f,
+  ) {
+    final $$SalesReturnItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.salesReturnItems,
+      getReferencedColumn: (t) => t.shipmentId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesReturnItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.salesReturnItems,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -44980,6 +45286,31 @@ class $$VegetableShipmentsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> salesReturnItemsRefs<T extends Object>(
+    Expression<T> Function($$SalesReturnItemsTableAnnotationComposer a) f,
+  ) {
+    final $$SalesReturnItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.salesReturnItems,
+      getReferencedColumn: (t) => t.shipmentId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesReturnItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.salesReturnItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$VegetableShipmentsTableTableManager
@@ -44999,6 +45330,7 @@ class $$VegetableShipmentsTableTableManager
             bool supplierId,
             bool invoicesRefs,
             bool invoiceItemsRefs,
+            bool salesReturnItemsRefs,
           })
         > {
   $$VegetableShipmentsTableTableManager(
@@ -45094,12 +45426,14 @@ class $$VegetableShipmentsTableTableManager
                 supplierId = false,
                 invoicesRefs = false,
                 invoiceItemsRefs = false,
+                salesReturnItemsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (invoicesRefs) db.invoices,
                     if (invoiceItemsRefs) db.invoiceItems,
+                    if (salesReturnItemsRefs) db.salesReturnItems,
                   ],
                   addJoins:
                       <
@@ -45179,6 +45513,27 @@ class $$VegetableShipmentsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (salesReturnItemsRefs)
+                        await $_getPrefetchedData<
+                          VegetableShipment,
+                          $VegetableShipmentsTable,
+                          SalesReturnItem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VegetableShipmentsTableReferences
+                              ._salesReturnItemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VegetableShipmentsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).salesReturnItemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.shipmentId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -45203,6 +45558,7 @@ typedef $$VegetableShipmentsTableProcessedTableManager =
         bool supplierId,
         bool invoicesRefs,
         bool invoiceItemsRefs,
+        bool salesReturnItemsRefs,
       })
     >;
 typedef $$InvoicesTableCreateCompanionBuilder =
@@ -46801,6 +47157,29 @@ final class $$InvoiceItemsTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static MultiTypedResultKey<$SalesReturnItemsTable, List<SalesReturnItem>>
+  _salesReturnItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.salesReturnItems,
+    aliasName: $_aliasNameGenerator(
+      db.invoiceItems.id,
+      db.salesReturnItems.invoiceItemId,
+    ),
+  );
+
+  $$SalesReturnItemsTableProcessedTableManager get salesReturnItemsRefs {
+    final manager = $$SalesReturnItemsTableTableManager(
+      $_db,
+      $_db.salesReturnItems,
+    ).filter((f) => f.invoiceItemId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _salesReturnItemsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$InvoiceItemsTableFilterComposer
@@ -46929,6 +47308,31 @@ class $$InvoiceItemsTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> salesReturnItemsRefs(
+    Expression<bool> Function($$SalesReturnItemsTableFilterComposer f) f,
+  ) {
+    final $$SalesReturnItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.salesReturnItems,
+      getReferencedColumn: (t) => t.invoiceItemId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesReturnItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.salesReturnItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 }
 
@@ -47173,6 +47577,31 @@ class $$InvoiceItemsTableAnnotationComposer
         );
     return composer;
   }
+
+  Expression<T> salesReturnItemsRefs<T extends Object>(
+    Expression<T> Function($$SalesReturnItemsTableAnnotationComposer a) f,
+  ) {
+    final $$SalesReturnItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.salesReturnItems,
+      getReferencedColumn: (t) => t.invoiceItemId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesReturnItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.salesReturnItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$InvoiceItemsTableTableManager
@@ -47192,6 +47621,7 @@ class $$InvoiceItemsTableTableManager
             bool invoiceId,
             bool productId,
             bool shipmentId,
+            bool salesReturnItemsRefs,
           })
         > {
   $$InvoiceItemsTableTableManager(_$AppDatabase db, $InvoiceItemsTable table)
@@ -47274,10 +47704,17 @@ class $$InvoiceItemsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({invoiceId = false, productId = false, shipmentId = false}) {
+              ({
+                invoiceId = false,
+                productId = false,
+                shipmentId = false,
+                salesReturnItemsRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
-                  explicitlyWatchedTables: [],
+                  explicitlyWatchedTables: [
+                    if (salesReturnItemsRefs) db.salesReturnItems,
+                  ],
                   addJoins:
                       <
                         T extends TableManagerState<
@@ -47343,7 +47780,29 @@ class $$InvoiceItemsTableTableManager
                         return state;
                       },
                   getPrefetchedDataCallback: (items) async {
-                    return [];
+                    return [
+                      if (salesReturnItemsRefs)
+                        await $_getPrefetchedData<
+                          InvoiceItem,
+                          $InvoiceItemsTable,
+                          SalesReturnItem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$InvoiceItemsTableReferences
+                              ._salesReturnItemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$InvoiceItemsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).salesReturnItemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.invoiceItemId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
                   },
                 );
               },
@@ -47363,7 +47822,12 @@ typedef $$InvoiceItemsTableProcessedTableManager =
       $$InvoiceItemsTableUpdateCompanionBuilder,
       (InvoiceItem, $$InvoiceItemsTableReferences),
       InvoiceItem,
-      PrefetchHooks Function({bool invoiceId, bool productId, bool shipmentId})
+      PrefetchHooks Function({
+        bool invoiceId,
+        bool productId,
+        bool shipmentId,
+        bool salesReturnItemsRefs,
+      })
     >;
 typedef $$ExpensesTableCreateCompanionBuilder =
     ExpensesCompanion Function({
@@ -66499,6 +66963,11 @@ typedef $$SalesReturnItemsTableCreateCompanionBuilder =
       required int quantity,
       required double unitPrice,
       required double totalPrice,
+      Value<int?> invoiceItemId,
+      Value<double> discount,
+      Value<double> commission,
+      Value<int?> shipmentId,
+      Value<String> returnReason,
     });
 typedef $$SalesReturnItemsTableUpdateCompanionBuilder =
     SalesReturnItemsCompanion Function({
@@ -66509,6 +66978,11 @@ typedef $$SalesReturnItemsTableUpdateCompanionBuilder =
       Value<int> quantity,
       Value<double> unitPrice,
       Value<double> totalPrice,
+      Value<int?> invoiceItemId,
+      Value<double> discount,
+      Value<double> commission,
+      Value<int?> shipmentId,
+      Value<String> returnReason,
     });
 
 final class $$SalesReturnItemsTableReferences
@@ -66557,6 +67031,50 @@ final class $$SalesReturnItemsTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static $InvoiceItemsTable _invoiceItemIdTable(_$AppDatabase db) =>
+      db.invoiceItems.createAlias(
+        $_aliasNameGenerator(
+          db.salesReturnItems.invoiceItemId,
+          db.invoiceItems.id,
+        ),
+      );
+
+  $$InvoiceItemsTableProcessedTableManager? get invoiceItemId {
+    final $_column = $_itemColumn<int>('invoice_item_id');
+    if ($_column == null) return null;
+    final manager = $$InvoiceItemsTableTableManager(
+      $_db,
+      $_db.invoiceItems,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_invoiceItemIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $VegetableShipmentsTable _shipmentIdTable(_$AppDatabase db) =>
+      db.vegetableShipments.createAlias(
+        $_aliasNameGenerator(
+          db.salesReturnItems.shipmentId,
+          db.vegetableShipments.id,
+        ),
+      );
+
+  $$VegetableShipmentsTableProcessedTableManager? get shipmentId {
+    final $_column = $_itemColumn<int>('shipment_id');
+    if ($_column == null) return null;
+    final manager = $$VegetableShipmentsTableTableManager(
+      $_db,
+      $_db.vegetableShipments,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_shipmentIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
 }
 
 class $$SalesReturnItemsTableFilterComposer
@@ -66590,6 +67108,21 @@ class $$SalesReturnItemsTableFilterComposer
 
   ColumnFilters<double> get totalPrice => $composableBuilder(
     column: $table.totalPrice,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get discount => $composableBuilder(
+    column: $table.discount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get commission => $composableBuilder(
+    column: $table.commission,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get returnReason => $composableBuilder(
+    column: $table.returnReason,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -66638,6 +67171,52 @@ class $$SalesReturnItemsTableFilterComposer
     );
     return composer;
   }
+
+  $$InvoiceItemsTableFilterComposer get invoiceItemId {
+    final $$InvoiceItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceItemId,
+      referencedTable: $db.invoiceItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoiceItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.invoiceItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VegetableShipmentsTableFilterComposer get shipmentId {
+    final $$VegetableShipmentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shipmentId,
+      referencedTable: $db.vegetableShipments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VegetableShipmentsTableFilterComposer(
+            $db: $db,
+            $table: $db.vegetableShipments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$SalesReturnItemsTableOrderingComposer
@@ -66671,6 +67250,21 @@ class $$SalesReturnItemsTableOrderingComposer
 
   ColumnOrderings<double> get totalPrice => $composableBuilder(
     column: $table.totalPrice,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get discount => $composableBuilder(
+    column: $table.discount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get commission => $composableBuilder(
+    column: $table.commission,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get returnReason => $composableBuilder(
+    column: $table.returnReason,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -66719,6 +67313,52 @@ class $$SalesReturnItemsTableOrderingComposer
     );
     return composer;
   }
+
+  $$InvoiceItemsTableOrderingComposer get invoiceItemId {
+    final $$InvoiceItemsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceItemId,
+      referencedTable: $db.invoiceItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoiceItemsTableOrderingComposer(
+            $db: $db,
+            $table: $db.invoiceItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VegetableShipmentsTableOrderingComposer get shipmentId {
+    final $$VegetableShipmentsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shipmentId,
+      referencedTable: $db.vegetableShipments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VegetableShipmentsTableOrderingComposer(
+            $db: $db,
+            $table: $db.vegetableShipments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$SalesReturnItemsTableAnnotationComposer
@@ -66746,6 +67386,19 @@ class $$SalesReturnItemsTableAnnotationComposer
 
   GeneratedColumn<double> get totalPrice => $composableBuilder(
     column: $table.totalPrice,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get discount =>
+      $composableBuilder(column: $table.discount, builder: (column) => column);
+
+  GeneratedColumn<double> get commission => $composableBuilder(
+    column: $table.commission,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get returnReason => $composableBuilder(
+    column: $table.returnReason,
     builder: (column) => column,
   );
 
@@ -66794,6 +67447,53 @@ class $$SalesReturnItemsTableAnnotationComposer
     );
     return composer;
   }
+
+  $$InvoiceItemsTableAnnotationComposer get invoiceItemId {
+    final $$InvoiceItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceItemId,
+      referencedTable: $db.invoiceItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoiceItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.invoiceItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VegetableShipmentsTableAnnotationComposer get shipmentId {
+    final $$VegetableShipmentsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.shipmentId,
+          referencedTable: $db.vegetableShipments,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$VegetableShipmentsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.vegetableShipments,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
 }
 
 class $$SalesReturnItemsTableTableManager
@@ -66809,7 +67509,12 @@ class $$SalesReturnItemsTableTableManager
           $$SalesReturnItemsTableUpdateCompanionBuilder,
           (SalesReturnItem, $$SalesReturnItemsTableReferences),
           SalesReturnItem,
-          PrefetchHooks Function({bool returnId, bool productId})
+          PrefetchHooks Function({
+            bool returnId,
+            bool productId,
+            bool invoiceItemId,
+            bool shipmentId,
+          })
         > {
   $$SalesReturnItemsTableTableManager(
     _$AppDatabase db,
@@ -66833,6 +67538,11 @@ class $$SalesReturnItemsTableTableManager
                 Value<int> quantity = const Value.absent(),
                 Value<double> unitPrice = const Value.absent(),
                 Value<double> totalPrice = const Value.absent(),
+                Value<int?> invoiceItemId = const Value.absent(),
+                Value<double> discount = const Value.absent(),
+                Value<double> commission = const Value.absent(),
+                Value<int?> shipmentId = const Value.absent(),
+                Value<String> returnReason = const Value.absent(),
               }) => SalesReturnItemsCompanion(
                 id: id,
                 returnId: returnId,
@@ -66841,6 +67551,11 @@ class $$SalesReturnItemsTableTableManager
                 quantity: quantity,
                 unitPrice: unitPrice,
                 totalPrice: totalPrice,
+                invoiceItemId: invoiceItemId,
+                discount: discount,
+                commission: commission,
+                shipmentId: shipmentId,
+                returnReason: returnReason,
               ),
           createCompanionCallback:
               ({
@@ -66851,6 +67566,11 @@ class $$SalesReturnItemsTableTableManager
                 required int quantity,
                 required double unitPrice,
                 required double totalPrice,
+                Value<int?> invoiceItemId = const Value.absent(),
+                Value<double> discount = const Value.absent(),
+                Value<double> commission = const Value.absent(),
+                Value<int?> shipmentId = const Value.absent(),
+                Value<String> returnReason = const Value.absent(),
               }) => SalesReturnItemsCompanion.insert(
                 id: id,
                 returnId: returnId,
@@ -66859,6 +67579,11 @@ class $$SalesReturnItemsTableTableManager
                 quantity: quantity,
                 unitPrice: unitPrice,
                 totalPrice: totalPrice,
+                invoiceItemId: invoiceItemId,
+                discount: discount,
+                commission: commission,
+                shipmentId: shipmentId,
+                returnReason: returnReason,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -66868,64 +67593,100 @@ class $$SalesReturnItemsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({returnId = false, productId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (returnId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.returnId,
-                                referencedTable:
-                                    $$SalesReturnItemsTableReferences
-                                        ._returnIdTable(db),
-                                referencedColumn:
-                                    $$SalesReturnItemsTableReferences
-                                        ._returnIdTable(db)
-                                        .id,
-                              )
-                              as T;
-                    }
-                    if (productId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.productId,
-                                referencedTable:
-                                    $$SalesReturnItemsTableReferences
-                                        ._productIdTable(db),
-                                referencedColumn:
-                                    $$SalesReturnItemsTableReferences
-                                        ._productIdTable(db)
-                                        .id,
-                              )
-                              as T;
-                    }
+          prefetchHooksCallback:
+              ({
+                returnId = false,
+                productId = false,
+                invoiceItemId = false,
+                shipmentId = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (returnId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.returnId,
+                                    referencedTable:
+                                        $$SalesReturnItemsTableReferences
+                                            ._returnIdTable(db),
+                                    referencedColumn:
+                                        $$SalesReturnItemsTableReferences
+                                            ._returnIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (productId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productId,
+                                    referencedTable:
+                                        $$SalesReturnItemsTableReferences
+                                            ._productIdTable(db),
+                                    referencedColumn:
+                                        $$SalesReturnItemsTableReferences
+                                            ._productIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (invoiceItemId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.invoiceItemId,
+                                    referencedTable:
+                                        $$SalesReturnItemsTableReferences
+                                            ._invoiceItemIdTable(db),
+                                    referencedColumn:
+                                        $$SalesReturnItemsTableReferences
+                                            ._invoiceItemIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (shipmentId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.shipmentId,
+                                    referencedTable:
+                                        $$SalesReturnItemsTableReferences
+                                            ._shipmentIdTable(db),
+                                    referencedColumn:
+                                        $$SalesReturnItemsTableReferences
+                                            ._shipmentIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
 
-                    return state;
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
                   },
-              getPrefetchedDataCallback: (items) async {
-                return [];
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -66942,7 +67703,12 @@ typedef $$SalesReturnItemsTableProcessedTableManager =
       $$SalesReturnItemsTableUpdateCompanionBuilder,
       (SalesReturnItem, $$SalesReturnItemsTableReferences),
       SalesReturnItem,
-      PrefetchHooks Function({bool returnId, bool productId})
+      PrefetchHooks Function({
+        bool returnId,
+        bool productId,
+        bool invoiceItemId,
+        bool shipmentId,
+      })
     >;
 typedef $$CustomerContainersTableCreateCompanionBuilder =
     CustomerContainersCompanion Function({

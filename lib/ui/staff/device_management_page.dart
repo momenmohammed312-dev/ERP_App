@@ -91,7 +91,7 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
         ipAddress: device.ipAddress!,
         port: device.port!,
         authToken: device.authToken,
-        timeout: const Duration(seconds: 5),
+        timeout: const Duration(seconds: 10),
       );
 
       final connected = await source.connect();
