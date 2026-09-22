@@ -104,7 +104,7 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  payroll.payrollPeriod,
+                  _formatPeriod(payroll.payrollPeriod),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -145,6 +145,12 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
               _buildPayrollDetailRow(
                 'غرامة تأخير (${payroll.lateDays} يوم)',
                 '- ${CurrencyHelper.formatCurrency(payroll.lateDeduction)}',
+                color: Colors.red,
+              ),
+            if (_absencePart(payroll) > 0)
+              _buildPayrollDetailRow(
+                'خصم الغياب (${payroll.absentDays} يوم)',
+                '- ${CurrencyHelper.formatCurrency(_absencePart(payroll))}',
                 color: Colors.red,
               ),
             const Divider(height: 16),
@@ -198,8 +204,16 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
     );
   }
 
-  Widget _buildPayrollDetailRow(String label, String value, {Color? color}) {
-    return Padding(
+  /// Absence share folded into the aggregate deductions (no separate column).
+  double _absencePart(Payroll payroll) {
+    final part = payroll.deductions -
+        payroll.advances -
+        payroll.penaltiesTotal -
+        payroll.lateDeduction;
+    return part > 0 ? part : 0.0;
+  }
+
+  Widget _buildPayrollDetailRow(String label, String value, {Color? color}) {    return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -319,42 +333,181 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
     }
   }
 
+  String _formatPeriod(String period) {
+    final parts = period.split('-');
+    if (parts.length >= 3 && parts[2].startsWith('W')) {
+      final weekNum = parts[2].substring(1);
+      return 'أسبوع $weekNum (شهر ${parts[1]} / ${parts[0]})';
+    }
+    if (parts.length >= 2) {
+      return 'شهر ${parts[1]} / ${parts[0]}';
+    }
+    return period;
+  }
+
   void _calculatePayroll() {
     final now = DateTime.now();
-    final selectedPeriod = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    String payrollType = 'monthly';
+    int selectedYear = now.year;
+    int selectedMonth = now.month;
+    int selectedWeek = 1;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('احتساب المرتب'),
-        content: Text('سيتم احتساب المرتب للموظف ${widget.staff.name} للفترة $selectedPeriod'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                final db = ref.read(appDatabaseProvider);
-                final service = StaffManagementService(StaffManagementDao(db), db);
-                final user = ref.read(authProvider);
-                await service.calculatePayroll(user, widget.staff.staffId, selectedPeriod);
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم احتساب المرتب بنجاح'), backgroundColor: Colors.green),
-                );
-                _loadData();
-              } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
-                );
-              }
-            },
-            child: const Text('احتساب'),
-          ),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final periodCode = payrollType == 'monthly'
+              ? '$selectedYear-${selectedMonth.toString().padLeft(2, '0')}'
+              : '$selectedYear-${selectedMonth.toString().padLeft(2, '0')}-W$selectedWeek';
+
+          return AlertDialog(
+            title: const Text('احتساب المرتب'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'الموظف: ${widget.staff.name}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('دورة المرتب:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Center(child: Text('شهري')),
+                          selected: payrollType == 'monthly',
+                          onSelected: (val) {
+                            if (val) setDialogState(() => payrollType = 'monthly');
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Center(child: Text('أسبوعي')),
+                          selected: payrollType == 'weekly',
+                          onSelected: (val) {
+                            if (val) setDialogState(() => payrollType = 'weekly');
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          initialValue: selectedYear,
+                          decoration: const InputDecoration(
+                            labelText: 'السنة',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [now.year - 1, now.year, now.year + 1]
+                              .map((y) => DropdownMenuItem(value: y, child: Text('$y')))
+                              .toList(),
+                          onChanged: (v) => setDialogState(() => selectedYear = v!),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          initialValue: selectedMonth,
+                          decoration: const InputDecoration(
+                            labelText: 'الشهر',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: List.generate(12, (i) => i + 1)
+                              .map((m) => DropdownMenuItem(value: m, child: Text('شهر $m')))
+                              .toList(),
+                          onChanged: (v) => setDialogState(() => selectedMonth = v!),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (payrollType == 'weekly') ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      initialValue: selectedWeek,
+                      decoration: const InputDecoration(
+                        labelText: 'الأسبوع',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('الأسبوع الأول (W1)')),
+                        DropdownMenuItem(value: 2, child: Text('الأسبوع الثاني (W2)')),
+                        DropdownMenuItem(value: 3, child: Text('الأسبوع الثالث (W3)')),
+                        DropdownMenuItem(value: 4, child: Text('الأسبوع الرابع (W4)')),
+                        DropdownMenuItem(value: 5, child: Text('الأسبوع الخامس (W5)')),
+                      ],
+                      onChanged: (v) => setDialogState(() => selectedWeek = v!),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'الفترة المحددة: ${_formatPeriod(periodCode)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    final db = ref.read(appDatabaseProvider);
+                    final service = StaffManagementService(StaffManagementDao(db), db);
+                    final user = ref.read(authProvider);
+                    await service.calculatePayroll(user, widget.staff.staffId, periodCode);
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('تم احتساب المرتب للفترة ${_formatPeriod(periodCode)} بنجاح'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                    _loadData();
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700],
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('احتساب'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

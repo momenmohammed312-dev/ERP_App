@@ -25,7 +25,7 @@ class StaffManagementService {
     return 'STAFF${(maxId + 1).toString().padLeft(4, '0')}';
   }
 
-  Future<void> addNewStaff(
+  Future<String> addNewStaff(
     User? user, {
     required String name,
     required String position,
@@ -82,6 +82,7 @@ class StaffManagementService {
         updatedAt: DateTime.now(),
       ),
     );
+    return staffId;
   }
 
   Future<void> updateStaffInfo(
@@ -165,6 +166,115 @@ class StaffManagementService {
   }
 
   // ATTENDANCE MANAGEMENT
+
+  /// Restored old rule: worked + overtime hours are always derived from the
+  /// recorded times via the engine (schedule-aware). Falls back to a raw
+  /// span minus 8 standard hours when the DB/engine is unavailable.
+  Future<({double workingHours, double overtimeHours})> _calcWorkedHours(
+    String staffId,
+    DateTime checkInTime,
+    DateTime checkOutTime,
+  ) async {
+    final repoDb = _db;
+    if (repoDb != null) {
+      try {
+        final engine = AttendanceCalculationEngine(
+          repoDb,
+          repoDb.attendanceDeviceDao,
+          _dao,
+        );
+        final calc = await engine.processCheckOut(
+          staffId,
+          checkInTime: checkInTime,
+          checkOutTime: checkOutTime,
+        );
+        return (
+          workingHours: calc.workingHours,
+          overtimeHours: calc.overtimeHours,
+        );
+      } catch (_) {}
+    }
+    final raw = checkOutTime.difference(checkInTime).inMinutes / 60.0;
+    if (raw <= 0) return (workingHours: 0.0, overtimeHours: 0.0);
+    final ot = raw - 8.0;
+    return (
+      workingHours: raw <= 8.0 ? raw : 8.0,
+      overtimeHours: ot > 0 ? ot : 0.0,
+    );
+  }
+
+  /// Restored old rule (recomputeOvertimeForPeriod): recalculate worked +
+  /// overtime hours for every row in [start, end] that has both times.
+  /// Skips admin overrides (explicit managerial decision) and days inside a
+  /// paid payroll period. Everything runs in one transaction (atomic).
+  Future<({int recomputed, int skipped})> recomputeOvertimeForPeriod(
+    User? user,
+    String staffId,
+    DateTime start,
+    DateTime end,
+  ) async {
+    PermissionValidator.requirePermission(
+      user,
+      Permission.manageAttendance,
+      'إعادة حساب الإضافي',
+    );
+    final db = _dao.attachedDatabase;
+    final s = DateTime(start.year, start.month, start.day);
+    final e = DateTime(end.year, end.month, end.day).add(
+      const Duration(days: 1),
+    );
+
+    final rows = await _dao.getAttendanceByStaff(
+      staffId,
+      startDate: s,
+      endDate: e,
+    );
+    final payrolls = await (db.select(
+      db.payrollTable,
+    )..where((t) => t.staffId.equals(staffId))).get();
+    bool inPaidPeriod(DateTime day) {
+      final d = DateTime(day.year, day.month, day.day);
+      for (final p in payrolls) {
+        if (p.status != 'paid') continue;
+        final ps = DateTime(
+          p.periodStart.year,
+          p.periodStart.month,
+          p.periodStart.day,
+        );
+        final pe = DateTime(p.periodEnd.year, p.periodEnd.month, p.periodEnd.day);
+        if (!d.isBefore(ps) && !d.isAfter(pe)) return true;
+      }
+      return false;
+    }
+
+    int recomputed = 0;
+    int skipped = 0;
+    await db.transaction(() async {
+      for (final r in rows) {
+        if (r.checkInTime == null ||
+            r.checkOutTime == null ||
+            r.source == 'admin_override' ||
+            inPaidPeriod(r.date)) {
+          skipped++;
+          continue;
+        }
+        final calc = await _calcWorkedHours(
+          staffId,
+          r.checkInTime!,
+          r.checkOutTime!,
+        );
+        await _dao.updateAttendance(
+          r.copyWith(
+            workingHours: Value(calc.workingHours),
+            overtimeHours: calc.overtimeHours,
+            updatedAt: DateTime.now(),
+          ),
+        );
+        recomputed++;
+      }
+    });
+    return (recomputed: recomputed, skipped: skipped);
+  }
 
   Future<void> recordCheckIn(
     String staffId, {
@@ -270,19 +380,58 @@ class StaffManagementService {
     DateTime? checkInTime,
     DateTime? checkOutTime,
     String? notes,
+    String? leaveType,
   }) async {
     PermissionValidator.requirePermission(user, Permission.manageAttendance);
     if (reason.trim().isEmpty) {
       throw Exception('Reason is required for manual override');
     }
 
+    // Restored intent rule: an override that carries an excuse (explicit
+    // leaveType, or إذن/تصريح written in the notes) but keeps a plain
+    // present/late status is coerced to excused/excused_late — otherwise the
+    // permission is saved yet never counted anywhere ("عملت إذن ومسمّعش").
+    String finalStatus = status;
+    String? finalLeaveType = leaveType;
+    final notesText = notes ?? '';
+    final mentionsExcuse =
+        notesText.contains('إذن') ||
+        notesText.contains('اذن') ||
+        notesText.contains('تصريح');
+    if (finalStatus == 'present' &&
+        (finalLeaveType?.isNotEmpty == true || mentionsExcuse)) {
+      finalStatus = 'excused';
+      finalLeaveType ??= 'other';
+    } else if (finalStatus == 'late' &&
+        (finalLeaveType?.isNotEmpty == true || mentionsExcuse)) {
+      finalStatus = 'excused_late';
+      finalLeaveType ??= 'other';
+    }
+
+    // Restored old rule: an override with both times also refreshes the
+    // derived worked/overtime hours instead of leaving stale values.
+    double? finalWorkingHours;
+    double? finalOvertimeHours;
+    if (checkInTime != null && checkOutTime != null) {
+      final calc = await _calcWorkedHours(staffId, checkInTime, checkOutTime);
+      finalWorkingHours = calc.workingHours;
+      finalOvertimeHours = calc.overtimeHours;
+    }
+
     final entry = AttendanceTableCompanion.insert(
       staffId: staffId,
       date: date,
-      status: status,
+      status: finalStatus,
       checkInTime: Value(checkInTime),
       checkOutTime: Value(checkOutTime),
+      workingHours: finalWorkingHours == null
+          ? const Value.absent()
+          : Value(finalWorkingHours),
+      overtimeHours: finalOvertimeHours == null
+          ? const Value.absent()
+          : Value(finalOvertimeHours),
       notes: Value(notes),
+      leaveType: Value(finalLeaveType),
       source: const Value('admin_override'),
       overrideReason: Value(reason),
       createdAt: DateTime.now(),
@@ -290,17 +439,21 @@ class StaffManagementService {
     );
 
     // If an entry already exists for this date, we should update it, otherwise add.
-    // For simplicity, we can rely on DAO's logic or implement an upsert here if needed.
-    // Assuming adding a new attendance log or updating the existing one:
     final existing = await _dao.getAttendanceByStaff(staffId, startDate: date, endDate: date.add(const Duration(days: 1)));
     final todayRecords = existing.where((a) => a.date == date).toList();
 
     if (todayRecords.isNotEmpty) {
-      final updated = todayRecords.first.copyWith(
-        status: status,
+      final current = todayRecords.first;
+      final updated = current.copyWith(
+        status: finalStatus,
         checkInTime: Value(checkInTime),
         checkOutTime: Value(checkOutTime),
+        workingHours: finalWorkingHours == null
+            ? Value(current.workingHours)
+            : Value(finalWorkingHours),
+        overtimeHours: finalOvertimeHours ?? current.overtimeHours,
         notes: Value(notes),
+        leaveType: Value(finalLeaveType),
         source: const Value('admin_override'),
         overrideReason: Value(reason),
         updatedAt: DateTime.now(),
@@ -318,17 +471,36 @@ class StaffManagementService {
     DateTime? checkInTime,
     DateTime? checkOutTime,
     double? workingHours,
+    double? overtimeHours,
     String? notes,
+    String? leaveType,
     String source = 'manual',
   }) async {
+    // Restored old rule: worked/overtime hours always follow the times via
+    // the engine — explicit values win, missing ones are derived so overtime
+    // ("إضافي") is never silently left at zero on manual saves.
+    double? finalWorkingHours = workingHours;
+    double? finalOvertimeHours = overtimeHours;
+    if (checkInTime != null &&
+        checkOutTime != null &&
+        (finalWorkingHours == null || finalOvertimeHours == null)) {
+      final calc = await _calcWorkedHours(staffId, checkInTime, checkOutTime);
+      finalWorkingHours ??= calc.workingHours;
+      finalOvertimeHours ??= calc.overtimeHours;
+    }
+
     final entry = AttendanceTableCompanion.insert(
       staffId: staffId,
       date: date,
       status: status,
       checkInTime: Value(checkInTime),
       checkOutTime: Value(checkOutTime),
-      workingHours: Value(workingHours),
+      workingHours: Value(finalWorkingHours),
+      overtimeHours: finalOvertimeHours == null
+          ? const Value.absent()
+          : Value(finalOvertimeHours),
       notes: Value(notes),
+      leaveType: Value(leaveType),
       source: Value(source),
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
@@ -342,12 +514,17 @@ class StaffManagementService {
     final todayRecords = existing.where((a) => a.date == date).toList();
 
     if (todayRecords.isNotEmpty) {
-      final updated = todayRecords.first.copyWith(
+      final current = todayRecords.first;
+      final updated = current.copyWith(
         status: status,
         checkInTime: Value(checkInTime),
         checkOutTime: Value(checkOutTime),
-        workingHours: Value(workingHours),
+        workingHours: finalWorkingHours == null
+            ? Value(current.workingHours)
+            : Value(finalWorkingHours),
+        overtimeHours: finalOvertimeHours ?? current.overtimeHours,
         notes: Value(notes),
+        leaveType: Value(leaveType),
         source: Value(source),
         updatedAt: DateTime.now(),
       );
@@ -374,11 +551,44 @@ class StaffManagementService {
     int lateDays = 0;
     double totalHours = 0.0;
     double totalOvertime = 0.0;
+    int totalLateMinutes = 0;
+
+    // Restored effective-late rule: a 'present' row whose check-in is past
+    // grace still counts as late (days + minutes), so payroll fines and the
+    // attendance screen agree. Falls back to status-only when the engine
+    // or schedule is unavailable.
+    ScheduleConfig? schedule;
+    final repoDb = _db;
+    if (repoDb != null) {
+      try {
+        final engine = AttendanceCalculationEngine(
+          repoDb,
+          repoDb.attendanceDeviceDao,
+          _dao,
+        );
+        schedule = await engine.getScheduleForStaff(staffId);
+      } catch (_) {}
+    }
+
+    int lateMinutesOf(Attendance r) {
+      if (r.status == 'excused' || r.status == 'excused_late') return 0;
+      if (r.checkInTime == null || schedule == null) return 0;
+      final ci = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
+      final graceEnd =
+          schedule.workStartMinutesSinceMidnight + schedule.gracePeriodMinutes;
+      if (ci <= graceEnd) return 0;
+      return ci - graceEnd;
+    }
 
     for (final record in attendanceRecords) {
       switch (record.status) {
         case 'present':
           presentDays++;
+          final lm = lateMinutesOf(record);
+          if (lm > 0) {
+            lateDays++;
+            totalLateMinutes += lm;
+          }
           break;
         case 'absent':
           absentDays++;
@@ -389,6 +599,7 @@ class StaffManagementService {
         case 'late':
           lateDays++;
           presentDays++; // Late counts as present
+          totalLateMinutes += lateMinutesOf(record);
           break;
         // Bug 5: إذن — excused days count as present, never as late,
         // so the flat late fine (lateDays × setting) skips them while
@@ -411,6 +622,7 @@ class StaffManagementService {
       lateDays: lateDays,
       totalHours: totalHours,
       totalOvertime: totalOvertime,
+      totalLateMinutes: totalLateMinutes,
     );
   }
 
@@ -590,18 +802,51 @@ class StaffManagementService {
       }
     }
 
-    // Calculate payroll
-    final basicSalary = staff.basicSalary;
-    final overtimePay =
-        attendanceSummary.totalOvertime *
-        (staff.hourlyRate ?? basicSalary / 160);
+    // Calculate payroll — base depends on employment type (restored rules):
+    // - daily: day wage × present days in the period (present + late + excused)
+    // - weekly / full_time / part_time / contract: basicSalary as-is for the
+    //   chosen period (weekly staff pick a W-period, monthly staff a month).
+    final isWeeklyPeriod = payrollPeriod.contains('-W');
+    double basicSalary = staff.basicSalary;
+    if (staff.employmentType == 'daily') {
+      basicSalary = staff.basicSalary * attendanceSummary.presentDays;
+    }
+    // Hourly base always derives from the single-unit wage, not the
+    // period total (daily total would inflate it by present days).
+    final hourlyBase = staff.hourlyRate ??
+        (staff.employmentType == 'daily'
+            ? staff.basicSalary / 8
+            : isWeeklyPeriod
+                ? staff.basicSalary / 48
+                : staff.basicSalary / 160);
+    final overtimePay = attendanceSummary.totalOvertime * hourlyBase;
 
-    // Bug 4(b): flat fine per late day (status 'late' days only).
+    // Bug 4(b): flat fine per late day (explicit 'late' rows plus 'present'
+    // rows past grace — see getAttendanceSummary). Excused rows never count.
     // Default setting 0 → identical to the old behavior.
     final lateDeduction =
         attendanceSummary.lateDays * await _latePenaltyPerInstance();
 
-    final deductions = totalAdvances + penaltiesTotal + lateDeduction;
+    // Restored old rule (81ad48a): absence deducts a day wage —
+    // base ÷ divisor (6 for weekly periods/staff, 30 otherwise) × the
+    // absence multiplier setting — so absent days actually reduce the slip.
+    // Daily staff already earn by present days only, so no extra deduction.
+    double absenceMult = 1.0;
+    try {
+      final amRow = await (db.select(
+        db.attendanceSettings,
+      )..where((t) => t.settingKey.equals('absence_penalty_days_multiplier')))
+          .getSingleOrNull();
+      absenceMult = double.tryParse(amRow?.settingValue ?? '1') ?? 1.0;
+    } catch (_) {}
+    final divisor =
+        (isWeeklyPeriod || staff.employmentType == 'weekly') ? 6.0 : 30.0;
+    final absenceDeduction = staff.employmentType == 'daily'
+        ? 0.0
+        : attendanceSummary.absentDays * (staff.basicSalary / divisor) * absenceMult;
+
+    final deductions =
+        totalAdvances + penaltiesTotal + lateDeduction + absenceDeduction;
 
     final netSalary = basicSalary + overtimePay + allowancesTotal + rewardsTotal - deductions;
 
@@ -613,7 +858,7 @@ class StaffManagementService {
             periodEnd: periodEnd,
             basicSalary: basicSalary,
             overtimeHours: Value(attendanceSummary.totalOvertime),
-            overtimeRate: Value(staff.hourlyRate ?? basicSalary / 160),
+            overtimeRate: Value(hourlyBase),
             overtimePay: Value(overtimePay),
             allowances: Value(allowancesTotal),
             deductions: Value(deductions),
@@ -739,6 +984,28 @@ await db.expenseDao.insertExpense(
     });
   }
 
+  /// Weekly bounds (restored locked rules from the old payroll): the week
+  /// runs Saturday → Thursday (6 days), payday is Thursday. The week belongs
+  /// to its Thursday's month, and Wn is that Thursday's order within its
+  /// month (1..5). Example: Thu 2026-09-03 → W1 = Sat 2026-08-29 .. Thu 2026-09-03.
+  (DateTime, DateTime) weekBounds(int year, int month, int week) {
+    if (week < 1) throw Exception('رقم الأسبوع غير صالح: $week');
+    var thursday = DateTime(year, month, 1);
+    while (thursday.weekday != DateTime.thursday) {
+      thursday = thursday.add(const Duration(days: 1));
+    }
+    thursday = thursday.add(Duration(days: (week - 1) * 7));
+    if (thursday.month != month || thursday.year != year) {
+      throw Exception(
+        'لا يوجد أسبوع رقم $week في $year-${month.toString().padLeft(2, '0')}',
+      );
+    }
+    final day = DateTime(thursday.year, thursday.month, thursday.day);
+    final start = day.subtract(const Duration(days: 5)); // Saturday
+    final end = DateTime(thursday.year, thursday.month, thursday.day, 23, 59, 59);
+    return (start, end);
+  }
+
   DateTime _getPeriodStart(String period) {
     // Parse period like "2024-01" or "2024-01-W1"
     final parts = period.split('-');
@@ -747,22 +1014,23 @@ await db.expenseDao.insertExpense(
 
     if (parts.length > 2 && parts[2].startsWith('W')) {
       final week = int.parse(parts[2].substring(1));
-      final firstDay = DateTime(year, month, 1);
-      final startOfWeek = firstDay.add(Duration(days: (week - 1) * 7));
-      return startOfWeek;
+      return weekBounds(year, month, week).$1;
     }
 
     return DateTime(year, month, 1);
   }
 
   DateTime _getPeriodEnd(String period) {
-    final start = _getPeriodStart(period);
     final parts = period.split('-');
 
     if (parts.length > 2 && parts[2].startsWith('W')) {
-      return start.add(const Duration(days: 6));
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final week = int.parse(parts[2].substring(1));
+      return weekBounds(year, month, week).$2;
     }
 
+    final start = _getPeriodStart(period);
     return DateTime(start.year, start.month + 1, 0); // Last day of month
   }
 
@@ -832,6 +1100,7 @@ class AttendanceSummary {
   final int lateDays;
   final double totalHours;
   final double totalOvertime;
+  final int totalLateMinutes;
 
   AttendanceSummary({
     required this.totalDays,
@@ -841,6 +1110,7 @@ class AttendanceSummary {
     required this.lateDays,
     required this.totalHours,
     required this.totalOvertime,
+    this.totalLateMinutes = 0,
   });
 
   double get attendanceRate => totalDays > 0 ? presentDays / totalDays : 0.0;

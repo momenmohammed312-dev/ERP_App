@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
@@ -21,6 +22,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   final _nameController = TextEditingController();
   final _positionController = TextEditingController();
+  final _biometricIdController = TextEditingController();
   final _nationalIdController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
@@ -33,6 +35,8 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   final _emergencyContactController = TextEditingController();
   final _emergencyPhoneController = TextEditingController();
   final _notesController = TextEditingController();
+
+  StaffBiometricMapping? _currentBiometricMapping;
 
   String _selectedEmploymentType = 'full_time';
   DateTime? _hireDate;
@@ -60,6 +64,13 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     _service = StaffManagementService(StaffManagementDao(db), db);
     if (widget.staff != null) {
       _populateForm(widget.staff!);
+      final deviceDao = ref.read(attendanceDeviceDaoProvider);
+      final mappings = await deviceDao.getMappingsForStaff(widget.staff!.staffId);
+      if (mappings.isNotEmpty) {
+        _currentBiometricMapping = mappings.first;
+        _biometricIdController.text = _currentBiometricMapping!.externalUserId;
+        if (mounted) setState(() {});
+      }
     }
   }
 
@@ -73,7 +84,14 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     _departmentController.text = staff.department ?? '';
     _basicSalaryController.text = staff.basicSalary.toString();
     _hourlyRateController.text = staff.hourlyRate?.toString() ?? '';
-    _selectedEmploymentType = staff.employmentType;
+    const validTypes = ['full_time', 'weekly', 'daily', 'part_time', 'contract'];
+    if (validTypes.contains(staff.employmentType)) {
+      _selectedEmploymentType = staff.employmentType;
+    } else if (staff.employmentType == 'monthly') {
+      _selectedEmploymentType = 'full_time';
+    } else {
+      _selectedEmploymentType = 'full_time';
+    }
     _hireDate = staff.hireDate;
     _contractEndDate = staff.contractEndDate;
     _bankNameController.text = staff.bankName ?? '';
@@ -115,6 +133,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   void dispose() {
     _nameController.dispose();
     _positionController.dispose();
+    _biometricIdController.dispose();
     _nationalIdController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
@@ -218,22 +237,35 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               decoration: _buildInputDecoration('المنصب (اختياري)', Icons.work),
             ),
             const SizedBox(height: 12),
+            TextFormField(
+              controller: _biometricIdController,
+              style: const TextStyle(color: Colors.white),
+              keyboardType: TextInputType.text,
+              decoration: _buildInputDecoration(
+                'رقم البصمة بالجهاز (ID في جهاز البصمة)',
+                Icons.fingerprint,
+              ),
+            ),
+            const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              // ignore: deprecated_member_use
               value: _selectedEmploymentType,
               decoration: _buildInputDecoration(
-                'نوع التوظيف',
+                'نوع التوظيف والراتب',
                 Icons.work_outline,
               ),
               items: const [
-                DropdownMenuItem(value: 'full_time', child: Text('دوام')),
-                DropdownMenuItem(value: 'part_time', child: Text('جزئي')),
-                DropdownMenuItem(value: 'contract', child: Text('عقد')),
+                DropdownMenuItem(value: 'full_time', child: Text('دوام كامل (راتب شهري)')),
+                DropdownMenuItem(value: 'weekly', child: Text('راتب أسبوعي')),
+                DropdownMenuItem(value: 'daily', child: Text('يومية (راتب يومي)')),
+                DropdownMenuItem(value: 'part_time', child: Text('دوام جزئي (بالساعة)')),
+                DropdownMenuItem(value: 'contract', child: Text('عقد عمل')),
               ],
               onChanged: (value) {
-                setState(() {
-                  _selectedEmploymentType = value!;
-                });
+                if (value != null) {
+                  setState(() {
+                    _selectedEmploymentType = value;
+                  });
+                }
               },
             ),
             const SizedBox(height: 12),
@@ -241,7 +273,13 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               controller: _basicSalaryController,
               keyboardType: TextInputType.number,
               decoration: _buildInputDecoration(
-                'الراتب الأساسي',
+                _selectedEmploymentType == 'weekly'
+                    ? 'الراتب الأسبوعي'
+                    : _selectedEmploymentType == 'daily'
+                        ? 'اليومية (الراتب اليومي)'
+                        : _selectedEmploymentType == 'full_time'
+                            ? 'الراتب الشهري الأساسي'
+                            : 'الراتب الأساسي',
                 Icons.attach_money,
               ),
               validator: (value) {
@@ -645,13 +683,14 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       }
 
       final salary = double.tryParse(_basicSalaryController.text);
-      if (salary == null || salary <= 0) {
-        throw Exception('الراتب الأساسي يجب أن يكون رقماً موجباً');
+      if (salary == null || salary < 0) {
+        throw Exception('الراتب يجب أن يكون رقماً موجباً أو صفراً');
       }
 
+      String effectiveStaffId;
       if (widget.staff == null) {
         final user = ref.read(authProvider);
-        await _service.addNewStaff(
+        effectiveStaffId = await _service.addNewStaff(
           user,
           name: _nameController.text.trim(),
           // position is optional — default to empty string
@@ -701,6 +740,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
           weekendDay: _useDefaultSchedule ? null : _weekendDay,
         );
       } else {
+        effectiveStaffId = widget.staff!.staffId;
         final user = ref.read(authProvider);
         await _service.updateStaffInfo(
           user,
@@ -749,6 +789,54 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               : _workDays.entries.where((e) => e.value).map((e) => e.key).join(','),
           weekendDay: _useDefaultSchedule ? null : _weekendDay,
         );
+      }
+
+      // Save or update Biometric ID mapping
+      final enteredBiometricId = _biometricIdController.text.trim();
+      final deviceDao = ref.read(attendanceDeviceDaoProvider);
+
+      if (enteredBiometricId.isNotEmpty) {
+        final devices = await deviceDao.getAllDevices();
+        int deviceId = 1;
+        if (devices.isNotEmpty) {
+          deviceId = devices.first.id;
+        } else {
+          deviceId = await deviceDao.addDevice(
+            BiometricDevicesCompanion.insert(
+              deviceCode: 'BIO-001',
+              name: 'جهاز البصمة الرئيسي',
+              connectionType: 'tcp_ip',
+              ipAddress: const Value('192.168.1.201'),
+              port: const Value(4370),
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          );
+        }
+
+        if (_currentBiometricMapping != null) {
+          await deviceDao.updateMapping(
+            _currentBiometricMapping!.copyWith(
+              externalUserId: enteredBiometricId,
+              deviceId: deviceId,
+              enrollmentStatus: 'enrolled',
+              updatedAt: DateTime.now(),
+            ),
+          );
+        } else {
+          await deviceDao.addMapping(
+            StaffBiometricMappingsCompanion.insert(
+              staffId: effectiveStaffId,
+              deviceId: deviceId,
+              externalUserId: enteredBiometricId,
+              enrollmentStatus: 'enrolled',
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          );
+        }
+      } else if (_currentBiometricMapping != null && enteredBiometricId.isEmpty) {
+        await deviceDao.deleteMapping(_currentBiometricMapping!.id);
       }
 
       if (mounted) {

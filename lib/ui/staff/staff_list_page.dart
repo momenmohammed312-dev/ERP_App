@@ -8,6 +8,7 @@ import '../../services/staff_management_service.dart';
 import 'staff_form_page.dart';
 import 'staff_details_page.dart';
 import 'attendance_page.dart';
+import 'biometric_enrollment_page.dart';
 import 'employee_dashboard_page.dart';
 
 class StaffListPage extends ConsumerStatefulWidget {
@@ -22,6 +23,7 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
   late StaffManagementDao _dao;
   List<Staff> _staffList = [];
   List<Staff> _filteredStaffList = [];
+  Map<String, String> _biometricIdByStaffId = {};
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
 
@@ -53,9 +55,18 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
     setState(() => _isLoading = true);
     try {
       final staff = await _dao.getAllStaff();
+      final deviceDao = ref.read(attendanceDeviceDaoProvider);
+      final Map<String, String> biometricMap = {};
+      for (final s in staff) {
+        final mappings = await deviceDao.getMappingsForStaff(s.staffId);
+        if (mappings.isNotEmpty) {
+          biometricMap[s.staffId] = mappings.first.externalUserId;
+        }
+      }
       setState(() {
         _staffList = staff;
         _filteredStaffList = staff;
+        _biometricIdByStaffId = biometricMap;
         _isLoading = false;
       });
     } catch (e) {
@@ -324,15 +335,53 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
           children: [
             Text(staff.position, style: TextStyle(color: subTextColor)),
             const SizedBox(height: 4),
-            Row(
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
               children: [
-                Icon(Icons.badge, size: 16, color: subTextColor),
-                const SizedBox(width: 4),
-                Text(staff.staffId, style: TextStyle(color: subTextColor)),
-                const SizedBox(width: 16),
-                Icon(Icons.phone, size: 16, color: subTextColor),
-                const SizedBox(width: 4),
-                Text(staff.phone ?? 'لا يوجد', style: TextStyle(color: subTextColor)),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.badge, size: 16, color: subTextColor),
+                    const SizedBox(width: 4),
+                    Text(staff.staffId, style: TextStyle(color: subTextColor)),
+                  ],
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.fingerprint,
+                      size: 16,
+                      color: _biometricIdByStaffId.containsKey(staff.staffId)
+                          ? Colors.teal
+                          : subTextColor.withValues(alpha: 0.5),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _biometricIdByStaffId.containsKey(staff.staffId)
+                          ? 'بصمة: ${_biometricIdByStaffId[staff.staffId]}'
+                          : 'بدون بصمة',
+                      style: TextStyle(
+                        color: _biometricIdByStaffId.containsKey(staff.staffId)
+                            ? Colors.teal
+                            : subTextColor.withValues(alpha: 0.5),
+                        fontWeight: _biometricIdByStaffId.containsKey(staff.staffId)
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+                if (staff.phone != null && staff.phone!.isNotEmpty)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.phone, size: 16, color: subTextColor),
+                      const SizedBox(width: 4),
+                      Text(staff.phone!, style: TextStyle(color: subTextColor)),
+                    ],
+                  ),
               ],
             ),
             const SizedBox(height: 4),
@@ -341,8 +390,12 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
                 Icon(Icons.attach_money, size: 16, color: Colors.green),
                 const SizedBox(width: 4),
                 Text(
-                  'المرتب الأساسي: ${staff.basicSalary.toStringAsFixed(2)} ج.م',
-                  style: TextStyle(
+                  staff.employmentType == 'weekly'
+                      ? 'الراتب الأسبوعي: ${staff.basicSalary.toStringAsFixed(2)} ج.م'
+                      : staff.employmentType == 'daily'
+                          ? 'اليومية: ${staff.basicSalary.toStringAsFixed(2)} ج.م'
+                          : 'المرتب الأساسي: ${staff.basicSalary.toStringAsFixed(2)} ج.م',
+                  style: const TextStyle(
                     color: Colors.green,
                     fontWeight: FontWeight.w500,
                   ),
@@ -373,6 +426,16 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
                   Icon(Icons.edit, color: Colors.orange),
                   const SizedBox(width: 8),
                   Text('تعديل', style: TextStyle(color: textColor)),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'biometric',
+              child: Row(
+                children: [
+                  const Icon(Icons.fingerprint, color: Colors.teal),
+                  const SizedBox(width: 8),
+                  Text('ربط البصمة والجهاز', style: TextStyle(color: textColor)),
                 ],
               ),
             ),
@@ -423,6 +486,15 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
         break;
       case 'edit':
         _editStaff(staff);
+        break;
+      case 'biometric':
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => BiometricEnrollmentPage(staff: staff),
+          ),
+        );
+        _loadStaff();
         break;
       case 'attendance':
         _viewAttendance(staff);
