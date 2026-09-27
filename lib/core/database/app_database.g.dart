@@ -20464,6 +20464,33 @@ class $AttendanceTableTable extends AttendanceTable
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _excusedMeta = const VerificationMeta(
+    'excused',
+  );
+  @override
+  late final GeneratedColumn<bool> excused = GeneratedColumn<bool>(
+    'excused',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("excused" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _excusedHoursMeta = const VerificationMeta(
+    'excusedHours',
+  );
+  @override
+  late final GeneratedColumn<double> excusedHours = GeneratedColumn<double>(
+    'excused_hours',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
   static const VerificationMeta _leaveTypeMeta = const VerificationMeta(
     'leaveType',
   );
@@ -20538,6 +20565,30 @@ class $AttendanceTableTable extends AttendanceTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _lateMinutesMeta = const VerificationMeta(
+    'lateMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> lateMinutes = GeneratedColumn<int>(
+    'late_minutes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _permissionHoursMeta = const VerificationMeta(
+    'permissionHours',
+  );
+  @override
+  late final GeneratedColumn<double> permissionHours = GeneratedColumn<double>(
+    'permission_hours',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
   static const VerificationMeta _approvedByMeta = const VerificationMeta(
     'approvedBy',
   );
@@ -20593,6 +20644,8 @@ class $AttendanceTableTable extends AttendanceTable
     checkOutLocation,
     workingHours,
     status,
+    excused,
+    excusedHours,
     leaveType,
     notes,
     source,
@@ -20600,6 +20653,8 @@ class $AttendanceTableTable extends AttendanceTable
     rawEventId,
     overrideReason,
     overtimeHours,
+    lateMinutes,
+    permissionHours,
     approvedBy,
     approvedAt,
     createdAt,
@@ -20689,6 +20744,21 @@ class $AttendanceTableTable extends AttendanceTable
     } else if (isInserting) {
       context.missing(_statusMeta);
     }
+    if (data.containsKey('excused')) {
+      context.handle(
+        _excusedMeta,
+        excused.isAcceptableOrUnknown(data['excused']!, _excusedMeta),
+      );
+    }
+    if (data.containsKey('excused_hours')) {
+      context.handle(
+        _excusedHoursMeta,
+        excusedHours.isAcceptableOrUnknown(
+          data['excused_hours']!,
+          _excusedHoursMeta,
+        ),
+      );
+    }
     if (data.containsKey('leave_type')) {
       context.handle(
         _leaveTypeMeta,
@@ -20740,6 +20810,24 @@ class $AttendanceTableTable extends AttendanceTable
         overtimeHours.isAcceptableOrUnknown(
           data['overtime_hours']!,
           _overtimeHoursMeta,
+        ),
+      );
+    }
+    if (data.containsKey('late_minutes')) {
+      context.handle(
+        _lateMinutesMeta,
+        lateMinutes.isAcceptableOrUnknown(
+          data['late_minutes']!,
+          _lateMinutesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('permission_hours')) {
+      context.handle(
+        _permissionHoursMeta,
+        permissionHours.isAcceptableOrUnknown(
+          data['permission_hours']!,
+          _permissionHoursMeta,
         ),
       );
     }
@@ -20816,6 +20904,14 @@ class $AttendanceTableTable extends AttendanceTable
         DriftSqlType.string,
         data['${effectivePrefix}status'],
       )!,
+      excused: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}excused'],
+      )!,
+      excusedHours: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}excused_hours'],
+      )!,
       leaveType: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}leave_type'],
@@ -20843,6 +20939,14 @@ class $AttendanceTableTable extends AttendanceTable
       overtimeHours: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}overtime_hours'],
+      )!,
+      lateMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}late_minutes'],
+      )!,
+      permissionHours: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}permission_hours'],
       )!,
       approvedBy: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -20879,6 +20983,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
   final String? checkOutLocation;
   final double? workingHours;
   final String status;
+  final bool excused;
+  final double excusedHours;
   final String? leaveType;
   final String? notes;
   final String? source;
@@ -20886,6 +20992,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
   final int? rawEventId;
   final String? overrideReason;
   final double overtimeHours;
+  final int lateMinutes;
+  final double permissionHours;
   final String? approvedBy;
   final DateTime? approvedAt;
   final DateTime createdAt;
@@ -20900,6 +21008,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
     this.checkOutLocation,
     this.workingHours,
     required this.status,
+    required this.excused,
+    required this.excusedHours,
     this.leaveType,
     this.notes,
     this.source,
@@ -20907,6 +21017,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
     this.rawEventId,
     this.overrideReason,
     required this.overtimeHours,
+    required this.lateMinutes,
+    required this.permissionHours,
     this.approvedBy,
     this.approvedAt,
     required this.createdAt,
@@ -20934,6 +21046,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
       map['working_hours'] = Variable<double>(workingHours);
     }
     map['status'] = Variable<String>(status);
+    map['excused'] = Variable<bool>(excused);
+    map['excused_hours'] = Variable<double>(excusedHours);
     if (!nullToAbsent || leaveType != null) {
       map['leave_type'] = Variable<String>(leaveType);
     }
@@ -20953,6 +21067,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
       map['override_reason'] = Variable<String>(overrideReason);
     }
     map['overtime_hours'] = Variable<double>(overtimeHours);
+    map['late_minutes'] = Variable<int>(lateMinutes);
+    map['permission_hours'] = Variable<double>(permissionHours);
     if (!nullToAbsent || approvedBy != null) {
       map['approved_by'] = Variable<String>(approvedBy);
     }
@@ -20985,6 +21101,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
           ? const Value.absent()
           : Value(workingHours),
       status: Value(status),
+      excused: Value(excused),
+      excusedHours: Value(excusedHours),
       leaveType: leaveType == null && nullToAbsent
           ? const Value.absent()
           : Value(leaveType),
@@ -21004,6 +21122,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
           ? const Value.absent()
           : Value(overrideReason),
       overtimeHours: Value(overtimeHours),
+      lateMinutes: Value(lateMinutes),
+      permissionHours: Value(permissionHours),
       approvedBy: approvedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(approvedBy),
@@ -21030,6 +21150,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
       checkOutLocation: serializer.fromJson<String?>(json['checkOutLocation']),
       workingHours: serializer.fromJson<double?>(json['workingHours']),
       status: serializer.fromJson<String>(json['status']),
+      excused: serializer.fromJson<bool>(json['excused']),
+      excusedHours: serializer.fromJson<double>(json['excusedHours']),
       leaveType: serializer.fromJson<String?>(json['leaveType']),
       notes: serializer.fromJson<String?>(json['notes']),
       source: serializer.fromJson<String?>(json['source']),
@@ -21037,6 +21159,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
       rawEventId: serializer.fromJson<int?>(json['rawEventId']),
       overrideReason: serializer.fromJson<String?>(json['overrideReason']),
       overtimeHours: serializer.fromJson<double>(json['overtimeHours']),
+      lateMinutes: serializer.fromJson<int>(json['lateMinutes']),
+      permissionHours: serializer.fromJson<double>(json['permissionHours']),
       approvedBy: serializer.fromJson<String?>(json['approvedBy']),
       approvedAt: serializer.fromJson<DateTime?>(json['approvedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -21056,6 +21180,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
       'checkOutLocation': serializer.toJson<String?>(checkOutLocation),
       'workingHours': serializer.toJson<double?>(workingHours),
       'status': serializer.toJson<String>(status),
+      'excused': serializer.toJson<bool>(excused),
+      'excusedHours': serializer.toJson<double>(excusedHours),
       'leaveType': serializer.toJson<String?>(leaveType),
       'notes': serializer.toJson<String?>(notes),
       'source': serializer.toJson<String?>(source),
@@ -21063,6 +21189,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
       'rawEventId': serializer.toJson<int?>(rawEventId),
       'overrideReason': serializer.toJson<String?>(overrideReason),
       'overtimeHours': serializer.toJson<double>(overtimeHours),
+      'lateMinutes': serializer.toJson<int>(lateMinutes),
+      'permissionHours': serializer.toJson<double>(permissionHours),
       'approvedBy': serializer.toJson<String?>(approvedBy),
       'approvedAt': serializer.toJson<DateTime?>(approvedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -21080,6 +21208,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
     Value<String?> checkOutLocation = const Value.absent(),
     Value<double?> workingHours = const Value.absent(),
     String? status,
+    bool? excused,
+    double? excusedHours,
     Value<String?> leaveType = const Value.absent(),
     Value<String?> notes = const Value.absent(),
     Value<String?> source = const Value.absent(),
@@ -21087,6 +21217,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
     Value<int?> rawEventId = const Value.absent(),
     Value<String?> overrideReason = const Value.absent(),
     double? overtimeHours,
+    int? lateMinutes,
+    double? permissionHours,
     Value<String?> approvedBy = const Value.absent(),
     Value<DateTime?> approvedAt = const Value.absent(),
     DateTime? createdAt,
@@ -21105,6 +21237,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
         : this.checkOutLocation,
     workingHours: workingHours.present ? workingHours.value : this.workingHours,
     status: status ?? this.status,
+    excused: excused ?? this.excused,
+    excusedHours: excusedHours ?? this.excusedHours,
     leaveType: leaveType.present ? leaveType.value : this.leaveType,
     notes: notes.present ? notes.value : this.notes,
     source: source.present ? source.value : this.source,
@@ -21116,6 +21250,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
         ? overrideReason.value
         : this.overrideReason,
     overtimeHours: overtimeHours ?? this.overtimeHours,
+    lateMinutes: lateMinutes ?? this.lateMinutes,
+    permissionHours: permissionHours ?? this.permissionHours,
     approvedBy: approvedBy.present ? approvedBy.value : this.approvedBy,
     approvedAt: approvedAt.present ? approvedAt.value : this.approvedAt,
     createdAt: createdAt ?? this.createdAt,
@@ -21142,6 +21278,10 @@ class Attendance extends DataClass implements Insertable<Attendance> {
           ? data.workingHours.value
           : this.workingHours,
       status: data.status.present ? data.status.value : this.status,
+      excused: data.excused.present ? data.excused.value : this.excused,
+      excusedHours: data.excusedHours.present
+          ? data.excusedHours.value
+          : this.excusedHours,
       leaveType: data.leaveType.present ? data.leaveType.value : this.leaveType,
       notes: data.notes.present ? data.notes.value : this.notes,
       source: data.source.present ? data.source.value : this.source,
@@ -21157,6 +21297,12 @@ class Attendance extends DataClass implements Insertable<Attendance> {
       overtimeHours: data.overtimeHours.present
           ? data.overtimeHours.value
           : this.overtimeHours,
+      lateMinutes: data.lateMinutes.present
+          ? data.lateMinutes.value
+          : this.lateMinutes,
+      permissionHours: data.permissionHours.present
+          ? data.permissionHours.value
+          : this.permissionHours,
       approvedBy: data.approvedBy.present
           ? data.approvedBy.value
           : this.approvedBy,
@@ -21180,6 +21326,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
           ..write('checkOutLocation: $checkOutLocation, ')
           ..write('workingHours: $workingHours, ')
           ..write('status: $status, ')
+          ..write('excused: $excused, ')
+          ..write('excusedHours: $excusedHours, ')
           ..write('leaveType: $leaveType, ')
           ..write('notes: $notes, ')
           ..write('source: $source, ')
@@ -21187,6 +21335,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
           ..write('rawEventId: $rawEventId, ')
           ..write('overrideReason: $overrideReason, ')
           ..write('overtimeHours: $overtimeHours, ')
+          ..write('lateMinutes: $lateMinutes, ')
+          ..write('permissionHours: $permissionHours, ')
           ..write('approvedBy: $approvedBy, ')
           ..write('approvedAt: $approvedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -21196,7 +21346,7 @@ class Attendance extends DataClass implements Insertable<Attendance> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     staffId,
     date,
@@ -21206,6 +21356,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
     checkOutLocation,
     workingHours,
     status,
+    excused,
+    excusedHours,
     leaveType,
     notes,
     source,
@@ -21213,11 +21365,13 @@ class Attendance extends DataClass implements Insertable<Attendance> {
     rawEventId,
     overrideReason,
     overtimeHours,
+    lateMinutes,
+    permissionHours,
     approvedBy,
     approvedAt,
     createdAt,
     updatedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -21231,6 +21385,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
           other.checkOutLocation == this.checkOutLocation &&
           other.workingHours == this.workingHours &&
           other.status == this.status &&
+          other.excused == this.excused &&
+          other.excusedHours == this.excusedHours &&
           other.leaveType == this.leaveType &&
           other.notes == this.notes &&
           other.source == this.source &&
@@ -21238,6 +21394,8 @@ class Attendance extends DataClass implements Insertable<Attendance> {
           other.rawEventId == this.rawEventId &&
           other.overrideReason == this.overrideReason &&
           other.overtimeHours == this.overtimeHours &&
+          other.lateMinutes == this.lateMinutes &&
+          other.permissionHours == this.permissionHours &&
           other.approvedBy == this.approvedBy &&
           other.approvedAt == this.approvedAt &&
           other.createdAt == this.createdAt &&
@@ -21254,6 +21412,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
   final Value<String?> checkOutLocation;
   final Value<double?> workingHours;
   final Value<String> status;
+  final Value<bool> excused;
+  final Value<double> excusedHours;
   final Value<String?> leaveType;
   final Value<String?> notes;
   final Value<String?> source;
@@ -21261,6 +21421,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
   final Value<int?> rawEventId;
   final Value<String?> overrideReason;
   final Value<double> overtimeHours;
+  final Value<int> lateMinutes;
+  final Value<double> permissionHours;
   final Value<String?> approvedBy;
   final Value<DateTime?> approvedAt;
   final Value<DateTime> createdAt;
@@ -21275,6 +21437,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     this.checkOutLocation = const Value.absent(),
     this.workingHours = const Value.absent(),
     this.status = const Value.absent(),
+    this.excused = const Value.absent(),
+    this.excusedHours = const Value.absent(),
     this.leaveType = const Value.absent(),
     this.notes = const Value.absent(),
     this.source = const Value.absent(),
@@ -21282,6 +21446,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     this.rawEventId = const Value.absent(),
     this.overrideReason = const Value.absent(),
     this.overtimeHours = const Value.absent(),
+    this.lateMinutes = const Value.absent(),
+    this.permissionHours = const Value.absent(),
     this.approvedBy = const Value.absent(),
     this.approvedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -21297,6 +21463,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     this.checkOutLocation = const Value.absent(),
     this.workingHours = const Value.absent(),
     required String status,
+    this.excused = const Value.absent(),
+    this.excusedHours = const Value.absent(),
     this.leaveType = const Value.absent(),
     this.notes = const Value.absent(),
     this.source = const Value.absent(),
@@ -21304,6 +21472,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     this.rawEventId = const Value.absent(),
     this.overrideReason = const Value.absent(),
     this.overtimeHours = const Value.absent(),
+    this.lateMinutes = const Value.absent(),
+    this.permissionHours = const Value.absent(),
     this.approvedBy = const Value.absent(),
     this.approvedAt = const Value.absent(),
     required DateTime createdAt,
@@ -21323,6 +21493,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     Expression<String>? checkOutLocation,
     Expression<double>? workingHours,
     Expression<String>? status,
+    Expression<bool>? excused,
+    Expression<double>? excusedHours,
     Expression<String>? leaveType,
     Expression<String>? notes,
     Expression<String>? source,
@@ -21330,6 +21502,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     Expression<int>? rawEventId,
     Expression<String>? overrideReason,
     Expression<double>? overtimeHours,
+    Expression<int>? lateMinutes,
+    Expression<double>? permissionHours,
     Expression<String>? approvedBy,
     Expression<DateTime>? approvedAt,
     Expression<DateTime>? createdAt,
@@ -21345,6 +21519,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
       if (checkOutLocation != null) 'check_out_location': checkOutLocation,
       if (workingHours != null) 'working_hours': workingHours,
       if (status != null) 'status': status,
+      if (excused != null) 'excused': excused,
+      if (excusedHours != null) 'excused_hours': excusedHours,
       if (leaveType != null) 'leave_type': leaveType,
       if (notes != null) 'notes': notes,
       if (source != null) 'source': source,
@@ -21352,6 +21528,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
       if (rawEventId != null) 'raw_event_id': rawEventId,
       if (overrideReason != null) 'override_reason': overrideReason,
       if (overtimeHours != null) 'overtime_hours': overtimeHours,
+      if (lateMinutes != null) 'late_minutes': lateMinutes,
+      if (permissionHours != null) 'permission_hours': permissionHours,
       if (approvedBy != null) 'approved_by': approvedBy,
       if (approvedAt != null) 'approved_at': approvedAt,
       if (createdAt != null) 'created_at': createdAt,
@@ -21369,6 +21547,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     Value<String?>? checkOutLocation,
     Value<double?>? workingHours,
     Value<String>? status,
+    Value<bool>? excused,
+    Value<double>? excusedHours,
     Value<String?>? leaveType,
     Value<String?>? notes,
     Value<String?>? source,
@@ -21376,6 +21556,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     Value<int?>? rawEventId,
     Value<String?>? overrideReason,
     Value<double>? overtimeHours,
+    Value<int>? lateMinutes,
+    Value<double>? permissionHours,
     Value<String?>? approvedBy,
     Value<DateTime?>? approvedAt,
     Value<DateTime>? createdAt,
@@ -21391,6 +21573,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
       checkOutLocation: checkOutLocation ?? this.checkOutLocation,
       workingHours: workingHours ?? this.workingHours,
       status: status ?? this.status,
+      excused: excused ?? this.excused,
+      excusedHours: excusedHours ?? this.excusedHours,
       leaveType: leaveType ?? this.leaveType,
       notes: notes ?? this.notes,
       source: source ?? this.source,
@@ -21398,6 +21582,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
       rawEventId: rawEventId ?? this.rawEventId,
       overrideReason: overrideReason ?? this.overrideReason,
       overtimeHours: overtimeHours ?? this.overtimeHours,
+      lateMinutes: lateMinutes ?? this.lateMinutes,
+      permissionHours: permissionHours ?? this.permissionHours,
       approvedBy: approvedBy ?? this.approvedBy,
       approvedAt: approvedAt ?? this.approvedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -21435,6 +21621,12 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     if (status.present) {
       map['status'] = Variable<String>(status.value);
     }
+    if (excused.present) {
+      map['excused'] = Variable<bool>(excused.value);
+    }
+    if (excusedHours.present) {
+      map['excused_hours'] = Variable<double>(excusedHours.value);
+    }
     if (leaveType.present) {
       map['leave_type'] = Variable<String>(leaveType.value);
     }
@@ -21455,6 +21647,12 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
     }
     if (overtimeHours.present) {
       map['overtime_hours'] = Variable<double>(overtimeHours.value);
+    }
+    if (lateMinutes.present) {
+      map['late_minutes'] = Variable<int>(lateMinutes.value);
+    }
+    if (permissionHours.present) {
+      map['permission_hours'] = Variable<double>(permissionHours.value);
     }
     if (approvedBy.present) {
       map['approved_by'] = Variable<String>(approvedBy.value);
@@ -21483,6 +21681,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
           ..write('checkOutLocation: $checkOutLocation, ')
           ..write('workingHours: $workingHours, ')
           ..write('status: $status, ')
+          ..write('excused: $excused, ')
+          ..write('excusedHours: $excusedHours, ')
           ..write('leaveType: $leaveType, ')
           ..write('notes: $notes, ')
           ..write('source: $source, ')
@@ -21490,6 +21690,8 @@ class AttendanceTableCompanion extends UpdateCompanion<Attendance> {
           ..write('rawEventId: $rawEventId, ')
           ..write('overrideReason: $overrideReason, ')
           ..write('overtimeHours: $overtimeHours, ')
+          ..write('lateMinutes: $lateMinutes, ')
+          ..write('permissionHours: $permissionHours, ')
           ..write('approvedBy: $approvedBy, ')
           ..write('approvedAt: $approvedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -23719,6 +23921,42 @@ class $PayrollTableTable extends PayrollTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0.0),
   );
+  static const VerificationMeta _lateHoursMeta = const VerificationMeta(
+    'lateHours',
+  );
+  @override
+  late final GeneratedColumn<double> lateHours = GeneratedColumn<double>(
+    'late_hours',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _permissionHoursMeta = const VerificationMeta(
+    'permissionHours',
+  );
+  @override
+  late final GeneratedColumn<double> permissionHours = GeneratedColumn<double>(
+    'permission_hours',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _permissionDeductionMeta =
+      const VerificationMeta('permissionDeduction');
+  @override
+  late final GeneratedColumn<double> permissionDeduction =
+      GeneratedColumn<double>(
+        'permission_deduction',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.0),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -23778,6 +24016,9 @@ class $PayrollTableTable extends PayrollTable
     expenseRefId,
     lateDays,
     lateDeduction,
+    lateHours,
+    permissionHours,
+    permissionDeduction,
     createdAt,
     updatedAt,
   ];
@@ -24062,6 +24303,30 @@ class $PayrollTableTable extends PayrollTable
         ),
       );
     }
+    if (data.containsKey('late_hours')) {
+      context.handle(
+        _lateHoursMeta,
+        lateHours.isAcceptableOrUnknown(data['late_hours']!, _lateHoursMeta),
+      );
+    }
+    if (data.containsKey('permission_hours')) {
+      context.handle(
+        _permissionHoursMeta,
+        permissionHours.isAcceptableOrUnknown(
+          data['permission_hours']!,
+          _permissionHoursMeta,
+        ),
+      );
+    }
+    if (data.containsKey('permission_deduction')) {
+      context.handle(
+        _permissionDeductionMeta,
+        permissionDeduction.isAcceptableOrUnknown(
+          data['permission_deduction']!,
+          _permissionDeductionMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -24227,6 +24492,18 @@ class $PayrollTableTable extends PayrollTable
         DriftSqlType.double,
         data['${effectivePrefix}late_deduction'],
       )!,
+      lateHours: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}late_hours'],
+      )!,
+      permissionHours: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}permission_hours'],
+      )!,
+      permissionDeduction: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}permission_deduction'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -24280,6 +24557,9 @@ class Payroll extends DataClass implements Insertable<Payroll> {
   final String? expenseRefId;
   final int lateDays;
   final double lateDeduction;
+  final double lateHours;
+  final double permissionHours;
+  final double permissionDeduction;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Payroll({
@@ -24318,6 +24598,9 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     this.expenseRefId,
     required this.lateDays,
     required this.lateDeduction,
+    required this.lateHours,
+    required this.permissionHours,
+    required this.permissionDeduction,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -24375,6 +24658,9 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     }
     map['late_days'] = Variable<int>(lateDays);
     map['late_deduction'] = Variable<double>(lateDeduction);
+    map['late_hours'] = Variable<double>(lateHours);
+    map['permission_hours'] = Variable<double>(permissionHours);
+    map['permission_deduction'] = Variable<double>(permissionDeduction);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -24433,6 +24719,9 @@ class Payroll extends DataClass implements Insertable<Payroll> {
           : Value(expenseRefId),
       lateDays: Value(lateDays),
       lateDeduction: Value(lateDeduction),
+      lateHours: Value(lateHours),
+      permissionHours: Value(permissionHours),
+      permissionDeduction: Value(permissionDeduction),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -24481,6 +24770,11 @@ class Payroll extends DataClass implements Insertable<Payroll> {
       expenseRefId: serializer.fromJson<String?>(json['expenseRefId']),
       lateDays: serializer.fromJson<int>(json['lateDays']),
       lateDeduction: serializer.fromJson<double>(json['lateDeduction']),
+      lateHours: serializer.fromJson<double>(json['lateHours']),
+      permissionHours: serializer.fromJson<double>(json['permissionHours']),
+      permissionDeduction: serializer.fromJson<double>(
+        json['permissionDeduction'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -24524,6 +24818,9 @@ class Payroll extends DataClass implements Insertable<Payroll> {
       'expenseRefId': serializer.toJson<String?>(expenseRefId),
       'lateDays': serializer.toJson<int>(lateDays),
       'lateDeduction': serializer.toJson<double>(lateDeduction),
+      'lateHours': serializer.toJson<double>(lateHours),
+      'permissionHours': serializer.toJson<double>(permissionHours),
+      'permissionDeduction': serializer.toJson<double>(permissionDeduction),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -24565,6 +24862,9 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     Value<String?> expenseRefId = const Value.absent(),
     int? lateDays,
     double? lateDeduction,
+    double? lateHours,
+    double? permissionHours,
+    double? permissionDeduction,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Payroll(
@@ -24607,6 +24907,9 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     expenseRefId: expenseRefId.present ? expenseRefId.value : this.expenseRefId,
     lateDays: lateDays ?? this.lateDays,
     lateDeduction: lateDeduction ?? this.lateDeduction,
+    lateHours: lateHours ?? this.lateHours,
+    permissionHours: permissionHours ?? this.permissionHours,
+    permissionDeduction: permissionDeduction ?? this.permissionDeduction,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -24693,6 +24996,13 @@ class Payroll extends DataClass implements Insertable<Payroll> {
       lateDeduction: data.lateDeduction.present
           ? data.lateDeduction.value
           : this.lateDeduction,
+      lateHours: data.lateHours.present ? data.lateHours.value : this.lateHours,
+      permissionHours: data.permissionHours.present
+          ? data.permissionHours.value
+          : this.permissionHours,
+      permissionDeduction: data.permissionDeduction.present
+          ? data.permissionDeduction.value
+          : this.permissionDeduction,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -24736,6 +25046,9 @@ class Payroll extends DataClass implements Insertable<Payroll> {
           ..write('expenseRefId: $expenseRefId, ')
           ..write('lateDays: $lateDays, ')
           ..write('lateDeduction: $lateDeduction, ')
+          ..write('lateHours: $lateHours, ')
+          ..write('permissionHours: $permissionHours, ')
+          ..write('permissionDeduction: $permissionDeduction, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -24779,6 +25092,9 @@ class Payroll extends DataClass implements Insertable<Payroll> {
     expenseRefId,
     lateDays,
     lateDeduction,
+    lateHours,
+    permissionHours,
+    permissionDeduction,
     createdAt,
     updatedAt,
   ]);
@@ -24821,6 +25137,9 @@ class Payroll extends DataClass implements Insertable<Payroll> {
           other.expenseRefId == this.expenseRefId &&
           other.lateDays == this.lateDays &&
           other.lateDeduction == this.lateDeduction &&
+          other.lateHours == this.lateHours &&
+          other.permissionHours == this.permissionHours &&
+          other.permissionDeduction == this.permissionDeduction &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -24861,6 +25180,9 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
   final Value<String?> expenseRefId;
   final Value<int> lateDays;
   final Value<double> lateDeduction;
+  final Value<double> lateHours;
+  final Value<double> permissionHours;
+  final Value<double> permissionDeduction;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const PayrollTableCompanion({
@@ -24899,6 +25221,9 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     this.expenseRefId = const Value.absent(),
     this.lateDays = const Value.absent(),
     this.lateDeduction = const Value.absent(),
+    this.lateHours = const Value.absent(),
+    this.permissionHours = const Value.absent(),
+    this.permissionDeduction = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -24938,6 +25263,9 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     this.expenseRefId = const Value.absent(),
     this.lateDays = const Value.absent(),
     this.lateDeduction = const Value.absent(),
+    this.lateHours = const Value.absent(),
+    this.permissionHours = const Value.absent(),
+    this.permissionDeduction = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
   }) : staffId = Value(staffId),
@@ -24985,6 +25313,9 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     Expression<String>? expenseRefId,
     Expression<int>? lateDays,
     Expression<double>? lateDeduction,
+    Expression<double>? lateHours,
+    Expression<double>? permissionHours,
+    Expression<double>? permissionDeduction,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -25025,6 +25356,10 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
       if (expenseRefId != null) 'expense_ref_id': expenseRefId,
       if (lateDays != null) 'late_days': lateDays,
       if (lateDeduction != null) 'late_deduction': lateDeduction,
+      if (lateHours != null) 'late_hours': lateHours,
+      if (permissionHours != null) 'permission_hours': permissionHours,
+      if (permissionDeduction != null)
+        'permission_deduction': permissionDeduction,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -25066,6 +25401,9 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     Value<String?>? expenseRefId,
     Value<int>? lateDays,
     Value<double>? lateDeduction,
+    Value<double>? lateHours,
+    Value<double>? permissionHours,
+    Value<double>? permissionDeduction,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -25105,6 +25443,9 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
       expenseRefId: expenseRefId ?? this.expenseRefId,
       lateDays: lateDays ?? this.lateDays,
       lateDeduction: lateDeduction ?? this.lateDeduction,
+      lateHours: lateHours ?? this.lateHours,
+      permissionHours: permissionHours ?? this.permissionHours,
+      permissionDeduction: permissionDeduction ?? this.permissionDeduction,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -25220,6 +25561,15 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
     if (lateDeduction.present) {
       map['late_deduction'] = Variable<double>(lateDeduction.value);
     }
+    if (lateHours.present) {
+      map['late_hours'] = Variable<double>(lateHours.value);
+    }
+    if (permissionHours.present) {
+      map['permission_hours'] = Variable<double>(permissionHours.value);
+    }
+    if (permissionDeduction.present) {
+      map['permission_deduction'] = Variable<double>(permissionDeduction.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -25267,6 +25617,9 @@ class PayrollTableCompanion extends UpdateCompanion<Payroll> {
           ..write('expenseRefId: $expenseRefId, ')
           ..write('lateDays: $lateDays, ')
           ..write('lateDeduction: $lateDeduction, ')
+          ..write('lateHours: $lateHours, ')
+          ..write('permissionHours: $permissionHours, ')
+          ..write('permissionDeduction: $permissionDeduction, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -42042,6 +42395,1337 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
   }
 }
 
+class $CashCustodiesTable extends CashCustodies
+    with TableInfo<$CashCustodiesTable, CashCustody> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CashCustodiesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _custodyNumberMeta = const VerificationMeta(
+    'custodyNumber',
+  );
+  @override
+  late final GeneratedColumn<String> custodyNumber = GeneratedColumn<String>(
+    'custody_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _staffIdMeta = const VerificationMeta(
+    'staffId',
+  );
+  @override
+  late final GeneratedColumn<String> staffId = GeneratedColumn<String>(
+    'staff_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _staffNameMeta = const VerificationMeta(
+    'staffName',
+  );
+  @override
+  late final GeneratedColumn<String> staffName = GeneratedColumn<String>(
+    'staff_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
+    'date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<double> amount = GeneratedColumn<double>(
+    'amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _totalExpensesMeta = const VerificationMeta(
+    'totalExpenses',
+  );
+  @override
+  late final GeneratedColumn<double> totalExpenses = GeneratedColumn<double>(
+    'total_expenses',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _remainingAmountMeta = const VerificationMeta(
+    'remainingAmount',
+  );
+  @override
+  late final GeneratedColumn<double> remainingAmount = GeneratedColumn<double>(
+    'remaining_amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('open'),
+  );
+  static const VerificationMeta _settledAtMeta = const VerificationMeta(
+    'settledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> settledAt = GeneratedColumn<DateTime>(
+    'settled_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _settledByMeta = const VerificationMeta(
+    'settledBy',
+  );
+  @override
+  late final GeneratedColumn<String> settledBy = GeneratedColumn<String>(
+    'settled_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    custodyNumber,
+    staffId,
+    staffName,
+    date,
+    amount,
+    description,
+    totalExpenses,
+    remainingAmount,
+    status,
+    settledAt,
+    settledBy,
+    notes,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cash_custodies';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CashCustody> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('custody_number')) {
+      context.handle(
+        _custodyNumberMeta,
+        custodyNumber.isAcceptableOrUnknown(
+          data['custody_number']!,
+          _custodyNumberMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_custodyNumberMeta);
+    }
+    if (data.containsKey('staff_id')) {
+      context.handle(
+        _staffIdMeta,
+        staffId.isAcceptableOrUnknown(data['staff_id']!, _staffIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_staffIdMeta);
+    }
+    if (data.containsKey('staff_name')) {
+      context.handle(
+        _staffNameMeta,
+        staffName.isAcceptableOrUnknown(data['staff_name']!, _staffNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_staffNameMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+        _dateMeta,
+        date.isAcceptableOrUnknown(data['date']!, _dateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(
+        _amountMeta,
+        amount.isAcceptableOrUnknown(data['amount']!, _amountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('total_expenses')) {
+      context.handle(
+        _totalExpensesMeta,
+        totalExpenses.isAcceptableOrUnknown(
+          data['total_expenses']!,
+          _totalExpensesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('remaining_amount')) {
+      context.handle(
+        _remainingAmountMeta,
+        remainingAmount.isAcceptableOrUnknown(
+          data['remaining_amount']!,
+          _remainingAmountMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_remainingAmountMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('settled_at')) {
+      context.handle(
+        _settledAtMeta,
+        settledAt.isAcceptableOrUnknown(data['settled_at']!, _settledAtMeta),
+      );
+    }
+    if (data.containsKey('settled_by')) {
+      context.handle(
+        _settledByMeta,
+        settledBy.isAcceptableOrUnknown(data['settled_by']!, _settledByMeta),
+      );
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CashCustody map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CashCustody(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      custodyNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}custody_number'],
+      )!,
+      staffId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}staff_id'],
+      )!,
+      staffName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}staff_name'],
+      )!,
+      date: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}date'],
+      )!,
+      amount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}amount'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      totalExpenses: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}total_expenses'],
+      )!,
+      remainingAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}remaining_amount'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      settledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}settled_at'],
+      ),
+      settledBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}settled_by'],
+      ),
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CashCustodiesTable createAlias(String alias) {
+    return $CashCustodiesTable(attachedDatabase, alias);
+  }
+}
+
+class CashCustody extends DataClass implements Insertable<CashCustody> {
+  final int id;
+
+  /// رقم العهدة التسلسلي، مثال: CUST-000001
+  final String custodyNumber;
+
+  /// معرف الموظف أو الشخص المسؤول (من staff_table)
+  final String staffId;
+
+  /// اسم الموظف مسجل كـ denormalized لسرعة العرض والحفاظ على السجل
+  final String staffName;
+
+  /// تاريخ استلام / إنشاء العهدة
+  final DateTime date;
+
+  /// المبلغ الأصلي للعهدة (ثابت لا يتغير بعد الإنشاء)
+  final double amount;
+
+  /// وصف أو غرض العهدة
+  final String? description;
+
+  /// إجمالي المصروفات المسجلة على هذه العهدة
+  final double totalExpenses;
+
+  /// المبلغ المتبقي (amount - totalExpenses)
+  final double remainingAmount;
+
+  /// حالة العهدة: 'open' | 'settled' | 'cancelled'
+  final String status;
+
+  /// تاريخ ووقت الإغلاق والتسوية
+  final DateTime? settledAt;
+
+  /// اسم أو معرف من قام بالتسوية
+  final String? settledBy;
+
+  /// ملاحظات إضافية
+  final String? notes;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const CashCustody({
+    required this.id,
+    required this.custodyNumber,
+    required this.staffId,
+    required this.staffName,
+    required this.date,
+    required this.amount,
+    this.description,
+    required this.totalExpenses,
+    required this.remainingAmount,
+    required this.status,
+    this.settledAt,
+    this.settledBy,
+    this.notes,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['custody_number'] = Variable<String>(custodyNumber);
+    map['staff_id'] = Variable<String>(staffId);
+    map['staff_name'] = Variable<String>(staffName);
+    map['date'] = Variable<DateTime>(date);
+    map['amount'] = Variable<double>(amount);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    map['total_expenses'] = Variable<double>(totalExpenses);
+    map['remaining_amount'] = Variable<double>(remainingAmount);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || settledAt != null) {
+      map['settled_at'] = Variable<DateTime>(settledAt);
+    }
+    if (!nullToAbsent || settledBy != null) {
+      map['settled_by'] = Variable<String>(settledBy);
+    }
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CashCustodiesCompanion toCompanion(bool nullToAbsent) {
+    return CashCustodiesCompanion(
+      id: Value(id),
+      custodyNumber: Value(custodyNumber),
+      staffId: Value(staffId),
+      staffName: Value(staffName),
+      date: Value(date),
+      amount: Value(amount),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+      totalExpenses: Value(totalExpenses),
+      remainingAmount: Value(remainingAmount),
+      status: Value(status),
+      settledAt: settledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settledAt),
+      settledBy: settledBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settledBy),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CashCustody.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CashCustody(
+      id: serializer.fromJson<int>(json['id']),
+      custodyNumber: serializer.fromJson<String>(json['custodyNumber']),
+      staffId: serializer.fromJson<String>(json['staffId']),
+      staffName: serializer.fromJson<String>(json['staffName']),
+      date: serializer.fromJson<DateTime>(json['date']),
+      amount: serializer.fromJson<double>(json['amount']),
+      description: serializer.fromJson<String?>(json['description']),
+      totalExpenses: serializer.fromJson<double>(json['totalExpenses']),
+      remainingAmount: serializer.fromJson<double>(json['remainingAmount']),
+      status: serializer.fromJson<String>(json['status']),
+      settledAt: serializer.fromJson<DateTime?>(json['settledAt']),
+      settledBy: serializer.fromJson<String?>(json['settledBy']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'custodyNumber': serializer.toJson<String>(custodyNumber),
+      'staffId': serializer.toJson<String>(staffId),
+      'staffName': serializer.toJson<String>(staffName),
+      'date': serializer.toJson<DateTime>(date),
+      'amount': serializer.toJson<double>(amount),
+      'description': serializer.toJson<String?>(description),
+      'totalExpenses': serializer.toJson<double>(totalExpenses),
+      'remainingAmount': serializer.toJson<double>(remainingAmount),
+      'status': serializer.toJson<String>(status),
+      'settledAt': serializer.toJson<DateTime?>(settledAt),
+      'settledBy': serializer.toJson<String?>(settledBy),
+      'notes': serializer.toJson<String?>(notes),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CashCustody copyWith({
+    int? id,
+    String? custodyNumber,
+    String? staffId,
+    String? staffName,
+    DateTime? date,
+    double? amount,
+    Value<String?> description = const Value.absent(),
+    double? totalExpenses,
+    double? remainingAmount,
+    String? status,
+    Value<DateTime?> settledAt = const Value.absent(),
+    Value<String?> settledBy = const Value.absent(),
+    Value<String?> notes = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => CashCustody(
+    id: id ?? this.id,
+    custodyNumber: custodyNumber ?? this.custodyNumber,
+    staffId: staffId ?? this.staffId,
+    staffName: staffName ?? this.staffName,
+    date: date ?? this.date,
+    amount: amount ?? this.amount,
+    description: description.present ? description.value : this.description,
+    totalExpenses: totalExpenses ?? this.totalExpenses,
+    remainingAmount: remainingAmount ?? this.remainingAmount,
+    status: status ?? this.status,
+    settledAt: settledAt.present ? settledAt.value : this.settledAt,
+    settledBy: settledBy.present ? settledBy.value : this.settledBy,
+    notes: notes.present ? notes.value : this.notes,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CashCustody copyWithCompanion(CashCustodiesCompanion data) {
+    return CashCustody(
+      id: data.id.present ? data.id.value : this.id,
+      custodyNumber: data.custodyNumber.present
+          ? data.custodyNumber.value
+          : this.custodyNumber,
+      staffId: data.staffId.present ? data.staffId.value : this.staffId,
+      staffName: data.staffName.present ? data.staffName.value : this.staffName,
+      date: data.date.present ? data.date.value : this.date,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      totalExpenses: data.totalExpenses.present
+          ? data.totalExpenses.value
+          : this.totalExpenses,
+      remainingAmount: data.remainingAmount.present
+          ? data.remainingAmount.value
+          : this.remainingAmount,
+      status: data.status.present ? data.status.value : this.status,
+      settledAt: data.settledAt.present ? data.settledAt.value : this.settledAt,
+      settledBy: data.settledBy.present ? data.settledBy.value : this.settledBy,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashCustody(')
+          ..write('id: $id, ')
+          ..write('custodyNumber: $custodyNumber, ')
+          ..write('staffId: $staffId, ')
+          ..write('staffName: $staffName, ')
+          ..write('date: $date, ')
+          ..write('amount: $amount, ')
+          ..write('description: $description, ')
+          ..write('totalExpenses: $totalExpenses, ')
+          ..write('remainingAmount: $remainingAmount, ')
+          ..write('status: $status, ')
+          ..write('settledAt: $settledAt, ')
+          ..write('settledBy: $settledBy, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    custodyNumber,
+    staffId,
+    staffName,
+    date,
+    amount,
+    description,
+    totalExpenses,
+    remainingAmount,
+    status,
+    settledAt,
+    settledBy,
+    notes,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CashCustody &&
+          other.id == this.id &&
+          other.custodyNumber == this.custodyNumber &&
+          other.staffId == this.staffId &&
+          other.staffName == this.staffName &&
+          other.date == this.date &&
+          other.amount == this.amount &&
+          other.description == this.description &&
+          other.totalExpenses == this.totalExpenses &&
+          other.remainingAmount == this.remainingAmount &&
+          other.status == this.status &&
+          other.settledAt == this.settledAt &&
+          other.settledBy == this.settledBy &&
+          other.notes == this.notes &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CashCustodiesCompanion extends UpdateCompanion<CashCustody> {
+  final Value<int> id;
+  final Value<String> custodyNumber;
+  final Value<String> staffId;
+  final Value<String> staffName;
+  final Value<DateTime> date;
+  final Value<double> amount;
+  final Value<String?> description;
+  final Value<double> totalExpenses;
+  final Value<double> remainingAmount;
+  final Value<String> status;
+  final Value<DateTime?> settledAt;
+  final Value<String?> settledBy;
+  final Value<String?> notes;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const CashCustodiesCompanion({
+    this.id = const Value.absent(),
+    this.custodyNumber = const Value.absent(),
+    this.staffId = const Value.absent(),
+    this.staffName = const Value.absent(),
+    this.date = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.description = const Value.absent(),
+    this.totalExpenses = const Value.absent(),
+    this.remainingAmount = const Value.absent(),
+    this.status = const Value.absent(),
+    this.settledAt = const Value.absent(),
+    this.settledBy = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  CashCustodiesCompanion.insert({
+    this.id = const Value.absent(),
+    required String custodyNumber,
+    required String staffId,
+    required String staffName,
+    required DateTime date,
+    required double amount,
+    this.description = const Value.absent(),
+    this.totalExpenses = const Value.absent(),
+    required double remainingAmount,
+    this.status = const Value.absent(),
+    this.settledAt = const Value.absent(),
+    this.settledBy = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : custodyNumber = Value(custodyNumber),
+       staffId = Value(staffId),
+       staffName = Value(staffName),
+       date = Value(date),
+       amount = Value(amount),
+       remainingAmount = Value(remainingAmount);
+  static Insertable<CashCustody> custom({
+    Expression<int>? id,
+    Expression<String>? custodyNumber,
+    Expression<String>? staffId,
+    Expression<String>? staffName,
+    Expression<DateTime>? date,
+    Expression<double>? amount,
+    Expression<String>? description,
+    Expression<double>? totalExpenses,
+    Expression<double>? remainingAmount,
+    Expression<String>? status,
+    Expression<DateTime>? settledAt,
+    Expression<String>? settledBy,
+    Expression<String>? notes,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (custodyNumber != null) 'custody_number': custodyNumber,
+      if (staffId != null) 'staff_id': staffId,
+      if (staffName != null) 'staff_name': staffName,
+      if (date != null) 'date': date,
+      if (amount != null) 'amount': amount,
+      if (description != null) 'description': description,
+      if (totalExpenses != null) 'total_expenses': totalExpenses,
+      if (remainingAmount != null) 'remaining_amount': remainingAmount,
+      if (status != null) 'status': status,
+      if (settledAt != null) 'settled_at': settledAt,
+      if (settledBy != null) 'settled_by': settledBy,
+      if (notes != null) 'notes': notes,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  CashCustodiesCompanion copyWith({
+    Value<int>? id,
+    Value<String>? custodyNumber,
+    Value<String>? staffId,
+    Value<String>? staffName,
+    Value<DateTime>? date,
+    Value<double>? amount,
+    Value<String?>? description,
+    Value<double>? totalExpenses,
+    Value<double>? remainingAmount,
+    Value<String>? status,
+    Value<DateTime?>? settledAt,
+    Value<String?>? settledBy,
+    Value<String?>? notes,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return CashCustodiesCompanion(
+      id: id ?? this.id,
+      custodyNumber: custodyNumber ?? this.custodyNumber,
+      staffId: staffId ?? this.staffId,
+      staffName: staffName ?? this.staffName,
+      date: date ?? this.date,
+      amount: amount ?? this.amount,
+      description: description ?? this.description,
+      totalExpenses: totalExpenses ?? this.totalExpenses,
+      remainingAmount: remainingAmount ?? this.remainingAmount,
+      status: status ?? this.status,
+      settledAt: settledAt ?? this.settledAt,
+      settledBy: settledBy ?? this.settledBy,
+      notes: notes ?? this.notes,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (custodyNumber.present) {
+      map['custody_number'] = Variable<String>(custodyNumber.value);
+    }
+    if (staffId.present) {
+      map['staff_id'] = Variable<String>(staffId.value);
+    }
+    if (staffName.present) {
+      map['staff_name'] = Variable<String>(staffName.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<DateTime>(date.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<double>(amount.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (totalExpenses.present) {
+      map['total_expenses'] = Variable<double>(totalExpenses.value);
+    }
+    if (remainingAmount.present) {
+      map['remaining_amount'] = Variable<double>(remainingAmount.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (settledAt.present) {
+      map['settled_at'] = Variable<DateTime>(settledAt.value);
+    }
+    if (settledBy.present) {
+      map['settled_by'] = Variable<String>(settledBy.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashCustodiesCompanion(')
+          ..write('id: $id, ')
+          ..write('custodyNumber: $custodyNumber, ')
+          ..write('staffId: $staffId, ')
+          ..write('staffName: $staffName, ')
+          ..write('date: $date, ')
+          ..write('amount: $amount, ')
+          ..write('description: $description, ')
+          ..write('totalExpenses: $totalExpenses, ')
+          ..write('remainingAmount: $remainingAmount, ')
+          ..write('status: $status, ')
+          ..write('settledAt: $settledAt, ')
+          ..write('settledBy: $settledBy, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CustodyExpensesTable extends CustodyExpenses
+    with TableInfo<$CustodyExpensesTable, CustodyExpense> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CustodyExpensesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _custodyIdMeta = const VerificationMeta(
+    'custodyId',
+  );
+  @override
+  late final GeneratedColumn<int> custodyId = GeneratedColumn<int>(
+    'custody_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES cash_custodies (id)',
+    ),
+  );
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
+    'date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 255,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<double> amount = GeneratedColumn<double>(
+    'amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    custodyId,
+    date,
+    description,
+    amount,
+    notes,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'custody_expenses';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CustodyExpense> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('custody_id')) {
+      context.handle(
+        _custodyIdMeta,
+        custodyId.isAcceptableOrUnknown(data['custody_id']!, _custodyIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_custodyIdMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+        _dateMeta,
+        date.isAcceptableOrUnknown(data['date']!, _dateMeta),
+      );
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_descriptionMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(
+        _amountMeta,
+        amount.isAcceptableOrUnknown(data['amount']!, _amountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CustodyExpense map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CustodyExpense(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      custodyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}custody_id'],
+      )!,
+      date: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}date'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      )!,
+      amount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}amount'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CustodyExpensesTable createAlias(String alias) {
+    return $CustodyExpensesTable(attachedDatabase, alias);
+  }
+}
+
+class CustodyExpense extends DataClass implements Insertable<CustodyExpense> {
+  final int id;
+
+  /// ربط بالمصروف بالعهدة
+  final int custodyId;
+
+  /// تاريخ تسجيل المصروف
+  final DateTime date;
+
+  /// بيان أو وصف المصروف
+  final String description;
+
+  /// قيمة المصروف
+  final double amount;
+
+  /// ملاحظات إضافية
+  final String? notes;
+  final DateTime createdAt;
+  const CustodyExpense({
+    required this.id,
+    required this.custodyId,
+    required this.date,
+    required this.description,
+    required this.amount,
+    this.notes,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['custody_id'] = Variable<int>(custodyId);
+    map['date'] = Variable<DateTime>(date);
+    map['description'] = Variable<String>(description);
+    map['amount'] = Variable<double>(amount);
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  CustodyExpensesCompanion toCompanion(bool nullToAbsent) {
+    return CustodyExpensesCompanion(
+      id: Value(id),
+      custodyId: Value(custodyId),
+      date: Value(date),
+      description: Value(description),
+      amount: Value(amount),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory CustodyExpense.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CustodyExpense(
+      id: serializer.fromJson<int>(json['id']),
+      custodyId: serializer.fromJson<int>(json['custodyId']),
+      date: serializer.fromJson<DateTime>(json['date']),
+      description: serializer.fromJson<String>(json['description']),
+      amount: serializer.fromJson<double>(json['amount']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'custodyId': serializer.toJson<int>(custodyId),
+      'date': serializer.toJson<DateTime>(date),
+      'description': serializer.toJson<String>(description),
+      'amount': serializer.toJson<double>(amount),
+      'notes': serializer.toJson<String?>(notes),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  CustodyExpense copyWith({
+    int? id,
+    int? custodyId,
+    DateTime? date,
+    String? description,
+    double? amount,
+    Value<String?> notes = const Value.absent(),
+    DateTime? createdAt,
+  }) => CustodyExpense(
+    id: id ?? this.id,
+    custodyId: custodyId ?? this.custodyId,
+    date: date ?? this.date,
+    description: description ?? this.description,
+    amount: amount ?? this.amount,
+    notes: notes.present ? notes.value : this.notes,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  CustodyExpense copyWithCompanion(CustodyExpensesCompanion data) {
+    return CustodyExpense(
+      id: data.id.present ? data.id.value : this.id,
+      custodyId: data.custodyId.present ? data.custodyId.value : this.custodyId,
+      date: data.date.present ? data.date.value : this.date,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustodyExpense(')
+          ..write('id: $id, ')
+          ..write('custodyId: $custodyId, ')
+          ..write('date: $date, ')
+          ..write('description: $description, ')
+          ..write('amount: $amount, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, custodyId, date, description, amount, notes, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CustodyExpense &&
+          other.id == this.id &&
+          other.custodyId == this.custodyId &&
+          other.date == this.date &&
+          other.description == this.description &&
+          other.amount == this.amount &&
+          other.notes == this.notes &&
+          other.createdAt == this.createdAt);
+}
+
+class CustodyExpensesCompanion extends UpdateCompanion<CustodyExpense> {
+  final Value<int> id;
+  final Value<int> custodyId;
+  final Value<DateTime> date;
+  final Value<String> description;
+  final Value<double> amount;
+  final Value<String?> notes;
+  final Value<DateTime> createdAt;
+  const CustodyExpensesCompanion({
+    this.id = const Value.absent(),
+    this.custodyId = const Value.absent(),
+    this.date = const Value.absent(),
+    this.description = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  CustodyExpensesCompanion.insert({
+    this.id = const Value.absent(),
+    required int custodyId,
+    this.date = const Value.absent(),
+    required String description,
+    required double amount,
+    this.notes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : custodyId = Value(custodyId),
+       description = Value(description),
+       amount = Value(amount);
+  static Insertable<CustodyExpense> custom({
+    Expression<int>? id,
+    Expression<int>? custodyId,
+    Expression<DateTime>? date,
+    Expression<String>? description,
+    Expression<double>? amount,
+    Expression<String>? notes,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (custodyId != null) 'custody_id': custodyId,
+      if (date != null) 'date': date,
+      if (description != null) 'description': description,
+      if (amount != null) 'amount': amount,
+      if (notes != null) 'notes': notes,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  CustodyExpensesCompanion copyWith({
+    Value<int>? id,
+    Value<int>? custodyId,
+    Value<DateTime>? date,
+    Value<String>? description,
+    Value<double>? amount,
+    Value<String?>? notes,
+    Value<DateTime>? createdAt,
+  }) {
+    return CustodyExpensesCompanion(
+      id: id ?? this.id,
+      custodyId: custodyId ?? this.custodyId,
+      date: date ?? this.date,
+      description: description ?? this.description,
+      amount: amount ?? this.amount,
+      notes: notes ?? this.notes,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (custodyId.present) {
+      map['custody_id'] = Variable<int>(custodyId.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<DateTime>(date.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<double>(amount.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustodyExpensesCompanion(')
+          ..write('id: $id, ')
+          ..write('custodyId: $custodyId, ')
+          ..write('date: $date, ')
+          ..write('description: $description, ')
+          ..write('amount: $amount, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -42141,6 +43825,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $EmptyBarnikaTrackingTable emptyBarnikaTracking =
       $EmptyBarnikaTrackingTable(this);
   late final $SyncQueueTable syncQueue = $SyncQueueTable(this);
+  late final $CashCustodiesTable cashCustodies = $CashCustodiesTable(this);
+  late final $CustodyExpensesTable custodyExpenses = $CustodyExpensesTable(
+    this,
+  );
   late final ProductDao productDao = ProductDao(this as AppDatabase);
   late final CustomerDao customerDao = CustomerDao(this as AppDatabase);
   late final SupplierDao supplierDao = SupplierDao(this as AppDatabase);
@@ -42194,6 +43882,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final EmptyBarnikaTrackingDao emptyBarnikaTrackingDao =
       EmptyBarnikaTrackingDao(this as AppDatabase);
   late final SyncQueueDao syncQueueDao = SyncQueueDao(this as AppDatabase);
+  late final CustodyDao custodyDao = CustodyDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -42254,6 +43943,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     attendanceSettings,
     emptyBarnikaTracking,
     syncQueue,
+    cashCustodies,
+    custodyExpenses,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -57490,6 +59181,8 @@ typedef $$AttendanceTableTableCreateCompanionBuilder =
       Value<String?> checkOutLocation,
       Value<double?> workingHours,
       required String status,
+      Value<bool> excused,
+      Value<double> excusedHours,
       Value<String?> leaveType,
       Value<String?> notes,
       Value<String?> source,
@@ -57497,6 +59190,8 @@ typedef $$AttendanceTableTableCreateCompanionBuilder =
       Value<int?> rawEventId,
       Value<String?> overrideReason,
       Value<double> overtimeHours,
+      Value<int> lateMinutes,
+      Value<double> permissionHours,
       Value<String?> approvedBy,
       Value<DateTime?> approvedAt,
       required DateTime createdAt,
@@ -57513,6 +59208,8 @@ typedef $$AttendanceTableTableUpdateCompanionBuilder =
       Value<String?> checkOutLocation,
       Value<double?> workingHours,
       Value<String> status,
+      Value<bool> excused,
+      Value<double> excusedHours,
       Value<String?> leaveType,
       Value<String?> notes,
       Value<String?> source,
@@ -57520,6 +59217,8 @@ typedef $$AttendanceTableTableUpdateCompanionBuilder =
       Value<int?> rawEventId,
       Value<String?> overrideReason,
       Value<double> overtimeHours,
+      Value<int> lateMinutes,
+      Value<double> permissionHours,
       Value<String?> approvedBy,
       Value<DateTime?> approvedAt,
       Value<DateTime> createdAt,
@@ -57580,6 +59279,16 @@ class $$AttendanceTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get excused => $composableBuilder(
+    column: $table.excused,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get excusedHours => $composableBuilder(
+    column: $table.excusedHours,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get leaveType => $composableBuilder(
     column: $table.leaveType,
     builder: (column) => ColumnFilters(column),
@@ -57612,6 +59321,16 @@ class $$AttendanceTableTableFilterComposer
 
   ColumnFilters<double> get overtimeHours => $composableBuilder(
     column: $table.overtimeHours,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lateMinutes => $composableBuilder(
+    column: $table.lateMinutes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get permissionHours => $composableBuilder(
+    column: $table.permissionHours,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -57690,6 +59409,16 @@ class $$AttendanceTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get excused => $composableBuilder(
+    column: $table.excused,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get excusedHours => $composableBuilder(
+    column: $table.excusedHours,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get leaveType => $composableBuilder(
     column: $table.leaveType,
     builder: (column) => ColumnOrderings(column),
@@ -57722,6 +59451,16 @@ class $$AttendanceTableTableOrderingComposer
 
   ColumnOrderings<double> get overtimeHours => $composableBuilder(
     column: $table.overtimeHours,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lateMinutes => $composableBuilder(
+    column: $table.lateMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get permissionHours => $composableBuilder(
+    column: $table.permissionHours,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -57792,6 +59531,14 @@ class $$AttendanceTableTableAnnotationComposer
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
 
+  GeneratedColumn<bool> get excused =>
+      $composableBuilder(column: $table.excused, builder: (column) => column);
+
+  GeneratedColumn<double> get excusedHours => $composableBuilder(
+    column: $table.excusedHours,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get leaveType =>
       $composableBuilder(column: $table.leaveType, builder: (column) => column);
 
@@ -57818,6 +59565,16 @@ class $$AttendanceTableTableAnnotationComposer
 
   GeneratedColumn<double> get overtimeHours => $composableBuilder(
     column: $table.overtimeHours,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lateMinutes => $composableBuilder(
+    column: $table.lateMinutes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get permissionHours => $composableBuilder(
+    column: $table.permissionHours,
     builder: (column) => column,
   );
 
@@ -57880,6 +59637,8 @@ class $$AttendanceTableTableTableManager
                 Value<String?> checkOutLocation = const Value.absent(),
                 Value<double?> workingHours = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<bool> excused = const Value.absent(),
+                Value<double> excusedHours = const Value.absent(),
                 Value<String?> leaveType = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<String?> source = const Value.absent(),
@@ -57887,6 +59646,8 @@ class $$AttendanceTableTableTableManager
                 Value<int?> rawEventId = const Value.absent(),
                 Value<String?> overrideReason = const Value.absent(),
                 Value<double> overtimeHours = const Value.absent(),
+                Value<int> lateMinutes = const Value.absent(),
+                Value<double> permissionHours = const Value.absent(),
                 Value<String?> approvedBy = const Value.absent(),
                 Value<DateTime?> approvedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -57901,6 +59662,8 @@ class $$AttendanceTableTableTableManager
                 checkOutLocation: checkOutLocation,
                 workingHours: workingHours,
                 status: status,
+                excused: excused,
+                excusedHours: excusedHours,
                 leaveType: leaveType,
                 notes: notes,
                 source: source,
@@ -57908,6 +59671,8 @@ class $$AttendanceTableTableTableManager
                 rawEventId: rawEventId,
                 overrideReason: overrideReason,
                 overtimeHours: overtimeHours,
+                lateMinutes: lateMinutes,
+                permissionHours: permissionHours,
                 approvedBy: approvedBy,
                 approvedAt: approvedAt,
                 createdAt: createdAt,
@@ -57924,6 +59689,8 @@ class $$AttendanceTableTableTableManager
                 Value<String?> checkOutLocation = const Value.absent(),
                 Value<double?> workingHours = const Value.absent(),
                 required String status,
+                Value<bool> excused = const Value.absent(),
+                Value<double> excusedHours = const Value.absent(),
                 Value<String?> leaveType = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<String?> source = const Value.absent(),
@@ -57931,6 +59698,8 @@ class $$AttendanceTableTableTableManager
                 Value<int?> rawEventId = const Value.absent(),
                 Value<String?> overrideReason = const Value.absent(),
                 Value<double> overtimeHours = const Value.absent(),
+                Value<int> lateMinutes = const Value.absent(),
+                Value<double> permissionHours = const Value.absent(),
                 Value<String?> approvedBy = const Value.absent(),
                 Value<DateTime?> approvedAt = const Value.absent(),
                 required DateTime createdAt,
@@ -57945,6 +59714,8 @@ class $$AttendanceTableTableTableManager
                 checkOutLocation: checkOutLocation,
                 workingHours: workingHours,
                 status: status,
+                excused: excused,
+                excusedHours: excusedHours,
                 leaveType: leaveType,
                 notes: notes,
                 source: source,
@@ -57952,6 +59723,8 @@ class $$AttendanceTableTableTableManager
                 rawEventId: rawEventId,
                 overrideReason: overrideReason,
                 overtimeHours: overtimeHours,
+                lateMinutes: lateMinutes,
+                permissionHours: permissionHours,
                 approvedBy: approvedBy,
                 approvedAt: approvedAt,
                 createdAt: createdAt,
@@ -58830,6 +60603,9 @@ typedef $$PayrollTableTableCreateCompanionBuilder =
       Value<String?> expenseRefId,
       Value<int> lateDays,
       Value<double> lateDeduction,
+      Value<double> lateHours,
+      Value<double> permissionHours,
+      Value<double> permissionDeduction,
       required DateTime createdAt,
       required DateTime updatedAt,
     });
@@ -58870,6 +60646,9 @@ typedef $$PayrollTableTableUpdateCompanionBuilder =
       Value<String?> expenseRefId,
       Value<int> lateDays,
       Value<double> lateDeduction,
+      Value<double> lateHours,
+      Value<double> permissionHours,
+      Value<double> permissionDeduction,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -59055,6 +60834,21 @@ class $$PayrollTableTableFilterComposer
 
   ColumnFilters<double> get lateDeduction => $composableBuilder(
     column: $table.lateDeduction,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get lateHours => $composableBuilder(
+    column: $table.lateHours,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get permissionHours => $composableBuilder(
+    column: $table.permissionHours,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get permissionDeduction => $composableBuilder(
+    column: $table.permissionDeduction,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -59253,6 +61047,21 @@ class $$PayrollTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get lateHours => $composableBuilder(
+    column: $table.lateHours,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get permissionHours => $composableBuilder(
+    column: $table.permissionHours,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get permissionDeduction => $composableBuilder(
+    column: $table.permissionDeduction,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -59424,6 +61233,19 @@ class $$PayrollTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<double> get lateHours =>
+      $composableBuilder(column: $table.lateHours, builder: (column) => column);
+
+  GeneratedColumn<double> get permissionHours => $composableBuilder(
+    column: $table.permissionHours,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get permissionDeduction => $composableBuilder(
+    column: $table.permissionDeduction,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -59494,6 +61316,9 @@ class $$PayrollTableTableTableManager
                 Value<String?> expenseRefId = const Value.absent(),
                 Value<int> lateDays = const Value.absent(),
                 Value<double> lateDeduction = const Value.absent(),
+                Value<double> lateHours = const Value.absent(),
+                Value<double> permissionHours = const Value.absent(),
+                Value<double> permissionDeduction = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => PayrollTableCompanion(
@@ -59532,6 +61357,9 @@ class $$PayrollTableTableTableManager
                 expenseRefId: expenseRefId,
                 lateDays: lateDays,
                 lateDeduction: lateDeduction,
+                lateHours: lateHours,
+                permissionHours: permissionHours,
+                permissionDeduction: permissionDeduction,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -59572,6 +61400,9 @@ class $$PayrollTableTableTableManager
                 Value<String?> expenseRefId = const Value.absent(),
                 Value<int> lateDays = const Value.absent(),
                 Value<double> lateDeduction = const Value.absent(),
+                Value<double> lateHours = const Value.absent(),
+                Value<double> permissionHours = const Value.absent(),
+                Value<double> permissionDeduction = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
               }) => PayrollTableCompanion.insert(
@@ -59610,6 +61441,9 @@ class $$PayrollTableTableTableManager
                 expenseRefId: expenseRefId,
                 lateDays: lateDays,
                 lateDeduction: lateDeduction,
+                lateHours: lateHours,
+                permissionHours: permissionHours,
+                permissionDeduction: permissionDeduction,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -70546,6 +72380,872 @@ typedef $$SyncQueueTableProcessedTableManager =
       SyncQueueData,
       PrefetchHooks Function()
     >;
+typedef $$CashCustodiesTableCreateCompanionBuilder =
+    CashCustodiesCompanion Function({
+      Value<int> id,
+      required String custodyNumber,
+      required String staffId,
+      required String staffName,
+      required DateTime date,
+      required double amount,
+      Value<String?> description,
+      Value<double> totalExpenses,
+      required double remainingAmount,
+      Value<String> status,
+      Value<DateTime?> settledAt,
+      Value<String?> settledBy,
+      Value<String?> notes,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$CashCustodiesTableUpdateCompanionBuilder =
+    CashCustodiesCompanion Function({
+      Value<int> id,
+      Value<String> custodyNumber,
+      Value<String> staffId,
+      Value<String> staffName,
+      Value<DateTime> date,
+      Value<double> amount,
+      Value<String?> description,
+      Value<double> totalExpenses,
+      Value<double> remainingAmount,
+      Value<String> status,
+      Value<DateTime?> settledAt,
+      Value<String?> settledBy,
+      Value<String?> notes,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$CashCustodiesTableReferences
+    extends BaseReferences<_$AppDatabase, $CashCustodiesTable, CashCustody> {
+  $$CashCustodiesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<$CustodyExpensesTable, List<CustodyExpense>>
+  _custodyExpensesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.custodyExpenses,
+    aliasName: $_aliasNameGenerator(
+      db.cashCustodies.id,
+      db.custodyExpenses.custodyId,
+    ),
+  );
+
+  $$CustodyExpensesTableProcessedTableManager get custodyExpensesRefs {
+    final manager = $$CustodyExpensesTableTableManager(
+      $_db,
+      $_db.custodyExpenses,
+    ).filter((f) => f.custodyId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _custodyExpensesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$CashCustodiesTableFilterComposer
+    extends Composer<_$AppDatabase, $CashCustodiesTable> {
+  $$CashCustodiesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get custodyNumber => $composableBuilder(
+    column: $table.custodyNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get staffId => $composableBuilder(
+    column: $table.staffId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get staffName => $composableBuilder(
+    column: $table.staffName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get totalExpenses => $composableBuilder(
+    column: $table.totalExpenses,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get remainingAmount => $composableBuilder(
+    column: $table.remainingAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get settledAt => $composableBuilder(
+    column: $table.settledAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get settledBy => $composableBuilder(
+    column: $table.settledBy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> custodyExpensesRefs(
+    Expression<bool> Function($$CustodyExpensesTableFilterComposer f) f,
+  ) {
+    final $$CustodyExpensesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.custodyExpenses,
+      getReferencedColumn: (t) => t.custodyId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustodyExpensesTableFilterComposer(
+            $db: $db,
+            $table: $db.custodyExpenses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$CashCustodiesTableOrderingComposer
+    extends Composer<_$AppDatabase, $CashCustodiesTable> {
+  $$CashCustodiesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get custodyNumber => $composableBuilder(
+    column: $table.custodyNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get staffId => $composableBuilder(
+    column: $table.staffId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get staffName => $composableBuilder(
+    column: $table.staffName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get totalExpenses => $composableBuilder(
+    column: $table.totalExpenses,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get remainingAmount => $composableBuilder(
+    column: $table.remainingAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get settledAt => $composableBuilder(
+    column: $table.settledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get settledBy => $composableBuilder(
+    column: $table.settledBy,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CashCustodiesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CashCustodiesTable> {
+  $$CashCustodiesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get custodyNumber => $composableBuilder(
+    column: $table.custodyNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get staffId =>
+      $composableBuilder(column: $table.staffId, builder: (column) => column);
+
+  GeneratedColumn<String> get staffName =>
+      $composableBuilder(column: $table.staffName, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<double> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get totalExpenses => $composableBuilder(
+    column: $table.totalExpenses,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get remainingAmount => $composableBuilder(
+    column: $table.remainingAmount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get settledAt =>
+      $composableBuilder(column: $table.settledAt, builder: (column) => column);
+
+  GeneratedColumn<String> get settledBy =>
+      $composableBuilder(column: $table.settledBy, builder: (column) => column);
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  Expression<T> custodyExpensesRefs<T extends Object>(
+    Expression<T> Function($$CustodyExpensesTableAnnotationComposer a) f,
+  ) {
+    final $$CustodyExpensesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.custodyExpenses,
+      getReferencedColumn: (t) => t.custodyId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustodyExpensesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.custodyExpenses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$CashCustodiesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CashCustodiesTable,
+          CashCustody,
+          $$CashCustodiesTableFilterComposer,
+          $$CashCustodiesTableOrderingComposer,
+          $$CashCustodiesTableAnnotationComposer,
+          $$CashCustodiesTableCreateCompanionBuilder,
+          $$CashCustodiesTableUpdateCompanionBuilder,
+          (CashCustody, $$CashCustodiesTableReferences),
+          CashCustody,
+          PrefetchHooks Function({bool custodyExpensesRefs})
+        > {
+  $$CashCustodiesTableTableManager(_$AppDatabase db, $CashCustodiesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CashCustodiesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CashCustodiesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CashCustodiesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> custodyNumber = const Value.absent(),
+                Value<String> staffId = const Value.absent(),
+                Value<String> staffName = const Value.absent(),
+                Value<DateTime> date = const Value.absent(),
+                Value<double> amount = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<double> totalExpenses = const Value.absent(),
+                Value<double> remainingAmount = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime?> settledAt = const Value.absent(),
+                Value<String?> settledBy = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => CashCustodiesCompanion(
+                id: id,
+                custodyNumber: custodyNumber,
+                staffId: staffId,
+                staffName: staffName,
+                date: date,
+                amount: amount,
+                description: description,
+                totalExpenses: totalExpenses,
+                remainingAmount: remainingAmount,
+                status: status,
+                settledAt: settledAt,
+                settledBy: settledBy,
+                notes: notes,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String custodyNumber,
+                required String staffId,
+                required String staffName,
+                required DateTime date,
+                required double amount,
+                Value<String?> description = const Value.absent(),
+                Value<double> totalExpenses = const Value.absent(),
+                required double remainingAmount,
+                Value<String> status = const Value.absent(),
+                Value<DateTime?> settledAt = const Value.absent(),
+                Value<String?> settledBy = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => CashCustodiesCompanion.insert(
+                id: id,
+                custodyNumber: custodyNumber,
+                staffId: staffId,
+                staffName: staffName,
+                date: date,
+                amount: amount,
+                description: description,
+                totalExpenses: totalExpenses,
+                remainingAmount: remainingAmount,
+                status: status,
+                settledAt: settledAt,
+                settledBy: settledBy,
+                notes: notes,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$CashCustodiesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({custodyExpensesRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (custodyExpensesRefs) db.custodyExpenses,
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (custodyExpensesRefs)
+                    await $_getPrefetchedData<
+                      CashCustody,
+                      $CashCustodiesTable,
+                      CustodyExpense
+                    >(
+                      currentTable: table,
+                      referencedTable: $$CashCustodiesTableReferences
+                          ._custodyExpensesRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$CashCustodiesTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).custodyExpensesRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.custodyId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$CashCustodiesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CashCustodiesTable,
+      CashCustody,
+      $$CashCustodiesTableFilterComposer,
+      $$CashCustodiesTableOrderingComposer,
+      $$CashCustodiesTableAnnotationComposer,
+      $$CashCustodiesTableCreateCompanionBuilder,
+      $$CashCustodiesTableUpdateCompanionBuilder,
+      (CashCustody, $$CashCustodiesTableReferences),
+      CashCustody,
+      PrefetchHooks Function({bool custodyExpensesRefs})
+    >;
+typedef $$CustodyExpensesTableCreateCompanionBuilder =
+    CustodyExpensesCompanion Function({
+      Value<int> id,
+      required int custodyId,
+      Value<DateTime> date,
+      required String description,
+      required double amount,
+      Value<String?> notes,
+      Value<DateTime> createdAt,
+    });
+typedef $$CustodyExpensesTableUpdateCompanionBuilder =
+    CustodyExpensesCompanion Function({
+      Value<int> id,
+      Value<int> custodyId,
+      Value<DateTime> date,
+      Value<String> description,
+      Value<double> amount,
+      Value<String?> notes,
+      Value<DateTime> createdAt,
+    });
+
+final class $$CustodyExpensesTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $CustodyExpensesTable, CustodyExpense> {
+  $$CustodyExpensesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $CashCustodiesTable _custodyIdTable(_$AppDatabase db) =>
+      db.cashCustodies.createAlias(
+        $_aliasNameGenerator(db.custodyExpenses.custodyId, db.cashCustodies.id),
+      );
+
+  $$CashCustodiesTableProcessedTableManager get custodyId {
+    final $_column = $_itemColumn<int>('custody_id')!;
+
+    final manager = $$CashCustodiesTableTableManager(
+      $_db,
+      $_db.cashCustodies,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_custodyIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$CustodyExpensesTableFilterComposer
+    extends Composer<_$AppDatabase, $CustodyExpensesTable> {
+  $$CustodyExpensesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$CashCustodiesTableFilterComposer get custodyId {
+    final $$CashCustodiesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.custodyId,
+      referencedTable: $db.cashCustodies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashCustodiesTableFilterComposer(
+            $db: $db,
+            $table: $db.cashCustodies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CustodyExpensesTableOrderingComposer
+    extends Composer<_$AppDatabase, $CustodyExpensesTable> {
+  $$CustodyExpensesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$CashCustodiesTableOrderingComposer get custodyId {
+    final $$CashCustodiesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.custodyId,
+      referencedTable: $db.cashCustodies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashCustodiesTableOrderingComposer(
+            $db: $db,
+            $table: $db.cashCustodies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CustodyExpensesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CustodyExpensesTable> {
+  $$CustodyExpensesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$CashCustodiesTableAnnotationComposer get custodyId {
+    final $$CashCustodiesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.custodyId,
+      referencedTable: $db.cashCustodies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashCustodiesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.cashCustodies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CustodyExpensesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CustodyExpensesTable,
+          CustodyExpense,
+          $$CustodyExpensesTableFilterComposer,
+          $$CustodyExpensesTableOrderingComposer,
+          $$CustodyExpensesTableAnnotationComposer,
+          $$CustodyExpensesTableCreateCompanionBuilder,
+          $$CustodyExpensesTableUpdateCompanionBuilder,
+          (CustodyExpense, $$CustodyExpensesTableReferences),
+          CustodyExpense,
+          PrefetchHooks Function({bool custodyId})
+        > {
+  $$CustodyExpensesTableTableManager(
+    _$AppDatabase db,
+    $CustodyExpensesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CustodyExpensesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CustodyExpensesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CustodyExpensesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> custodyId = const Value.absent(),
+                Value<DateTime> date = const Value.absent(),
+                Value<String> description = const Value.absent(),
+                Value<double> amount = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => CustodyExpensesCompanion(
+                id: id,
+                custodyId: custodyId,
+                date: date,
+                description: description,
+                amount: amount,
+                notes: notes,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int custodyId,
+                Value<DateTime> date = const Value.absent(),
+                required String description,
+                required double amount,
+                Value<String?> notes = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => CustodyExpensesCompanion.insert(
+                id: id,
+                custodyId: custodyId,
+                date: date,
+                description: description,
+                amount: amount,
+                notes: notes,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$CustodyExpensesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({custodyId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (custodyId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.custodyId,
+                                referencedTable:
+                                    $$CustodyExpensesTableReferences
+                                        ._custodyIdTable(db),
+                                referencedColumn:
+                                    $$CustodyExpensesTableReferences
+                                        ._custodyIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$CustodyExpensesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CustodyExpensesTable,
+      CustodyExpense,
+      $$CustodyExpensesTableFilterComposer,
+      $$CustodyExpensesTableOrderingComposer,
+      $$CustodyExpensesTableAnnotationComposer,
+      $$CustodyExpensesTableCreateCompanionBuilder,
+      $$CustodyExpensesTableUpdateCompanionBuilder,
+      (CustodyExpense, $$CustodyExpensesTableReferences),
+      CustodyExpense,
+      PrefetchHooks Function({bool custodyId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -70662,4 +73362,8 @@ class $AppDatabaseManager {
       $$EmptyBarnikaTrackingTableTableManager(_db, _db.emptyBarnikaTracking);
   $$SyncQueueTableTableManager get syncQueue =>
       $$SyncQueueTableTableManager(_db, _db.syncQueue);
+  $$CashCustodiesTableTableManager get cashCustodies =>
+      $$CashCustodiesTableTableManager(_db, _db.cashCustodies);
+  $$CustodyExpensesTableTableManager get custodyExpenses =>
+      $$CustodyExpensesTableTableManager(_db, _db.custodyExpenses);
 }

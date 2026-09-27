@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer';
 
 import 'package:drift/drift.dart';
@@ -63,6 +64,8 @@ import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart
 import 'package:pos_offline_desktop/core/database/dao/sync_queue_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/vegetable_shipment_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/empty_barnika_tracking_dao.dart';
+import 'package:pos_offline_desktop/core/database/tables/cash_custody_tables.dart';
+import 'package:pos_offline_desktop/core/database/dao/custody_dao.dart';
 import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
 import 'supplier_ledger_backfill.dart';
@@ -128,6 +131,8 @@ part 'app_database.g.dart';
     VegetableShipments,
     EmptyBarnikaTracking,
     SyncQueue,
+    CashCustodies,
+    CustodyExpenses,
   ],
   daos: [
     ProductDao,
@@ -156,6 +161,7 @@ part 'app_database.g.dart';
     VegetableShipmentDao,
     EmptyBarnikaTrackingDao,
     SyncQueueDao,
+    CustodyDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -166,7 +172,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 57;
+  int get schemaVersion => 72;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -174,6 +180,8 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
       await _ensureStaffTables(m);
       await _ensureCriticalColumns(m);
+      await _ensureAttendanceV59BackupTable();
+      await _ensureAttendanceUniqueIndex();
     },
     onUpgrade: (Migrator m, int from, int to) async {
       log('Migration: from $from to $to');
@@ -288,12 +296,38 @@ class AppDatabase extends _$AppDatabase {
         await _runV57Migrations(m);
       }
 
+      // 4t. Schema v58 — cash custody (العهد المالية ومصروفاتها).
+      if (from < 58) {
+        await _runV58Migrations(m);
+      }
+
       // 4. Staff tables (also for DBs that skipped v35 createTable migrations)
       await _ensureStaffTables(m);
 
       // 5. Always ensure critical columns exist (to fix drifted schemas)
       await _ensureCriticalColumns(m);
-      
+
+      if (from < 59) {
+        // FROZEN 2026-09-28. The v59 attendance-integrity migration used to
+        // dedupe rows and HARD-DELETE every loser, then create
+        // UNIQUE(staff_id, date). That constraint turns pre-existing duplicate
+        // attendance into a SqliteException on any racing device sync, and the
+        // dedupe is destructive. Both are reverted/frozen by the v72
+        // restoration; the code stays for audit but must not run.
+        // Re-enable only after keeper-selection has been validated against a
+        // copy of the real customer database.
+        log('v59: SKIPPED (frozen) — destructive attendance dedupe is disabled');
+      }
+
+      // 4z. Schema v72 — restore baseline attendance/payroll columns.
+      // Purely additive, idempotent, zero DELETE / DROP / RENAME.
+      // Deliberately NOT numbered 60/61: those numbers already mean
+      // manufacturing/accounting/equity on other branch lines and
+      // excused/excused_hours on the v69/v71 line.
+      if (from < 72) {
+        await _runV72BaselinePayrollColumns(m);
+      }
+
       // 6. Special data fixes
       if (from < 36) {
         try {
@@ -306,6 +340,7 @@ class AppDatabase extends _$AppDatabase {
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
+      await _ensureAttendanceV59BackupTable();
       await _ensureMigrationLogTable();
       await CustomerStatusFix.fixCustomerStatusColumn(this);
       await CustomerOpeningBalanceFix.fixDuplicateOpeningTransactions(this);
@@ -395,7 +430,9 @@ class AppDatabase extends _$AppDatabase {
 
       // Recreate to drop FK constraint if needed, copying data safely without 'id'
       try {
-        final tableInfo = await customSelect("PRAGMA foreign_key_list('customer_containers')").get();
+        final tableInfo = await customSelect(
+          "PRAGMA foreign_key_list('customer_containers')",
+        ).get();
         bool hasCustomerFk = false;
         for (final row in tableInfo) {
           if (row.read<String>('table') == 'customers') {
@@ -404,7 +441,9 @@ class AppDatabase extends _$AppDatabase {
           }
         }
         if (hasCustomerFk) {
-          log('customer_containers has legacy foreign key to customers. Recreating table...');
+          log(
+            'customer_containers has legacy foreign key to customers. Recreating table...',
+          );
           await customStatement('PRAGMA foreign_keys = OFF');
           await customStatement('''
             CREATE TABLE customer_containers_new (
@@ -418,7 +457,7 @@ class AppDatabase extends _$AppDatabase {
               PRIMARY KEY (product_id, customer_id)
             )
           ''');
-          
+
           try {
             await customStatement('''
               INSERT INTO customer_containers_new
@@ -430,9 +469,11 @@ class AppDatabase extends _$AppDatabase {
           } catch (e) {
             log('Error copying customer_containers data: $e');
           }
-          
+
           await customStatement('DROP TABLE customer_containers');
-          await customStatement('ALTER TABLE customer_containers_new RENAME TO customer_containers');
+          await customStatement(
+            'ALTER TABLE customer_containers_new RENAME TO customer_containers',
+          );
           await customStatement('PRAGMA foreign_keys = ON');
           log('Recreated customer_containers successfully.');
         }
@@ -534,19 +575,29 @@ class AppDatabase extends _$AppDatabase {
 
       // Safety check for staff_table schedule columns
       try {
-        await customStatement('ALTER TABLE staff_table ADD COLUMN work_schedule_start TEXT');
+        await customStatement(
+          'ALTER TABLE staff_table ADD COLUMN work_schedule_start TEXT',
+        );
       } catch (_) {}
       try {
-        await customStatement('ALTER TABLE staff_table ADD COLUMN work_schedule_end TEXT');
+        await customStatement(
+          'ALTER TABLE staff_table ADD COLUMN work_schedule_end TEXT',
+        );
       } catch (_) {}
       try {
-        await customStatement('ALTER TABLE staff_table ADD COLUMN work_days TEXT');
+        await customStatement(
+          'ALTER TABLE staff_table ADD COLUMN work_days TEXT',
+        );
       } catch (_) {}
       try {
-        await customStatement('ALTER TABLE staff_table ADD COLUMN weekend_day TEXT');
+        await customStatement(
+          'ALTER TABLE staff_table ADD COLUMN weekend_day TEXT',
+        );
       } catch (_) {}
       try {
-        await customStatement('ALTER TABLE staff_table ADD COLUMN use_default_schedule INTEGER NOT NULL DEFAULT 1');
+        await customStatement(
+          'ALTER TABLE staff_table ADD COLUMN use_default_schedule INTEGER NOT NULL DEFAULT 1',
+        );
       } catch (_) {}
 
       // Safety check for biometric attendance tables
@@ -671,6 +722,47 @@ class AppDatabase extends _$AppDatabase {
 
       // Safety check for staff-related tables (missing in some DBs)
       await _ensureStaffTablesSafetyCheck();
+
+      // Safety check for cash custody tables
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS cash_custodies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            custody_number TEXT NOT NULL UNIQUE,
+            staff_id TEXT NOT NULL,
+            staff_name TEXT NOT NULL,
+            date INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            description TEXT,
+            total_expenses REAL NOT NULL DEFAULT 0.0,
+            remaining_amount REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open',
+            settled_at INTEGER,
+            settled_by TEXT,
+            notes TEXT,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+            updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
+          )
+        ''');
+      } catch (e) {
+        log('Error ensuring cash_custodies table: $e');
+      }
+
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS custody_expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            custody_id INTEGER NOT NULL REFERENCES cash_custodies(id),
+            date INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+            description TEXT NOT NULL,
+            amount REAL NOT NULL,
+            notes TEXT,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
+          )
+        ''');
+      } catch (e) {
+        log('Error ensuring custody_expenses table: $e');
+      }
     },
   );
 
@@ -681,16 +773,28 @@ class AppDatabase extends _$AppDatabase {
         await customStatement('ALTER TABLE products ADD COLUMN unit TEXT');
         await customStatement('ALTER TABLE products ADD COLUMN category TEXT');
         await customStatement('ALTER TABLE products ADD COLUMN barcode TEXT');
-        await customStatement('ALTER TABLE products ADD COLUMN status TEXT DEFAULT "Active"');
-        
+        await customStatement(
+          'ALTER TABLE products ADD COLUMN status TEXT DEFAULT "Active"',
+        );
+
         await customStatement('ALTER TABLE customers ADD COLUMN phone TEXT');
         await customStatement('ALTER TABLE customers ADD COLUMN address TEXT');
-        await customStatement('ALTER TABLE customers ADD COLUMN status TEXT DEFAULT "Active"');
-        
-        await customStatement('ALTER TABLE invoices ADD COLUMN payment_method TEXT DEFAULT "cash"');
-        await customStatement('ALTER TABLE invoices ADD COLUMN paid_amount REAL DEFAULT 0.0');
-        await customStatement('ALTER TABLE invoices ADD COLUMN status TEXT DEFAULT "pending"');
-        await customStatement('ALTER TABLE invoices ADD COLUMN invoice_number TEXT');
+        await customStatement(
+          'ALTER TABLE customers ADD COLUMN status TEXT DEFAULT "Active"',
+        );
+
+        await customStatement(
+          'ALTER TABLE invoices ADD COLUMN payment_method TEXT DEFAULT "cash"',
+        );
+        await customStatement(
+          'ALTER TABLE invoices ADD COLUMN paid_amount REAL DEFAULT 0.0',
+        );
+        await customStatement(
+          'ALTER TABLE invoices ADD COLUMN status TEXT DEFAULT "pending"',
+        );
+        await customStatement(
+          'ALTER TABLE invoices ADD COLUMN invoice_number TEXT',
+        );
       } catch (e) {
         log('Legacy migration warning: $e');
       }
@@ -796,9 +900,15 @@ class AppDatabase extends _$AppDatabase {
 
     if (from < 38) {
       try {
-        await customStatement('ALTER TABLE users ADD COLUMN failed_attempts INTEGER DEFAULT 0');
-        await customStatement('ALTER TABLE users ADD COLUMN locked_until INTEGER');
-        await customStatement('ALTER TABLE users ADD COLUMN custom_permissions TEXT');
+        await customStatement(
+          'ALTER TABLE users ADD COLUMN failed_attempts INTEGER DEFAULT 0',
+        );
+        await customStatement(
+          'ALTER TABLE users ADD COLUMN locked_until INTEGER',
+        );
+        await customStatement(
+          'ALTER TABLE users ADD COLUMN custom_permissions TEXT',
+        );
         await customStatement('ALTER TABLE users ADD COLUMN email TEXT');
         await customStatement('ALTER TABLE users ADD COLUMN phone TEXT');
       } catch (e) {
@@ -919,14 +1029,21 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
-  Future<void> _logMigrationStep(int version, String step, String status, {String? error}) async {
+  Future<void> _logMigrationStep(
+    int version,
+    String step,
+    String status, {
+    String? error,
+  }) async {
     try {
       await customStatement(
         'INSERT INTO _migration_log (version, step, status, error) VALUES (?, ?, ?, ?)',
         [version, step, status, error],
       );
     } catch (e) {
-      log('WARNING: migration log insert failed (version=$version step=$step status=$status): $e');
+      log(
+        'WARNING: migration log insert failed (version=$version step=$step status=$status): $e',
+      );
     }
   }
 
@@ -949,7 +1066,12 @@ class AppDatabase extends _$AppDatabase {
       }
       await _logMigrationStep(42, 'days_audit_columns', 'completed');
     } catch (e) {
-      await _logMigrationStep(42, 'days_audit_columns', 'failed', error: e.toString());
+      await _logMigrationStep(
+        42,
+        'days_audit_columns',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -975,7 +1097,12 @@ class AppDatabase extends _$AppDatabase {
       }
       await _logMigrationStep(43, 'payroll_columns', 'completed');
     } catch (e) {
-      await _logMigrationStep(43, 'payroll_columns', 'failed', error: e.toString());
+      await _logMigrationStep(
+        43,
+        'payroll_columns',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -997,7 +1124,9 @@ class AppDatabase extends _$AppDatabase {
 
       // Attendance index
       try {
-        await customStatement('CREATE INDEX IF NOT EXISTS idx_attendance_staff ON attendance_table(staff_id)');
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_attendance_staff ON attendance_table(staff_id)',
+        );
       } catch (e) {
         log('v44 index warning: $e');
       }
@@ -1018,7 +1147,12 @@ class AppDatabase extends _$AppDatabase {
       }
       await _logMigrationStep(44, 'attendance_index_trigger', 'completed');
     } catch (e) {
-      await _logMigrationStep(44, 'attendance_index_trigger', 'failed', error: e.toString());
+      await _logMigrationStep(
+        44,
+        'attendance_index_trigger',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -1027,10 +1161,17 @@ class AppDatabase extends _$AppDatabase {
   Future<void> _runV45Migrations(Migrator m) async {
     await _logMigrationStep(45, 'days_partial_unique_index', 'started');
     try {
-      await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_days_one_open ON days(is_open) WHERE is_open = 1');
+      await customStatement(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_days_one_open ON days(is_open) WHERE is_open = 1',
+      );
       await _logMigrationStep(45, 'days_partial_unique_index', 'completed');
     } catch (e) {
-      await _logMigrationStep(45, 'days_partial_unique_index', 'failed', error: e.toString());
+      await _logMigrationStep(
+        45,
+        'days_partial_unique_index',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -1151,9 +1292,18 @@ class AppDatabase extends _$AppDatabase {
         log('v47 warning idx_sync_logs_device: $e');
       }
 
-      await _logMigrationStep(47, 'attendance_devices_integration', 'completed');
+      await _logMigrationStep(
+        47,
+        'attendance_devices_integration',
+        'completed',
+      );
     } catch (e) {
-      await _logMigrationStep(47, 'attendance_devices_integration', 'failed', error: e.toString());
+      await _logMigrationStep(
+        47,
+        'attendance_devices_integration',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -1211,7 +1361,12 @@ class AppDatabase extends _$AppDatabase {
 
       await _logMigrationStep(48, 'attendance_settings_schedule', 'completed');
     } catch (e) {
-      await _logMigrationStep(48, 'attendance_settings_schedule', 'failed', error: e.toString());
+      await _logMigrationStep(
+        48,
+        'attendance_settings_schedule',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -1240,7 +1395,12 @@ class AppDatabase extends _$AppDatabase {
 
       await _logMigrationStep(49, 'barneka_containers', 'completed');
     } catch (e) {
-      await _logMigrationStep(49, 'barneka_containers', 'failed', error: e.toString());
+      await _logMigrationStep(
+        49,
+        'barneka_containers',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -1282,7 +1442,12 @@ class AppDatabase extends _$AppDatabase {
 
       await _logMigrationStep(50, 'barneka_walkin', 'completed');
     } catch (e) {
-      await _logMigrationStep(50, 'barneka_walkin', 'failed', error: e.toString());
+      await _logMigrationStep(
+        50,
+        'barneka_walkin',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -1380,21 +1545,102 @@ class AppDatabase extends _$AppDatabase {
     // Critical columns for existing tables
     final columnChecks = [
       {'table': 'invoices', 'column': 'customer_id', 'type': 'TEXT'},
-      {'table': 'invoices', 'column': 'total_amount', 'type': 'REAL DEFAULT 0.0'},
-      {'table': 'invoices', 'column': 'paid_amount',  'type': 'REAL DEFAULT 0.0'},
-      {'table': 'invoices', 'column': 'status',       'type': 'TEXT DEFAULT "pending"'},
-      {'table': 'customers','column': 'status',       'type': 'TEXT DEFAULT "Active"'},
-      {'table': 'customers','column': 'created_at',   'type': 'INTEGER'},
-      {'table': 'products', 'column': 'cost_price',   'type': 'REAL'},
-      {'table': 'products', 'column': 'min_stock_level', 'type': 'INTEGER DEFAULT 0'},
-      {'table': 'products', 'column': 'barneka', 'type': 'INTEGER NOT NULL DEFAULT 0'},
-      {'table': 'invoice_items', 'column': 'discount', 'type': 'REAL DEFAULT 0'},
-      {'table': 'invoice_items', 'column': 'commission', 'type': 'REAL DEFAULT 0'},
+      {
+        'table': 'invoices',
+        'column': 'total_amount',
+        'type': 'REAL DEFAULT 0.0',
+      },
+      {
+        'table': 'invoices',
+        'column': 'paid_amount',
+        'type': 'REAL DEFAULT 0.0',
+      },
+      {
+        'table': 'invoices',
+        'column': 'status',
+        'type': 'TEXT DEFAULT "pending"',
+      },
+      {
+        'table': 'customers',
+        'column': 'status',
+        'type': 'TEXT DEFAULT "Active"',
+      },
+      {'table': 'customers', 'column': 'created_at', 'type': 'INTEGER'},
+      {'table': 'products', 'column': 'cost_price', 'type': 'REAL'},
+      {
+        'table': 'products',
+        'column': 'min_stock_level',
+        'type': 'INTEGER DEFAULT 0',
+      },
+      {
+        'table': 'products',
+        'column': 'barneka',
+        'type': 'INTEGER NOT NULL DEFAULT 0',
+      },
+      {
+        'table': 'invoice_items',
+        'column': 'discount',
+        'type': 'REAL DEFAULT 0',
+      },
+      {
+        'table': 'invoice_items',
+        'column': 'commission',
+        'type': 'REAL DEFAULT 0',
+      },
       {'table': 'invoice_items', 'column': 'unit_cost_at_time', 'type': 'REAL'},
       {'table': 'attendance_table', 'column': 'source', 'type': 'TEXT'},
-      {'table': 'attendance_table', 'column': 'source_device_id', 'type': 'INTEGER'},
-      {'table': 'attendance_table', 'column': 'raw_event_id', 'type': 'INTEGER'},
-      {'table': 'attendance_table', 'column': 'override_reason', 'type': 'TEXT'},
+      {
+        'table': 'attendance_table',
+        'column': 'source_device_id',
+        'type': 'INTEGER',
+      },
+      {
+        'table': 'attendance_table',
+        'column': 'raw_event_id',
+        'type': 'INTEGER',
+      },
+      {
+        'table': 'attendance_table',
+        'column': 'override_reason',
+        'type': 'TEXT',
+      },
+      // v72 baseline attendance/payroll columns - safety net for databases
+      // whose migration log predates v72.
+      {
+        'table': 'attendance_table',
+        'column': 'excused',
+        'type': 'INTEGER NOT NULL DEFAULT 0',
+      },
+      {
+        'table': 'attendance_table',
+        'column': 'excused_hours',
+        'type': 'REAL NOT NULL DEFAULT 0.0',
+      },
+      {
+        'table': 'attendance_table',
+        'column': 'permission_hours',
+        'type': 'REAL NOT NULL DEFAULT 0.0',
+      },
+      {
+        'table': 'attendance_table',
+        'column': 'late_minutes',
+        'type': 'INTEGER NOT NULL DEFAULT 0',
+      },
+      {
+        'table': 'payroll_table',
+        'column': 'late_hours',
+        'type': 'REAL NOT NULL DEFAULT 0.0',
+      },
+      {
+        'table': 'payroll_table',
+        'column': 'permission_hours',
+        'type': 'REAL NOT NULL DEFAULT 0.0',
+      },
+      {
+        'table': 'payroll_table',
+        'column': 'permission_deduction',
+        'type': 'REAL NOT NULL DEFAULT 0.0',
+      },
       {'table': 'audit_log', 'column': 'old_value', 'type': 'TEXT'},
       {'table': 'audit_log', 'column': 'new_value', 'type': 'TEXT'},
       // Invoice void support columns
@@ -1435,21 +1681,65 @@ class AppDatabase extends _$AppDatabase {
   Future<void> _ensureCriticalColumnsInBeforeOpen() async {
     final columnChecks = [
       {'table': 'products', 'column': 'cost_price', 'type': 'REAL'},
-      {'table': 'products', 'column': 'min_stock_level', 'type': 'INTEGER DEFAULT 0'},
-      {'table': 'products', 'column': 'barneka', 'type': 'INTEGER NOT NULL DEFAULT 0'},
+      {
+        'table': 'products',
+        'column': 'min_stock_level',
+        'type': 'INTEGER DEFAULT 0',
+      },
+      {
+        'table': 'products',
+        'column': 'barneka',
+        'type': 'INTEGER NOT NULL DEFAULT 0',
+      },
       {'table': 'invoices', 'column': 'customer_id', 'type': 'TEXT'},
-      {'table': 'invoices', 'column': 'total_amount', 'type': 'REAL DEFAULT 0.0'},
-      {'table': 'invoices', 'column': 'paid_amount', 'type': 'REAL DEFAULT 0.0'},
-      {'table': 'invoices', 'column': 'status', 'type': 'TEXT DEFAULT "pending"'},
-      {'table': 'customers', 'column': 'status', 'type': 'TEXT DEFAULT "Active"'},
+      {
+        'table': 'invoices',
+        'column': 'total_amount',
+        'type': 'REAL DEFAULT 0.0',
+      },
+      {
+        'table': 'invoices',
+        'column': 'paid_amount',
+        'type': 'REAL DEFAULT 0.0',
+      },
+      {
+        'table': 'invoices',
+        'column': 'status',
+        'type': 'TEXT DEFAULT "pending"',
+      },
+      {
+        'table': 'customers',
+        'column': 'status',
+        'type': 'TEXT DEFAULT "Active"',
+      },
       {'table': 'customers', 'column': 'created_at', 'type': 'INTEGER'},
-      {'table': 'invoice_items', 'column': 'discount', 'type': 'REAL DEFAULT 0'},
-      {'table': 'invoice_items', 'column': 'commission', 'type': 'REAL DEFAULT 0'},
+      {
+        'table': 'invoice_items',
+        'column': 'discount',
+        'type': 'REAL DEFAULT 0',
+      },
+      {
+        'table': 'invoice_items',
+        'column': 'commission',
+        'type': 'REAL DEFAULT 0',
+      },
       {'table': 'invoice_items', 'column': 'unit_cost_at_time', 'type': 'REAL'},
       {'table': 'attendance_table', 'column': 'source', 'type': 'TEXT'},
-      {'table': 'attendance_table', 'column': 'source_device_id', 'type': 'INTEGER'},
-      {'table': 'attendance_table', 'column': 'raw_event_id', 'type': 'INTEGER'},
-      {'table': 'attendance_table', 'column': 'override_reason', 'type': 'TEXT'},
+      {
+        'table': 'attendance_table',
+        'column': 'source_device_id',
+        'type': 'INTEGER',
+      },
+      {
+        'table': 'attendance_table',
+        'column': 'raw_event_id',
+        'type': 'INTEGER',
+      },
+      {
+        'table': 'attendance_table',
+        'column': 'override_reason',
+        'type': 'TEXT',
+      },
       {'table': 'audit_log', 'column': 'old_value', 'type': 'TEXT'},
       {'table': 'audit_log', 'column': 'new_value', 'type': 'TEXT'},
       // Invoice void support columns
@@ -1473,42 +1763,94 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'invoice_items', 'column': 'updated_at', 'type': 'INTEGER'},
       // Payroll table columns (v43, v56, and runtime safety for existing client DBs)
       {'table': 'payroll_table', 'column': 'bonus', 'type': 'REAL DEFAULT 0.0'},
-      {'table': 'payroll_table', 'column': 'commission', 'type': 'REAL DEFAULT 0.0'},
-      {'table': 'payroll_table', 'column': 'incentives', 'type': 'REAL DEFAULT 0.0'},
-      {'table': 'payroll_table', 'column': 'rewards_total', 'type': 'REAL DEFAULT 0.0'},
-      {'table': 'payroll_table', 'column': 'penalties_total', 'type': 'REAL DEFAULT 0.0'},
+      {
+        'table': 'payroll_table',
+        'column': 'commission',
+        'type': 'REAL DEFAULT 0.0',
+      },
+      {
+        'table': 'payroll_table',
+        'column': 'incentives',
+        'type': 'REAL DEFAULT 0.0',
+      },
+      {
+        'table': 'payroll_table',
+        'column': 'rewards_total',
+        'type': 'REAL DEFAULT 0.0',
+      },
+      {
+        'table': 'payroll_table',
+        'column': 'penalties_total',
+        'type': 'REAL DEFAULT 0.0',
+      },
       {'table': 'payroll_table', 'column': 'expense_ref_id', 'type': 'TEXT'},
-      {'table': 'payroll_table', 'column': 'late_days', 'type': 'INTEGER DEFAULT 0'},
-      {'table': 'payroll_table', 'column': 'late_deduction', 'type': 'REAL DEFAULT 0.0'},
+      {
+        'table': 'payroll_table',
+        'column': 'late_days',
+        'type': 'INTEGER DEFAULT 0',
+      },
+      {
+        'table': 'payroll_table',
+        'column': 'late_deduction',
+        'type': 'REAL DEFAULT 0.0',
+      },
       {'table': 'payroll_table', 'column': 'notes', 'type': 'TEXT'},
       {'table': 'payroll_table', 'column': 'payment_date', 'type': 'INTEGER'},
       {'table': 'payroll_table', 'column': 'payment_method', 'type': 'TEXT'},
-      {'table': 'payroll_table', 'column': 'transaction_reference', 'type': 'TEXT'},
+      {
+        'table': 'payroll_table',
+        'column': 'transaction_reference',
+        'type': 'TEXT',
+      },
       {'table': 'payroll_table', 'column': 'approved_by', 'type': 'TEXT'},
       {'table': 'payroll_table', 'column': 'approved_at', 'type': 'INTEGER'},
       // Attendance table extra columns
-      {'table': 'attendance_table', 'column': 'overtime_hours', 'type': 'REAL DEFAULT 0'},
+      {
+        'table': 'attendance_table',
+        'column': 'overtime_hours',
+        'type': 'REAL DEFAULT 0',
+      },
       {'table': 'attendance_table', 'column': 'approved_by', 'type': 'TEXT'},
       {'table': 'attendance_table', 'column': 'approved_at', 'type': 'INTEGER'},
       {'table': 'attendance_table', 'column': 'leave_type', 'type': 'TEXT'},
       {'table': 'attendance_table', 'column': 'notes', 'type': 'TEXT'},
-      {'table': 'attendance_table', 'column': 'check_in_location', 'type': 'TEXT'},
-      {'table': 'attendance_table', 'column': 'check_out_location', 'type': 'TEXT'},
+      {
+        'table': 'attendance_table',
+        'column': 'check_in_location',
+        'type': 'TEXT',
+      },
+      {
+        'table': 'attendance_table',
+        'column': 'check_out_location',
+        'type': 'TEXT',
+      },
       {'table': 'attendance_table', 'column': 'working_hours', 'type': 'REAL'},
       // Staff table schedule & profile columns
-      {'table': 'staff_table', 'column': 'is_active', 'type': 'INTEGER DEFAULT 1'},
+      {
+        'table': 'staff_table',
+        'column': 'is_active',
+        'type': 'INTEGER DEFAULT 1',
+      },
       {'table': 'staff_table', 'column': 'work_schedule_start', 'type': 'TEXT'},
       {'table': 'staff_table', 'column': 'work_schedule_end', 'type': 'TEXT'},
       {'table': 'staff_table', 'column': 'work_days', 'type': 'TEXT'},
       {'table': 'staff_table', 'column': 'weekend_day', 'type': 'TEXT'},
-      {'table': 'staff_table', 'column': 'use_default_schedule', 'type': 'INTEGER DEFAULT 1'},
+      {
+        'table': 'staff_table',
+        'column': 'use_default_schedule',
+        'type': 'INTEGER DEFAULT 1',
+      },
       {'table': 'staff_table', 'column': 'bank_name', 'type': 'TEXT'},
       {'table': 'staff_table', 'column': 'bank_account', 'type': 'TEXT'},
       {'table': 'staff_table', 'column': 'emergency_contact', 'type': 'TEXT'},
       {'table': 'staff_table', 'column': 'emergency_phone', 'type': 'TEXT'},
       {'table': 'staff_table', 'column': 'notes', 'type': 'TEXT'},
       {'table': 'staff_table', 'column': 'hourly_rate', 'type': 'REAL'},
-      {'table': 'staff_table', 'column': 'contract_end_date', 'type': 'INTEGER'},
+      {
+        'table': 'staff_table',
+        'column': 'contract_end_date',
+        'type': 'INTEGER',
+      },
       {'table': 'staff_table', 'column': 'department', 'type': 'TEXT'},
       {'table': 'staff_table', 'column': 'national_id', 'type': 'TEXT'},
       {'table': 'staff_table', 'column': 'phone', 'type': 'TEXT'},
@@ -1517,16 +1859,32 @@ class AppDatabase extends _$AppDatabase {
       // Staff advances extra columns
       {'table': 'staff_advances', 'column': 'rejection_reason', 'type': 'TEXT'},
       {'table': 'staff_advances', 'column': 'payment_method', 'type': 'TEXT'},
-      {'table': 'staff_advances', 'column': 'transaction_reference', 'type': 'TEXT'},
-      {'table': 'staff_advances', 'column': 'installment_months', 'type': 'INTEGER'},
-      {'table': 'staff_advances', 'column': 'monthly_deduction', 'type': 'REAL'},
+      {
+        'table': 'staff_advances',
+        'column': 'transaction_reference',
+        'type': 'TEXT',
+      },
+      {
+        'table': 'staff_advances',
+        'column': 'installment_months',
+        'type': 'INTEGER',
+      },
+      {
+        'table': 'staff_advances',
+        'column': 'monthly_deduction',
+        'type': 'REAL',
+      },
       {'table': 'staff_advances', 'column': 'approved_by', 'type': 'TEXT'},
       {'table': 'staff_advances', 'column': 'approved_at', 'type': 'INTEGER'},
       {'table': 'staff_advances', 'column': 'payment_date', 'type': 'INTEGER'},
       {'table': 'staff_advances', 'column': 'reason', 'type': 'TEXT'},
       // Vacations extra columns
       {'table': 'vacations', 'column': 'rejection_reason', 'type': 'TEXT'},
-      {'table': 'vacations', 'column': 'contact_during_vacation', 'type': 'TEXT'},
+      {
+        'table': 'vacations',
+        'column': 'contact_during_vacation',
+        'type': 'TEXT',
+      },
       {'table': 'vacations', 'column': 'handover_to', 'type': 'TEXT'},
       {'table': 'vacations', 'column': 'approved_by', 'type': 'TEXT'},
       {'table': 'vacations', 'column': 'approved_at', 'type': 'INTEGER'},
@@ -1534,7 +1892,11 @@ class AppDatabase extends _$AppDatabase {
       // Rewards & penalties extra columns
       {'table': 'rewards_penalties', 'column': 'description', 'type': 'TEXT'},
       {'table': 'rewards_penalties', 'column': 'amount', 'type': 'REAL'},
-      {'table': 'rewards_penalties', 'column': 'expiry_date', 'type': 'INTEGER'},
+      {
+        'table': 'rewards_penalties',
+        'column': 'expiry_date',
+        'type': 'INTEGER',
+      },
       {'table': 'rewards_penalties', 'column': 'evidence', 'type': 'TEXT'},
       {'table': 'rewards_penalties', 'column': 'notes', 'type': 'TEXT'},
     ];
@@ -1575,8 +1937,9 @@ class AppDatabase extends _$AppDatabase {
 
     for (final table in const ['products', 'invoices', 'invoice_items']) {
       try {
-        final ids =
-            await customSelect('SELECT id FROM $table WHERE sync_id IS NULL').get();
+        final ids = await customSelect(
+          'SELECT id FROM $table WHERE sync_id IS NULL',
+        ).get();
         for (final row in ids) {
           final id = row.data['id'];
           if (id is! int) continue;
@@ -1809,7 +2172,11 @@ class AppDatabase extends _$AppDatabase {
   /// These tables are registered in @DriftDatabase so `m.createAll()` handles
   /// fresh installs. For upgrades we create them defensively (IF NOT EXISTS).
   Future<void> _runV51Migrations(Migrator m) async {
-    await _logMigrationStep(51, 'vegetable_shipments_barnika_tracking', 'started');
+    await _logMigrationStep(
+      51,
+      'vegetable_shipments_barnika_tracking',
+      'started',
+    );
     try {
       // VegetableShipments table
       try {
@@ -1847,9 +2214,18 @@ class AppDatabase extends _$AppDatabase {
         log('v51: invoice_items.shipment_id likely already exists: $e');
       }
 
-      await _logMigrationStep(51, 'vegetable_shipments_barnika_tracking', 'completed');
+      await _logMigrationStep(
+        51,
+        'vegetable_shipments_barnika_tracking',
+        'completed',
+      );
     } catch (e) {
-      await _logMigrationStep(51, 'vegetable_shipments_barnika_tracking', 'failed', error: e.toString());
+      await _logMigrationStep(
+        51,
+        'vegetable_shipments_barnika_tracking',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -1868,9 +2244,18 @@ class AppDatabase extends _$AppDatabase {
       } catch (e) {
         log('v52: cash_sessions.settlement_amount likely already exists: $e');
       }
-      await _logMigrationStep(52, 'cash_sessions_settlement_amount', 'completed');
+      await _logMigrationStep(
+        52,
+        'cash_sessions_settlement_amount',
+        'completed',
+      );
     } catch (e) {
-      await _logMigrationStep(52, 'cash_sessions_settlement_amount', 'failed', error: e.toString());
+      await _logMigrationStep(
+        52,
+        'cash_sessions_settlement_amount',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -1916,7 +2301,12 @@ class AppDatabase extends _$AppDatabase {
 
       await _logMigrationStep(53, 'sync_columns_queue', 'completed');
     } catch (e) {
-      await _logMigrationStep(53, 'sync_columns_queue', 'failed', error: e.toString());
+      await _logMigrationStep(
+        53,
+        'sync_columns_queue',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -1932,7 +2322,12 @@ class AppDatabase extends _$AppDatabase {
       }
       await _logMigrationStep(54, 'sync_queue_device_name', 'completed');
     } catch (e) {
-      await _logMigrationStep(54, 'sync_queue_device_name', 'failed', error: e.toString());
+      await _logMigrationStep(
+        54,
+        'sync_queue_device_name',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -1951,7 +2346,12 @@ class AppDatabase extends _$AppDatabase {
       }
       await _logMigrationStep(55, 'biometric_mapping_index', 'completed');
     } catch (e) {
-      await _logMigrationStep(55, 'biometric_mapping_index', 'failed', error: e.toString());
+      await _logMigrationStep(
+        55,
+        'biometric_mapping_index',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -1979,7 +2379,12 @@ class AppDatabase extends _$AppDatabase {
       }
       await _logMigrationStep(56, 'payroll_late_columns', 'completed');
     } catch (e) {
-      await _logMigrationStep(56, 'payroll_late_columns', 'failed', error: e.toString());
+      await _logMigrationStep(
+        56,
+        'payroll_late_columns',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
   }
@@ -2020,9 +2425,615 @@ class AppDatabase extends _$AppDatabase {
       }
       await _logMigrationStep(57, 'partial_return_columns', 'completed');
     } catch (e) {
-      await _logMigrationStep(57, 'partial_return_columns', 'failed', error: e.toString());
+      await _logMigrationStep(
+        57,
+        'partial_return_columns',
+        'failed',
+        error: e.toString(),
+      );
       rethrow;
     }
+  }
+
+  /// Schema v58 — Cash custody tables (العهد المالية ومصروفاتها)
+  Future<void> _runV58Migrations(Migrator m) async {
+    await _logMigrationStep(58, 'cash_custody_tables', 'started');
+    try {
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS cash_custodies (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          custody_number TEXT NOT NULL UNIQUE,
+          staff_id TEXT NOT NULL,
+          staff_name TEXT NOT NULL,
+          date INTEGER NOT NULL,
+          amount REAL NOT NULL,
+          description TEXT,
+          total_expenses REAL NOT NULL DEFAULT 0.0,
+          remaining_amount REAL NOT NULL,
+          status TEXT NOT NULL DEFAULT 'open',
+          settled_at INTEGER,
+          settled_by TEXT,
+          notes TEXT,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+          updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
+        )
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS custody_expenses (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          custody_id INTEGER NOT NULL REFERENCES cash_custodies(id),
+          date INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+          description TEXT NOT NULL,
+          amount REAL NOT NULL,
+          notes TEXT,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
+        )
+      ''');
+
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_custody_expenses_custody ON custody_expenses(custody_id)',
+        );
+      } catch (e) {
+        log('v58: index warning idx_custody_expenses_custody: $e');
+      }
+
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_cash_custodies_staff ON cash_custodies(staff_id)',
+        );
+      } catch (e) {
+        log('v58: index warning idx_cash_custodies_staff: $e');
+      }
+
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_cash_custodies_status ON cash_custodies(status)',
+        );
+      } catch (e) {
+        log('v58: index warning idx_cash_custodies_status: $e');
+      }
+
+      await _logMigrationStep(58, 'cash_custody_tables', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        58,
+        'cash_custody_tables',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// Schema v72 — restore the baseline (5eb58db) attendance/payroll columns.
+  ///
+  /// Contract, deliberately narrow:
+  ///   * additive only — no DELETE, no DROP, no RENAME
+  ///   * idempotent — every ALTER is individually guarded, so re-running is a
+  ///     no-op even if the log row is missing
+  ///   * no unique index, no attendance-row deletion
+  ///   * back-fill only derives the `excused` flag from data that already
+  ///     means "permission"; it never invents hours or money
+  ///
+  /// Number 60/61 are intentionally skipped: they already mean other things
+  /// on other branch lines (manufacturing / accounting / equity, and
+  /// excused / excused_hours respectively).
+  Future<void> _runV72BaselinePayrollColumns(Migrator m) async {
+    await _logMigrationStep(72, 'baseline_payroll_columns', 'started');
+    try {
+      const columns = <String>[
+        'ALTER TABLE attendance_table ADD COLUMN excused INTEGER NOT NULL DEFAULT 0',
+        'ALTER TABLE attendance_table ADD COLUMN excused_hours REAL NOT NULL DEFAULT 0.0',
+        'ALTER TABLE attendance_table ADD COLUMN permission_hours REAL NOT NULL DEFAULT 0.0',
+        'ALTER TABLE attendance_table ADD COLUMN late_minutes INTEGER NOT NULL DEFAULT 0',
+        'ALTER TABLE payroll_table ADD COLUMN late_hours REAL NOT NULL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN permission_hours REAL NOT NULL DEFAULT 0.0',
+        'ALTER TABLE payroll_table ADD COLUMN permission_deduction REAL NOT NULL DEFAULT 0.0',
+      ];
+      for (final sql in columns) {
+        try {
+          await customStatement(sql);
+          log('v72: $sql');
+        } catch (e) {
+          // Column already present on this database - expected and harmless.
+          log('v72: skipped (already exists) ${sql.split('ADD COLUMN ').last}');
+        }
+      }
+
+      // Back-fill `excused` from rows that ALREADY carried a permission under
+      // the v57 model, so historical permissions become countable instead of
+      // reading as zero. Derived only; no hours, no money, no deletion.
+      try {
+        final changed = await customUpdate(
+          "UPDATE attendance_table SET excused = 1 WHERE excused = 0 AND ("
+          "status IN ('excused','excused_late')"
+          " OR (status = 'leave' AND leave_type IS NOT NULL AND TRIM(leave_type) <> '')"
+          " OR notes LIKE '%إذن%'"
+          " OR notes LIKE '%اذن%'"
+          " OR notes LIKE '%تصريح%'"
+          ')',
+        );
+        log('v72: back-filled excused flag on $changed attendance row(s)');
+      } catch (e) {
+        log('v72: excused back-fill warning: $e');
+      }
+
+      // Back-fill `late_minutes` from the recorded check-in. Grace only decides
+      // WHETHER the row is late; the stored minutes are measured from the shift
+      // start, matching baseline 5eb58db:871/900.
+      //
+      // check_in_time is epoch milliseconds, so seconds-of-day is
+      // (check_in_time / 1000) % 86400 for a UTC-normalised value. Guarded by a
+      // try/catch: if the stored epoch is not day-aligned the back-fill is
+      // simply skipped and the column stays 0, which reads as "no late minutes"
+      // rather than inventing a wrong number.
+      try {
+        final workStart = await _v72ScheduleStartMinutes();
+        final grace = await _v72IntSetting('grace_period_minutes', 15);
+        final graceEndSeconds = (workStart + grace) * 60;
+        await customUpdate(
+          'UPDATE attendance_table '
+          'SET late_minutes = '
+          "(CAST((check_in_time / 1000) AS INTEGER) % 86400) / 60 - ? "
+          "WHERE late_minutes = 0 "
+          "AND status IN ('present','late') "
+          'AND check_in_time IS NOT NULL '
+          'AND CAST((check_in_time / 1000) AS INTEGER) % 86400 > ?',
+          variables: [
+            Variable.withInt(workStart ~/ 60),
+            Variable.withInt(graceEndSeconds),
+          ],
+        );
+        log(
+          'v72: back-filled late_minutes (shift start ${workStart}m, grace ${grace}m)',
+        );
+      } catch (e) {
+        log('v72: late_minutes back-fill warning: $e');
+      }
+
+      await _logMigrationStep(72, 'baseline_payroll_columns', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        72,
+        'baseline_payroll_columns',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// Minutes-since-midnight of the default work start, as an int like 540.
+  Future<int> _v72ScheduleStartMinutes() async {
+    try {
+      final row = await (select(attendanceSettings)
+            ..where((s) => s.settingKey.equals('default_work_start')))
+          .getSingleOrNull();
+      final raw = row?.settingValue ?? '09:00';
+      final parts = raw.split(':');
+      final h = int.tryParse(parts.first) ?? 9;
+      final m = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+      return h * 60 + m;
+    } catch (_) {
+      return 9 * 60;
+    }
+  }
+
+  Future<int> _v72IntSetting(String key, int fallback) async {
+    try {
+      final row = await (select(attendanceSettings)
+            ..where((s) => s.settingKey.equals(key)))
+          .getSingleOrNull();
+      return int.tryParse(row?.settingValue ?? '') ?? fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  /// FROZEN 2026-09-28 — do not call. Retained for audit only.
+  ///
+  /// This deduped attendance rows, HARD-DELETED every loser, and created
+  /// UNIQUE(staff_id, date). The v72 restoration disables all three. The code
+  /// is kept so the decision is reviewable, not so it can be reused.
+  // ignore: unused_element
+  Future<void> _runV59AttendanceIntegrity(Migrator m) async {
+    await _logMigrationStep(59, 'attendance_uniqueness', 'started');
+    try {
+      await customStatement('PRAGMA foreign_keys = OFF');
+      try {
+        await transaction(() async {
+          final attendanceTableRows = await customSelect(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+            variables: [Variable.withString('attendance_table')],
+          ).get();
+          if (attendanceTableRows.isEmpty) {
+            await m.createTable(attendanceTable);
+            await _ensureAttendanceUniqueIndex();
+            return;
+          }
+
+          await _ensureAttendanceV59BackupTable();
+
+          final rows = await select(attendanceTable).get();
+          final groups = <(String, DateTime), List<Attendance>>{};
+          for (final row in rows) {
+            final dateOnly = _v59DateOnly(row.date);
+            groups
+                .putIfAbsent((row.staffId, dateOnly), () => <Attendance>[])
+                .add(row);
+          }
+
+          final groupKeys = groups.keys.toList()
+            ..sort((left, right) {
+              final staffOrder = left.$1.compareTo(right.$1);
+              if (staffOrder != 0) return staffOrder;
+              return left.$2.compareTo(right.$2);
+            });
+          final rawEventsHaveResultingId = await _v59RawEventsHaveResultingId();
+
+          for (final groupKey in groupKeys) {
+            final dateOnly = groupKey.$2;
+            final orderedRows = [...groups[groupKey]!]
+              ..sort(_v59CompareAttendanceRows);
+            final keeper = orderedRows.first;
+
+            if (orderedRows.length == 1) {
+              final changed =
+                  await (update(attendanceTable)
+                        ..where((row) => row.id.equals(keeper.id)))
+                      .write(AttendanceTableCompanion(date: Value(dateOnly)));
+              if (changed != 1) {
+                throw StateError(
+                  'v59 attendance keeper could not be normalized: ${keeper.id}',
+                );
+              }
+              continue;
+            }
+
+            final protectedKeeper = _v59IsProtected(keeper);
+            final checkInTime =
+                keeper.checkInTime ??
+                _v59Earliest(orderedRows, (row) => row.checkInTime);
+            final checkOutTime =
+                keeper.checkOutTime ??
+                _v59Latest(orderedRows, (row) => row.checkOutTime);
+            final workingHours = _v59MaxNonNegativeDouble(
+              orderedRows,
+              (row) => row.workingHours,
+            );
+            final overtimeHours = _v59MaxNonNegativeDouble(
+              orderedRows,
+              (row) => row.overtimeHours,
+            );
+            final checkInLocation = _v59MergeCheckInLocation(
+              orderedRows,
+              keeper,
+            );
+            final checkOutLocation = _v59MergeCheckOutLocation(
+              orderedRows,
+              keeper,
+            );
+            final leaveType = protectedKeeper
+                ? keeper.leaveType
+                : (keeper.leaveType ??
+                      _v59First<String>(orderedRows, (row) => row.leaveType));
+            final notes = _v59MergeNotes(orderedRows, keeper);
+            final approvedBy = protectedKeeper
+                ? keeper.approvedBy
+                : (keeper.approvedBy ??
+                      _v59First<String>(orderedRows, (row) => row.approvedBy));
+            final approvedAt = protectedKeeper
+                ? keeper.approvedAt
+                : (keeper.approvedAt ??
+                      _v59First<DateTime>(
+                        orderedRows,
+                        (row) => row.approvedAt,
+                      ));
+            final source = protectedKeeper
+                ? keeper.source
+                : _v59First<String>(orderedRows, (row) => row.source);
+            final sourceDeviceId = protectedKeeper
+                ? keeper.sourceDeviceId
+                : (keeper.sourceDeviceId ??
+                      _v59First<int>(orderedRows, (row) => row.sourceDeviceId));
+            final rawEventId = protectedKeeper
+                ? keeper.rawEventId
+                : (keeper.rawEventId ??
+                      _v59First<int>(orderedRows, (row) => row.rawEventId));
+            final overrideReason = protectedKeeper
+                ? keeper.overrideReason
+                : (keeper.overrideReason ??
+                      _v59First<String>(
+                        orderedRows,
+                        (row) => row.overrideReason,
+                      ));
+
+            final losers = orderedRows
+                .where((row) => row.id != keeper.id)
+                .toList();
+            final backedUpAt = DateTime.now().millisecondsSinceEpoch;
+            Future<void> backupRow(Attendance row) async {
+              await customStatement(
+                '''
+                  INSERT OR IGNORE INTO attendance_v59_duplicate_backup
+                    (original_id, keeper_id, staff_id, attendance_date, payload_json, backed_up_at)
+                  VALUES (?, ?, ?, ?, ?, ?)
+                ''',
+                [
+                  row.id,
+                  keeper.id,
+                  row.staffId,
+                  dateOnly.toIso8601String(),
+                  jsonEncode(row.toJson()),
+                  backedUpAt,
+                ],
+              );
+            }
+
+            await backupRow(keeper);
+            for (final loser in losers) {
+              await backupRow(loser);
+            }
+
+            final changed =
+                await (update(
+                  attendanceTable,
+                )..where((row) => row.id.equals(keeper.id))).write(
+                  AttendanceTableCompanion(
+                    date: Value(dateOnly),
+                    checkInTime: Value(checkInTime),
+                    checkOutTime: Value(checkOutTime),
+                    checkInLocation: Value(checkInLocation),
+                    checkOutLocation: Value(checkOutLocation),
+                    workingHours: Value(workingHours),
+                    status: Value(keeper.status),
+                    leaveType: Value(leaveType),
+                    notes: Value(notes),
+                    source: Value(source),
+                    sourceDeviceId: Value(sourceDeviceId),
+                    rawEventId: Value(rawEventId),
+                    overrideReason: Value(overrideReason),
+                    overtimeHours: Value(overtimeHours),
+                    approvedBy: Value(approvedBy),
+                    approvedAt: Value(approvedAt),
+                  ),
+                );
+            if (changed != 1) {
+              throw StateError(
+                'v59 attendance keeper could not be updated: ${keeper.id}',
+              );
+            }
+
+            for (final loser in losers) {
+              if (rawEventsHaveResultingId) {
+                await customUpdate(
+                  'UPDATE attendance_raw_events SET resulting_attendance_id = ? '
+                  'WHERE resulting_attendance_id = ?',
+                  variables: [
+                    Variable.withInt(keeper.id),
+                    Variable.withInt(loser.id),
+                  ],
+                );
+              }
+            }
+
+            for (final loser in losers) {
+              final deleted = await (delete(
+                attendanceTable,
+              )..where((row) => row.id.equals(loser.id))).go();
+              if (deleted != 1) {
+                throw StateError(
+                  'v59 attendance loser could not be deleted: ${loser.id}',
+                );
+              }
+            }
+          }
+
+          await _ensureAttendanceUniqueIndex();
+        });
+      } finally {
+        await customStatement('PRAGMA foreign_keys = ON');
+      }
+      await _logMigrationStep(59, 'attendance_uniqueness', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        59,
+        'attendance_uniqueness',
+        'failed',
+        error: e.toString(),
+      );
+      log('Migration v59 failed: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _ensureAttendanceV59BackupTable() async {
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS attendance_v59_duplicate_backup (
+        original_id INTEGER NOT NULL PRIMARY KEY,
+        keeper_id INTEGER NOT NULL,
+        staff_id TEXT NOT NULL,
+        attendance_date TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        backed_up_at INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _ensureAttendanceUniqueIndex() async {
+    // FROZEN 2026-09-28 as part of the v72 attendance/payroll restoration.
+    // This helper used to create UNIQUE(staff_id, date) on attendance_table.
+    // The constraint is NOT reinstated: a device sync and a file import can
+    // legitimately produce two rows for the same staff/date, and under the
+    // constraint the second INSERT throws and the punch is lost.
+    //
+    // No database opened by any released build ever ran v59, so no shipped
+    // customer file can already contain this index. If a DB is ever found that
+    // does contain it, removing the index needs its own reviewed migration -
+    // it is deliberately NOT done here.
+    log('v72: attendance UNIQUE(staff_id,date) is disabled - not created');
+  }
+
+  Future<bool> _v59RawEventsHaveResultingId() async {
+    final table = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      variables: [Variable.withString('attendance_raw_events')],
+    ).get();
+    if (table.isEmpty) return false;
+    final columns = await customSelect(
+      "PRAGMA table_info('attendance_raw_events')",
+    ).get();
+    return columns.any(
+      (row) => row.read<String>('name') == 'resulting_attendance_id',
+    );
+  }
+
+  DateTime _v59DateOnly(DateTime value) {
+    final local = value.toLocal();
+    return DateTime(local.year, local.month, local.day);
+  }
+
+  String? _v59Source(Attendance row) => row.source?.trim().toLowerCase();
+
+  bool _v59IsProtected(Attendance row) {
+    final source = _v59Source(row);
+    return source == 'admin' ||
+        source == 'admin_override' ||
+        source == 'manual' ||
+        source == 'import' ||
+        source == 'excel_import' ||
+        ((source == null || source.isEmpty) && row.checkOutTime != null);
+  }
+
+  int _v59AttendancePriority(Attendance row) {
+    final source = _v59Source(row);
+    if (source == 'admin' || source == 'admin_override') return 0;
+    if (source == 'manual') return 1;
+    if (source == 'import' || source == 'excel_import') return 2;
+    if ((source == null || source.isEmpty) && row.checkOutTime != null) {
+      return 3;
+    }
+    if (source == 'auto_generated') return 4;
+    if (source == null || source.isEmpty) return 5;
+    if (source == 'device') return 6;
+    return 7;
+  }
+
+  int _v59CompareAttendanceRows(Attendance left, Attendance right) {
+    final protectedOrder = (_v59IsProtected(left) ? 0 : 1).compareTo(
+      _v59IsProtected(right) ? 0 : 1,
+    );
+    if (protectedOrder != 0) return protectedOrder;
+    final priority = _v59AttendancePriority(
+      left,
+    ).compareTo(_v59AttendancePriority(right));
+    if (priority != 0) return priority;
+    final updated = right.updatedAt.compareTo(left.updatedAt);
+    if (updated != 0) return updated;
+    return right.id.compareTo(left.id);
+  }
+
+  DateTime? _v59Earliest(
+    Iterable<Attendance> rows,
+    DateTime? Function(Attendance row) read,
+  ) {
+    DateTime? selected;
+    for (final row in rows) {
+      final value = read(row);
+      if (value != null && (selected == null || value.isBefore(selected))) {
+        selected = value;
+      }
+    }
+    return selected;
+  }
+
+  DateTime? _v59Latest(
+    Iterable<Attendance> rows,
+    DateTime? Function(Attendance row) read,
+  ) {
+    DateTime? selected;
+    for (final row in rows) {
+      final value = read(row);
+      if (value != null && (selected == null || value.isAfter(selected))) {
+        selected = value;
+      }
+    }
+    return selected;
+  }
+
+  T? _v59First<T extends Object>(
+    Iterable<Attendance> rows,
+    T? Function(Attendance row) read,
+  ) {
+    for (final row in rows) {
+      final value = read(row);
+      if (value != null) return value;
+    }
+    return null;
+  }
+
+  double _v59MaxNonNegativeDouble(
+    Iterable<Attendance> rows,
+    double? Function(Attendance row) read,
+  ) {
+    double? selected;
+    for (final row in rows) {
+      final value = read(row);
+      if (value != null &&
+          value >= 0 &&
+          (selected == null || value > selected)) {
+        selected = value;
+      }
+    }
+    return selected ?? 0.0;
+  }
+
+  String? _v59MergeCheckInLocation(List<Attendance> rows, Attendance keeper) {
+    if (keeper.checkInLocation != null) return keeper.checkInLocation;
+    Attendance? selected;
+    for (final row in rows) {
+      if (row.checkInTime == null || row.checkInLocation == null) continue;
+      if (selected == null ||
+          row.checkInTime!.isBefore(selected.checkInTime!) ||
+          (row.checkInTime == selected.checkInTime &&
+              row.id.compareTo(selected.id) < 0)) {
+        selected = row;
+      }
+    }
+    return selected?.checkInLocation;
+  }
+
+  String? _v59MergeCheckOutLocation(List<Attendance> rows, Attendance keeper) {
+    if (keeper.checkOutLocation != null) return keeper.checkOutLocation;
+    Attendance? selected;
+    for (final row in rows) {
+      if (row.checkOutTime == null || row.checkOutLocation == null) continue;
+      if (selected == null ||
+          row.checkOutTime!.isAfter(selected.checkOutTime!) ||
+          (row.checkOutTime == selected.checkOutTime &&
+              row.id.compareTo(selected.id) < 0)) {
+        selected = row;
+      }
+    }
+    return selected?.checkOutLocation;
+  }
+
+  String? _v59MergeNotes(List<Attendance> rows, Attendance keeper) {
+    final notes = <String>[];
+    void addNote(String? value) {
+      if (value == null || value.trim().isEmpty || notes.contains(value)) {
+        return;
+      }
+      notes.add(value);
+    }
+
+    addNote(keeper.notes);
+    for (final row in rows) {
+      addNote(row.notes);
+    }
+    return notes.isEmpty ? null : notes.join('; ');
   }
 
   /// Backfills `sync_id` (a fresh UUID per row) plus `created_at`/`updated_at`
