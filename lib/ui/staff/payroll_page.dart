@@ -132,26 +132,60 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
               ),
             if (payroll.allowances > 0)
               _buildPayrollDetailRow(
-                'بدلات ومكافآت',
+                'بدلات',
                 CurrencyHelper.formatCurrency(payroll.allowances),
               ),
-            if (payroll.deductions > 0)
+            if (payroll.rewardsTotal > 0)
               _buildPayrollDetailRow(
-                'استقطاعات وسلف',
-                '- ${CurrencyHelper.formatCurrency(payroll.deductions)}',
-                color: Colors.red,
+                'مكافآت',
+                CurrencyHelper.formatCurrency(payroll.rewardsTotal),
               ),
+            // Breakdown only — these three rows are ALREADY inside
+            // payroll.deductions, so they must never be summed again on top
+            // of the total row below.
             if (payroll.lateDeduction > 0)
               _buildPayrollDetailRow(
-                'غرامة تأخير (${payroll.lateDays} يوم)',
+                'منها: غرامة تأخير (${payroll.lateDays} يوم)',
                 '- ${CurrencyHelper.formatCurrency(payroll.lateDeduction)}',
                 color: Colors.red,
+                subtitle: true,
               ),
             if (_absencePart(payroll) > 0)
               _buildPayrollDetailRow(
-                'خصم الغياب (${payroll.absentDays} يوم)',
+                'منها: خصم الغياب (${payroll.absentDays} يوم)',
                 '- ${CurrencyHelper.formatCurrency(_absencePart(payroll))}',
                 color: Colors.red,
+                subtitle: true,
+              ),
+            if (_permissionPart(payroll) > 0)
+              _buildPayrollDetailRow(
+                _permissionHours(payroll) > 0
+                    ? 'منها: خصم إذن / انصراف مبكر (${_permissionHours(payroll).toStringAsFixed(1)} ساعة)'
+                    : 'منها: خصم إذن / انصراف مبكر',
+                '- ${CurrencyHelper.formatCurrency(_permissionPart(payroll))}',
+                color: Colors.red,
+                subtitle: true,
+              ),
+            if (payroll.penaltiesTotal > 0)
+              _buildPayrollDetailRow(
+                'منها: جزاءات',
+                '- ${CurrencyHelper.formatCurrency(payroll.penaltiesTotal)}',
+                color: Colors.red,
+                subtitle: true,
+              ),
+            if (payroll.advances > 0)
+              _buildPayrollDetailRow(
+                'منها: سلف',
+                '- ${CurrencyHelper.formatCurrency(payroll.advances)}',
+                color: Colors.red,
+                subtitle: true,
+              ),
+            if (payroll.deductions > 0)
+              _buildPayrollDetailRow(
+                'إجمالي الخصومات',
+                '- ${CurrencyHelper.formatCurrency(payroll.deductions)}',
+                color: Colors.red,
+                bold: true,
               ),
             const Divider(height: 16),
             Row(
@@ -195,6 +229,22 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                         foregroundColor: Colors.white,
                       ),
                     ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _deletePayroll(payroll),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: Colors.red,
+                    ),
+                    label: const Text(
+                      'مسح',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.red),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -204,24 +254,70 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
     );
   }
 
-  /// Absence share folded into the aggregate deductions (no separate column).
+  /// Permission / early-leave deduction, read from the FIRST-CLASS payroll
+  /// column written by `StaffManagementService.calculatePayroll`.
+  ///
+  /// v72: this used to be reverse-engineered from `Payroll.otherDeductions`,
+  /// which was a legacy catch-all that never had a column of its own. The
+  /// service no longer writes permission into it, so the old read returned 0
+  /// and [Payroll.otherDeductions] went stale for every slip.
+  ///
+  /// Falls back to `otherDeductions` ONLY for slips calculated before the v72
+  /// migration, where the first-class columns are still 0. A current slip has
+  /// `permissionDeduction` populated, so the fallback cannot mask a real value.
+  double _permissionPart(Payroll payroll) {
+    if (payroll.permissionDeduction > 0) return payroll.permissionDeduction;
+    return payroll.otherDeductions > 0 ? payroll.otherDeductions : 0.0;
+  }
+
+  /// Permission hours, read from the first-class column.
+  double _permissionHours(Payroll payroll) =>
+      payroll.permissionHours > 0 ? payroll.permissionHours : 0.0;
+
+  /// Absence share of the aggregate deductions.
+  ///
+  /// v72: the permission share is now subtracted from its own first-class
+  /// column instead of being left to fall into this residual. Without that,
+  /// `_absencePart` returned absence + permission and the slip showed the
+  /// permission money on the absence line.
   double _absencePart(Payroll payroll) {
     final part = payroll.deductions -
         payroll.advances -
         payroll.penaltiesTotal -
-        payroll.lateDeduction;
+        payroll.lateDeduction -
+        _permissionPart(payroll);
     return part > 0 ? part : 0.0;
   }
 
-  Widget _buildPayrollDetailRow(String label, String value, {Color? color}) {    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
+  /// [subtitle] = صف تفصيل محتسب ضمن [total] — بيتعرض بشكل باهت مع مسافة
+  /// بادئة عشان ما يتجمعش مع الصف الإجمالي مرتين. [bold] = صف الإجمالي.
+  Widget _buildPayrollDetailRow(
+    String label,
+    String value, {
+    Color? color,
+    bool subtitle = false,
+    bool bold = false,
+  }) {
+    final weight = bold ? FontWeight.bold : FontWeight.w500;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(subtitle ? 16 : 0, 4.0, 0, 4.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: Colors.grey[700])),
+          Text(
+            label,
+            style: TextStyle(
+              color: subtitle ? Colors.grey[500] : Colors.grey[700],
+              fontSize: subtitle ? 13 : null,
+            ),
+          ),
           Text(
             value,
-            style: TextStyle(fontWeight: FontWeight.w500, color: color),
+            style: TextStyle(
+              fontWeight: weight,
+              color: color,
+              fontSize: subtitle ? 13 : null,
+            ),
           ),
         ],
       ),
@@ -333,6 +429,54 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
     }
   }
 
+  Future<void> _deletePayroll(Payroll payroll) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('مسح المرتب؟'),
+        content: Text(
+          'سيتم مسح مرتب ${_formatPeriod(payroll.payrollPeriod)} نهائياً '
+          'ويمكنك إعادة احتسابه من جديد.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text(
+              'مسح',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final service = StaffManagementService(StaffManagementDao(db), db);
+      final user = ref.read(authProvider);
+      await service.deletePayroll(user, payroll.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم مسح المرتب'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   String _formatPeriod(String period) {
     final parts = period.split('-');
     if (parts.length >= 3 && parts[2].startsWith('W')) {
@@ -347,10 +491,13 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
 
   void _calculatePayroll() {
     final now = DateTime.now();
+    final currentWeek = ref
+        .read(staffManagementServiceProvider)
+        .weekPeriodForDate(now);
     String payrollType = 'monthly';
-    int selectedYear = now.year;
-    int selectedMonth = now.month;
-    int selectedWeek = 1;
+    int selectedYear = currentWeek.year;
+    int selectedMonth = currentWeek.month;
+    int selectedWeek = currentWeek.week;
 
     showDialog(
       context: context,
@@ -359,6 +506,48 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
           final periodCode = payrollType == 'monthly'
               ? '$selectedYear-${selectedMonth.toString().padLeft(2, '0')}'
               : '$selectedYear-${selectedMonth.toString().padLeft(2, '0')}-W$selectedWeek';
+
+          // Valid weeks of the chosen month (Thursday must fall in it).
+          // A week runs Saturday → Thursday and may start in the previous
+          // month — the range below always shows the real dates.
+          List<int> validWeeks() {
+            final svc = ref.read(staffManagementServiceProvider);
+            final out = <int>[];
+            for (var w = 1; w <= 5; w++) {
+              try {
+                svc.weekBounds(selectedYear, selectedMonth, w);
+                out.add(w);
+              } catch (_) {}
+            }
+            return out;
+          }
+
+          String rangeText() {
+            final fmt = DateFormat('yyyy/MM/dd');
+            if (payrollType == 'monthly') {
+              final start = DateTime(selectedYear, selectedMonth, 1);
+              final end = DateTime(selectedYear, selectedMonth + 1, 0);
+              return '${fmt.format(start)} → ${fmt.format(end)}';
+            }
+            try {
+              final svc = ref.read(staffManagementServiceProvider);
+              final b = svc.weekBounds(
+                selectedYear,
+                selectedMonth,
+                selectedWeek,
+              );
+              return '${fmt.format(b.$1)} → ${fmt.format(b.$2)} (سبت → خميس)';
+            } catch (_) {
+              return 'أسبوع غير موجود في هذا الشهر';
+            }
+          }
+
+          void clampWeek() {
+            final valid = validWeeks();
+            if (valid.isNotEmpty && !valid.contains(selectedWeek)) {
+              selectedWeek = valid.last;
+            }
+          }
 
           return AlertDialog(
             title: const Text('احتساب المرتب'),
@@ -410,7 +599,13 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                           items: [now.year - 1, now.year, now.year + 1]
                               .map((y) => DropdownMenuItem(value: y, child: Text('$y')))
                               .toList(),
-                          onChanged: (v) => setDialogState(() => selectedYear = v!),
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setDialogState(() {
+                              selectedYear = v;
+                              clampWeek();
+                            });
+                          },
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -424,28 +619,57 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                           items: List.generate(12, (i) => i + 1)
                               .map((m) => DropdownMenuItem(value: m, child: Text('شهر $m')))
                               .toList(),
-                          onChanged: (v) => setDialogState(() => selectedMonth = v!),
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setDialogState(() {
+                              selectedMonth = v;
+                              clampWeek();
+                            });
+                          },
                         ),
                       ),
                     ],
                   ),
                   if (payrollType == 'weekly') ...[
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<int>(
-                      initialValue: selectedWeek,
-                      decoration: const InputDecoration(
-                        labelText: 'الأسبوع',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 1, child: Text('الأسبوع الأول (W1)')),
-                        DropdownMenuItem(value: 2, child: Text('الأسبوع الثاني (W2)')),
-                        DropdownMenuItem(value: 3, child: Text('الأسبوع الثالث (W3)')),
-                        DropdownMenuItem(value: 4, child: Text('الأسبوع الرابع (W4)')),
-                        DropdownMenuItem(value: 5, child: Text('الأسبوع الخامس (W5)')),
-                      ],
-                      onChanged: (v) => setDialogState(() => selectedWeek = v!),
-                    ),
+                    Builder(builder: (context) {
+                      final valid = validWeeks();
+                      if (!valid.contains(selectedWeek) && valid.isNotEmpty) {
+                        selectedWeek = valid.last;
+                      }
+                      final svc = ref.read(staffManagementServiceProvider);
+                      final fmt = DateFormat('dd/MM');
+                      return DropdownButtonFormField<int>(
+                        value: valid.contains(selectedWeek)
+                            ? selectedWeek
+                            : (valid.isEmpty ? null : valid.last),
+                        decoration: const InputDecoration(
+                          labelText: 'الأسبوع (سبت → خميس)',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: valid.map((w) {
+                          String range = '';
+                          try {
+                            final b = svc.weekBounds(
+                              selectedYear,
+                              selectedMonth,
+                              w,
+                            );
+                            range =
+                                ' (${fmt.format(b.$1)} → ${fmt.format(b.$2)})';
+                          } catch (_) {}
+                          return DropdownMenuItem(
+                            value: w,
+                            child: Text('الأسبوع $w$range (W$w)'),
+                          );
+                        }).toList(),
+                        onChanged: (v) {
+                          if (v != null) {
+                            setDialogState(() => selectedWeek = v);
+                          }
+                        },
+                      );
+                    }),
                   ],
                   const SizedBox(height: 16),
                   Container(
@@ -460,9 +684,23 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                         const Icon(Icons.info_outline, color: Colors.blue, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
-                            'الفترة المحددة: ${_formatPeriod(periodCode)}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'الفترة المحددة: ${_formatPeriod(periodCode)}',
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                rangeText(),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue[800],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],

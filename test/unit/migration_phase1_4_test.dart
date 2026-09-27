@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,7 +19,7 @@ void main() {
 
   test('migration v50 → v52 creates vegetable tables and new columns', () async {
     final dbPath =
-        Directory.systemTemp.path + '/pos_migration_test_${DateTime.now().millisecondsSinceEpoch}.db';
+        '${Directory.systemTemp.path}/pos_migration_test_${DateTime.now().millisecondsSinceEpoch}.db';
     final file = File(dbPath);
 
     // Build a minimal v50 schema that existed before vegetable shipments were added.
@@ -164,84 +163,122 @@ void main() {
       raw.dispose();
     }
 
-    // Open the same file via AppDatabase — schemaVersion is 52, so onUpgrade runs.
+    // Open the same file via AppDatabase. The database is stamped 50, so
+    // onUpgrade runs forward to the current schemaVersion.
     final db = AppDatabase(NativeDatabase(file));
     try {
-      // Verify schema was upgraded to 52.
-      final versionRow = await db.customSelect('PRAGMA user_version').getSingle();
+      // The database must end at the current schema contract. This asserts the
+      // exact version on purpose: a ">=" would hide a wrong version and a lower
+      // one would mean a migration silently did not run.
+      //
+      // v72 is the current schema. 60 and 61 are deliberately NOT recreated -
+      // they already mean manufacturing / accounting / equity on other branch
+      // lines and excused / excused_hours on the v69/v71 line.
+      final versionRow = await db
+          .customSelect('PRAGMA user_version')
+          .getSingle();
       final version = versionRow.read<int>('user_version');
-      expect(version, 56, reason: 'schema should be upgraded to current (56)');
+      expect(version, 72, reason: 'schema should be upgraded to current (72)');
 
       // Verify vegetable_shipments table was created by v51 migration.
-      final shipmentTables = await db.customSelect(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='vegetable_shipments'",
-      ).get();
-      expect(shipmentTables.isNotEmpty, isTrue,
-          reason: 'vegetable_shipments table must exist after v51 migration');
+      final shipmentTables = await db
+          .customSelect(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='vegetable_shipments'",
+          )
+          .get();
+      expect(
+        shipmentTables.isNotEmpty,
+        isTrue,
+        reason: 'vegetable_shipments table must exist after v51 migration',
+      );
 
       // Verify empty_barnika_tracking table was created by v51 migration.
-      final barnikaTables = await db.customSelect(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='empty_barnika_tracking'",
-      ).get();
-      expect(barnikaTables.isNotEmpty, isTrue,
-          reason: 'empty_barnika_tracking table must exist after v51 migration');
+      final barnikaTables = await db
+          .customSelect(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='empty_barnika_tracking'",
+          )
+          .get();
+      expect(
+        barnikaTables.isNotEmpty,
+        isTrue,
+        reason: 'empty_barnika_tracking table must exist after v51 migration',
+      );
 
       // Verify invoices.shipment_id column was added by v51 migration.
-      final invoiceCols = await db.customSelect(
-        "PRAGMA table_info(invoices)",
-      ).get();
+      final invoiceCols = await db
+          .customSelect("PRAGMA table_info(invoices)")
+          .get();
       final invoiceColNames = invoiceCols
           .map((r) => r.read<String>('name'))
           .toList();
-      expect(invoiceColNames, contains('shipment_id'),
-          reason: 'invoices must have shipment_id after v51 migration');
+      expect(
+        invoiceColNames,
+        contains('shipment_id'),
+        reason: 'invoices must have shipment_id after v51 migration',
+      );
 
       // Verify invoice_items.shipment_id column was added by v51 migration.
-      final itemCols = await db.customSelect(
-        "PRAGMA table_info(invoice_items)",
-      ).get();
-      final itemColNames = itemCols
-          .map((r) => r.read<String>('name'))
-          .toList();
-      expect(itemColNames, contains('shipment_id'),
-          reason: 'invoice_items must have shipment_id after v51 migration');
+      final itemCols = await db
+          .customSelect("PRAGMA table_info(invoice_items)")
+          .get();
+      final itemColNames = itemCols.map((r) => r.read<String>('name')).toList();
+      expect(
+        itemColNames,
+        contains('shipment_id'),
+        reason: 'invoice_items must have shipment_id after v51 migration',
+      );
 
       // Verify cash_sessions.settlement_amount was added by v52 migration.
-      final sessionCols = await db.customSelect(
-        "PRAGMA table_info(cash_sessions)",
-      ).get();
+      final sessionCols = await db
+          .customSelect("PRAGMA table_info(cash_sessions)")
+          .get();
       final sessionColNames = sessionCols
           .map((r) => r.read<String>('name'))
           .toList();
-      expect(sessionColNames, contains('settlement_amount'),
-          reason: 'cash_sessions must have settlement_amount after v52 migration');
+      expect(
+        sessionColNames,
+        contains('settlement_amount'),
+        reason: 'cash_sessions must have settlement_amount after v52 migration',
+      );
 
       // Verify v50 data is preserved.
-      final supplierRows = await db.customSelect(
-        "SELECT name FROM suppliers WHERE id='sup-1'",
-      ).get();
-      expect(supplierRows.isNotEmpty, isTrue,
-          reason: 'supplier data must survive migration');
+      final supplierRows = await db
+          .customSelect("SELECT name FROM suppliers WHERE id='sup-1'")
+          .get();
+      expect(
+        supplierRows.isNotEmpty,
+        isTrue,
+        reason: 'supplier data must survive migration',
+      );
       expect(supplierRows.first.read<String>('name'), 'مورّد اختبار');
 
-      final customerRows = await db.customSelect(
-        "SELECT name FROM customers WHERE id='cust-1'",
-      ).get();
-      expect(customerRows.isNotEmpty, isTrue,
-          reason: 'customer data must survive migration');
+      final customerRows = await db
+          .customSelect("SELECT name FROM customers WHERE id='cust-1'")
+          .get();
+      expect(
+        customerRows.isNotEmpty,
+        isTrue,
+        reason: 'customer data must survive migration',
+      );
 
-      final invoiceRows = await db.customSelect(
-        "SELECT total_amount FROM invoices WHERE id=1",
-      ).get();
-      expect(invoiceRows.isNotEmpty, isTrue,
-          reason: 'invoice data must survive migration');
+      final invoiceRows = await db
+          .customSelect("SELECT total_amount FROM invoices WHERE id=1")
+          .get();
+      expect(
+        invoiceRows.isNotEmpty,
+        isTrue,
+        reason: 'invoice data must survive migration',
+      );
       expect(invoiceRows.first.read<double>('total_amount'), 50.0);
 
-      final itemRows = await db.customSelect(
-        "SELECT quantity FROM invoice_items WHERE id=1",
-      ).get();
-      expect(itemRows.isNotEmpty, isTrue,
-          reason: 'invoice item data must survive migration');
+      final itemRows = await db
+          .customSelect("SELECT quantity FROM invoice_items WHERE id=1")
+          .get();
+      expect(
+        itemRows.isNotEmpty,
+        isTrue,
+        reason: 'invoice item data must survive migration',
+      );
       expect(itemRows.first.read<int>('quantity'), 10);
     } finally {
       await db.close();
