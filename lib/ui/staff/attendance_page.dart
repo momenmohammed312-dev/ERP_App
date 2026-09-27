@@ -6,6 +6,7 @@ import '../../core/database/dao/staff_management_dao.dart';
 import '../../core/models/user_model.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../widgets/permission_guard.dart';
+import '../../services/attendance/attendance_deduction_calculator.dart';
 import 'package:intl/intl.dart';
 import 'manual_override_dialog.dart';
 
@@ -36,6 +37,13 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
   // ── restored from 81ad48a: absence multiplier setting ──
   double _absenceMultiplier = 1.0;
 
+  // ── user-controlled deduction rules (attendance settings) ──
+  // v72: the raw `late_penalty_per_hour` value. The effective multiplier is
+  // always derived through AttendanceDeductionRules.resolveLateMultiplier(),
+  // so this page and the payroll can never resolve it differently.
+  double _latePenaltyPerHour = 0.0;
+  String _absenceMode = 'day_wage'; // 'day_wage' | 'fixed'
+
   String _dateFilter = 'all'; // 'all', 'today', 'this_week', 'this_month', 'custom'
   DateTimeRange? _customDateRange;
   String _statusFilter = 'all'; // 'all', 'present', 'late', 'excused', 'absent', 'leave'
@@ -43,6 +51,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
   List<Attendance> get _filteredAttendanceList {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    final weekBounds = ref
+        .read(staffManagementServiceProvider)
+        .weekBoundsForDate(today);
 
     return _attendanceList.where((r) {
       // 1. Date filter
@@ -50,9 +61,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       if (_dateFilter == 'today') {
         if (!rDate.isAtSameMomentAs(today)) return false;
       } else if (_dateFilter == 'this_week') {
-        final startOfWeek = today.subtract(Duration(days: today.weekday % 7));
-        final endOfWeek = startOfWeek.add(const Duration(days: 6));
-        if (rDate.isBefore(startOfWeek) || rDate.isAfter(endOfWeek)) return false;
+        if (rDate.isBefore(weekBounds.$1) || rDate.isAfter(weekBounds.$2)) {
+          return false;
+        }
       } else if (_dateFilter == 'this_month') {
         if (rDate.year != now.year || rDate.month != now.month) return false;
       } else if (_dateFilter == 'custom' && _customDateRange != null) {
@@ -100,6 +111,8 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       String workStart = '09:00';
       String workEnd = '17:00';
       double absenceMult = 1.0;
+      double lateMult = 0.0;
+      String absenceMode = 'day_wage';
       try {
         final absRow = await (db.select(db.attendanceSettings)
               ..where((t) => t.settingKey.equals('absence_penalty_amount')))
@@ -120,6 +133,14 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
             workEnd = s.settingValue;
           } else if (s.settingKey == 'absence_penalty_days_multiplier') {
             absenceMult = double.tryParse(s.settingValue) ?? 1.0;
+          } else if (s.settingKey == 'late_penalty_per_hour') {
+            lateMult = double.tryParse(s.settingValue) ?? 0.0;
+          } else if (s.settingKey == 'late_penalty_multiplier') {
+            // Pre-v72 key, still honoured so an existing database keeps its
+            // configured value.
+            lateMult = double.tryParse(s.settingValue) ?? lateMult;
+          } else if (s.settingKey == 'absence_deduction_mode') {
+            absenceMode = s.settingValue == 'fixed' ? 'fixed' : 'day_wage';
           }
         }
       } catch (_) {}
@@ -159,6 +180,8 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
         _workStart = workStart;
         _workEnd = workEnd;
         _absenceMultiplier = absenceMult;
+        _latePenaltyPerHour = lateMult;
+        _absenceMode = absenceMode;
         _penaltiesTotal = penaltiesTotal;
         _penaltyTitles = penaltyTitles;
         _isLoading = false;
@@ -713,10 +736,12 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     }
   }
 
-  /// Restored from 81ad48a: recompute worked/overtime hours for the currently
-  /// filtered range (fixes old rows whose overtime stayed zero). Skips
-  /// admin overrides and days inside paid payroll periods — with confirm.
-  Future<void> _recomputeOvertime() async {
+  /// Period repair (overtime + permissions of OLD rows): recomputes hours
+  /// from the recorded times — including admin_override rows whose hours
+  /// were left stale — and coerces إذن notes on plain present/late rows to
+  /// excused statuses so the permission is actually counted. Skips paid
+  /// payroll days — with confirm.
+  Future<void> _repairPeriod() async {
     final list = _filteredAttendanceList
         .where((r) => r.checkInTime != null && r.checkOutTime != null)
         .toList();
@@ -730,12 +755,13 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('إعادة حساب الإضافي؟'),
+        title: const Text('إصلاح سجلات الفترة؟'),
         content: Text(
-          'سيُعاد حساب ساعات العمل والإضافي لـ ${list.length} سجل\n'
-          'من ${DateFormat('yyyy/MM/dd').format(dates.first)} إلى ${DateFormat('yyyy/MM/dd').format(dates.last)}\n'
-          'حسب بداية/نهاية الدوام.\n\n'
-          'تُستثنى التعديلات الإدارية وأيام المرتبات المدفوعة.',
+          'سيتم لـ ${list.length} سجل\n'
+          'من ${DateFormat('yyyy/MM/dd').format(dates.first)} إلى ${DateFormat('yyyy/MM/dd').format(dates.last)}:\n'
+          '• إعادة حساب ساعات العمل والإضافي من الأوقات المسجلة\n'
+          '• تحويل أي إذن مكتوب في الملاحظات على حالة حاضر/متأخر إلى إذن معتمد\n\n'
+          'تُستثنى أيام المرتبات المدفوعة.',
         ),
         actions: [
           TextButton(
@@ -744,7 +770,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('إعادة حساب وتحديث'),
+            child: const Text('إصلاح وتحديث'),
           ),
         ],
       ),
@@ -754,7 +780,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     try {
       final user = ref.read(authProvider);
       final service = ref.read(staffManagementServiceProvider);
-      final result = await service.recomputeOvertimeForPeriod(
+      final result = await service.repairPeriodRecords(
         user,
         widget.staff.staffId,
         dates.first,
@@ -765,7 +791,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'تمت إعادة حساب ${result.recomputed} سجل (تُخطي ${result.skipped})',
+            'تم إصلاح ${result.recomputed} سجل (أذونات: ${result.excusesFixed}، تُخطي ${result.skipped})',
           ),
           backgroundColor: Colors.green,
         ),
@@ -842,9 +868,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
           ),
           const SizedBox(width: 4),
           ElevatedButton.icon(
-            onPressed: _isChecking ? null : _recomputeOvertime,
-            icon: const Icon(Icons.more_time, size: 18),
-            label: const Text('إعادة حساب الإضافي'),
+            onPressed: _isChecking ? null : _repairPeriod,
+            icon: const Icon(Icons.build_circle, size: 18),
+            label: const Text('إصلاح الفترة'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.teal,
               foregroundColor: Colors.white,
@@ -890,96 +916,158 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     }
   }
 
+  // v72: this page no longer keeps private copies of these rules. The summary
+  // cards, the detail dialogs and the payroll all go through
+  // AttendanceDeductionRules, so a card value and the rows listed in its own
+  // dialog can never be produced by two different definitions.
   bool _isLateEffective(Attendance r) {
-    if (r.status == 'excused' || r.status == 'excused_late') return false;
-    if (r.checkInTime == null) return r.status == 'late';
-    final ci = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
-    final gEnd = _scheduleStartMinutes() + _graceMinutes;
-    if (r.status == 'late') return true;
-    if (r.status != 'present') return false;
-    return ci > gEnd;
+    return _lateMinutesOf(r) > 0;
   }
 
   int _lateMinutesOf(Attendance r) {
-    if (!_isLateEffective(r) || r.checkInTime == null) return 0;
-    final ci = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
-    final gEnd = _scheduleStartMinutes() + _graceMinutes;
-    if (ci <= gEnd) return 0;
-    // القاعدة القديمة: التأخير من بداية الدوام شاملاً السماح
-    return ci - _scheduleStartMinutes();
+    return AttendanceDeductionRules.lateMinutesOf(
+      r,
+      workStartMinutes: _scheduleStartMinutes(),
+      graceMinutes: _graceMinutes,
+    );
   }
 
   bool _isPermissionRecord(Attendance r) {
-    if (r.status == 'excused' || r.status == 'excused_late') return true;
-    // أذونات محفوظة كإجازة مع نوع إذن (شخصي/مأمورية/طبي/طارئ/...) تُحتسب إذناً
-    if (r.status == 'leave' &&
-        r.leaveType != null &&
-        r.leaveType!.trim().isNotEmpty) {
-      return true;
-    }
-    if (r.checkOutTime != null) {
-      final co = r.checkOutTime!.hour * 60 + r.checkOutTime!.minute;
-      if (co < _scheduleEndMinutes() &&
-          (r.status == 'present' || r.status == 'late')) {
-        return true;
-      }
-    }
-    return false;
+    return AttendanceDeductionRules.isPermissionRecord(
+      r,
+      workEndMinutes: _scheduleEndMinutes(),
+    );
   }
 
   String _formatHM(int totalMinutes) {
     return '${totalMinutes ~/ 60}س ${totalMinutes % 60}د';
   }
 
-  // Restored from 81ad48a (via PayrollDisplay): hourly rate for deduction
-  // previews — explicit hourlyRate first, else base ÷ divisor ÷ 8 where the
-  // divisor is 6 for weekly staff and 30 otherwise.
-  double _hourlyRate() {
-    if (widget.staff.hourlyRate != null) return widget.staff.hourlyRate!;
-    final divisor = widget.staff.employmentType == 'weekly' ? 6.0 : 30.0;
-    if (divisor <= 0) return 0.0;
-    return widget.staff.basicSalary / divisor / 8.0;
+  /// الحساب المشترك مع كشف المرتب — نفس الأرقام بالظبط، عشان الكارت
+  /// والكشف ما يختلفوش لنفس الموظف ونفس الفترة.
+  AttendanceDeductionResult _computeDeductions(List<Attendance> list) {
+    return computeAttendanceDeductions(
+      records: list,
+      staff: widget.staff,
+      weeklyPeriod: widget.staff.employmentType == 'weekly',
+      workStartMinutes: _scheduleStartMinutes(),
+      workEndMinutes: _scheduleEndMinutes(),
+      graceMinutes: _graceMinutes,
+      // v72: the SAME resolved multiplier the payroll uses, so the card and
+      // the payslip can never show different late money.
+      lateMultiplier: AttendanceDeductionRules.resolveLateMultiplier(
+        _latePenaltyPerHour,
+      ),
+      absenceMultiplier: _absenceMultiplier,
+      absenceMode: _absenceMode,
+      fixedAbsenceAmount: _absencePenalty,
+    );
   }
 
-  // Restored from 81ad48a: early-leave minutes (checkout before schedule
-  // end). Fully excused rows (excused/excused_late/leave-with-type) are
-  // exempt and accrue nothing.
-  int _earlyMinutesOf(Attendance r) {
-    if (r.checkOutTime == null) return 0;
-    if (r.status == 'excused' ||
-        r.status == 'excused_late' ||
-        r.status == 'leave' ||
-        r.status == 'absent') {
-      return 0;
+  /// أسباب صفر الخصومات رغم وجود سجلات تستحق الخصم — إعداد ناقص أو
+  /// سجلات بلا وقت يقيس منه. بتتحول لقائمة تحذير في حوار التفاصيل بدل
+  /// ما المستخدم يشوف 0 ويفضل يدور في الشاشة.
+  List<String> _deductionZeroReasons({
+    required double hourly,
+    required List<Attendance> lateRecords,
+    required int totalLateMinutes,
+    required List<Attendance> permissionRecords,
+    required int totalEarlyMinutes,
+    required int absentDays,
+    required double dayWage,
+  }) {
+    final reasons = <String>[];
+    if (hourly <= 0) {
+      reasons.add(
+        'سعر ساعة الموظف غير محدد (الراتب الأساسي = 0 ولم يتم ضبط سعر الساعة) — كل بنود الخصم بالتأخير والانصراف تساوي صفر.',
+      );
     }
-    final co = r.checkOutTime!.hour * 60 + r.checkOutTime!.minute;
-    final end = _scheduleEndMinutes();
-    if (co >= end) return 0;
-    return end - co;
+    if (absentDays > 0 && _absenceMode == 'fixed' && _absencePenalty <= 0) {
+      reasons.add(
+        'نمط خصم الغياب = «مبلغ ثابت لليوم» والمبلغ المحفوظ = 0 — لن يتم خصم أي غياب. اضغط «تحويل إلى أجر اليوم» بالأسفل أو اضبط المبلغ من إعدادات الحضور.',
+      );
+    }
+    if (absentDays > 0 && _absenceMode == 'day_wage' && dayWage <= 0) {
+      reasons.add('أجر اليوم = 0 (الراتب الأساسي = 0) — لا يمكن خصم الغياب.');
+    }
+    if (lateRecords.isNotEmpty && totalLateMinutes <= 0) {
+      reasons.add(
+        'يوجد ${lateRecords.length} يوم متأخر لكن دقائق التأخير المحتسبة = 0 — راجع بداية الدوام وفترة السماح.',
+      );
+    }
+    if (permissionRecords.isNotEmpty && totalEarlyMinutes <= 0) {
+      reasons.add(
+        'يوجد ${permissionRecords.length} سجل إذن/انصراف مبكر لكن الساعات المخصومة = 0 — الإذن اليومي المعفي لا يُخصم؛ سجّل وقت الانصراف أو حدّد «إذن بساعات محددة».',
+      );
+    }
+    return reasons;
+  }
+
+  /// يحوّل نمط خصم الغياب إلى «أجر اليوم» (الأساسي ÷ 30 أو ÷ 6) فوراً.
+  Future<void> _switchAbsenceModeToDayWage() async {
+    final db = ref.read(appDatabaseProvider);
+    final now = DateTime.now();
+    final existing = await (db.select(db.attendanceSettings)
+          ..where((s) => s.settingKey.equals('absence_deduction_mode')))
+        .getSingleOrNull();
+    if (existing == null) {
+      await db.into(db.attendanceSettings).insert(
+            AttendanceSettingsCompanion.insert(
+              settingKey: 'absence_deduction_mode',
+              settingValue: 'day_wage',
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+    } else {
+      await db.update(db.attendanceSettings).replace(
+            existing.copyWith(
+              settingValue: 'day_wage',
+              updatedAt: now,
+            ),
+          );
+    }
+    if (!mounted) return;
+    await _loadAttendance();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('تم تحويل نمط خصم الغياب إلى «أجر اليوم»'),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   Widget _buildSummaryCards() {
     final list = _filteredAttendanceList;
-    final absentDays = list.where((r) => r.status == 'absent').length;
     final lateRecords = list.where(_isLateEffective).toList();
-    final lateDays = lateRecords.length;
-    final totalLateMinutes =
-        lateRecords.fold<int>(0, (s, r) => s + _lateMinutesOf(r));
     final permissionRecords = list.where(_isPermissionRecord).toList();
-    final excusedDays = list
-        .where((r) => r.status == 'excused' || r.status == 'excused_late')
-        .length;
     final totalOvertime = list.fold<double>(0.0, (s, r) => s + r.overtimeHours);
-    // Restored old deduction model (81ad48a): hourly-based —
-    // late ×1.5, early/permission ×1.0, absence × amount × multiplier —
-    // plus active penalties. Never silently zero while lateness exists.
-    final hourly = _hourlyRate();
-    final totalEarlyMinutes =
-        list.fold<int>(0, (s, r) => s + _earlyMinutesOf(r));
-    final lateDed = (totalLateMinutes / 60.0) * hourly * 1.5;
-    final permDed = (totalEarlyMinutes / 60.0) * hourly * 1.0;
-    final absDed = absentDays * _absencePenalty * _absenceMultiplier;
-    final totalDeductions = lateDed + permDed + absDed + _penaltiesTotal;
+
+    // الحساب المشترك مع كشف المرتب — مصدر واحد للقواعد، فالكارت والكشف
+    // لازم يطلعوا نفس الرقم لنفس الموظف.
+    final d = _computeDeductions(list);
+    final absentDays = d.absentDays;
+    final lateDays = d.lateDays;
+    final totalLateMinutes = d.totalLateMinutes;
+    final totalEarlyMinutes = d.totalPermissionMinutes;
+    final hourly = d.hourly;
+    final dayWage = d.dayWage;
+    final lateDed = d.lateDeduction;
+    final permDed = d.permissionDeduction;
+    final absDed = d.absenceDeduction;
+    final totalDeductions = d.total + _penaltiesTotal;
+    // صفر صامت: فيه سجلات مستحقة للخصم لكن النتيجة 0 بسبب إعداد ناقص.
+    // بدل ما نعرض 0 ونخلي المستخدم يدور، نسمّي السبب ونعرضه.
+    final zeroReasons = _deductionZeroReasons(
+      hourly: hourly,
+      lateRecords: lateRecords,
+      totalLateMinutes: totalLateMinutes,
+      permissionRecords: permissionRecords,
+      totalEarlyMinutes: totalEarlyMinutes,
+      absentDays: absentDays,
+      dayWage: dayWage,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -991,9 +1079,10 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
               '$absentDays يوم',
               Icons.person_off,
               Colors.red,
-              () {
-                setState(() => _statusFilter = 'absent');
-              },
+              // v72: opening the detail must NOT mutate the shared status
+              // filter. It used to set _statusFilter='absent', which made
+              // every sibling card recompute over absence rows only, so
+              // إذن / تأخير / إضافي all silently read 0 afterwards.
               () => _showAbsenceDetails(
                 list.where((r) => r.status == 'absent').toList(),
               ),
@@ -1006,22 +1095,19 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
               '${_formatHM(totalLateMinutes)} ($lateDays يوم)',
               Icons.timer,
               Colors.amber,
-              () {
-                setState(() => _statusFilter = 'late');
-              },
+              // v72: see غياب — the card opens the dialog, it does not filter.
               () => _showLateDetails(lateRecords),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: _summaryCard(
-              'إذن',
-              '$excusedDays يوم',
+              // v72: hours, and the SAME predicate the dialog uses, so the
+              // card can never read zero while the dialog lists permissions.
+              'إذن/بدري',
+              _formatHM(d.totalPermissionMinutes),
               Icons.assignment_turned_in,
               Colors.teal,
-              () {
-                setState(() => _statusFilter = 'excused');
-              },
               () => _showPermissionDetails(permissionRecords),
             ),
           ),
@@ -1041,17 +1127,30 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
           Expanded(
             child: _summaryCard(
               'خصومات',
-              '${totalDeductions.toStringAsFixed(0)} ج.م',
+              // بدون سعر ساعة كل الأبواب صفرية — نقول ذلك صراحة بدل عرض 0
+              hourly <= 0
+                  ? 'سعر الساعة غير محدد'
+                  : (totalDeductions <= 0 && zeroReasons.isNotEmpty
+                      ? 'راجع الإعدادات'
+                      : '${totalDeductions.toStringAsFixed(0)} ج.م'),
               Icons.money_off,
-              Colors.deepOrange,
+              (totalDeductions <= 0 && zeroReasons.isNotEmpty)
+                  ? Colors.amber
+                  : Colors.deepOrange,
               () => _showDeductionsDetails(
                 lateDed: lateDed,
                 permDed: permDed,
                 absDed: absDed,
                 hourly: hourly,
+                lateMult: AttendanceDeductionRules.resolveLateMultiplier(
+                  _latePenaltyPerHour,
+                ),
+                absenceMode: _absenceMode,
+                dayWage: dayWage,
                 totalLateMinutes: totalLateMinutes,
                 totalEarlyMinutes: totalEarlyMinutes,
                 absentDays: absentDays,
+                zeroReasons: zeroReasons,
               ),
             ),
           ),
@@ -1335,16 +1434,20 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     );
   }
 
-  // Restored old breakdown (81ad48a): late ×1.5, early/permission ×1.0,
-  // absence × amount × multiplier, plus active penalties.
+  // User-controlled breakdown: late hour × multiplier, early ×1.0,
+  // absence by mode (day wage or fixed amount) × multiplier, plus penalties.
   void _showDeductionsDetails({
     required double lateDed,
     required double permDed,
     required double absDed,
     required double hourly,
+    required double lateMult,
+    required String absenceMode,
+    required double dayWage,
     required int totalLateMinutes,
     required int totalEarlyMinutes,
     required int absentDays,
+    required List<String> zeroReasons,
   }) {
     final total = lateDed + permDed + absDed + _penaltiesTotal;
     showDialog(
@@ -1368,6 +1471,76 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                   'سعر ساعة الموظف: ${hourly.toStringAsFixed(2)} ج.م',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
+                if (zeroReasons.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              size: 18,
+                              color: Colors.amber,
+                            ),
+                            const SizedBox(width: 6),
+                            const Expanded(
+                              child: Text(
+                                'لماذا الخصومات صفر؟',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.amber,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ...zeroReasons.map(
+                          (r) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4, right: 4),
+                            child: Text(
+                              '• $r',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ),
+                        if (absenceMode == 'fixed' && _absencePenalty <= 0) ...[
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _switchAbsenceModeToDayWage();
+                              },
+                              icon: const Icon(Icons.bolt, size: 18),
+                              label: const Text('تحويل إلى أجر اليوم'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.amber,
+                                foregroundColor: Colors.black87,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Text(
                   'التأخير الإجمالي: ${_formatHM(totalLateMinutes)} — الانصراف المبكر: ${_formatHM(totalEarlyMinutes)}',
@@ -1378,7 +1551,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.timer, color: Colors.amber),
-                  title: const Text('خصم التأخير (×1.5)'),
+                  title: Text(
+                    'خصم التأخير (×${lateMult.toStringAsFixed(1)})',
+                  ),
                   trailing: Text(
                     '${lateDed.toStringAsFixed(2)} ج.م',
                     style: const TextStyle(fontWeight: FontWeight.bold),
@@ -1399,6 +1574,12 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.person_off, color: Colors.red),
                   title: Text('خصم الغياب ($absentDays يوم)'),
+                  subtitle: Text(
+                    absenceMode == 'fixed'
+                        ? 'مبلغ ثابت لليوم'
+                        : 'أجر يوم: ${dayWage.toStringAsFixed(2)} ج.م',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                   trailing: Text(
                     '${absDed.toStringAsFixed(2)} ج.م',
                     style: const TextStyle(fontWeight: FontWeight.bold),

@@ -9,6 +9,7 @@ import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart
 import 'package:pos_offline_desktop/core/database/dao/staff_management_dao.dart';
 import 'attendance_calculation_engine.dart';
 import 'attendance_source.dart';
+import 'zkteco/zkteco_client.dart';
 import 'zkteco_tcp_attendance_source.dart';
 
 class SyncResult {
@@ -18,31 +19,101 @@ class SyncResult {
   final int duplicate;
   final String? error;
 
+  /// معلومة تشخيصية اختيارية (تُعرض مع النتيجة، لا تؤثر على الألوان).
+  /// مثال: تصفير كيرسور مستقبلي، أو تأكيد عدم وجود جديد رغم الاتصال.
+  final String? info;
+
   const SyncResult({
     required this.fetched,
     required this.matched,
     required this.unmatched,
     required this.duplicate,
     this.error,
+    this.info,
   });
 }
 
+class _ResolvedEvent {
+  final AttendanceRawEvent raw;
+  final String staffId;
+  final DateTime workDate;
+
+  const _ResolvedEvent({
+    required this.raw,
+    required this.staffId,
+    required this.workDate,
+  });
+}
+
+class _ResolvedGroup {
+  final String staffId;
+  final DateTime workDate;
+  final ScheduleConfig schedule;
+  final List<_ResolvedEvent> events;
+
+  _ResolvedGroup({
+    required this.staffId,
+    required this.workDate,
+    required this.schedule,
+  }) : events = <_ResolvedEvent>[];
+
+  void add(_ResolvedEvent event) {
+    events.add(event);
+  }
+}
+
+class _AttendanceCandidate {
+  final DateTime time;
+  final AttendanceRawEvent? raw;
+  final bool isExisting;
+  final bool protectedExisting;
+
+  const _AttendanceCandidate({
+    required this.time,
+    this.raw,
+    this.isExisting = false,
+    this.protectedExisting = false,
+  });
+}
+
+class _ProtectedAttendanceException implements Exception {
+  final String message;
+
+  const _ProtectedAttendanceException(this.message);
+}
+
 class AttendanceSyncService {
+  static const _duplicateWindow = Duration(minutes: 10);
+  static const _minCheckoutAfterCheckIn = Duration(hours: 4);
+  static const _checkoutThresholdBeforeEnd = Duration(hours: 2);
+
+  /// كيرسور مخزن أبعد من الآن بهذا القدر يُعتبر مسموماً (قفزة ساعة سابقة)
+  /// ويُتجاهل لصالح سحب كامل — وإلا حجب كل البصمات الحقيقية للأبد.
+  static const _futureCursorTolerance = Duration(hours: 1);
+
   final AttendanceDeviceDao _deviceDao;
   final StaffManagementDao _staffDao;
   final AttendanceCalculationEngine _engine;
 
+  /// حقن مصدر بديل (للاختبارات): لو موجود يُستخدم بدل إنشاء مصدر TCP.
+  final AttendanceSource Function(BiometricDevice device)? _sourceFactory;
+
   /// Prevents concurrent syncs for the same device
-  final Set<int> _syncingDevices = {};
+  static final Set<int> _syncingDevices = {};
 
   /// Auto-sync timer
   Timer? _autoSyncTimer;
   bool _isAutoSyncEnabled = false;
 
-  AttendanceSyncService(this._deviceDao, this._staffDao, this._engine);
+  AttendanceSyncService(this._deviceDao, this._staffDao, this._engine,
+      {AttendanceSource Function(BiometricDevice device)? sourceFactory})
+      : _sourceFactory = sourceFactory;
 
   /// Whether auto-sync is currently running
   bool get isAutoSyncEnabled => _isAutoSyncEnabled;
+
+  /// محرك الحسابات (يُستخدم لمشاركة توليد الغياب مع مسار الاستيراد).
+  AttendanceCalculationEngine get engine => _engine;
 
   /// Starts periodic auto-sync for all active devices
   void startAutoSync({Duration interval = const Duration(minutes: 5)}) {
@@ -64,26 +135,102 @@ class AttendanceSyncService {
     _isAutoSyncEnabled = false;
   }
 
-  /// Triggers a sync for all active devices
-  Future<void> syncAllDevices({String triggeredBy = 'manual'}) async {
-    final devices = await _deviceDao.getAllDevices();
-    for (final device in devices.where((d) => d.isActive)) {
-      await syncDevice(device, triggeredBy: triggeredBy);
+  /// رسالة عملية قصيرة لأخطاء الشبكة (تظهر كاملة في الواجهة بدل نص
+  /// الـSocket الطويل): السبب الغالب أن الكمبيوتر ليس على نفس شبكة البصمة.
+  static String _friendlySyncError(Object e, BiometricDevice device) {
+    final text = e.toString();
+    final lower = text.toLowerCase();
+    final endpoint = device.ipAddress == null
+        ? device.name
+        : '${device.ipAddress}:${device.port ?? 4370}';
+    if (lower.contains('10060') ||
+        lower.contains('connection timed out') ||
+        lower.contains('timed out')) {
+      return 'تعذر الوصول لجهاز البصمة $endpoint (timeout) — تأكد أن الكمبيوتر على نفس شبكة الجهاز وأن الكابل والـIP سليمين';
     }
+    if (lower.contains('connection refused') || lower.contains('errno = 10061')) {
+      return 'جهاز البصمة $endpoint رفض الاتصال — تأكد من البورت ورقم الـIP';
+    }
+    if (lower.contains('unreachable') || lower.contains('errno = 10065')) {
+      return 'جهاز البصمة $endpoint لا يمكن الوصول إليه — راجع الشبكة والراوتر';
+    }
+    return text;
   }
 
-  /// Triggers a sync for a specific device
-  Future<void> syncDevice(
+  static String _fmtShort(DateTime t) =>
+      '${t.year}/${t.month}/${t.day} '
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  /// Triggers a sync for all active devices. Returns aggregate counts so
+  /// the UI can show what actually happened instead of a blind "done".
+  Future<SyncResult> syncAllDevices({String triggeredBy = 'manual'}) async {    await _deviceDao.markStaleRunningFailed(
+      DateTime.now().subtract(const Duration(minutes: 10)),
+      'stale lock recovered: sync did not finish within 10min',
+    );
+    final devices = await _deviceDao.getAllDevices();
+    int fetched = 0, matched = 0, unmatched = 0, duplicate = 0;
+    String? error;
+    final infos = <String>[];
+    // المزامنة الجماعية للأجهزة الحية TCP فقط — أجهزة الملف/USB لها زرها
+    // الخاص، وتمريرها هنا كان يرمي 'Unsupported connection type' في النتيجة.
+    for (final device
+        in devices.where((d) => d.isActive && d.connectionType == 'tcp_ip')) {
+      final r = await syncDevice(device, triggeredBy: triggeredBy);
+      fetched += r.fetched;
+      matched += r.matched;
+      unmatched += r.unmatched;
+      duplicate += r.duplicate;
+      error ??= r.error;
+      if (r.info != null && !infos.contains(r.info)) infos.add(r.info!);
+    }
+    return SyncResult(
+      fetched: fetched,
+      matched: matched,
+      unmatched: unmatched,
+      duplicate: duplicate,
+      error: error,
+      info: infos.isEmpty ? null : infos.join(' — '),
+    );
+  }
+
+  /// Triggers a sync for a specific device. Returns what happened
+  /// (fetched/matched/...) so a press with zero results is distinguishable
+  /// from a press that actually imported attendance.
+  Future<SyncResult> syncDevice(
     BiometricDevice device, {
     String triggeredBy = 'manual',
   }) async {
     // Prevent concurrent syncs for the same device
     if (_syncingDevices.contains(device.id)) {
-      return;
+      return const SyncResult(
+        fetched: 0,
+        matched: 0,
+        unmatched: 0,
+        duplicate: 0,
+        error: 'المزامنة جارية بالفعل',
+      );
     }
     _syncingDevices.add(device.id);
 
     try {
+      final runningSince = DateTime.now().subtract(const Duration(minutes: 10));
+      await _deviceDao.markStaleRunningFailed(
+        runningSince,
+        'stale lock recovered: sync did not finish within 10min',
+      );
+      final running = await _deviceDao.getRunningLogForDevice(
+        device.id,
+        runningSince,
+      );
+      if (running != null) {
+        return const SyncResult(
+          fetched: 0,
+          matched: 0,
+          unmatched: 0,
+          duplicate: 0,
+          error: 'المزامنة جارية بالفعل',
+        );
+      }
       final syncBatchId = const Uuid().v4();
       final logCompanion = AttendanceSyncLogsCompanion.insert(
         deviceId: device.id,
@@ -100,10 +247,14 @@ class AttendanceSyncService {
       int unmatched = 0;
       int duplicate = 0;
       String? error;
+      final notes = <String>[];
 
       try {
         // 1. Instantiate the correct source based on connection type
-        if (device.connectionType == 'tcp_ip') {
+        // (or the injected factory in tests).
+        if (_sourceFactory != null) {
+          source = _sourceFactory(device);
+        } else if (device.connectionType == 'tcp_ip') {
           if (device.ipAddress == null || device.port == null) {
             throw Exception(
               'IP Address and Port are required for TCP/IP devices',
@@ -120,67 +271,177 @@ class AttendanceSyncService {
           );
         }
 
-        // 2. Connect
+        // 2. Connect — مع تمرير السبب الحقيقي (packet loss / CommKey / timeout)
         final connected = await source.connect();
         if (!connected) {
-          throw Exception('Failed to connect to device');
+          String detail =
+              'فشل الاتصال بالجهاز ${device.ipAddress}:${device.port}';
+          if (source is ZKTecoTcpAttendanceSource && source.lastError != null) {
+            detail = source.lastError!;
+          }
+          throw Exception(detail);
         }
 
-        // 3. Fetch events (passing lastSyncAt as an optimization hint)
-        final events = await source.fetchEvents(since: device.lastSyncAt);
-        fetched = events.length;
+        // Restored: sync the terminal clock when it drifts more than 2
+        // minutes — skew shifts every event timestamp, which then falls
+        // outside the `since` filter and the import silently misses
+        // check-ins/check-outs.
+        try {
+          if (source is ZKTecoTcpAttendanceSource) {
+            final tcpSource = source;
+            final info = await tcpSource.getDeviceInfo();
+            if (info.deviceTime != null) {
+              final drift = DateTime.now().difference(info.deviceTime!).abs();
+              if (drift > const Duration(minutes: 2)) {
+                await tcpSource.setDeviceTime(DateTime.now());
+              }
+            }
+          }
+        } catch (_) {}
 
-        // 4. Ingest raw events
-        for (final event in events) {
-          // Generate Dedup Hash: sha256(deviceId + externalUserId + eventTime)
-          final hashStr =
-              '${device.id}_${event.externalUserId}_${event.eventTime.toIso8601String()}';
-          final dedupHash = sha256.convert(utf8.encode(hashStr)).toString();
-
-          // Truncate rawPayload to prevent database bloat
-          final rawPayload =
-              event.rawPayload != null && event.rawPayload!.length > 10000
-              ? event.rawPayload!.substring(0, 10000)
-              : event.rawPayload;
-
-          final rawCompanion = AttendanceRawEventsCompanion.insert(
-            deviceId: device.id,
-            externalUserId: event.externalUserId,
-            eventTime: event.eventTime,
-            eventType: Value(event.eventType),
-            rawPayload: Value(rawPayload),
-            syncBatchId: Value(syncBatchId),
-            dedupHash: dedupHash,
-            status: 'pending',
-            createdAt: DateTime.now(),
+        final lastSyncAt = device.lastSyncAt;
+        // حارس الكيرسور المسموم: قيمة مخزنة في المستقبل (قفزة ساعة سابقة)
+        // كانت تحجب كل البصمات الحقيقية للأبد عبر فلتر isAfter — نمسحها
+        // فوراً ونسحب سحباً كاملاً آمناً (منع التكرار بالـhash)، مع تسجيل تحذير.
+        DateTime? effectiveSinceBase = lastSyncAt;
+        if (lastSyncAt != null &&
+            lastSyncAt.isAfter(
+                DateTime.now().add(_futureCursorTolerance))) {
+          notes.add(
+            'تم تصفير كيرسور مستقبلي مسموم '
+            '(${_fmtShort(lastSyncAt)}) — سيُعاد السحب الكامل',
           );
-
-          final resultId = await _deviceDao.addRawEvent(rawCompanion);
-          if (resultId == 0) {
-            duplicate++;
+          effectiveSinceBase = null;
+          await _deviceDao.resetDeviceSyncCursor(device.id);
+        }
+        final overlapSince =
+            effectiveSinceBase?.subtract(const Duration(minutes: 15));
+        List<RawAttendanceEvent> events;
+        try {
+          events = await source.fetchEvents(since: overlapSince);
+        } on ZkTransportException {
+          await Future.delayed(const Duration(seconds: 2));
+          try {
+            await source.disconnect();
+          } catch (_) {}
+          if (!await source.connect()) {
+            final detail = source is ZKTecoTcpAttendanceSource
+                ? source.lastError
+                : null;
+            throw Exception(detail ?? 'فشلت إعادة الاتصال بجهاز الحضور');
+          }
+          events = await source.fetchEvents(since: overlapSince);
+        }
+        if (source is ZKTecoTcpAttendanceSource) {
+          final report = source.lastFetchReport;
+          if (report != null && report.droppedChunks > 0) {
+            final sample = report.debugSample == null
+                ? ''
+                : ' (sample: ${report.debugSample})';
+            throw Exception(
+              'parser mismatch: dropped ${report.droppedChunks} chunks '
+              'of ${report.rawBytes} bytes$sample',
+            );
           }
         }
+        fetched = events.length;
+
+        // 4. Ingest raw events (dups counted by pre-check: insertOrIgnore
+        // لا يميّز المكرر من قيمته الراجعة).
+        final knownHashes =
+            await _deviceDao.getDedupHashesForDevice(device.id);
+        DateTime? maxEventTime;
+        DateTime? minEventTime;
+        await _deviceDao.attachedDatabase.transaction(() async {
+          for (final event in events) {
+            if (event.eventTime.isAfter(maxEventTime ?? DateTime.fromMillisecondsSinceEpoch(0))) {
+              maxEventTime = event.eventTime;
+            }
+            if (minEventTime == null ||
+                event.eventTime.isBefore(minEventTime!)) {
+              minEventTime = event.eventTime;
+            }
+            // Generate Dedup Hash: sha256(deviceId + externalUserId + eventTime)
+            final hashStr =
+                '${device.id}_${event.externalUserId}_${event.eventTime.toIso8601String()}';
+            final dedupHash = sha256.convert(utf8.encode(hashStr)).toString();
+            if (knownHashes.contains(dedupHash)) {
+              duplicate++;
+              continue;
+            }
+
+            // Truncate rawPayload to prevent database bloat
+            final rawPayload =
+                event.rawPayload != null && event.rawPayload!.length > 10000
+                ? event.rawPayload!.substring(0, 10000)
+                : event.rawPayload;
+
+            final rawCompanion = AttendanceRawEventsCompanion.insert(
+              deviceId: device.id,
+              externalUserId: event.externalUserId,
+              eventTime: event.eventTime,
+              eventType: Value(event.eventType),
+              rawPayload: Value(rawPayload),
+              syncBatchId: Value(syncBatchId),
+              dedupHash: dedupHash,
+              status: 'pending',
+              createdAt: DateTime.now(),
+            );
+
+            await _deviceDao.addRawEvent(rawCompanion);
+            knownHashes.add(dedupHash);
+          }
+        });
 
         // 5. Process pending events (Matching & Heuristics)
         final processResult = await processPendingEvents(device.id);
         matched = processResult.matched;
         unmatched = processResult.unmatched;
 
-        // Update device lastSync status
-        await _deviceDao.updateDevice(
-          device.copyWith(
-            lastSyncAt: Value(DateTime.now()),
-            lastSyncStatus: Value('success'),
-            lastSyncError: const Value(null),
-          ),
+        // 5b. توليد الغياب للأيام المغلقة في نطاق البصمات الواردة:
+        // أي موظف نشط بلا سجل في يوم عمل مغلق يُسجَّل غائباً.
+        // (لا يفشل المزامنة لو تعثر — يُسجَّل ملاحظة فقط.)
+        final minSeen = minEventTime;
+        if (matched + unmatched > 0 && minSeen != null) {
+          try {
+            final absences =
+                await _engine.generateAbsencesForRange(minSeen, DateTime.now());
+            if (absences > 0) {
+              notes.add('اتسجل غياب تلقائي: $absences');
+            }
+          } catch (_) {}
+        }
+
+        // الكيرسور = آخر حدث فعلياً مشاهد — لا يتقدم مع السحب الفارغ،
+        // ولا يرجع للخلف أبداً (حماية من تداخل الـoverlap).
+        // (لو كان مسموماً فقد مُسح أعلاه، فالأساس هنا سليم.)
+        // نسخة محلية: maxEventTime يُكتب داخل closure فلا ترقية تلقائية له.
+        final maxSeen = maxEventTime;
+        DateTime? newSyncAt = effectiveSinceBase;
+        if (maxSeen != null &&
+            (newSyncAt == null || maxSeen.isAfter(newSyncAt))) {
+          newSyncAt = maxSeen;
+        }
+        if (fetched == 0) {
+          notes.add(
+            effectiveSinceBase == null
+                ? 'الجهاز متصل ولا يحمل سجلات — أول سحب'
+                : 'الجهاز متصل ولا توجد بصمات جديدة منذ ${_fmtShort(effectiveSinceBase)}',
+          );
+        }
+
+        final syncStatus = unmatched == 0 ? 'success' : 'partial';
+        await _deviceDao.updateDeviceSyncState(
+          device.id,
+          lastSyncAt: newSyncAt,
+          status: syncStatus,
         );
       } catch (e) {
-        error = e.toString();
-        await _deviceDao.updateDevice(
-          device.copyWith(
-            lastSyncStatus: Value('failed'),
-            lastSyncError: Value(error),
-          ),
+        error = _friendlySyncError(e, device);
+        await _deviceDao.updateDeviceSyncState(
+          device.id,
+          status: 'failed',
+          error: error,
         );
       } finally {
         // Always disconnect the source
@@ -191,10 +452,13 @@ class AttendanceSyncService {
         // Update sync log
         final currentLog = await _deviceDao.getSyncLogById(logId);
         if (currentLog != null) {
+          final logStatus = error == null
+              ? (unmatched == 0 ? 'success' : 'partial')
+              : 'failed';
           await _deviceDao.updateSyncLog(
             currentLog.copyWith(
               finishedAt: Value(DateTime.now()),
-              status: error == null ? 'success' : 'failed',
+              status: logStatus,
               eventsFetched: fetched,
               eventsMatched: matched,
               eventsUnmatched: unmatched,
@@ -204,6 +468,15 @@ class AttendanceSyncService {
           );
         }
       }
+
+      return SyncResult(
+        fetched: fetched,
+        matched: matched,
+        unmatched: unmatched,
+        duplicate: duplicate,
+        error: error,
+        info: notes.isEmpty ? null : notes.join(' — '),
+      );
     } finally {
       _syncingDevices.remove(device.id);
     }
@@ -211,165 +484,652 @@ class AttendanceSyncService {
 
   /// Processes raw events for a specific device, matches them to staff, and creates attendance records.
   Future<SyncResult> processPendingEvents(int deviceId) async {
-    final pendingEvents = await _deviceDao.getUnprocessedEventsForDevice(
+    final retryableEvents = await _deviceDao.getRetryableEventsForDevice(
       deviceId,
     );
+    retryableEvents.sort(_compareRawEvents);
 
-    // Sort chronologically
-    pendingEvents.sort((a, b) => a.eventTime.compareTo(b.eventTime));
+    final groups = <_ResolvedGroup>[];
+    final schedules = <String, ScheduleConfig>{};
+    var unmatched = 0;
 
-    int matched = 0;
-    int unmatched = 0;
-
-    for (final rawEvent in pendingEvents) {
-      // Find staff mapping — لو مفيش ربط، أنشئ موظف تلقائي من الجهاز
-      var mapping = await _deviceDao.getMappingByExternalId(
-        deviceId,
-        rawEvent.externalUserId,
-      );
+    for (final rawEvent in retryableEvents) {
+      StaffBiometricMapping? mapping;
+      try {
+        mapping = await _deviceDao.getMappingRecordByExternalId(
+          deviceId,
+          rawEvent.externalUserId,
+        );
+      } catch (error) {
+        await _markRetryError(rawEvent, error);
+        unmatched++;
+        continue;
+      }
 
       if (mapping == null) {
         try {
-          final newStaffId = await _autoCreateStaffForExternalId(
+          await _autoCreateStaffForExternalId(
             deviceId,
             rawEvent.externalUserId,
           );
-          mapping = await _deviceDao.getMappingByExternalId(
+          mapping = await _deviceDao.getMappingRecordByExternalId(
             deviceId,
             rawEvent.externalUserId,
           );
-          if (mapping == null) throw Exception('mapping not created');
-        } catch (e) {
-          await _deviceDao.updateRawEvent(
-            rawEvent.copyWith(
-              status: 'unmatched',
-              errorMessage: Value('فشل الإنشاء التلقائي: $e'),
-              processedAt: Value(DateTime.now()),
-            ),
-          );
+          if (mapping == null) {
+            throw StateError('mapping not created');
+          }
+        } catch (error) {
+          await _markRetryError(rawEvent, error);
           unmatched++;
           continue;
         }
       }
 
-      final staffId = mapping.staffId;
-      final staff = await _staffDao.getStaffById(staffId);
-
-      // Verify that staff is active and not terminated
-      if (staff == null || !staff.isActive || staff.status != 'active') {
-        await _deviceDao.updateRawEvent(
-          rawEvent.copyWith(
-            matchedStaffId: Value(staffId),
-            status: 'unmatched',
-            errorMessage: Value(
-              staff == null
-                  ? 'Staff record not found: $staffId'
-                  : 'Staff is inactive or terminated (${staff.status})',
-            ),
-            processedAt: Value(DateTime.now()),
-          ),
+      if (mapping.enrollmentStatus != 'enrolled') {
+        await _markUnmatched(
+          rawEvent,
+          'تعذر استخدام ربط البصمة: enrollmentStatus=${mapping.enrollmentStatus}',
+          mapping.staffId,
         );
         unmatched++;
         continue;
       }
 
-      // Update raw event with matched staff
-      var updatedEvent = rawEvent.copyWith(matchedStaffId: Value(staffId));
-
-      // --- Heuristic: First event of day = check-in, Next event = check-out ---
-      // Get today's attendance for this staff
-      final date = DateTime(
-        rawEvent.eventTime.year,
-        rawEvent.eventTime.month,
-        rawEvent.eventTime.day,
-      );
-      final nextDay = date.add(const Duration(days: 1));
-
-      final attendanceRecords = await _staffDao.getAttendanceByStaff(
-        staffId,
-        startDate: date,
-        endDate: nextDay,
-      );
-
-      // Filter strictly to today's date (compare date components only)
-      final todayRecords = attendanceRecords.where((a) {
-        final aDate = DateTime(a.date.year, a.date.month, a.date.day);
-        return aDate == date;
-      }).toList();
-
-      Attendance? resultingAttendance;
-
-      if (todayRecords.isEmpty) {
-        // No attendance today -> This is a check-in (حساب الحالة بنفس محرك المسار اليدوي)
-        final status = await _engine.processCheckIn(
-          staffId,
-          checkInTime: rawEvent.eventTime,
-        );
-        final companion = AttendanceTableCompanion.insert(
-          staffId: staffId,
-          date: date,
-          status: status,
-          checkInTime: Value(rawEvent.eventTime),
-          source: const Value('device'),
-          sourceDeviceId: Value(deviceId),
-          rawEventId: Value(rawEvent.id),
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        );
-        final newId = await _staffDao.addAttendanceReturningId(companion);
-        // Fetch only the inserted record
-        resultingAttendance = await _staffDao.getAttendanceById(newId);
-        if (resultingAttendance == null) {
-          // Fallback: skip this event if we can't fetch the record
+      final staffId = mapping.staffId;
+      try {
+        final staff = await _staffDao.getStaffById(staffId);
+        if (staff == null || !staff.isActive || staff.status != 'active') {
+          await _markUnmatched(
+            rawEvent,
+            staff == null
+                ? 'Staff record not found: $staffId'
+                : 'Staff is inactive or terminated (${staff.status})',
+            staffId,
+          );
+          unmatched++;
           continue;
         }
-      } else {
-        // Attendance exists -> Update check-out
-        final currentRecord = todayRecords.first;
-        // Only update if checkout is null OR if this event is LATER than existing checkout
-        if (currentRecord.checkOutTime == null ||
-            rawEvent.eventTime.isAfter(currentRecord.checkOutTime!)) {
-          // حساب ساعات العمل والأوفرتايم بنفس منطق مسار الحضور اليدوي
-          final checkInTime = currentRecord.checkInTime;
-          final result = checkInTime != null
-              ? await _engine.processCheckOut(
-                  staffId,
-                  checkInTime: checkInTime,
-                  checkOutTime: rawEvent.eventTime,
-                )
-              : null;
-          final updatedRecord = currentRecord.copyWith(
-            checkOutTime: Value(rawEvent.eventTime),
-            workingHours: result == null
-                ? const Value(null)
-                : Value(result.workingHours),
-            overtimeHours: result?.overtimeHours ?? currentRecord.overtimeHours,
-            status: result?.status ?? currentRecord.status,
-            updatedAt: DateTime.now(),
-          );
-          await _staffDao.updateAttendance(updatedRecord);
-          resultingAttendance = updatedRecord;
-        } else {
-          resultingAttendance = currentRecord;
-        }
-      }
 
-      // Mark raw event as processed
-      updatedEvent = updatedEvent.copyWith(
-        status: 'matched',
-        resultingAttendanceId: Value(resultingAttendance.id),
-        processedAt: Value(DateTime.now()),
-      );
-      await _deviceDao.updateRawEvent(updatedEvent);
-      matched++;
+        if (_isNonBiometric(rawEvent)) {
+          await _markUnmatched(
+            rawEvent,
+            'تحقق يدوي: بصمة غير بيومترية (كارت/باسورد)',
+            staffId,
+          );
+          unmatched++;
+          continue;
+        }
+
+        if (!schedules.containsKey(staffId)) {
+          schedules[staffId] = await _engine.getScheduleForStaff(staffId);
+        }
+        final schedule = schedules[staffId]!;
+        final workDate = await _resolveWorkDate(
+          staffId: staffId,
+          eventTime: rawEvent.eventTime,
+          schedule: schedule,
+        );
+        _ResolvedGroup? group;
+        for (final candidateGroup in groups) {
+          if (candidateGroup.staffId == staffId &&
+              candidateGroup.workDate == workDate) {
+            group = candidateGroup;
+            break;
+          }
+        }
+        if (group == null) {
+          group = _ResolvedGroup(
+            staffId: staffId,
+            workDate: workDate,
+            schedule: schedule,
+          );
+          groups.add(group);
+        }
+        group.add(
+          _ResolvedEvent(raw: rawEvent, staffId: staffId, workDate: workDate),
+        );
+      } catch (error) {
+        await _markRetryError(rawEvent, error, staffId: staffId);
+        unmatched++;
+      }
+    }
+
+    groups.sort((a, b) {
+      final staffOrder = a.staffId.compareTo(b.staffId);
+      if (staffOrder != 0) return staffOrder;
+      return a.workDate.compareTo(b.workDate);
+    });
+
+    var matched = 0;
+    for (final group in groups) {
+      try {
+        final attendanceRows = await _staffDao.getAttendanceOnDate(
+          group.staffId,
+          group.workDate,
+        );
+        if (_hasManualAbsent(attendanceRows)) {
+          for (final event in group.events) {
+            await _markUnmatched(
+              event.raw,
+              'سجل غياب يدوي: لم يتم تعديل الحضور',
+              event.staffId,
+            );
+          }
+          unmatched += group.events.length;
+          continue;
+        }
+        if (_hasProtectedAttendance(attendanceRows)) {
+          for (final event in group.events) {
+            await _markUnmatched(
+              event.raw,
+              'سجل حضور محفوظ مسبقًا: يحتاج مراجعة يدوية',
+              event.staffId,
+            );
+          }
+          unmatched += group.events.length;
+          continue;
+        }
+
+        await _deviceDao.attachedDatabase.transaction(() async {
+          await _processGroup(
+            deviceId: deviceId,
+            staffId: group.staffId,
+            workDate: group.workDate,
+            schedule: group.schedule,
+            newEvents: group.events,
+          );
+        });
+        matched += group.events.length;
+      } on _ProtectedAttendanceException catch (error) {
+        for (final event in group.events) {
+          await _markUnmatched(event.raw, error.message, event.staffId);
+        }
+        unmatched += group.events.length;
+      } catch (error) {
+        await _markGroupError(group, error);
+        unmatched += group.events.length;
+      }
     }
 
     return SyncResult(
-      fetched: pendingEvents.length,
+      fetched: retryableEvents.length,
       matched: matched,
       unmatched: unmatched,
       duplicate: 0,
     );
+  }
+
+  int _compareRawEvents(AttendanceRawEvent a, AttendanceRawEvent b) {
+    final timeOrder = a.eventTime.compareTo(b.eventTime);
+    if (timeOrder != 0) return timeOrder;
+    final deviceOrder = a.deviceId.compareTo(b.deviceId);
+    if (deviceOrder != 0) return deviceOrder;
+    return a.id.compareTo(b.id);
+  }
+
+  bool _isNonBiometric(AttendanceRawEvent event) {
+    final payload = event.rawPayload;
+    if (payload == null || payload.isEmpty) return false;
+
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is Map) {
+        final value = decoded['verifyType'] ?? decoded['verify_type'];
+        final verifyType = value is num
+            ? value.toInt()
+            : int.tryParse('$value');
+        if (verifyType == 2 || verifyType == 3) return true;
+      }
+    } catch (_) {}
+
+    return RegExp(r'"verifyType"\s*:\s*[23](?:\D|$)').hasMatch(payload) ||
+        RegExp(r'"verify_type"\s*:\s*[23](?:\D|$)').hasMatch(payload);
+  }
+
+  Future<DateTime> _resolveWorkDate({
+    required String staffId,
+    required DateTime eventTime,
+    required ScheduleConfig schedule,
+  }) async {
+    final date = _dateOnly(eventTime);
+    if (eventTime.hour >= 4) return date;
+
+    final previousDate = date.subtract(const Duration(days: 1));
+    if (_isOvernightSchedule(schedule)) return previousDate;
+
+    final previousRows = await _staffDao.getAttendanceOnDate(
+      staffId,
+      previousDate,
+    );
+    final hasOpenPrevious = previousRows.any(
+      (row) =>
+          (row.checkInTime != null && row.checkOutTime == null) ||
+          (row.source == 'auto_generated' &&
+              row.status == 'absent' &&
+              (row.checkInTime != null || row.checkOutTime != null)),
+    );
+    return hasOpenPrevious ? previousDate : date;
+  }
+
+  bool _hasManualAbsent(List<Attendance> rows) {
+    return rows.any(
+      (row) =>
+          row.status == 'absent' &&
+          row.checkInTime == null &&
+          row.source != 'auto_generated',
+    );
+  }
+
+  bool _hasProtectedAttendance(List<Attendance> rows) {
+    return rows.any((row) {
+      if (row.source == 'admin_override') return true;
+      if (row.checkOutTime == null) return false;
+      return row.source == 'manual' ||
+          row.source == 'import' ||
+          row.source == null;
+    });
+  }
+
+  Attendance _selectAttendanceRow(List<Attendance> rows) {
+    int priority(Attendance row) {
+      return switch (row.source) {
+        'admin_override' => 0,
+        'manual' => 1,
+        null => 2,
+        'auto_generated' => 3,
+        'device' => 4,
+        _ => 5,
+      };
+    }
+
+    rows.sort((left, right) {
+      final sourceOrder = priority(left).compareTo(priority(right));
+      if (sourceOrder != 0) return sourceOrder;
+      final leftUpdated = left.updatedAt;
+      final rightUpdated = right.updatedAt;
+      final updatedOrder = rightUpdated.compareTo(leftUpdated);
+      if (updatedOrder != 0) return updatedOrder;
+      return right.id.compareTo(left.id);
+    });
+    return rows.first;
+  }
+
+  DateTime _dateOnly(DateTime value) {
+    return DateTime(value.year, value.month, value.day);
+  }
+
+  Future<void> _markUnmatched(
+    AttendanceRawEvent event,
+    String message,
+    String? staffId,
+  ) async {
+    await _deviceDao.updateRawEvent(
+      event.copyWith(
+        matchedStaffId: Value<String?>(staffId),
+        resultingAttendanceId: const Value<int?>(null),
+        status: 'unmatched',
+        errorMessage: Value<String?>(message),
+        processedAt: Value<DateTime?>(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<void> _markRetryError(
+    AttendanceRawEvent event,
+    Object error, {
+    String? staffId,
+  }) async {
+    await _deviceDao.updateRawEvent(
+      event.copyWith(
+        matchedStaffId: Value<String?>(staffId),
+        resultingAttendanceId: const Value<int?>(null),
+        status: 'error',
+        errorMessage: Value<String?>('فشل معالجة الحضور: $error'),
+        processedAt: Value<DateTime?>(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<void> _markGroupError(_ResolvedGroup group, Object error) async {
+    for (final event in group.events) {
+      try {
+        await _markRetryError(event.raw, error, staffId: event.staffId);
+      } catch (_) {}
+    }
+  }
+
+  Future<List<AttendanceRawEvent>> _historyForGroup(
+    String staffId,
+    DateTime workDate,
+    ScheduleConfig schedule,
+  ) async {
+    final from = _dateOnly(workDate);
+    final nextDay = from.add(const Duration(days: 1));
+    final to = _isOvernightSchedule(schedule)
+        ? nextDay.add(const Duration(hours: 4, minutes: 1))
+        : from.add(const Duration(hours: 28));
+    final history = await _deviceDao.getMatchedEventsForStaff(
+      staffId,
+      from,
+      to,
+    );
+    final relevant = <AttendanceRawEvent>[];
+
+    for (final event in history) {
+      final linkedId = event.resultingAttendanceId;
+      if (linkedId == null) {
+        relevant.add(event);
+        continue;
+      }
+      final eventDate = _dateOnly(event.eventTime);
+      final isEarlyNextDay =
+          _isOvernightSchedule(schedule) &&
+          eventDate == nextDay &&
+          event.eventTime.hour < 4;
+      final linkedAttendance = await _staffDao.getAttendanceById(linkedId);
+      final isReparentableDeviceRow =
+          linkedAttendance?.staffId == staffId &&
+          linkedAttendance?.source == 'device' &&
+          linkedAttendance?.sourceDeviceId == event.deviceId &&
+          linkedAttendance?.checkOutTime == null;
+      if (linkedAttendance == null ||
+          _dateOnly(linkedAttendance.date) == workDate ||
+          (isEarlyNextDay && isReparentableDeviceRow)) {
+        relevant.add(event);
+      }
+    }
+
+    return relevant;
+  }
+
+  _AttendanceCandidate? _earliestCandidate(
+    Iterable<_AttendanceCandidate> candidates,
+  ) {
+    _AttendanceCandidate? selected;
+    for (final candidate in candidates) {
+      if (selected == null ||
+          candidate.time.isBefore(selected.time) ||
+          (candidate.time == selected.time &&
+              candidate.isExisting &&
+              !selected.isExisting)) {
+        selected = candidate;
+      }
+    }
+    return selected;
+  }
+
+  _AttendanceCandidate? _latestCandidate(
+    Iterable<_AttendanceCandidate> candidates,
+  ) {
+    _AttendanceCandidate? selected;
+    for (final candidate in candidates) {
+      if (selected == null ||
+          candidate.time.isAfter(selected.time) ||
+          (candidate.time == selected.time &&
+              candidate.protectedExisting &&
+              !selected.protectedExisting)) {
+        selected = candidate;
+      }
+    }
+    return selected;
+  }
+
+  bool _isOvernightSchedule(ScheduleConfig schedule) {
+    return schedule.workEndMinutesSinceMidnight <=
+        schedule.workStartMinutesSinceMidnight;
+  }
+
+  DateTime _scheduleEndFor(DateTime workDate, ScheduleConfig schedule) {
+    var end = DateTime(
+      workDate.year,
+      workDate.month,
+      workDate.day,
+      schedule.workEndHour,
+      schedule.workEndMinute,
+    );
+    if (_isOvernightSchedule(schedule)) {
+      end = end.add(const Duration(days: 1));
+    }
+    return end;
+  }
+
+  Future<void> _processGroup({
+    required int deviceId,
+    required String staffId,
+    required DateTime workDate,
+    required ScheduleConfig schedule,
+    required List<_ResolvedEvent> newEvents,
+  }) async {
+    final attendanceRows = await _staffDao.getAttendanceOnDate(
+      staffId,
+      workDate,
+    );
+    if (_hasManualAbsent(attendanceRows)) {
+      throw const _ProtectedAttendanceException(
+        'سجل غياب يدوي: لم يتم تعديل الحضور',
+      );
+    }
+    if (_hasProtectedAttendance(attendanceRows)) {
+      throw const _ProtectedAttendanceException(
+        'سجل حضور محفوظ مسبقًا: يحتاج مراجعة يدوية',
+      );
+    }
+    final existing = attendanceRows.isEmpty
+        ? null
+        : _selectAttendanceRow(attendanceRows);
+
+    final history = await _historyForGroup(staffId, workDate, schedule);
+    final allById = <int, AttendanceRawEvent>{
+      for (final event in history) event.id: event,
+      for (final event in newEvents) event.raw.id: event.raw,
+    };
+    final allEvents = allById.values.toList()..sort(_compareRawEvents);
+
+    final retainedEvents = <AttendanceRawEvent>[];
+    final duplicateIds = <int>{};
+    DateTime? previousTime;
+    for (final event in allEvents) {
+      if (previousTime != null &&
+          event.eventTime.difference(previousTime) < _duplicateWindow) {
+        duplicateIds.add(event.id);
+      } else {
+        retainedEvents.add(event);
+        previousTime = event.eventTime;
+      }
+    }
+
+    final isAutoAbsent =
+        existing?.source == 'auto_generated' &&
+        existing?.status == 'absent' &&
+        existing?.checkInTime == null;
+    final checkinCandidates = <_AttendanceCandidate>[];
+    if (existing != null && existing.checkInTime != null) {
+      checkinCandidates.add(
+        _AttendanceCandidate(time: existing.checkInTime!, isExisting: true),
+      );
+    }
+    if (isAutoAbsent && existing?.checkOutTime != null) {
+      checkinCandidates.add(
+        _AttendanceCandidate(time: existing!.checkOutTime!, isExisting: true),
+      );
+    }
+    for (final event in retainedEvents) {
+      checkinCandidates.add(
+        _AttendanceCandidate(time: event.eventTime, raw: event),
+      );
+    }
+
+    final checkin = _earliestCandidate(checkinCandidates);
+    if (checkin == null) {
+      throw StateError('attendance group has no check-in candidate');
+    }
+
+    final scheduleEnd = _scheduleEndFor(workDate, schedule);
+    final thresholdByDuration = checkin.time.add(_minCheckoutAfterCheckIn);
+    final thresholdBySchedule = scheduleEnd.subtract(
+      _checkoutThresholdBeforeEnd,
+    );
+    final checkoutThreshold = thresholdByDuration.isAfter(thresholdBySchedule)
+        ? thresholdByDuration
+        : thresholdBySchedule;
+
+    final checkoutCandidates = <_AttendanceCandidate>[];
+    for (final event in retainedEvents) {
+      if (event.eventTime.isAfter(checkin.time) &&
+          !event.eventTime.isBefore(checkoutThreshold)) {
+        checkoutCandidates.add(
+          _AttendanceCandidate(time: event.eventTime, raw: event),
+        );
+      }
+    }
+    if (_isOvernightSchedule(schedule)) {
+      final nextDayStart = _dateOnly(workDate).add(const Duration(days: 1));
+      final earlyWindowEnd = nextDayStart.add(const Duration(hours: 4));
+      for (final event in retainedEvents) {
+        if (!event.eventTime.isBefore(nextDayStart) &&
+            event.eventTime.isBefore(earlyWindowEnd) &&
+            event.eventTime.isAfter(checkin.time)) {
+          checkoutCandidates.add(
+            _AttendanceCandidate(time: event.eventTime, raw: event),
+          );
+        }
+      }
+    }
+    if (existing != null &&
+        existing.checkOutTime != null &&
+        !isAutoAbsent &&
+        existing.checkOutTime!.isAfter(checkin.time)) {
+      checkoutCandidates.add(
+        _AttendanceCandidate(
+          time: existing.checkOutTime!,
+          isExisting: true,
+          protectedExisting: existing.source != 'device',
+        ),
+      );
+    }
+    final checkout = _latestCandidate(checkoutCandidates);
+
+    final notes = <int, String>{};
+    void addNote(int eventId, String note) {
+      final current = notes[eventId];
+      if (current == null) {
+        notes[eventId] = note;
+      } else if (!current.split('; ').contains(note)) {
+        notes[eventId] = '$current; $note';
+      }
+    }
+
+    for (final event in allEvents) {
+      if (duplicateIds.contains(event.id)) {
+        addNote(event.id, 'duplicate within 10min window — ignored');
+        continue;
+      }
+      if (event.id == checkin.raw?.id || event.id == checkout?.raw?.id) {
+        continue;
+      }
+      if (!event.eventTime.isAfter(checkin.time)) continue;
+      if (event.eventTime.isBefore(checkoutThreshold)) {
+        addNote(event.id, 'before checkout threshold — kept open for review');
+      } else if (checkout != null) {
+        if (event.eventTime == checkout.time) {
+          addNote(event.id, 'matches existing check-out');
+        } else if (event.eventTime.isBefore(checkout.time)) {
+          addNote(event.id, 'superseded by later event');
+        }
+      }
+    }
+
+    final checkoutTime = checkout != null && checkout.time.isAfter(checkin.time)
+        ? checkout.time
+        : null;
+    final result = _engine.calculateAttendance(
+      checkInTime: checkin.time,
+      checkOutTime: checkoutTime,
+      schedule: schedule,
+    );
+    var status = result.status;
+    double? workingHours = existing?.workingHours;
+    var overtimeHours = existing?.overtimeHours ?? 0.0;
+    if (checkoutTime != null) {
+      workingHours = result.workingHours;
+      overtimeHours = result.overtimeHours;
+    }
+
+    final origin = checkin.raw ?? retainedEvents.first;
+    final now = DateTime.now();
+    late final Attendance attendance;
+    if (existing == null) {
+      final newId = await _staffDao.addAttendanceReturningId(
+        AttendanceTableCompanion.insert(
+          staffId: staffId,
+          date: workDate,
+          status: status,
+          checkInTime: Value<DateTime?>(checkin.time),
+          checkOutTime: Value<DateTime?>(checkout?.time),
+          workingHours: Value<double?>(workingHours),
+          overtimeHours: Value<double>(overtimeHours),
+          source: const Value('device'),
+          sourceDeviceId: Value<int?>(deviceId),
+          rawEventId: Value<int?>(origin.id),
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      final inserted = await _staffDao.getAttendanceById(newId);
+      if (inserted == null) {
+        throw StateError('inserted attendance could not be loaded');
+      }
+      attendance = inserted;
+    } else {
+      final useDeviceOrigin = isAutoAbsent;
+      attendance = existing.copyWith(
+        checkInTime: Value<DateTime?>(checkin.time),
+        checkOutTime: Value<DateTime?>(checkout?.time),
+        workingHours: Value<double?>(workingHours),
+        status: status,
+        overtimeHours: overtimeHours,
+        source: isAutoAbsent
+            ? const Value<String?>('device')
+            : const Value<String?>.absent(),
+        sourceDeviceId: useDeviceOrigin
+            ? Value<int?>(deviceId)
+            : const Value<int?>.absent(),
+        rawEventId: useDeviceOrigin
+            ? Value<int?>(origin.id)
+            : const Value<int?>.absent(),
+        updatedAt: now,
+      );
+      await _staffDao.updateAttendance(attendance);
+    }
+
+    final processedAt = DateTime.now();
+    for (final event in allEvents) {
+      await _deviceDao.updateRawEvent(
+        event.copyWith(
+          matchedStaffId: Value<String?>(staffId),
+          resultingAttendanceId: Value<int?>(attendance.id),
+          status: 'matched',
+          errorMessage: Value<String?>(notes[event.id]),
+          processedAt: Value<DateTime?>(processedAt),
+        ),
+      );
+    }
+
+    // v72: the stale-attendance DELETE is intentionally removed.
+    //
+    // It used to hard-delete any attendance row a re-matched raw event had
+    // previously produced. Two ways that destroys real data: a re-punch on a
+    // day an admin had marked with a permission erased that permission, and
+    // an attendance row that had already fed a payslip silently disappeared
+    // with no trace. Baseline 5eb58db has no such deletion either.
+    //
+    // The raw events keep pointing at the surviving attendance row, so nothing
+    // is orphaned; superseded rows simply stay and remain visible in the
+    // employee's history for a human to reconcile.
+    //
+    // Reinstating this needs its own reviewed change plus a proof that no
+    // already-paid payroll period references the rows being removed.
   }
 
   /// ينشئ موظف جديد تلقائياً من بصمة الجهاز ويربطه مباشرة.
@@ -378,45 +1138,47 @@ class AttendanceSyncService {
     int deviceId,
     String externalUserId,
   ) async {
-    final existing = await _deviceDao.getMappingByExternalId(
-      deviceId,
-      externalUserId,
-    );
-    if (existing != null) return existing.staffId;
+    return _deviceDao.attachedDatabase.transaction(() async {
+      final existing = await _deviceDao.getMappingRecordByExternalId(
+        deviceId,
+        externalUserId,
+      );
+      if (existing != null) return existing.staffId;
 
-    final allStaff = await _staffDao.getAllStaff();
-    int maxId = 0;
-    for (final s in allStaff) {
-      final n = int.tryParse(s.staffId.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-      if (n > maxId) maxId = n;
-    }
-    final newStaffId = 'STAFF${(maxId + 1).toString().padLeft(4, '0')}';
-    final now = DateTime.now();
+      final allStaff = await _staffDao.getAllStaff();
+      var maxId = 0;
+      for (final staff in allStaff) {
+        final numericId =
+            int.tryParse(staff.staffId.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+        if (numericId > maxId) maxId = numericId;
+      }
+      final newStaffId = 'STAFF${(maxId + 1).toString().padLeft(4, '0')}';
+      final now = DateTime.now();
 
-    await _staffDao.addStaff(
-      StaffTableCompanion.insert(
-        staffId: newStaffId,
-        name: 'موظف $externalUserId',
-        position: 'موظف',
-        employmentType: 'full_time',
-        basicSalary: 0,
-        hireDate: now,
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-      ),
-    );
-
-    await _deviceDao.addMapping(
-      StaffBiometricMappingsCompanion.insert(
-        staffId: newStaffId,
-        deviceId: deviceId,
-        externalUserId: externalUserId,
-        enrollmentStatus: 'enrolled',
-        createdAt: now,
-        updatedAt: now,
-      ),
-    );
-    return newStaffId;
+      await _staffDao.addStaff(
+        StaffTableCompanion.insert(
+          staffId: newStaffId,
+          name: 'موظف $externalUserId',
+          position: 'موظف',
+          employmentType: 'full_time',
+          basicSalary: 0,
+          hireDate: now,
+          status: 'active',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      await _deviceDao.addMapping(
+        StaffBiometricMappingsCompanion.insert(
+          staffId: newStaffId,
+          deviceId: deviceId,
+          externalUserId: externalUserId,
+          enrollmentStatus: 'enrolled',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      return newStaffId;
+    });
   }
 }
