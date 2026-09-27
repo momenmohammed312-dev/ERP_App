@@ -7,11 +7,21 @@ import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/services/attendance/attendance_calculation_engine.dart';
 import 'package:pos_offline_desktop/services/staff_management_service.dart';
 
-/// Bug 4:
-/// (a) lateMinutes counts only minutes PAST the grace end (not from
-///     schedule start).
-/// (b) flat fine per late day from the `late_penalty_amount` setting flows
-///     into payroll deductions; default 0 keeps old behavior identical.
+/// Late deduction, v72 approved rule:
+///
+///   hourly        = basicSalary / dailyDivisor / standardHoursPerDay  (/240)
+///   late hours    = (checkIn - workStart) / 60
+///   lateDeduction = late hours * hourly * lateMultiplier
+///
+/// `lateMultiplier` is resolved once through
+/// AttendanceDeductionRules.resolveLateMultiplier() from the
+/// `late_penalty_per_hour` setting, falling back to 1.5 when it is 0/unset, and
+/// the payroll and the Employee Details display share that one value.
+///
+/// Grace decides only WHETHER a row counts as late: arriving inside the grace
+/// window is on time. Once the row IS late the minutes are measured from the
+/// shift start, so 09:20 with a 15-minute grace is 20 late minutes, not 5.
+/// Excused rows never count.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -78,8 +88,8 @@ void main() {
     });
   });
 
-  group('flat late fine in payroll', () {
-    Future<AppDatabase> seedDb({String? penaltySetting}) async {
+  group('grace decides IF late, shift start decides HOW MUCH', () {
+    Future<AppDatabase> seedDb({double? multiplier}) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       await db.into(db.staffTable).insert(
@@ -95,22 +105,25 @@ void main() {
               updatedAt: DateTime(2026, 1, 1),
             ),
           );
+      // 9:20 with a 15-minute grace. Inside the grace? No. So the row is late,
+      // and the deducted minutes run from the 09:00 shift start => 20 each.
       for (final day in [2, 3]) {
         await db.staffManagementDao.addAttendance(
           AttendanceTableCompanion.insert(
             staffId: 'ST-1',
             date: DateTime(2026, 9, day),
             status: 'late',
+            checkInTime: Value(DateTime(2026, 9, day, 9, 20)),
             createdAt: DateTime(2026, 9, day),
             updatedAt: DateTime(2026, 9, day),
           ),
         );
       }
-      if (penaltySetting != null) {
+      if (multiplier != null) {
         await db.into(db.attendanceSettings).insert(
               AttendanceSettingsCompanion.insert(
-                settingKey: 'late_penalty_amount',
-                settingValue: penaltySetting,
+                settingKey: 'late_penalty_per_hour',
+                settingValue: '$multiplier',
                 createdAt: DateTime.now(),
                 updatedAt: DateTime.now(),
               ),
@@ -132,22 +145,50 @@ void main() {
       return rows.first;
     }
 
-    test('2 late days x 50 fine => 100 deduction', () async {
-      final db = await seedDb(penaltySetting: '50');
+    test('9000 monthly => 37.5 hourly (9000/30/8, not /160)', () async {
+      final db = await seedDb();
       final p = await calculated(db);
-      expect(p.lateDays, 2);
-      expect(p.lateDeduction, 100.0);
-      expect(p.deductions, 100.0);
-      expect(p.netSalary, 8900.0);
+      expect(p.overtimeRate, closeTo(37.5, 0.001));
     });
 
-    test('no setting => zero fine, old behavior identical', () async {
+    test('2 days x 20 shift-start minutes x 37.5 hourly x 1.5 => 37.5', () async {
       final db = await seedDb();
       final p = await calculated(db);
       expect(p.lateDays, 2);
-      expect(p.lateDeduction, 0.0);
-      expect(p.deductions, 0.0);
-      expect(p.netSalary, 9000.0);
+      expect(p.lateHours, closeTo(40 / 60, 0.001));
+      expect(p.lateDeduction, closeTo(37.5, 0.001));
+      expect(p.deductions, closeTo(37.5, 0.001));
+      expect(p.netSalary, closeTo(8962.5, 0.001));
+    });
+
+    test('late_penalty_per_hour = 2.0 applies', () async {
+      final db = await seedDb(multiplier: 2.0);
+      final p = await calculated(db);
+      expect(p.lateDeduction, closeTo(50.0, 0.001));
+      expect(p.netSalary, closeTo(8950.0, 0.001));
+    });
+
+    test('an unset setting falls back to 1.5, never to a silent zero', () async {
+      final db = await seedDb();
+      final p = await calculated(db);
+      expect(p.lateDeduction, greaterThan(0.0));
+    });
+
+    test('excused rows never count as late', () async {
+      final db = await seedDb();
+      await db.staffManagementDao.addAttendance(
+        AttendanceTableCompanion.insert(
+          staffId: 'ST-1',
+          date: DateTime(2026, 9, 4),
+          status: 'excused',
+          checkInTime: Value(DateTime(2026, 9, 4, 12, 0)),
+          createdAt: DateTime(2026, 9, 4),
+          updatedAt: DateTime(2026, 9, 4),
+        ),
+      );
+      final p = await calculated(db);
+      expect(p.lateDays, 2);
+      expect(p.lateDeduction, closeTo(37.5, 0.001));
     });
   });
 }
