@@ -903,16 +903,23 @@ class StaffManagementService {
 
     // One settings read for every deduction knob, so the payroll and the
     // attendance card can never read different values mid-session.
-    double lateMultiplierSetting = 1.5;
+    double latePenaltyPerHourSetting = 0.0;
     double absenceMultiplierSetting = 1.0;
     String absenceModeSetting = 'day_wage';
     double fixedAbsenceAmountSetting = 0.0;
     try {
       for (final s in await db.select(db.attendanceSettings).get()) {
         switch (s.settingKey) {
+          // v72: the baseline key is `late_penalty_per_hour`. Its default of 0
+          // meant "not configured", so it is resolved through the shared helper
+          // rather than read raw. The pre-v72 `late_penalty_multiplier` key is
+          // still honoured so an existing database keeps its configured value.
+          case 'late_penalty_per_hour':
+            latePenaltyPerHourSetting =
+                double.tryParse(s.settingValue) ?? latePenaltyPerHourSetting;
           case 'late_penalty_multiplier':
-            lateMultiplierSetting =
-                double.tryParse(s.settingValue) ?? lateMultiplierSetting;
+            latePenaltyPerHourSetting =
+                double.tryParse(s.settingValue) ?? latePenaltyPerHourSetting;
           case 'absence_penalty_days_multiplier':
             absenceMultiplierSetting =
                 double.tryParse(s.settingValue) ?? absenceMultiplierSetting;
@@ -925,6 +932,12 @@ class StaffManagementService {
         }
       }
     } catch (_) {}
+
+    // ONE resolved multiplier, shared by the payroll deduction and the
+    // Employee Details display, so the two can never disagree.
+    final lateMultiplierSetting = AttendanceDeductionRules.resolveLateMultiplier(
+      latePenaltyPerHourSetting,
+    );
 
     // Attendance deductions come from ONE calculator shared with the
     // attendance screen, otherwise the two disagree on the same employee.
@@ -981,16 +994,52 @@ class StaffManagementService {
     final permissionDeduction = deduction.permissionDeduction;
     final absenceDeduction = deduction.absenceDeduction;
 
-    // Permission (early leave) had no term at all before — it was previewed
-    // on the attendance screen and printed in the PDF column, but never
-    // persisted, so the net salary never actually lost it.
-    final deductions = totalAdvances +
+    // ── Commitment bonus (baseline 5eb58db:1330-1346) ──────────────────────
+    // `perfect_attendance_bonus` is granted only for a flawless period:
+    // no absence, no leave, and not a single late minute.
+    double perfectAttendanceBonus = 0.0;
+    try {
+      final row = await (db.select(db.attendanceSettings)
+            ..where((t) =>
+                t.settingKey.equals('perfect_attendance_bonus')))
+          .getSingleOrNull();
+      final configured = double.tryParse(row?.settingValue ?? '0') ?? 0.0;
+      if (configured > 0 &&
+          attendanceSummary.absentDays == 0 &&
+          attendanceSummary.leaveDays == 0 &&
+          deduction.totalLateMinutes == 0) {
+        perfectAttendanceBonus = configured;
+      }
+    } catch (_) {}
+
+    // ── Advance capping (baseline 5eb58db:1372-1401) ──────────────────────
+    // Advances can never push the net below zero: what is applied is capped at
+    // everything the period earned before advances are taken.
+    final netBeforeAdvances = basicSalary +
+        overtimePay +
+        allowancesTotal +
+        rewardsTotal +
+        perfectAttendanceBonus -
+        (penaltiesTotal +
+            lateDeduction +
+            permissionDeduction +
+            absenceDeduction);
+    final cap = netBeforeAdvances < 0 ? 0.0 : netBeforeAdvances;
+    final appliedAdvances =
+        totalAdvances > cap ? cap : totalAdvances;
+
+    final deductions = appliedAdvances +
         penaltiesTotal +
         lateDeduction +
         permissionDeduction +
         absenceDeduction;
 
-    final netSalary = basicSalary + overtimePay + allowancesTotal + rewardsTotal - deductions;
+    final netSalary = basicSalary +
+        overtimePay +
+        allowancesTotal +
+        rewardsTotal +
+        perfectAttendanceBonus -
+        deductions;
 
     await db.into(db.payrollTable).insert(
           PayrollTableCompanion.insert(
@@ -1004,11 +1053,14 @@ class StaffManagementService {
             overtimePay: Value(overtimePay),
             allowances: Value(allowancesTotal),
             deductions: Value(deductions),
-            advances: Value(totalAdvances),
-            // Permission / early-leave share lives in `otherDeductions` (no
-            // dedicated column) and is already inside `deductions` above —
-            // the slip reads it back with `_permissionPart`.
-            otherDeductions: Value(permissionDeduction),
+            advances: Value(appliedAdvances),
+            // v72: permission/early-leave is now a first-class column pair
+            // instead of being hidden in `otherDeductions` and reverse-
+            // engineered on display by subtraction. `otherDeductions` is left
+            // alone for whatever legacy value it already holds.
+            lateHours: Value(deduction.totalLateMinutes / 60.0),
+            permissionHours: Value(deduction.totalPermissionMinutes / 60.0),
+            permissionDeduction: Value(permissionDeduction),
             netSalary: netSalary,
             workingDays: Value(attendanceSummary.totalDays),
             presentDays: Value(attendanceSummary.presentDays),

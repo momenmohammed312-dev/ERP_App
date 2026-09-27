@@ -94,13 +94,21 @@ class AttendanceDeductionRules {
   }
 
   /// هل السجل ده إذن / انصراف مبكر قابل للخصم؟
+  ///
+  /// Single source of truth for BOTH the summary card and its detail dialog —
+  /// the card and the dialog must never disagree about what counts as a
+  /// permission.
   static bool isPermissionRecord(Attendance r, {required int workEndMinutes}) {
+    // v72 restored column: authoritative marker written by the current build.
+    if (r.excused) return true;
     if (r.status == 'excused' || r.status == 'excused_late') return true;
     if (r.status == 'leave' &&
         r.leaveType != null &&
         r.leaveType!.trim().isNotEmpty) {
       return true;
     }
+    // v72 restored column: admin-entered partial permission hours.
+    if (r.permissionHours > 0) return true;
     final co = _minutesOf(r.checkOutTime);
     if (co < 0) return false;
     return co < workEndMinutes &&
@@ -111,6 +119,10 @@ class AttendanceDeductionRules {
   static int permissionMinutesOf(Attendance r, {required int workEndMinutes}) {
     if (!isPermissionRecord(r, workEndMinutes: workEndMinutes)) return 0;
     if (r.status == 'leave') return 0; // إجازة معتمدة = ليست خصماً
+    // A fully exempt day (excused with no hours) deducts nothing.
+    if (r.excused && r.excusedHours <= 0) return 0;
+    // Explicit partial permission recorded on the row wins.
+    if (r.excusedHours > 0) return (r.excusedHours * 60).round();
     final co = _minutesOf(r.checkOutTime);
     if (co >= 0) return co < workEndMinutes ? workEndMinutes - co : 0;
     final m = permissionWindow.firstMatch(r.notes ?? '');
@@ -122,18 +134,32 @@ class AttendanceDeductionRules {
     return to > from ? to - from : 0;
   }
 
-  /// دقائق التأخير الفعلية — بعد نهاية السماح فقط، وصفر للمعفي.
+  /// دقائق التأخير الفعلية — من بداية الدوام، وصفر للمعفي.
+  ///
+  /// APPROVED BUSINESS RULE (v72), baseline 5eb58db:871/900:
+  ///   lateMinutes = checkIn - workStart
+  ///
+  /// Grace decides only WHETHER the row counts as late at all: arriving inside
+  /// the grace window is not late and deducts nothing. Once the row IS late,
+  /// the minutes deducted are measured from the shift start, so 09:20 with a
+  /// 15-minute grace is 20 late minutes, not 5.
   static int lateMinutesOf(
     Attendance r, {
     required int workStartMinutes,
     required int graceMinutes,
   }) {
+    // The v72 `excused` flag is the authoritative permission marker, so an
+    // excused row deducts nothing for lateness no matter which `status`
+    // string an older build happened to write.
+    if (r.excused) return 0;
     if (r.status == 'excused' || r.status == 'excused_late') return 0;
     final ci = _minutesOf(r.checkInTime);
     if (ci < 0) return 0;
+    // Grace only decides WHETHER the row is late...
     final graceEnd = workStartMinutes + graceMinutes;
     if (ci <= graceEnd) return 0;
-    return ci - graceEnd;
+    // ...but the deducted minutes are measured from the shift start.
+    return ci - workStartMinutes;
   }
 }
 

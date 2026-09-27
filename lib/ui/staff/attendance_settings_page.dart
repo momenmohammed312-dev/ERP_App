@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' as drift;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
+import 'package:pos_offline_desktop/services/attendance/attendance_calculation_engine.dart';
 import 'package:pos_offline_desktop/widgets/permission_guard.dart';
 
 class AttendanceSettingsPage extends ConsumerStatefulWidget {
@@ -26,10 +26,15 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
   };
   String _weekendDay = 'fri';
 
-  // Grace & penalties
+  // Grace & penalties (locked old rules: late hour × multiplier,
+  // absence day-wage or fixed amount per day)
   int _gracePeriodMinutes = 15;
-  double _latePenaltyAmount = 0;
+  double _latePenaltyMultiplier = 1.5;
+  double _perfectAttendanceBonus = 0.0;
   double _absencePenaltyAmount = 0;
+  String _absenceMode = 'day_wage'; // 'day_wage' | 'fixed'
+  // Overtime starts past the scheduled end + this grace (old rule)
+  int _overtimeGraceMinutes = 30;
   double _overtimeRateMultiplier = 1.5;
   double _overtimeThresholdHours = 8;
 
@@ -63,8 +68,18 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             _weekendDay = s.settingValue;
           case 'grace_period_minutes':
             _gracePeriodMinutes = int.tryParse(s.settingValue) ?? 15;
-          case 'late_penalty_amount':
-            _latePenaltyAmount = double.tryParse(s.settingValue) ?? 0;
+          case 'late_penalty_per_hour':
+            _latePenaltyMultiplier = double.tryParse(s.settingValue) ?? 1.5;
+          case 'late_penalty_multiplier':
+            // Pre-v72 key: honoured on read so an existing database keeps its
+            // configured value. New writes use `late_penalty_per_hour`.
+            _latePenaltyMultiplier = double.tryParse(s.settingValue) ?? 1.5;
+          case 'perfect_attendance_bonus':
+            _perfectAttendanceBonus = double.tryParse(s.settingValue) ?? 0;
+          case 'absence_deduction_mode':
+            _absenceMode = s.settingValue == 'fixed' ? 'fixed' : 'day_wage';
+          case 'overtime_grace_minutes':
+            _overtimeGraceMinutes = int.tryParse(s.settingValue) ?? 30;
           case 'absence_penalty_amount':
             _absencePenaltyAmount = double.tryParse(s.settingValue) ?? 0;
           case 'overtime_rate_multiplier':
@@ -103,7 +118,10 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         'default_work_days': _workDays.entries.where((e) => e.value).map((e) => e.key).join(','),
         'default_weekend': _weekendDay,
         'grace_period_minutes': _gracePeriodMinutes.toString(),
-        'late_penalty_amount': _latePenaltyAmount.toString(),
+        'late_penalty_per_hour': _latePenaltyMultiplier.toString(),
+        'perfect_attendance_bonus': _perfectAttendanceBonus.toString(),
+        'absence_deduction_mode': _absenceMode,
+        'overtime_grace_minutes': _overtimeGraceMinutes.toString(),
         'absence_penalty_amount': _absencePenaltyAmount.toString(),
         'overtime_rate_multiplier': _overtimeRateMultiplier.toString(),
         'overtime_threshold_hours': _overtimeThresholdHours.toString(),
@@ -152,47 +170,18 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
   Future<void> _generateAbsences() async {
     try {
       final db = ref.read(appDatabaseProvider);
-      final staffDao = db.staffManagementDao;
-
-      final today = DateTime.now();
-      final dateOnly = DateTime(today.year, today.month, today.day);
-      final nextDay = dateOnly.add(const Duration(days: 1));
-      int created = 0;
-
-      final activeStaff = await staffDao.getActiveStaff();
-      final allStaffIds = activeStaff.map((s) => s.staffId).toList();
-
-      // Batch: fetch all attendance records for all staff for this date
-      final allRecords = await Future.wait(
-        allStaffIds.map((id) => staffDao.getAttendanceByStaff(id, startDate: dateOnly, endDate: nextDay)),
+      final deviceDao = ref.read(attendanceDeviceDaoProvider);
+      final engine = AttendanceCalculationEngine(
+        db,
+        deviceDao,
+        db.staffManagementDao,
       );
-
-      // Build set of staff with existing records
-      final staffWithAttendance = <String>{};
-      for (int i = 0; i < allRecords.length; i++) {
-        final todayRecord = allRecords[i].where((a) {
-          final aDate = DateTime(a.date.year, a.date.month, a.date.day);
-          return aDate == dateOnly;
-        }).toList();
-        if (todayRecord.isNotEmpty) {
-          staffWithAttendance.add(allStaffIds[i]);
-        }
-      }
-
-      // Create absences only for staff without records
-      for (final staff in activeStaff) {
-        if (staffWithAttendance.contains(staff.staffId)) continue;
-
-        await staffDao.addAttendance(AttendanceTableCompanion.insert(
-          staffId: staff.staffId,
-          date: dateOnly,
-          status: 'absent',
-          source: const drift.Value('auto_generated'),
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ));
-        created++;
-      }
+      // يوم مغلق فقط (أمس): اليوم الحالي مفتوح ولا يُحسم غيابه.
+      // يشمل فحص أيام العمل وجداول الموظفين داخل المحرك.
+      final yesterday =
+          DateTime.now().subtract(const Duration(days: 1));
+      final created =
+          await engine.generateAbsencesForRange(yesterday, yesterday);
 
       setState(() => _absencesGenerated = created);
 
@@ -383,74 +372,147 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         ),
         const Divider(height: 1),
         ListTile(
-          title: const Text('غرامة التأخير'),
-          subtitle: Text(_latePenaltyAmount > 0 ? '${_latePenaltyAmount.toStringAsFixed(0)} ج.م' : 'بدون غرامة'),
+          title: const Text('مضاعف خصم التأخير'),
+          subtitle: Text(
+            'ساعة التأخير × ${_latePenaltyMultiplier.toStringAsFixed(1)} من سعر الساعة',
+          ),
           trailing: const Icon(Icons.money_off),
           onTap: () async {
             final controller = TextEditingController(
-              text: _latePenaltyAmount > 0 ? _latePenaltyAmount.toString() : '',
+              text: _latePenaltyMultiplier.toString(),
             );
             final result = await showDialog<double>(
               context: context,
               builder: (ctx) => AlertDialog(
-                title: const Text('غرامة التأخير (ج.م)'),
-                content: TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    hintText: '0 = بدون غرامة',
-                    suffixText: 'ج.م',
-                  ),
+                title: const Text('مضاعف خصم التأخير'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(suffixText: 'x'),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ActionChip(
+                          label: const Text('1x'),
+                          onPressed: () => Navigator.pop(ctx, 1.0),
+                        ),
+                        ActionChip(
+                          label: const Text('1.5x'),
+                          onPressed: () => Navigator.pop(ctx, 1.5),
+                        ),
+                        ActionChip(
+                          label: const Text('2x'),
+                          onPressed: () => Navigator.pop(ctx, 2.0),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('إلغاء'),
+                  ),
                   ElevatedButton(
                     onPressed: () {
-                      final val = double.tryParse(controller.text) ?? 0;
-                      Navigator.pop(ctx, val);
+                      final val = double.tryParse(controller.text);
+                      if (val != null && val > 0) Navigator.pop(ctx, val);
                     },
                     child: const Text('موافق'),
                   ),
                 ],
               ),
             );
-            if (result != null) setState(() => _latePenaltyAmount = result);
+            if (result != null) {
+              setState(() => _latePenaltyMultiplier = result);
+            }
           },
         ),
         const Divider(height: 1),
         ListTile(
-          title: const Text('غرامة الغياب'),
-          subtitle: Text(_absencePenaltyAmount > 0 ? '${_absencePenaltyAmount.toStringAsFixed(0)} ج.م' : 'بدون غرامة'),
+          title: const Text('خصم الغياب (اليوم بيوم)'),
+          subtitle: Text(
+            _absenceMode == 'fixed'
+                ? 'مبلغ ثابت: ${_absencePenaltyAmount.toStringAsFixed(0)} ج.م لليوم'
+                : 'أجر يوم كامل لكل يوم غياب',
+          ),
           trailing: const Icon(Icons.money_off),
           onTap: () async {
+            String mode = _absenceMode;
             final controller = TextEditingController(
-              text: _absencePenaltyAmount > 0 ? _absencePenaltyAmount.toString() : '',
+              text: _absencePenaltyAmount > 0
+                  ? _absencePenaltyAmount.toString()
+                  : '',
             );
-            final result = await showDialog<double>(
+            final result = await showDialog<Map<String, dynamic>>(
               context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('غرامة الغياب (ج.م)'),
-                content: TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    hintText: '0 = بدون غرامة',
-                    suffixText: 'ج.م',
+              builder: (ctx) => StatefulBuilder(
+                builder: (ctx, setDialogState) => AlertDialog(
+                  title: const Text('خصم الغياب (اليوم بيوم)'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      RadioListTile<String>(
+                        value: 'day_wage',
+                        groupValue: mode,
+                        title: const Text('أجر يوم'),
+                        subtitle: const Text(
+                          'خصم أجر يوم كامل (الأساسي ÷ 30) عن كل يوم غياب',
+                        ),
+                        onChanged: (v) =>
+                            setDialogState(() => mode = v ?? 'day_wage'),
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                      ),
+                      RadioListTile<String>(
+                        value: 'fixed',
+                        groupValue: mode,
+                        title: const Text('مبلغ ثابت لليوم'),
+                        onChanged: (v) =>
+                            setDialogState(() => mode = v ?? 'fixed'),
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                      ),
+                      if (mode == 'fixed') ...[
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: controller,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            hintText: '0 = بدون غرامة',
+                            suffixText: 'ج.م / يوم',
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('إلغاء'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        final val = double.tryParse(controller.text) ?? 0;
+                        Navigator.pop(ctx, {'mode': mode, 'amount': val});
+                      },
+                      child: const Text('موافق'),
+                    ),
+                  ],
                 ),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-                  ElevatedButton(
-                    onPressed: () {
-                      final val = double.tryParse(controller.text) ?? 0;
-                      Navigator.pop(ctx, val);
-                    },
-                    child: const Text('موافق'),
-                  ),
-                ],
               ),
             );
-            if (result != null) setState(() => _absencePenaltyAmount = result);
+            if (result != null) {
+              setState(() {
+                _absenceMode = result['mode'] as String;
+                _absencePenaltyAmount = result['amount'] as double;
+              });
+            }
           },
         ),
         const Divider(height: 1),
@@ -501,6 +563,49 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (result != null) setState(() => _overtimeRateMultiplier = result);
           },
         ),
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('مهلة بداية الإضافي'),
+          subtitle: Text(
+            'الإضافي بعد نهاية الدوام بـ $_overtimeGraceMinutes دقيقة',
+          ),
+          trailing: const Icon(Icons.more_time),
+          onTap: () async {
+            final controller = TextEditingController(
+              text: _overtimeGraceMinutes.toString(),
+            );
+            final result = await showDialog<int>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('مهلة بداية الإضافي (دقائق)'),
+                content: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    hintText: 'مثال: 30',
+                    suffixText: 'دقيقة',
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('إلغاء'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      final val = int.tryParse(controller.text);
+                      if (val != null && val >= 0) Navigator.pop(ctx, val);
+                    },
+                    child: const Text('موافق'),
+                  ),
+                ],
+              ),
+            );
+            if (result != null) {
+              setState(() => _overtimeGraceMinutes = result);
+            }
+          },
+        ),
       ],
     );
   }
@@ -511,8 +616,9 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
       icon: Icons.person_off,
       children: [
         ListTile(
-          title: const Text('توليد سجلات غياب اليوم'),
-          subtitle: const Text('يسجل غياب لكل موظف نشط لم يحضر اليوم'),
+          title: const Text('توليد سجلات غياب الأمس'),
+          subtitle: const Text(
+              'يسجل غياب لكل موظف نشط لم يحضر في آخر يوم عمل مغلق'),
           trailing: ElevatedButton.icon(
             onPressed: _generateAbsences,
             icon: const Icon(Icons.play_arrow),
