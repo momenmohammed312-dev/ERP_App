@@ -137,6 +137,15 @@ class AttendanceDeductionRules {
     // v72 restored column: admin-entered partial permission hours.
     if (r.permissionHours > 0 || r.excusedHours > 0) return true;
     if (customHoursFromNotes(r.notes) > 0) return true;
+    // An off-schedule day that ran through the night is NOT an early leave. She
+    // finished after the scheduled end, so `workEnd - checkOut` below would
+    // charge her for the hours she ADDED.
+    //
+    // Placement is load-bearing: this sits AFTER every admin-asserted marker
+    // above (excused flag, excused status, leave+leaveType, permissionHours /
+    // excusedHours, notes window). A supervisor's explicit permission must win
+    // over a timestamp heuristic.
+    if (isOffScheduleMidnightCrossing(r)) return false;
     final co = _minutesOf(r.checkOutTime);
     if (co < 0) return false;
     return co < workEndMinutes &&
@@ -157,7 +166,15 @@ class AttendanceDeductionRules {
         : (!r.excused && r.permissionHours > 0 ? r.permissionHours : 0.0);
     if (explicitHours > 0) return (explicitHours * 60).round();
     final co = _minutesOf(r.checkOutTime);
-    if (co >= 0) return co < workEndMinutes ? workEndMinutes - co : 0;
+    // Same guard as isPermissionRecord, needed independently: that method can
+    // return true via the notes-window marker above while `explicitHours` is
+    // still 0, in which case the early return above does not fire and control
+    // reaches this clock maths - which would otherwise dock the phantom
+    // `workEnd - midnight` span.
+    if (co >= 0) {
+      if (isOffScheduleMidnightCrossing(r)) return 0;
+      return co < workEndMinutes ? workEndMinutes - co : 0;
+    }
     final m = permissionWindow.firstMatch(r.notes ?? '');
     if (m != null) {
       final from = (int.tryParse(m.group(1)!) ?? 0) * 60 +
