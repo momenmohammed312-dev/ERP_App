@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/staff_management_dao.dart';
+import 'package:pos_offline_desktop/services/attendance/attendance_shift_bounds.dart';
 
 /// Work schedule configuration for an employee
 class ScheduleConfig {
@@ -205,10 +206,23 @@ class AttendanceCalculationEngine {
     String status;
     int lateMinutes = 0;
 
+    // v73: derived from the two timestamps alone - no new parameter. A
+    // check-in at or after the scheduled END is an alternative start, not
+    // lateness: the shift she was "late" to had already closed. Requires the
+    // day to have actually run past that end, so a genuinely late employee who
+    // simply leaves shortly after 17:00 is still 'late'.
+    final offScheduleStart = checkInMinutes >= scheduleEnd &&
+        AttendanceShiftBounds.isOffScheduleMidnightCrossing(
+          co: checkOutTime,
+          ci: checkInTime,
+        );
+
     if (checkInMinutes <= scheduleStart) {
       status = 'present';
     } else if (checkInMinutes <= graceEnd) {
       status = 'present'; // Within grace period
+    } else if (offScheduleStart) {
+      status = 'present';
     } else {
       status = 'late';
       // Bug 4(a): count only minutes past the grace END, not the whole
