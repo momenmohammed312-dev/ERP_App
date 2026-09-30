@@ -41,7 +41,13 @@ class ScheduleConfig {
 
   int get workStartMinutesSinceMidnight => workStartHour * 60 + workStartMinute;
   int get workEndMinutesSinceMidnight => workEndHour * 60 + workEndMinute;
-  int get standardMinutesPerDay => workEndMinutesSinceMidnight - workStartMinutesSinceMidnight;
+  int get standardMinutesPerDay {
+    final span = workEndMinutesSinceMidnight - workStartMinutesSinceMidnight;
+    // A shift that ends earlier in the clock than it starts (e.g. 20:00-02:30)
+    // has a negative raw span; add a day so callers get a real length.
+    // 08:00-17:00 stays 540.
+    return span <= 0 ? span + 1440 : span;
+  }
   int get standardMinutesTotal => standardMinutesPerDay; // alias for clarity
 }
 
