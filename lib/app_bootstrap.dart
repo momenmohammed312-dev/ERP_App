@@ -73,6 +73,7 @@ Future<void> bootstrapApp({Flavor? flavor}) async {
         titleBarStyle: TitleBarStyle.normal,
       );
       windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.setTitle(AppFlavor.appTitle);
         await windowManager.show();
         await windowManager.focus();
       });
@@ -81,7 +82,9 @@ Future<void> bootstrapApp({Flavor? flavor}) async {
     }
   }
 
-  runApp(UncontrolledProviderScope(container: container, child: const PosApp()));
+  runApp(
+    UncontrolledProviderScope(container: container, child: const PosApp()),
+  );
 }
 
 class PosApp extends ConsumerWidget {
@@ -121,10 +124,7 @@ class PosApp extends ConsumerWidget {
         ),
       ),
       themeMode: ThemeMode.dark,
-      supportedLocales: const [
-        Locale('ar'),
-        Locale('en'),
-      ],
+      supportedLocales: const [Locale('ar'), Locale('en')],
       locale: const Locale('ar'),
       routerConfig: isLicenseValid
           ? ref.watch(routerProvider)

@@ -580,6 +580,9 @@ class StaffManagementService {
     double? overtimeHours,
     String? notes,
     String? leaveType,
+    bool? excused,
+    double? excusedHours,
+    double? permissionHours,
     String source = 'manual',
   }) async {
     // Restored old rule: worked/overtime hours always follow the times via
@@ -605,6 +608,12 @@ class StaffManagementService {
       overtimeHours: finalOvertimeHours == null
           ? const Value.absent()
           : Value(finalOvertimeHours),
+      excused: excused == null ? const Value.absent() : Value(excused),
+      excusedHours:
+          excusedHours == null ? const Value.absent() : Value(excusedHours),
+      permissionHours: permissionHours == null
+          ? const Value.absent()
+          : Value(permissionHours),
       notes: Value(notes),
       leaveType: Value(leaveType),
       source: Value(source),
@@ -629,6 +638,9 @@ class StaffManagementService {
             ? Value(current.workingHours)
             : Value(finalWorkingHours),
         overtimeHours: finalOvertimeHours ?? current.overtimeHours,
+        excused: excused ?? current.excused,
+        excusedHours: excusedHours ?? current.excusedHours,
+        permissionHours: permissionHours ?? current.permissionHours,
         notes: Value(notes),
         leaveType: Value(leaveType),
         source: Value(source),
@@ -820,7 +832,12 @@ class StaffManagementService {
 
   // PAYROLL MANAGEMENT
 
-  Future<void> calculatePayroll(User? user, String staffId, String payrollPeriod) async {
+  Future<void> calculatePayroll(
+    User? user,
+    String staffId,
+    String payrollPeriod, {
+    double? attendanceBonus,
+  }) async {
     PermissionValidator.requirePermission(user, Permission.manageSalaries, 'حساب الرواتب');
     final staff = await _dao.getStaffById(staffId);
     if (staff == null) return;
@@ -835,11 +852,31 @@ class StaffManagementService {
       periodEnd,
     );
 
-    // Get advances to deduct (approved or paid advances, respecting installments)
+    // Get advances to deduct (approved or paid advances, respecting installments and the payroll period)
     final advances = await _dao.getAdvancesByStaff(staffId);
-    final eligibleAdvances = advances.where(
-      (a) => (a.status == 'approved' || a.status == 'paid'),
-    ).toList();
+    final eligibleAdvances = advances.where((a) {
+      if (a.status != 'approved' && a.status != 'paid') return false;
+
+      final effectiveDate = a.paymentDate ?? a.requestDate;
+
+      // Installment advances: deduct over installmentMonths starting from the advance month
+      if (a.installmentMonths != null &&
+          a.installmentMonths! > 1 &&
+          a.monthlyDeduction != null &&
+          a.monthlyDeduction! > 0) {
+        final startYear = effectiveDate.year;
+        final startMonth = effectiveDate.month;
+        final currentYear = periodStart.year;
+        final currentMonth = periodStart.month;
+        final monthsDiff =
+            (currentYear - startYear) * 12 + (currentMonth - startMonth);
+        return monthsDiff >= 0 && monthsDiff < a.installmentMonths!;
+      }
+
+      // Single advance: must fall within this payroll period
+      return !effectiveDate.isBefore(periodStart) &&
+          !effectiveDate.isAfter(periodEnd);
+    }).toList();
 
     double totalAdvances = 0.0;
     for (final a in eligibleAdvances) {
@@ -994,23 +1031,28 @@ class StaffManagementService {
     final permissionDeduction = deduction.permissionDeduction;
     final absenceDeduction = deduction.absenceDeduction;
 
-    // ── Commitment bonus (baseline 5eb58db:1330-1346) ──────────────────────
-    // `perfect_attendance_bonus` is granted only for a flawless period:
-    // no absence, no leave, and not a single late minute.
+    // ── Commitment bonus / إضافة انتظام (baseline 5eb58db:1330-1346) ──────
+    // If a manual attendance bonus is provided (اختياري), it is granted for zero absence:
     double perfectAttendanceBonus = 0.0;
-    try {
-      final row = await (db.select(db.attendanceSettings)
-            ..where((t) =>
-                t.settingKey.equals('perfect_attendance_bonus')))
-          .getSingleOrNull();
-      final configured = double.tryParse(row?.settingValue ?? '0') ?? 0.0;
-      if (configured > 0 &&
-          attendanceSummary.absentDays == 0 &&
-          attendanceSummary.leaveDays == 0 &&
-          deduction.totalLateMinutes == 0) {
-        perfectAttendanceBonus = configured;
+    if (attendanceBonus != null && attendanceBonus > 0) {
+      if (attendanceSummary.absentDays == 0) {
+        perfectAttendanceBonus = attendanceBonus;
       }
-    } catch (_) {}
+    } else {
+      try {
+        final row = await (db.select(db.attendanceSettings)
+              ..where((t) =>
+                  t.settingKey.equals('perfect_attendance_bonus')))
+            .getSingleOrNull();
+        final configured = double.tryParse(row?.settingValue ?? '0') ?? 0.0;
+        if (configured > 0 &&
+            attendanceSummary.absentDays == 0 &&
+            attendanceSummary.leaveDays == 0 &&
+            deduction.totalLateMinutes == 0) {
+          perfectAttendanceBonus = configured;
+        }
+      } catch (_) {}
+    }
 
     // ── Advance capping (baseline 5eb58db:1372-1401) ──────────────────────
     // Advances can never push the net below zero: what is applied is capped at
@@ -1054,6 +1096,7 @@ class StaffManagementService {
             allowances: Value(allowancesTotal),
             deductions: Value(deductions),
             advances: Value(appliedAdvances),
+            bonus: Value(perfectAttendanceBonus),
             // v72: permission/early-leave is now a first-class column pair
             // instead of being hidden in `otherDeductions` and reverse-
             // engineered on display by subtraction. `otherDeductions` is left

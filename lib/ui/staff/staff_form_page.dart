@@ -292,6 +292,30 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
                 return null;
               },
             ),
+            // الراتب = 0 يخلي كل بنود خصومات الحضور صفرى دون أي تنبيه
+            if ((double.tryParse(_basicSalaryController.text.trim()) ?? 0) <= 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 6, right: 4),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      size: 16,
+                      color: Colors.amber,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'راتب صفر: لن يتم احتساب خصومات التأخير ولا الانصراف المبكر ولا الغياب لهذا الموظف (سعر الساعة = 0).',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.amber.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (_selectedEmploymentType == 'part_time') ...[
               const SizedBox(height: 12),
               TextFormField(

@@ -11,10 +11,12 @@ class UnmatchedAttendancePage extends ConsumerStatefulWidget {
   const UnmatchedAttendancePage({super.key});
 
   @override
-  ConsumerState<UnmatchedAttendancePage> createState() => _UnmatchedAttendancePageState();
+  ConsumerState<UnmatchedAttendancePage> createState() =>
+      _UnmatchedAttendancePageState();
 }
 
-class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePage> {
+class _UnmatchedAttendancePageState
+    extends ConsumerState<UnmatchedAttendancePage> {
   List<AttendanceRawEvent> _unmatchedEvents = [];
   List<Staff> _allStaff = [];
   bool _isLoading = true;
@@ -31,7 +33,7 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
     final db = ref.read(appDatabaseProvider);
     final events = await dao.getUnmatchedEvents();
     final staff = await db.staffManagementDao.getActiveStaff();
-    
+
     if (mounted) {
       setState(() {
         _unmatchedEvents = events;
@@ -43,7 +45,9 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
 
   Future<void> _ignoreEvent(AttendanceRawEvent event) async {
     final dao = ref.read(attendanceDeviceDaoProvider);
-    await dao.updateRawEvent(event.copyWith(status: 'ignored', processedAt: Value(DateTime.now())));
+    await dao.updateRawEvent(
+      event.copyWith(status: 'ignored', processedAt: Value(DateTime.now())),
+    );
     _loadData();
   }
 
@@ -53,10 +57,18 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('إنشاء تلقائي لكل الغير مطابقين'),
-        content: Text('سيتم إنشاء ${_unmatchedEvents.map((e) => e.externalUserId).toSet().length} موظف/موظفين جديد وتحويل كل الحركات لحضور. متأكد؟'),
+        content: Text(
+          'سيتم إنشاء ${_unmatchedEvents.map((e) => e.externalUserId).toSet().length} موظف/موظفين جديد وتحويل كل الحركات لحضور. متأكد؟',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إنشاء')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('إنشاء'),
+          ),
         ],
       ),
     );
@@ -69,29 +81,69 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
 
     for (final extId in distinctIds) {
       // استخدم أول جهاز ظهر به هذا الـ externalId
-      final sample = _unmatchedEvents.firstWhere((e) => e.externalUserId == extId);
-      var mapping = await deviceDao.getMappingByExternalId(sample.deviceId, extId);
-      if (mapping != null) continue;
+      final sample = _unmatchedEvents.firstWhere(
+        (e) => e.externalUserId == extId,
+      );
+      var mapping = await deviceDao.getMappingRecordByExternalId(
+        sample.deviceId,
+        extId,
+      );
+      if (mapping != null) {
+        if (mapping.enrollmentStatus != 'enrolled') {
+          final now = DateTime.now();
+          await deviceDao.updateMapping(
+            mapping.copyWith(
+              enrollmentStatus: 'enrolled',
+              enrolledAt: Value(now),
+              updatedAt: now,
+            ),
+          );
+        }
+        continue;
+      }
       final allStaff = await staffDao.getAllStaff();
       int maxN = 0;
       for (final s in allStaff) {
-        final n = int.tryParse(s.staffId.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+        final n =
+            int.tryParse(s.staffId.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
         if (n > maxN) maxN = n;
       }
       final newStaffId = 'STAFF${(maxN + 1).toString().padLeft(4, '0')}';
       final now = DateTime.now();
-      await staffDao.addStaff(StaffTableCompanion.insert(
-        staffId: newStaffId, name: 'موظف $extId', position: 'موظف',
-        employmentType: 'full_time', basicSalary: 0, hireDate: now, status: 'active', createdAt: now, updatedAt: now,
-      ));
-      await deviceDao.addMapping(StaffBiometricMappingsCompanion.insert(
-        staffId: newStaffId, deviceId: sample.deviceId, externalUserId: extId, enrollmentStatus: 'enrolled', createdAt: now, updatedAt: now,
-      ));
+      await staffDao.addStaff(
+        StaffTableCompanion.insert(
+          staffId: newStaffId,
+          name: 'موظف $extId',
+          position: 'موظف',
+          employmentType: 'full_time',
+          basicSalary: 0,
+          hireDate: now,
+          status: 'active',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      await deviceDao.addMapping(
+        StaffBiometricMappingsCompanion.insert(
+          staffId: newStaffId,
+          deviceId: sample.deviceId,
+          externalUserId: extId,
+          enrollmentStatus: 'enrolled',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
     }
 
     // أعد جدولة الحركات كـ pending لتتم معالجتها
-    for (final e in _unmatchedEvents) {
-      await deviceDao.updateRawEvent(e.copyWith(status: 'pending', processedAt: const Value(null), matchedStaffId: const Value(null)));
+    final eventKeys = <(int, String)>{
+      for (final e in _unmatchedEvents) (e.deviceId, e.externalUserId),
+    };
+    for (final (deviceId, externalUserId) in eventKeys) {
+      await deviceDao.requeueUnmatchedEventsForExternalId(
+        deviceId,
+        externalUserId,
+      );
     }
     // شغّل المعالجة لكل جهاز
     final syncService = ref.read(attendanceSyncServiceProvider);
@@ -99,7 +151,12 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
       await syncService.processPendingEvents(dId);
     }
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإنشاء التلقائي ومعالجة الحضور'), backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم الإنشاء التلقائي ومعالجة الحضور'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
     _loadData();
   }
@@ -117,7 +174,9 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('الرقم الخارجي: ${event.externalUserId}'),
-              Text('الوقت: ${DateFormat('yyyy-MM-dd HH:mm').format(event.eventTime)}'),
+              Text(
+                'الوقت: ${DateFormat('yyyy-MM-dd HH:mm').format(event.eventTime)}',
+              ),
               const SizedBox(height: 16),
               DropdownButtonFormField<Staff>(
                 isExpanded: true,
@@ -125,10 +184,14 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
                   labelText: 'اختر الموظف',
                   border: OutlineInputBorder(),
                 ),
-                items: _allStaff.map((s) => DropdownMenuItem(
-                  value: s,
-                  child: Text('${s.name} (${s.staffId})'),
-                )).toList(),
+                items: _allStaff
+                    .map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text('${s.name} (${s.staffId})'),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (v) => setDialogState(() => selectedStaff = v),
               ),
             ],
@@ -139,7 +202,9 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
               child: const Text('إلغاء'),
             ),
             ElevatedButton(
-              onPressed: selectedStaff != null ? () => Navigator.pop(ctx, selectedStaff) : null,
+              onPressed: selectedStaff != null
+                  ? () => Navigator.pop(ctx, selectedStaff)
+                  : null,
               child: const Text('تعيين'),
             ),
           ],
@@ -148,37 +213,54 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
     );
 
     if (result != null) {
+      final assignedStaff = result;
       try {
         final dao = ref.read(attendanceDeviceDaoProvider);
-        
-        // Create mapping if not exists
-        final existingMapping = await dao.getMappingByExternalId(
-          event.deviceId,
-          event.externalUserId,
-        );
-        
-        if (existingMapping == null) {
-          await dao.addMapping(StaffBiometricMappingsCompanion.insert(
-            staffId: result.staffId,
-            deviceId: event.deviceId,
-            externalUserId: event.externalUserId,
-            enrollmentStatus: 'enrolled',
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ));
-        }
+        final db = ref.read(appDatabaseProvider);
 
-        // Mark event as matched
-        await dao.updateRawEvent(event.copyWith(
-          status: 'matched',
-          matchedStaffId: Value(result.staffId),
-          processedAt: Value(DateTime.now()),
-        ));
+        await db.transaction(() async {
+          final existingMapping = await dao.getMappingRecordByExternalId(
+            event.deviceId,
+            event.externalUserId,
+          );
+          final now = DateTime.now();
+          if (existingMapping != null) {
+            await dao.updateMapping(
+              existingMapping.copyWith(
+                staffId: assignedStaff.staffId,
+                enrollmentStatus: 'enrolled',
+                enrolledAt: Value(now),
+                updatedAt: now,
+              ),
+            );
+          } else {
+            await dao.addMapping(
+              StaffBiometricMappingsCompanion.insert(
+                staffId: assignedStaff.staffId,
+                deviceId: event.deviceId,
+                externalUserId: event.externalUserId,
+                enrollmentStatus: 'enrolled',
+                enrolledAt: Value(now),
+                createdAt: now,
+                updatedAt: now,
+              ),
+            );
+          }
+
+          await dao.requeueUnmatchedEventsForExternalId(
+            event.deviceId,
+            event.externalUserId,
+          );
+        });
+
+        await ref
+            .read(attendanceSyncServiceProvider)
+            .processPendingEvents(event.deviceId);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('تم تعيين الحركة لـ ${result.name}'),
+              content: Text('تم تعيين الحركة لـ ${assignedStaff.name}'),
               backgroundColor: Colors.green,
             ),
           );
@@ -206,7 +288,10 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
             if (_unmatchedEvents.isNotEmpty)
               TextButton.icon(
                 icon: const Icon(Icons.auto_fix_high, color: Colors.white),
-                label: const Text('إنشاء تلقائي للكل', style: TextStyle(color: Colors.white)),
+                label: const Text(
+                  'إنشاء تلقائي للكل',
+                  style: TextStyle(color: Colors.white),
+                ),
                 onPressed: _autoCreateAllUnmatched,
               ),
           ],
@@ -214,36 +299,44 @@ class _UnmatchedAttendancePageState extends ConsumerState<UnmatchedAttendancePag
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _unmatchedEvents.isEmpty
-                ? const Center(child: Text('لا توجد حركات غير متطابقة.'))
-                : ListView.builder(
-                    itemCount: _unmatchedEvents.length,
-                    itemBuilder: (context, index) {
-                      final event = _unmatchedEvents[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: ListTile(
-                          leading: const Icon(Icons.warning, color: Colors.orange),
-                          title: Text('External ID: ${event.externalUserId}'),
-                          subtitle: Text('الوقت: ${dateFormat.format(event.eventTime)}'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.person_add, color: Colors.blue),
-                                tooltip: 'تعيين لموظف',
-                                onPressed: () => _assignToStaff(event),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline),
-                                tooltip: 'تجاهل',
-                                onPressed: () => _ignoreEvent(event),
-                              ),
-                            ],
+            ? const Center(child: Text('لا توجد حركات غير متطابقة.'))
+            : ListView.builder(
+                itemCount: _unmatchedEvents.length,
+                itemBuilder: (context, index) {
+                  final event = _unmatchedEvents[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: ListTile(
+                      leading: const Icon(Icons.warning, color: Colors.orange),
+                      title: Text('External ID: ${event.externalUserId}'),
+                      subtitle: Text(
+                        'الوقت: ${dateFormat.format(event.eventTime)}',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.person_add,
+                              color: Colors.blue,
+                            ),
+                            tooltip: 'تعيين لموظف',
+                            onPressed: () => _assignToStaff(event),
                           ),
-                        ),
-                      );
-                    },
-                  ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: 'تجاهل',
+                            onPressed: () => _ignoreEvent(event),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
       ),
     );
   }

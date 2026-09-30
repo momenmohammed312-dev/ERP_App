@@ -470,7 +470,7 @@ class StaffPayrollStatementGenerator {
         build: (pw.Context ctx) => [
           pw.Center(
             child: pw.Text(
-              _b('كشف مرتبات مجمع - $period'),
+              _b(payrolls.length == 1 ? 'قسيمة راتب - $period' : 'كشف مرتبات مجمع - $period'),
               style: pw.TextStyle(font: arabicBoldFont, fontSize: 14),
             ),
           ),
@@ -478,7 +478,9 @@ class StaffPayrollStatementGenerator {
           pw.Center(
             child: pw.Text(
               _b(
-                'عدد الموظفين: ${payrolls.length} - إجمالي الصافي: ${totalNet.toStringAsFixed(0)} - إصدار: $issueDateStr',
+                payrolls.length == 1
+                    ? 'الموظف: ${staffMap[payrolls.first.staffId]?.name ?? payrolls.first.staffId} - الصافي: ${totalNet.toStringAsFixed(0)} - إصدار: $issueDateStr'
+                    : 'عدد الموظفين: ${payrolls.length} - إجمالي الصافي: ${totalNet.toStringAsFixed(0)} - إصدار: $issueDateStr',
               ),
               style: pw.TextStyle(
                 font: arabicFont,

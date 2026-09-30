@@ -179,11 +179,30 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                 ),
               ),
             ],
-            if (advance.status == 'approved') ...[
-              const Divider(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
+            const Divider(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _deleteAdvance(advance),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: Colors.red,
+                  ),
+                  label: const Text(
+                    'مسح',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                  ),
+                ),
+                if (advance.status == 'approved')
                   ElevatedButton.icon(
                     onPressed: () => _payAdvance(advance),
                     icon: const Icon(Icons.payments, size: 18),
@@ -193,13 +212,65 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                       foregroundColor: Colors.white,
                     ),
                   ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _deleteAdvance(StaffAdvance advance) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف السلفة'),
+        content: Text(
+          'هل أنت متأكد من مسح هذه السلفة بمبلغ ${CurrencyHelper.formatCurrency(advance.amount)}؟',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('مسح'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final db = ref.read(appDatabaseProvider);
+      await (db.delete(db.staffAdvances)
+            ..where((t) => t.id.equals(advance.id)))
+          .go();
+      await _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم مسح السلفة بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('فشل مسح السلفة: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildInfoColumn(String label, String value) {

@@ -185,6 +185,49 @@ void main() {
       ]);
       expect(r.totalPermissionMinutes, 0);
     });
+
+    test('custom hours permission with deduction is deducted by exact hours', () {
+      final r = compute([
+        row(
+          day: 1,
+          status: 'present',
+          excused: false,
+          excusedHours: 2.5,
+          permissionHours: 2.5,
+          notes: '[إذن مخصص - مع الخصم - 2.5 ساعة]',
+        ),
+      ]);
+      expect(r.totalPermissionMinutes, 150);
+      expect(r.permissionDeduction, closeTo(2.5 * (10000 / 30 / 8), 0.001));
+    });
+
+    test('custom hours permission without deduction (approved) deducts nothing', () {
+      final r = compute([
+        row(
+          day: 1,
+          status: 'excused',
+          excused: true,
+          excusedHours: 0.0,
+          permissionHours: 3.0,
+          notes: '[إذن عام - بدون خصم - 3 ساعات]',
+        ),
+      ]);
+      expect(r.totalPermissionMinutes, 0);
+      expect(r.permissionDeduction, 0.0);
+    });
+
+    test('custom hours permission parsed from notes when explicit column is 0', () {
+      final r = compute([
+        row(
+          day: 1,
+          status: 'present',
+          excused: false,
+          notes: '[إذن مخصص - مع الخصم - 2 ساعة]',
+        ),
+      ]);
+      expect(r.totalPermissionMinutes, 120);
+      expect(r.permissionDeduction, closeTo(2 * (10000 / 30 / 8), 0.001));
+    });
   });
 
   group('absence', () {

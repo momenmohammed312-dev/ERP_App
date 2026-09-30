@@ -7,6 +7,7 @@ import '../../core/database/dao/staff_management_dao.dart';
 import '../../core/utils/currency_helper.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../services/staff_management_service.dart';
+import 'services/staff_payroll_statement_generator.dart';
 
 class PayrollPage extends ConsumerStatefulWidget {
   final Staff staff;
@@ -140,6 +141,12 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                 'مكافآت',
                 CurrencyHelper.formatCurrency(payroll.rewardsTotal),
               ),
+            if (payroll.bonus > 0)
+              _buildPayrollDetailRow(
+                'إضافة انتظام',
+                '+ ${CurrencyHelper.formatCurrency(payroll.bonus)}',
+                color: Colors.teal[700],
+              ),
             // Breakdown only — these three rows are ALREADY inside
             // payroll.deductions, so they must never be summed again on top
             // of the total row below.
@@ -204,50 +211,58 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                 ),
               ],
             ),
-            if (payroll.status == 'calculated' || payroll.status == 'approved') ...[
-              const Divider(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (payroll.status == 'calculated')
-                    ElevatedButton.icon(
-                      onPressed: () => _approvePayroll(payroll),
-                      icon: const Icon(Icons.verified, size: 18),
-                      label: const Text('اعتماد'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  if (payroll.status == 'approved')
-                    ElevatedButton.icon(
-                      onPressed: () => _markPaid(payroll),
-                      icon: const Icon(Icons.payments, size: 18),
-                      label: const Text('صرف'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => _deletePayroll(payroll),
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      size: 18,
-                      color: Colors.red,
-                    ),
-                    label: const Text(
-                      'مسح',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.red),
+            const Divider(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (payroll.status == 'calculated')
+                  ElevatedButton.icon(
+                    onPressed: () => _approvePayroll(payroll),
+                    icon: const Icon(Icons.verified, size: 18),
+                    label: const Text('اعتماد'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
                     ),
                   ),
-                ],
-              ),
-            ],
+                if (payroll.status == 'approved')
+                  ElevatedButton.icon(
+                    onPressed: () => _markPaid(payroll),
+                    icon: const Icon(Icons.payments, size: 18),
+                    label: const Text('صرف'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: () => _printPayroll(payroll),
+                  icon: const Icon(Icons.print, size: 18),
+                  label: const Text('طباعة'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _deletePayroll(payroll),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: Colors.red,
+                  ),
+                  label: const Text(
+                    'مسح',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.red),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -477,6 +492,27 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
     }
   }
 
+  Future<void> _printPayroll(Payroll payroll) async {
+    try {
+      final db = ref.read(appDatabaseProvider);
+      await StaffPayrollStatementGenerator.generateAndPrintBatchSlips(
+        context: context,
+        db: db,
+        payrolls: [payroll],
+        staffMap: {widget.staff.staffId: widget.staff},
+        period: payroll.payrollPeriod,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ أثناء الطباعة: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   String _formatPeriod(String period) {
     final parts = period.split('-');
     if (parts.length >= 3 && parts[2].startsWith('W')) {
@@ -498,6 +534,7 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
     int selectedYear = currentWeek.year;
     int selectedMonth = currentWeek.month;
     int selectedWeek = currentWeek.week;
+    final bonusCtrl = TextEditingController();
 
     showDialog(
       context: context,
@@ -706,6 +743,19 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: bonusCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'إضافة انتظام (اختياري)',
+                      hintText: 'مبلغ إضافي لمن ليس لديه غياب (مثال: 300)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.stars_rounded, color: Colors.amber),
+                      suffixText: 'ج.م',
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -719,9 +769,17 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                   Navigator.pop(ctx);
                   try {
                     final db = ref.read(appDatabaseProvider);
-                    final service = StaffManagementService(StaffManagementDao(db), db);
+                    final service =
+                        StaffManagementService(StaffManagementDao(db), db);
                     final user = ref.read(authProvider);
-                    await service.calculatePayroll(user, widget.staff.staffId, periodCode);
+                    final bonusVal = double.tryParse(bonusCtrl.text.trim());
+                    await service.calculatePayroll(
+                      user,
+                      widget.staff.staffId,
+                      periodCode,
+                      attendanceBonus:
+                          bonusVal != null && bonusVal > 0 ? bonusVal : null,
+                    );
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(

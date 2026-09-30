@@ -58,7 +58,7 @@ void main() {
     });
 
     test('schema version is at least 57 (current 58)', () {
-      expect(db.schemaVersion, 58);
+      expect(db.schemaVersion, 59);
     });
 
     test('appFeatures.isClothing is true in clothing flavor', () {

@@ -8,10 +8,12 @@ import '../database/app_database.dart';
 import '../services/business_date_service.dart';
 import '../services/invoice_service.dart';
 import '../services/shipment_allocation_service.dart';
+import '../services/custody_service.dart';
 import '../../services/staff_management_service.dart';
 import '../database/dao/attendance_device_dao.dart';
 import '../../services/attendance/attendance_calculation_engine.dart';
 import '../../services/attendance/attendance_sync_service.dart';
+import '../../services/attendance/attendance_file_import_service.dart';
 import '../services/sync_service.dart';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -46,6 +48,11 @@ final invoiceServiceProvider = Provider<InvoiceService>((ref) {
   return InvoiceService(db);
 });
 
+final custodyServiceProvider = Provider<CustodyService>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return CustodyService(db);
+});
+
 final shipmentAllocationServiceProvider = Provider<ShipmentAllocationService>((
   ref,
 ) {
@@ -69,7 +76,25 @@ final attendanceSyncServiceProvider = Provider<AttendanceSyncService>((ref) {
     deviceDao,
     db.staffManagementDao,
   );
-  return AttendanceSyncService(deviceDao, db.staffManagementDao, engine);
+  final service = AttendanceSyncService(deviceDao, db.staffManagementDao, engine);
+  // Restored: background auto-sync every 2 minutes app-wide — LAN works
+  // locally even with choppy internet, so missing attendance arrives
+  // without pressing anything.
+  service.startAutoSync(interval: const Duration(minutes: 2));
+  ref.onDispose(() => service.stopAutoSync());
+  return service;
+});
+
+/// استيراد الحضور من ملف إكسل (ZKTeco) — يشارك نفس خط معالجة المزامنة.
+final attendanceFileImportProvider = Provider<AttendanceFileImportService>((
+  ref,
+) {
+  final db = ref.watch(appDatabaseProvider);
+  return AttendanceFileImportService(
+    ref.watch(attendanceDeviceDaoProvider),
+    db.staffManagementDao,
+    ref.watch(attendanceSyncServiceProvider),
+  );
 });
 
 final syncServiceProvider = Provider<SyncService>((ref) {

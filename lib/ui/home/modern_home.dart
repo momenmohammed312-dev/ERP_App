@@ -13,6 +13,7 @@ import 'package:pos_offline_desktop/ui/reports/reports_page.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/enhanced_new_invoice_page.dart';
 import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
 import 'package:pos_offline_desktop/ui/staff/employee_dashboard_page.dart';
+import 'package:pos_offline_desktop/ui/custody/custody_page.dart';
 import 'package:pos_offline_desktop/ui/setting/settings.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
@@ -32,11 +33,11 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  /// Tab count follows the staff flag (staff tab present or not).
-  int get _tabCount => AppFeatures.hasStaffModule ? 7 : 6;
+  /// Tab count follows the staff flag (staff tab present or not) + custody tab.
+  int get _tabCount => AppFeatures.hasStaffModule ? 8 : 7;
 
   /// Cashier tab index shifts when the staff tab is hidden.
-  int get _cashierTabIndex => AppFeatures.hasStaffModule ? 5 : 4;
+  int get _cashierTabIndex => AppFeatures.hasStaffModule ? 6 : 5;
 
   bool _licenseWarningShown = false;
 
@@ -91,12 +92,17 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
       // Staff tab — hidden in builds without the staff module.
       if (AppFeatures.hasStaffModule)
         const Tab(icon: Icon(Icons.badge_outlined), text: 'الموظفين'),
-      // Index 5
+      // Custody tab — العهد المالية
+      const Tab(
+        icon: Icon(Icons.account_balance_wallet_outlined),
+        text: 'العهد المالية',
+      ),
+      // Cash
       Tab(
-        icon: const Icon(Icons.account_balance_wallet_outlined),
+        icon: const Icon(Icons.point_of_sale_outlined),
         text: l10n.cash,
       ),
-      // Index 6
+      // Reports
       Tab(icon: const Icon(Icons.analytics), text: l10n.reports),
     ];
 
@@ -192,20 +198,13 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                       () => _tabController.animateTo(4),
                     ),
                   ),
-                  // Backup Button
+                  // Custody Button — العهد المالية
                   _buildLauncherButton(
                     context,
-                    'النسخ الاحتياطي',
-                    Icons.backup,
-                    Colors.purple,
-                    () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EnhancedBackupScreen(),
-                        ),
-                      );
-                    },
+                    'العهد المالية',
+                    Icons.account_balance_wallet_outlined,
+                    Colors.teal.shade700,
+                    () => _tabController.animateTo(AppFeatures.hasStaffModule ? 5 : 4),
                   ),
                   // Damaged Items Button — hidden without the module.
                   if (AppFeatures.hasDamagedModule)
@@ -291,6 +290,8 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
           featureName: 'staff_management',
           child: const EmployeeDashboardPage(),
         ),
+      // Custody
+      CustodyPage(db: widget.db),
       // Cash
       const CashierPage(),
       // Reports

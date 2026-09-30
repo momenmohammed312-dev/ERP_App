@@ -368,9 +368,10 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
 
   Future<List<Map<String, dynamic>>> getAllCustomerBalances() async {
     final rows = await customSelect(
-      'SELECT c.id, c.name, c.phone, (c.opening_balance + SUM(COALESCE(l.debit, 0) - COALESCE(l.credit, 0))) as balance '
+      'SELECT c.id, c.name, c.phone, (c.opening_balance + COALESCE(SUM(COALESCE(l.debit, 0) - COALESCE(l.credit, 0)), 0)) as balance '
       'FROM customers c '
       'LEFT JOIN ledger_transactions l ON l.ref_id = c.id AND l.entity_type = \'Customer\' '
+      'WHERE c.is_active = 1 '
       'GROUP BY c.id '
       'ORDER BY balance DESC',
       readsFrom: {db.customers, db.ledgerTransactions},

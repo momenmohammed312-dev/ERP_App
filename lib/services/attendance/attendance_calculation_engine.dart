@@ -14,6 +14,7 @@ class ScheduleConfig {
   final int gracePeriodMinutes;
   final double standardHoursPerDay;
   final double overtimeRateMultiplier;
+  final int overtimeGraceMinutes; // مهلة بعد نهاية الدوام قبل بدء الإضافي (افتراضي 30)
 
   const ScheduleConfig({
     required this.workStartHour,
@@ -25,6 +26,7 @@ class ScheduleConfig {
     required this.gracePeriodMinutes,
     required this.standardHoursPerDay,
     required this.overtimeRateMultiplier,
+    this.overtimeGraceMinutes = 30,
   });
 
   DateTime get workStartToday {
@@ -141,6 +143,7 @@ class AttendanceCalculationEngine {
         gracePeriodMinutes: int.tryParse(await _getSetting('grace_period_minutes', '15')) ?? 15,
         standardHoursPerDay: double.tryParse(await _getSetting('overtime_threshold_hours', '8')) ?? 8.0,
         overtimeRateMultiplier: double.tryParse(await _getSetting('overtime_rate_multiplier', '1.5')) ?? 1.5,
+        overtimeGraceMinutes: int.tryParse(await _getSetting('overtime_grace_minutes', '30')) ?? 30,
       );
     }
 
@@ -166,6 +169,8 @@ class AttendanceCalculationEngine {
       gracePeriodMinutes: int.tryParse(graceStr) ?? 15,
       standardHoursPerDay: double.tryParse(hoursStr) ?? 8.0,
       overtimeRateMultiplier: double.tryParse(rateStr) ?? 1.5,
+      overtimeGraceMinutes:
+          int.tryParse(await _getSetting('overtime_grace_minutes', '30')) ?? 30,
     );
   }
 
@@ -205,28 +210,33 @@ class AttendanceCalculationEngine {
       lateMinutes = checkInMinutes - graceEnd;
     }
 
-    // Calculate working hours and overtime
+    // Calculate working hours and overtime.
+    // Restored old rule: overtime accrues only past the scheduled end plus
+    // the overtime grace (strict: exactly at grace = 0), measured from the
+    // scheduled end itself — not from the span of the shift.
     double workingHours = 0;
     double overtimeHours = 0;
 
     if (checkOutTime != null) {
       final totalMinutes = checkOutTime.difference(checkInTime).inMinutes;
-      final standardMinutes = schedule.standardMinutesPerDay; // already in minutes
+      final checkOutMinutes = checkOutTime.hour * 60 + checkOutTime.minute;
+      workingHours = totalMinutes / 60.0;
 
-      if (totalMinutes <= standardMinutes) {
-        workingHours = totalMinutes / 60.0;
-        overtimeHours = 0;
+      // وقت الانصراف + مهلة الإضافي = بداية استحقاق الوقت الإضافي
+      // (مقارنة صارمة: عند المهلة تماماً = صفر)
+      final overtimeStartMinutes =
+          scheduleEnd + schedule.overtimeGraceMinutes;
+      if (checkOutMinutes > overtimeStartMinutes) {
+        overtimeHours = (checkOutMinutes - scheduleEnd) / 60.0;
       } else {
-        workingHours = schedule.standardHoursPerDay;
-        overtimeHours = (totalMinutes - standardMinutes) / 60.0;
+        overtimeHours = 0;
       }
 
       // Early leave: checked out before scheduled end
-      final checkOutMinutes = checkOutTime.hour * 60 + checkOutTime.minute;
       if (checkOutMinutes < scheduleEnd && status != 'late') {
         // If they left early but were present, mark as early leave
         // (but keep 'present' if they worked enough hours)
-        if (totalMinutes < standardMinutes * 0.5) {
+        if (totalMinutes < schedule.standardMinutesPerDay * 0.5) {
           status = 'early_leave';
         }
       }
@@ -243,8 +253,7 @@ class AttendanceCalculationEngine {
 
   /// Generates absence records for employees who didn't check in on a work day
   /// Returns the number of absence records created
-  Future<int> generateAbsencesForDate(DateTime date) async {
-    int created = 0;
+  Future<int> generateAbsencesForDate(DateTime date) async {    int created = 0;
     final activeStaff = await _staffDao.getActiveStaff();
     final dateOnly = DateTime(date.year, date.month, date.day);
     final nextDay = dateOnly.add(const Duration(days: 1));
@@ -285,6 +294,70 @@ class AttendanceCalculationEngine {
       created++;
     }
 
+    return created;
+  }
+
+  /// يولّد سجلات غياب لنطاق أيام **مغلقة** فقط (قبل اليوم الحالي).
+  ///
+  /// يُستدعى بعد كل مزامنة/استيراد ناجح للفترة التي وصلت عنها بصمات،
+  /// فيُسجَّل الغياب لكل موظف نشط بلا سجل في أيام العمل المغلقة.
+  /// يتجاهل: اليوم الحالي والمستقبل (اليوم مفتوح)، أيام العطلة حسب الجدول،
+  /// الأيام السابقة لتاريخ تعيين الموظف، والأيام التي لها سجل أياً كان.
+  /// Returns the number of absence records created.
+  Future<int> generateAbsencesForRange(DateTime from, DateTime to) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    var start = DateTime(from.year, from.month, from.day);
+    var end = DateTime(to.year, to.month, to.day);
+    // الأيام المغلقة فقط: ما قبل اليوم
+    if (end.isAfter(today.subtract(const Duration(days: 1)))) {
+      end = today.subtract(const Duration(days: 1));
+    }
+    if (end.isBefore(start)) return 0;
+    // حماية من نطاقات شاسعة بالخطأ (سنة كاملة تكفي لأي استيراد شرعي)
+    if (end.difference(start).inDays > 366) {
+      start = end.subtract(const Duration(days: 366));
+    }
+
+    final activeStaff = await _staffDao.getActiveStaff();
+    if (activeStaff.isEmpty) return 0;
+
+    var created = 0;
+    for (final staff in activeStaff) {
+      final rows = await _staffDao.getAttendanceByStaff(
+        staff.staffId,
+        startDate: start,
+        endDate: end,
+      );
+      final existingDays = <DateTime>{
+        for (final r in rows)
+          DateTime(r.date.year, r.date.month, r.date.day),
+      };
+      final schedule = await getScheduleForStaff(staff.staffId);
+      final hireDay = DateTime(
+        staff.hireDate.year,
+        staff.hireDate.month,
+        staff.hireDate.day,
+      );
+      var day = start;
+      while (!day.isAfter(end)) {
+        if (!existingDays.contains(day) &&
+            !day.isBefore(hireDay) &&
+            isWorkDay(day, schedule)) {
+          await _staffDao.addAttendance(AttendanceTableCompanion.insert(
+            staffId: staff.staffId,
+            date: day,
+            status: 'absent',
+            source: const Value('auto_generated'),
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ));
+          created++;
+          existingDays.add(day);
+        }
+        day = day.add(const Duration(days: 1));
+      }
+    }
     return created;
   }
 

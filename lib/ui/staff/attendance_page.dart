@@ -1543,7 +1543,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                 ],
                 const SizedBox(height: 8),
                 Text(
-                  'التأخير الإجمالي: ${_formatHM(totalLateMinutes)} — الانصراف المبكر: ${_formatHM(totalEarlyMinutes)}',
+                  'التأخير الإجمالي: ${_formatHM(totalLateMinutes)} — الأذونات والانصراف المبكر: ${_formatHM(totalEarlyMinutes)}',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
@@ -1563,7 +1563,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.logout, color: Colors.deepOrange),
-                  title: const Text('خصم الانصراف المبكر (×1.0)'),
+                  title: const Text('خصم الأذونات والانصراف المبكر (×1.0)'),
                   trailing: Text(
                     '${permDed.toStringAsFixed(2)} ج.م',
                     style: const TextStyle(fontWeight: FontWeight.bold),
@@ -1823,12 +1823,27 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
   /// mapped onto the current schema (no migration): leave/late/early +
   /// with/without deduction become status + leaveType + notes.
   Future<void> _showQuickPermissionDialog(Attendance record) async {
-    String permissionType = 'leave'; // leave | late | early
-    bool excused = true; // بدون خصم هو الافتراضي
+    String permissionType = (record.permissionHours > 0 || record.excusedHours > 0)
+        ? 'custom_hours'
+        : 'leave'; // leave | late | early | custom_hours
+    bool excused = record.excused ||
+        record.status == 'excused' ||
+        record.status == 'excused_late';
+    if (!record.excused && (record.excusedHours > 0 || record.permissionHours > 0)) {
+      excused = false;
+    }
     String excuseKind = record.leaveType?.isNotEmpty == true
         ? record.leaveType!
         : 'personal';
     final reasonCtrl = TextEditingController();
+    final double initialHours = record.excusedHours > 0
+        ? record.excusedHours
+        : (record.permissionHours > 0 ? record.permissionHours : 1.0);
+    final hoursCtrl = TextEditingController(
+      text: (record.excusedHours > 0 || record.permissionHours > 0)
+          ? initialHours.toStringAsFixed(initialHours.truncateToDouble() == initialHours ? 0 : 1)
+          : '1',
+    );
     const excuseItems = [
       DropdownMenuItem(value: 'personal', child: Text('إذن شخصي')),
       DropdownMenuItem(value: 'mission', child: Text('مأمورية عمل رسمية')),
@@ -1871,10 +1886,28 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
                       value: 'early',
                       child: Text('انصراف مبكر بإذن'),
                     ),
+                    DropdownMenuItem(
+                      value: 'custom_hours',
+                      child: Text('إذن مخصص لليوم (ساعات)'),
+                    ),
                   ],
                   onChanged: (v) =>
                       setDialogState(() => permissionType = v ?? 'leave'),
                 ),
+                if (permissionType == 'custom_hours') ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: hoursCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'عدد الساعات',
+                      hintText: 'اكتب عدد الساعات (مثال: 2 أو 3.5)',
+                      border: OutlineInputBorder(),
+                      suffixText: 'ساعة',
+                      isDense: true,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 const Text('الخصم:'),
                 RadioListTile<bool>(
@@ -1943,7 +1976,11 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
 
     String status;
     String? leaveType;
+    bool excusedFlag = excused;
+    double excusedHoursVal = 0.0;
+    double permissionHoursVal = 0.0;
     final extra = reasonCtrl.text.trim();
+
     if (permissionType == 'late') {
       if (excused) {
         status = 'excused_late';
@@ -1960,19 +1997,56 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
         status = 'present';
         leaveType = null;
       }
+    } else if (permissionType == 'custom_hours') {
+      final h = double.tryParse(hoursCtrl.text.trim()) ?? 0.0;
+      if (h <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('يرجى كتابة عدد ساعات صحيح للإذن'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+      permissionHoursVal = h;
+      if (excused) {
+        status = 'excused';
+        leaveType = excuseKind;
+        excusedFlag = true;
+        excusedHoursVal = 0.0;
+      } else {
+        status = record.status == 'absent' ? 'present' : record.status;
+        if (status == 'leave') status = 'present';
+        leaveType = null;
+        excusedFlag = false;
+        excusedHoursVal = h;
+      }
     } else {
       status = 'leave';
       leaveType = 'other';
     }
+
     final kindName = _getExcuseTypeTitle(leaveType ?? excuseKind);
-    final prefix = excused
-        ? '[$kindName - بدون خصم]'
-        : (permissionType == 'leave'
-            ? '[إذن يوم كامل - مع الخصم]'
-            : '[إذن - مع الخصم]');
+    final String prefix;
+    if (permissionType == 'custom_hours') {
+      final hStr = permissionHoursVal.toStringAsFixed(
+        permissionHoursVal.truncateToDouble() == permissionHoursVal ? 0 : 1,
+      );
+      prefix = excused
+          ? '[$kindName - بدون خصم - $hStr ساعة]'
+          : '[إذن مخصص - مع الخصم - $hStr ساعة]';
+    } else {
+      prefix = excused
+          ? '[$kindName - بدون خصم]'
+          : (permissionType == 'leave'
+              ? '[إذن يوم كامل - مع الخصم]'
+              : '[إذن - مع الخصم]');
+    }
     final notes = extra.isEmpty
         ? prefix
-        : '$prefix $extra${(record.notes != null && record.notes!.trim().isNotEmpty) ? ' | ${record.notes}' : ''}';
+        : '$prefix $extra${(record.notes != null && record.notes!.trim().isNotEmpty) ? ' | ${record.notes!}' : ''}';
 
     setState(() => _isChecking = true);
     try {
@@ -1986,6 +2060,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
         workingHours: record.workingHours,
         notes: notes,
         leaveType: leaveType,
+        excused: excusedFlag,
+        excusedHours: excusedHoursVal,
+        permissionHours: permissionHoursVal,
         source: 'manual',
       );
       await _loadAttendance();
@@ -2045,6 +2122,12 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       status = 'absent';
     }
 
+    String? cleanNotes = record.notes;
+    if (cleanNotes != null) {
+      cleanNotes = cleanNotes.replaceAll(RegExp(r'\[.*?\]\s*'), '').trim();
+      if (cleanNotes.isEmpty) cleanNotes = null;
+    }
+
     setState(() => _isChecking = true);
     try {
       final service = ref.read(staffManagementServiceProvider);
@@ -2055,8 +2138,11 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
         checkInTime: record.checkInTime,
         checkOutTime: record.checkOutTime,
         workingHours: record.workingHours,
-        notes: record.notes,
+        notes: cleanNotes,
         leaveType: null,
+        excused: false,
+        excusedHours: 0.0,
+        permissionHours: 0.0,
         source: 'manual',
       );
       await _loadAttendance();

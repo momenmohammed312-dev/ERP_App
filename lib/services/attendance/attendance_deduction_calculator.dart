@@ -26,6 +26,18 @@ class AttendanceDeductionRules {
     r'من\s*(\d{1,2}):(\d{2})\s*إلى\s*(\d{1,2}):(\d{2})',
   );
 
+  /// إذن ساعي أو مخصص مسجل في الملاحظات مثل: '[إذن مخصص - مع الخصم - 2.5 ساعة]'
+  static final RegExp customHoursPattern = RegExp(
+    r'(?:إذن|مخصص).*?(\d+(?:\.\d+)?)\s*س(?:اعة)?',
+  );
+
+  static double customHoursFromNotes(String? notes) {
+    if (notes == null) return 0.0;
+    final m = customHoursPattern.firstMatch(notes);
+    if (m == null) return 0.0;
+    return double.tryParse(m.group(1)!) ?? 0.0;
+  }
+
   /// -1 يعني "لا وقت مسجل".
   static int _minutesOf(DateTime? t) =>
       t == null ? -1 : (t.hour * 60 + t.minute);
@@ -108,7 +120,8 @@ class AttendanceDeductionRules {
       return true;
     }
     // v72 restored column: admin-entered partial permission hours.
-    if (r.permissionHours > 0) return true;
+    if (r.permissionHours > 0 || r.excusedHours > 0) return true;
+    if (customHoursFromNotes(r.notes) > 0) return true;
     final co = _minutesOf(r.checkOutTime);
     if (co < 0) return false;
     return co < workEndMinutes &&
@@ -118,20 +131,32 @@ class AttendanceDeductionRules {
   /// الدقائق المخصومة من سجل واحد (انصراف مبكر / إذن ساعي).
   static int permissionMinutesOf(Attendance r, {required int workEndMinutes}) {
     if (!isPermissionRecord(r, workEndMinutes: workEndMinutes)) return 0;
-    if (r.status == 'leave') return 0; // إجازة معتمدة = ليست خصماً
+    if (r.status == 'leave' && r.excusedHours <= 0 && r.permissionHours <= 0) {
+      return 0; // إجازة معتمدة = ليست خصماً
+    }
     // A fully exempt day (excused with no hours) deducts nothing.
     if (r.excused && r.excusedHours <= 0) return 0;
     // Explicit partial permission recorded on the row wins.
-    if (r.excusedHours > 0) return (r.excusedHours * 60).round();
+    final explicitHours = r.excusedHours > 0
+        ? r.excusedHours
+        : (!r.excused && r.permissionHours > 0 ? r.permissionHours : 0.0);
+    if (explicitHours > 0) return (explicitHours * 60).round();
     final co = _minutesOf(r.checkOutTime);
     if (co >= 0) return co < workEndMinutes ? workEndMinutes - co : 0;
     final m = permissionWindow.firstMatch(r.notes ?? '');
-    if (m == null) return 0; // إذن يوم كامل معفي
-    final from = (int.tryParse(m.group(1)!) ?? 0) * 60 +
-        (int.tryParse(m.group(2)!) ?? 0);
-    final to = (int.tryParse(m.group(3)!) ?? 0) * 60 +
-        (int.tryParse(m.group(4)!) ?? 0);
-    return to > from ? to - from : 0;
+    if (m != null) {
+      final from = (int.tryParse(m.group(1)!) ?? 0) * 60 +
+          (int.tryParse(m.group(2)!) ?? 0);
+      final to = (int.tryParse(m.group(3)!) ?? 0) * 60 +
+          (int.tryParse(m.group(4)!) ?? 0);
+      return to > from ? to - from : 0;
+    }
+    final noteHours = customHoursFromNotes(r.notes);
+    if (noteHours > 0) {
+      if (r.excused || (r.notes != null && r.notes!.contains('بدون خصم'))) return 0;
+      return (noteHours * 60).round();
+    }
+    return 0; // إذن يوم كامل معفي
   }
 
   /// دقائق التأخير الفعلية — من بداية الدوام، وصفر للمعفي.

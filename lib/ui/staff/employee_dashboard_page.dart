@@ -9,6 +9,7 @@ import 'staff_form_page.dart';
 import 'device_management_page.dart';
 import 'unmatched_attendance_page.dart';
 import 'attendance_settings_page.dart';
+import 'batch_payroll_slips_page.dart';
 
 class EmployeeDashboardPage extends ConsumerStatefulWidget {
   const EmployeeDashboardPage({super.key});
@@ -452,7 +453,19 @@ class _EmployeeDashboardPageState
                 ),
               ),
               const SizedBox(width: 8),
-              const Expanded(child: SizedBox()),
+              Expanded(
+                child: _buildActionBtn(
+                  'المرتبات المجمعة',
+                  Icons.payments,
+                  Colors.green,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BatchPayrollSlipsPage(),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ],

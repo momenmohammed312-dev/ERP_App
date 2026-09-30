@@ -35,7 +35,11 @@ class BackupService {
     String? description,
     int? createdBy,
   }) async {
-    PermissionValidator.requirePermission(user, Permission.createBackup, 'إنشاء نسخة احتياطية');
+    PermissionValidator.requirePermission(
+      user,
+      Permission.createBackup,
+      'إنشاء نسخة احتياطية',
+    );
     if (kIsWeb) {
       throw Exception('Backup operations not supported on web platform');
     }
@@ -121,7 +125,11 @@ class BackupService {
   /// Restore database from encrypted backup file
   /// استعادة قاعدة البيانات من ملف النسخ الاحتياطي المشفر
   Future<void> restoreBackup(User? user, String filename) async {
-    PermissionValidator.requirePermission(user, Permission.restoreBackup, 'استعادة نسخة احتياطية');
+    PermissionValidator.requirePermission(
+      user,
+      Permission.restoreBackup,
+      'استعادة نسخة احتياطية',
+    );
     if (kIsWeb) {
       throw Exception('Backup restore not supported on web platform');
     }
@@ -300,7 +308,11 @@ class BackupService {
   /// Delete an encrypted backup file
   /// حذف ملف نسخ احتياطي مشفر
   Future<void> deleteBackup(User? user, String filename) async {
-    PermissionValidator.requirePermission(user, Permission.deleteBackup, 'حذف نسخة احتياطية');
+    PermissionValidator.requirePermission(
+      user,
+      Permission.deleteBackup,
+      'حذف نسخة احتياطية',
+    );
     if (kIsWeb) {
       throw Exception('Backup deletion not supported on web platform');
     }
@@ -437,6 +449,7 @@ class BackupService {
       'employees',
       'staff_table',
       'attendance_table',
+      'attendance_v59_duplicate_backup',
       'vacations',
       'staff_advances',
       'payroll_table',
@@ -455,7 +468,7 @@ class BackupService {
         tablesData[tableName] = result.map((row) => row.data).toList();
       } catch (e) {
         debugPrint('Error getting data from table $tableName: $e');
-        tablesData[tableName] = [];
+        rethrow;
       }
     }
 
@@ -516,6 +529,7 @@ class BackupService {
       'attendance_settings',
       'employees',
       'staff_table',
+      'attendance_v59_duplicate_backup',
       'attendance_table',
       'vacations',
       'staff_advances',
@@ -529,15 +543,447 @@ class BackupService {
       'attendance_sync_logs',
     ];
 
-    for (final tableName in tableOrder) {
-      if (tablesData.containsKey(tableName)) {
-        await _restoreTable(tableName, tablesData[tableName] as List);
+    await _db.exclusively(() async {
+      await _db.customStatement('PRAGMA foreign_keys = OFF');
+      try {
+        await _db.transaction(() async {
+          final attendancePlan = _prepareAttendanceRestore(
+            tablesData['attendance_table'],
+            tablesData['attendance_v59_duplicate_backup'],
+          );
+
+          for (final tableName in const [
+            'attendance_v59_duplicate_backup',
+            'attendance_table',
+            'attendance_raw_events',
+          ]) {
+            if (!tablesData.containsKey(tableName)) {
+              await _db.customUpdate('DELETE FROM $tableName');
+            }
+          }
+
+          for (final tableName in tableOrder) {
+            if (!tablesData.containsKey(tableName)) continue;
+
+            final List<dynamic> tableData = tableName == 'attendance_table'
+                ? attendancePlan.rows
+                : tablesData[tableName] as List;
+
+            if (tableName == 'attendance_v59_duplicate_backup' &&
+                tableData.isEmpty) {
+              await _db.customUpdate('DELETE FROM $tableName');
+            } else {
+              if (tableName == 'attendance_table') {
+                await _restoreAttendanceAuditRows(attendancePlan.auditRows);
+              }
+              await _restoreTable(tableName, tableData);
+            }
+          }
+          await _restoreAttendanceRawEventReferences();
+          final foreignKeyViolations = await _db
+              .customSelect('PRAGMA foreign_key_check')
+              .get();
+          if (foreignKeyViolations.isNotEmpty) {
+            throw StateError(
+              'Backup restore contains ${foreignKeyViolations.length} foreign key violations',
+            );
+          }
+        });
+      } finally {
+        await _db.customStatement('PRAGMA foreign_keys = ON');
+      }
+    });
+  }
+
+  _AttendanceRestorePlan _prepareAttendanceRestore(
+    dynamic attendanceData,
+    dynamic auditData,
+  ) {
+    final rows = <Map<String, dynamic>>[];
+    final auditRows = <Map<String, dynamic>>[];
+    if (attendanceData is! List || attendanceData.isEmpty) {
+      return _AttendanceRestorePlan(rows: rows, auditRows: auditRows);
+    }
+
+    final originals = <Map<String, dynamic>>[];
+    final normalizedRows = <Map<String, dynamic>>[];
+    final ids = <int?>[];
+    final usedIds = <int>{};
+    final backedUpAt = DateTime.now().millisecondsSinceEpoch;
+
+    for (final raw in attendanceData) {
+      if (raw is! Map) {
+        throw const FormatException('Invalid attendance backup row');
+      }
+      final original = Map<String, dynamic>.from(raw);
+      final normalized = Map<String, dynamic>.from(original);
+      normalized['date'] = _attendanceLocalDateSeconds(original['date']);
+      for (final column in const [
+        'check_in_time',
+        'check_out_time',
+        'created_at',
+        'updated_at',
+        'approved_at',
+      ]) {
+        if (normalized[column] != null) {
+          normalized[column] = _attendanceStorageSeconds(normalized[column]);
+        }
+      }
+      originals.add(original);
+      normalizedRows.add(normalized);
+      final id = _attendanceIntValue(original['id']);
+      ids.add(id);
+      if (id != null) usedIds.add(id);
+    }
+
+    if (auditData is List) {
+      for (final raw in auditData) {
+        if (raw is Map) {
+          final id = _attendanceIntValue(raw['original_id']);
+          if (id != null) usedIds.add(id);
+        }
+      }
+    }
+
+    var nextFallbackId = -1;
+    int allocateFallbackId() {
+      while (usedIds.contains(nextFallbackId)) {
+        nextFallbackId--;
+      }
+      final id = nextFallbackId;
+      nextFallbackId--;
+      usedIds.add(id);
+      return id;
+    }
+
+    for (var index = 0; index < ids.length; index++) {
+      if (ids[index] == null) {
+        ids[index] = allocateFallbackId();
+      }
+    }
+
+    final groups = <(String, int), List<int>>{};
+    for (var index = 0; index < normalizedRows.length; index++) {
+      final staffId = normalizedRows[index]['staff_id']?.toString() ?? '';
+      final date = normalizedRows[index]['date'] as int;
+      groups.putIfAbsent((staffId, date), () => <int>[]).add(index);
+    }
+
+    final groupKeys = groups.keys.toList()
+      ..sort((left, right) {
+        final staffOrder = left.$1.compareTo(right.$1);
+        if (staffOrder != 0) return staffOrder;
+        return left.$2.compareTo(right.$2);
+      });
+
+    for (final groupKey in groupKeys) {
+      final ordered = [...groups[groupKey]!]
+        ..sort(
+          (left, right) => _compareAttendanceRows(
+            normalizedRows[left],
+            normalizedRows[right],
+            ids[left]!,
+            ids[right]!,
+          ),
+        );
+      final keeperIndex = ordered.first;
+      final keeperId = ids[keeperIndex]!;
+      final keeper = Map<String, dynamic>.from(normalizedRows[keeperIndex]);
+
+      if (ordered.length > 1) {
+        for (final loserIndex in ordered.skip(1)) {
+          _mergeAttendanceNullFields(keeper, normalizedRows[loserIndex]);
+        }
+
+        if (keeper['check_in_time'] == null) {
+          final checkInTime = _attendanceEarliestValue(
+            ordered.map((index) => normalizedRows[index]),
+            'check_in_time',
+          );
+          if (checkInTime != null) {
+            keeper['check_in_time'] = checkInTime;
+          }
+        }
+
+        if (keeper['check_out_time'] == null) {
+          final checkOutTime = _attendanceLatestValue(
+            ordered.map((index) => normalizedRows[index]),
+            'check_out_time',
+          );
+          if (checkOutTime != null) {
+            keeper['check_out_time'] = checkOutTime;
+          }
+        }
+
+        keeper['working_hours'] = _attendanceMaxNonNegative(
+          ordered.map((index) => normalizedRows[index]),
+          'working_hours',
+        );
+        keeper['overtime_hours'] = _attendanceMaxNonNegative(
+          ordered.map((index) => normalizedRows[index]),
+          'overtime_hours',
+        );
+
+        for (final index in ordered) {
+          final originalId = ids[index]!;
+          final normalizedDate = normalizedRows[index]['date'] as int;
+          auditRows.add({
+            'original_id': originalId,
+            'keeper_id': keeperId,
+            'staff_id': originals[index]['staff_id']?.toString() ?? '',
+            'attendance_date': _attendanceAuditDate(normalizedDate),
+            'payload_json': jsonEncode(originals[index]),
+            'backed_up_at': backedUpAt,
+          });
+        }
+      }
+
+      rows.add(keeper);
+    }
+
+    return _AttendanceRestorePlan(rows: rows, auditRows: auditRows);
+  }
+
+  Future<void> _restoreAttendanceAuditRows(
+    List<Map<String, dynamic>> rows,
+  ) async {
+    for (final row in rows) {
+      await _db.customStatement(
+        '''
+        INSERT OR IGNORE INTO attendance_v59_duplicate_backup
+          (original_id, keeper_id, staff_id, attendance_date, payload_json, backed_up_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ''',
+        [
+          row['original_id'],
+          row['keeper_id'],
+          row['staff_id'],
+          row['attendance_date'],
+          row['payload_json'],
+          row['backed_up_at'],
+        ],
+      );
+    }
+  }
+
+  Future<void> _restoreAttendanceRawEventReferences() async {
+    final columns = await _db
+        .customSelect("PRAGMA table_info('attendance_raw_events')")
+        .get();
+    if (!columns.any(
+      (row) => row.read<String>('name') == 'resulting_attendance_id',
+    )) {
+      return;
+    }
+    await _db.customUpdate('''
+      UPDATE attendance_raw_events
+      SET resulting_attendance_id = (
+        SELECT backup.keeper_id
+        FROM attendance_v59_duplicate_backup AS backup
+        WHERE backup.original_id = attendance_raw_events.resulting_attendance_id
+      )
+      WHERE resulting_attendance_id IN (
+        SELECT original_id
+        FROM attendance_v59_duplicate_backup
+      )
+    ''');
+  }
+
+  int _attendanceLocalDateSeconds(dynamic value) {
+    final parsed = _attendanceDateTime(value);
+    final local = parsed.toLocal();
+    final midnight = DateTime(local.year, local.month, local.day);
+    return midnight.millisecondsSinceEpoch ~/ 1000;
+  }
+
+  int _attendanceStorageSeconds(dynamic value) {
+    return _attendanceDateTime(value).millisecondsSinceEpoch ~/ 1000;
+  }
+
+  DateTime _attendanceDateTime(dynamic value) {
+    if (value is DateTime) return value;
+    if (value is num) {
+      final numeric = value.toDouble();
+      final absolute = numeric.abs();
+      if (absolute >= 100000000000000) {
+        return DateTime.fromMillisecondsSinceEpoch((numeric / 1000).round());
+      }
+      if (absolute >= 100000000000) {
+        return DateTime.fromMillisecondsSinceEpoch(numeric.round());
+      }
+      return DateTime.fromMillisecondsSinceEpoch((numeric * 1000).round());
+    }
+    if (value is String) {
+      final numeric = int.tryParse(value) ?? double.tryParse(value);
+      if (numeric != null) return _attendanceDateTime(numeric);
+      return DateTime.parse(value);
+    }
+    throw FormatException('Invalid attendance date: $value');
+  }
+
+  DateTime? _attendanceTimestamp(dynamic value) {
+    if (value == null) return null;
+    try {
+      return _attendanceDateTime(value);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  int? _attendanceIntValue(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) {
+      return int.tryParse(value) ?? double.tryParse(value)?.toInt();
+    }
+    return null;
+  }
+
+  int? _attendanceComparableValue(dynamic value) {
+    if (value is DateTime) return value.millisecondsSinceEpoch;
+    if (value is num) return value.toInt();
+    if (value is String) {
+      final numeric = int.tryParse(value) ?? double.tryParse(value);
+      if (numeric != null) return numeric.toInt();
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) return parsed.millisecondsSinceEpoch;
+    }
+    return null;
+  }
+
+  String? _attendanceSource(dynamic value) {
+    if (value == null) return null;
+    final source = value.toString().trim().toLowerCase();
+    return source.isEmpty ? null : source;
+  }
+
+  int _attendancePriority(Map<String, dynamic> row) {
+    final source = _attendanceSource(row['source']);
+    if (source == 'admin' || source == 'admin_override') return 0;
+    if (source == 'manual') return 1;
+    if (source == 'import' || source == 'excel_import') return 2;
+    if (source == null && row['check_out_time'] != null) return 3;
+    if (source == 'auto_generated') return 4;
+    if (source == 'device') return 5;
+    return 6;
+  }
+
+  int _compareAttendanceRows(
+    Map<String, dynamic> left,
+    Map<String, dynamic> right,
+    int leftId,
+    int rightId,
+  ) {
+    final priority = _attendancePriority(
+      left,
+    ).compareTo(_attendancePriority(right));
+    if (priority != 0) return priority;
+
+    final leftUpdated = _attendanceComparableValue(left['updated_at']);
+    final rightUpdated = _attendanceComparableValue(right['updated_at']);
+    if (leftUpdated == null && rightUpdated != null) return 1;
+    if (leftUpdated != null && rightUpdated == null) return -1;
+    if (leftUpdated != null && rightUpdated != null) {
+      final updatedOrder = rightUpdated.compareTo(leftUpdated);
+      if (updatedOrder != 0) return updatedOrder;
+    }
+    return rightId.compareTo(leftId);
+  }
+
+  dynamic _attendanceEarliestValue(
+    Iterable<Map<String, dynamic>> rows,
+    String column,
+  ) {
+    Map<String, dynamic>? selected;
+    DateTime? selectedTime;
+    for (final row in rows) {
+      if (row[column] == null) continue;
+      final valueTime = _attendanceTimestamp(row[column]);
+      if (selected == null) {
+        selected = row;
+        selectedTime = valueTime;
+      } else if (valueTime != null &&
+          (selectedTime == null || valueTime.isBefore(selectedTime))) {
+        selected = row;
+        selectedTime = valueTime;
+      }
+    }
+    return selected?[column];
+  }
+
+  dynamic _attendanceLatestValue(
+    Iterable<Map<String, dynamic>> rows,
+    String column,
+  ) {
+    Map<String, dynamic>? selected;
+    DateTime? selectedTime;
+    for (final row in rows) {
+      if (row[column] == null) continue;
+      final valueTime = _attendanceTimestamp(row[column]);
+      if (selected == null) {
+        selected = row;
+        selectedTime = valueTime;
+      } else if (valueTime != null &&
+          (selectedTime == null || valueTime.isAfter(selectedTime))) {
+        selected = row;
+        selectedTime = valueTime;
+      }
+    }
+    return selected?[column];
+  }
+
+  double? _attendanceNumber(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  double _attendanceMaxNonNegative(
+    Iterable<Map<String, dynamic>> rows,
+    String column,
+  ) {
+    double? selected;
+    for (final row in rows) {
+      final value = _attendanceNumber(row[column]);
+      if (value == null || !value.isFinite || value < 0) continue;
+      if (selected == null || value > selected) {
+        selected = value;
+      }
+    }
+    return selected ?? 0.0;
+  }
+
+  void _mergeAttendanceNullFields(
+    Map<String, dynamic> keeper,
+    Map<String, dynamic> loser,
+  ) {
+    for (final entry in loser.entries) {
+      if (const {
+        'id',
+        'staff_id',
+        'date',
+        'check_in_time',
+        'check_out_time',
+      }.contains(entry.key)) {
+        continue;
+      }
+      if (keeper[entry.key] == null && entry.value != null) {
+        keeper[entry.key] = entry.value;
       }
     }
   }
 
+  String _attendanceAuditDate(int seconds) {
+    final local = DateTime.fromMillisecondsSinceEpoch(seconds * 1000).toLocal();
+    return DateTime(local.year, local.month, local.day).toIso8601String();
+  }
+
   Future<void> _restoreTable(String tableName, List<dynamic> data) async {
-    if (data.isEmpty) return;
+    if (data.isEmpty) {
+      await _db.customUpdate('DELETE FROM $tableName');
+      debugPrint('Restored $tableName with 0 records');
+      return;
+    }
 
     try {
       // Clear existing data
@@ -642,6 +1088,13 @@ class BackupService {
   void dispose() {
     stopAutoBackup();
   }
+}
+
+class _AttendanceRestorePlan {
+  final List<Map<String, dynamic>> rows;
+  final List<Map<String, dynamic>> auditRows;
+
+  _AttendanceRestorePlan({required this.rows, required this.auditRows});
 }
 
 /// Backup information model

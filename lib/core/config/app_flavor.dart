@@ -1,9 +1,5 @@
 /// Application build flavor — selects DB, feature flags, and optional entry point.
-enum Flavor {
-  base,
-  vegetable,
-  clothing,
-}
+enum Flavor { base, vegetable, clothing }
 
 /// Global flavor configuration. Call [initialize] once at startup before using
 /// [current] or [databaseName].
@@ -63,7 +59,7 @@ class AppFlavor {
       case Flavor.clothing:
         return 'POS - ملابس';
       case Flavor.base:
-        return 'POS System - Developed by MO2';
+        return 'مِدار | MADAR ERP';
     }
   }
 }
