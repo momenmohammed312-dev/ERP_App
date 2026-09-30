@@ -4,6 +4,7 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:intl/intl.dart';
+import 'package:pos_offline_desktop/services/attendance/attendance_time_utils.dart';
 
 class ManualOverrideDialog extends ConsumerStatefulWidget {
   final Staff staff;
@@ -102,15 +103,13 @@ class _ManualOverrideDialogState extends ConsumerState<ManualOverrideDialog> {
       final user = ref.read(authProvider);
       final service = ref.read(staffManagementServiceProvider); // Critical: Use the service, not the DAO
       
-      DateTime? checkIn;
-      if (_checkInTime != null) {
-        checkIn = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, _checkInTime!.hour, _checkInTime!.minute);
-      }
-      
-      DateTime? checkOut;
-      if (_checkOutTime != null) {
-        checkOut = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, _checkOutTime!.hour, _checkOutTime!.minute);
-      }
+      // Both clock readings belong to the selected work date. When the check-out
+      // clock reads before the check-in clock the shift crossed midnight, so the
+      // check-out is rolled onto the next day - otherwise this dialog wrote
+      // negative working_hours (e.g. -17h for 17:00 -> 00:00).
+      final pair = pairCheckInOut(_selectedDate, _checkInTime, _checkOutTime);
+      final DateTime? checkIn = pair.checkIn;
+      final DateTime? checkOut = pair.checkOut;
 
       String finalNotes = _notesController.text.trim();
       String? excuseType;

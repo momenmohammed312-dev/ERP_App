@@ -218,9 +218,20 @@ class AttendanceCalculationEngine {
     double overtimeHours = 0;
 
     if (checkOutTime != null) {
-      final totalMinutes = checkOutTime.difference(checkInTime).inMinutes;
+      // v73: a check-out that lands BEFORE the check-in is a shift that crossed
+      // midnight, stamped on the shift's own calendar day. Roll it forward one
+      // day so the span is measured correctly instead of coming out negative.
+      // No-op whenever checkOut > checkIn, i.e. for every normal same-day shift.
+      final effectiveCheckOut =
+          checkOutTime.isBefore(checkInTime)
+              ? checkOutTime.add(const Duration(days: 1))
+              : checkOutTime;
+
+      final totalMinutes = effectiveCheckOut.difference(checkInTime).inMinutes;
       final checkOutMinutes = checkOutTime.hour * 60 + checkOutTime.minute;
-      workingHours = totalMinutes / 60.0;
+      // Clamp: worked hours can never be negative. A malformed pair with no
+      // recoverable rollover reads as 0 rather than as a phantom deduction.
+      workingHours = totalMinutes < 0 ? 0.0 : totalMinutes / 60.0;
 
       // وقت الانصراف + مهلة الإضافي = بداية استحقاق الوقت الإضافي
       // (مقارنة صارمة: عند المهلة تماماً = صفر)

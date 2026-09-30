@@ -7,6 +7,7 @@ import '../../core/models/user_model.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../widgets/permission_guard.dart';
 import '../../services/attendance/attendance_deduction_calculator.dart';
+import '../../services/attendance/attendance_time_utils.dart';
 import 'package:intl/intl.dart';
 import 'manual_override_dialog.dart';
 
@@ -545,28 +546,10 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
         final nt = result['notes'] as String;
         final lt = result['leaveType'] as String?;
 
-        DateTime? checkInDateTime;
-        if (ci != null) {
-          checkInDateTime = DateTime(
-            dt.year, dt.month, dt.day, ci.hour, ci.minute,
-          );
-        }
-
-        DateTime? checkOutDateTime;
-        double? workingHours;
-
-        if (co != null) {
-          checkOutDateTime = DateTime(
-            dt.year, dt.month, dt.day, co.hour, co.minute,
-          );
-          if (checkInDateTime != null) {
-            if (checkOutDateTime.isBefore(checkInDateTime)) {
-              checkOutDateTime = checkOutDateTime.add(const Duration(days: 1));
-            }
-            workingHours =
-                checkOutDateTime.difference(checkInDateTime).inMinutes / 60.0;
-          }
-        }
+        final pair = pairCheckInOut(dt, ci, co);
+        final DateTime? checkInDateTime = pair.checkIn;
+        final DateTime? checkOutDateTime = pair.checkOut;
+        final workingHours = workedHoursFrom(checkInDateTime, checkOutDateTime);
 
         final service = ref.read(staffManagementServiceProvider);
         await service.recordManualAttendance(
