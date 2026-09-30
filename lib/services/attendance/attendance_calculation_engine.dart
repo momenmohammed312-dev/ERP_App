@@ -282,7 +282,17 @@ class AttendanceCalculationEngine {
       }
 
       // Early leave: checked out before scheduled end
-      if (checkOutMinutes < scheduleEnd && status != 'late') {
+      //
+      // v73: a midnight crossing is not an early leave. Its check-out clock
+      // (00:00) reads before the scheduled end (17:00), so without this guard
+      // the row now that status is 'present' would enter this branch - before
+      // v73 it only escaped because the status happened to be 'late'.
+      if (checkOutMinutes < scheduleEnd &&
+          status != 'late' &&
+          !AttendanceShiftBounds.isOffScheduleMidnightCrossing(
+            co: checkOutTime,
+            ci: checkInTime,
+          )) {
         // If they left early but were present, mark as early leave
         // (but keep 'present' if they worked enough hours)
         if (totalMinutes < schedule.standardMinutesPerDay * 0.5) {
