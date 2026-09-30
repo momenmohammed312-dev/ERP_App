@@ -691,6 +691,14 @@ class StaffManagementService {
     int lateMinutesOf(Attendance r) {
       if (r.status == 'excused' || r.status == 'excused_late') return 0;
       if (r.checkInTime == null || schedule == null) return 0;
+      // An off-schedule day that ran through the night is not lateness: she
+      // finished after the scheduled end, so there is no shift she was late to.
+      // Without this the attendance summary would still count the day late
+      // (check-in after graceEnd) while the payroll slip, which goes through
+      // AttendanceDeductionRules, reports zero - the two would disagree.
+      // Only this exemption is added; the grace-vs-shift-start basis below is
+      // deliberately left untouched so normal employees see no change.
+      if (AttendanceDeductionRules.isOffScheduleMidnightCrossing(r)) return 0;
       final ci = r.checkInTime!.hour * 60 + r.checkInTime!.minute;
       final graceEnd =
           schedule.workStartMinutesSinceMidnight + schedule.gracePeriodMinutes;
