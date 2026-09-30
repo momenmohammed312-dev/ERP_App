@@ -255,10 +255,28 @@ class AttendanceCalculationEngine {
 
       // وقت الانصراف + مهلة الإضافي = بداية استحقاق الوقت الإضافي
       // (مقارنة صارمة: عند المهلة تماماً = صفر)
-      final overtimeStartMinutes =
-          scheduleEnd + schedule.overtimeGraceMinutes;
-      if (checkOutMinutes > overtimeStartMinutes) {
-        overtimeHours = (checkOutMinutes - scheduleEnd) / 60.0;
+      //
+      // v73: measured as ELAPSED time from the scheduled end rather than as a
+      // difference of clock minutes. The scheduled end is materialised on the
+      // check-in's calendar day, +1 day when the schedule itself is an overnight
+      // one. For a same-day check-out the two formulations are algebraically
+      // identical, so normal shifts are unaffected; for a check-out past
+      // midnight the clock form collapsed to 0 and credited nothing.
+      final scheduleEndAt = DateTime(
+        checkInTime.year,
+        checkInTime.month,
+        checkInTime.day,
+        schedule.workEndHour,
+        schedule.workEndMinute,
+      );
+      final scheduleEndFinal = scheduleEnd <= scheduleStart
+          ? scheduleEndAt.add(const Duration(days: 1))
+          : scheduleEndAt;
+      final overtimeStart = scheduleEndFinal
+          .add(Duration(minutes: schedule.overtimeGraceMinutes));
+      if (effectiveCheckOut.isAfter(overtimeStart)) {
+        overtimeHours =
+            effectiveCheckOut.difference(scheduleEndFinal).inMinutes / 60.0;
       } else {
         overtimeHours = 0;
       }
