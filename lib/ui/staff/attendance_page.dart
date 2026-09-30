@@ -2115,8 +2115,16 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     if (record.checkInTime != null) {
       final ci =
           record.checkInTime!.hour * 60 + record.checkInTime!.minute;
-      status =
-          ci > _scheduleStartMinutes() + _graceMinutes ? 'late' : 'present';
+      // v73: an off-schedule day that ran through the night reverts to
+      // 'present', matching what the engine now writes and what the deduction
+      // calculator already assumes. Without this, cancelling a permission on
+      // such a row would re-label it 'late' and re-introduce the deduction the
+      // midnight-crossing exemption just removed.
+      final offSchedule =
+          AttendanceDeductionRules.isOffScheduleMidnightCrossing(record);
+      status = (!offSchedule && ci > _scheduleStartMinutes() + _graceMinutes)
+          ? 'late'
+          : 'present';
     } else if (record.checkOutTime != null) {
       status = 'present';
     } else {
