@@ -928,6 +928,7 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     return AttendanceDeductionRules.lateMinutesOf(
       r,
       workStartMinutes: _scheduleStartMinutes(),
+      workEndMinutes: _scheduleEndMinutes(),
       graceMinutes: _graceMinutes,
     );
   }

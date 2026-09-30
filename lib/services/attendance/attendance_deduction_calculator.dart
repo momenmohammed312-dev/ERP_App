@@ -200,9 +200,15 @@ class AttendanceDeductionRules {
   /// the grace window is not late and deducts nothing. Once the row IS late,
   /// the minutes deducted are measured from the shift start, so 09:20 with a
   /// 15-minute grace is 20 late minutes, not 5.
+  /// v73: a check-in at or after the scheduled END is an alternative start, not
+  /// lateness - the shift she was "late" to had already closed. That exemption
+  /// additionally requires the day to have actually run past the scheduled end
+  /// (see [isOffScheduleMidnightCrossing]); without that second condition a
+  /// genuinely 9h-late employee who leaves at 18:00 would be wrongly excused.
   static int lateMinutesOf(
     Attendance r, {
     required int workStartMinutes,
+    required int workEndMinutes,
     required int graceMinutes,
   }) {
     // The v72 `excused` flag is the authoritative permission marker, so an
@@ -216,6 +222,10 @@ class AttendanceDeductionRules {
     final graceEnd = workStartMinutes + graceMinutes;
     if (ci <= graceEnd) return 0;
     // ...but the deducted minutes are measured from the shift start.
+    // v73 exemption for an off-schedule start: checked in at/after the scheduled
+    // end AND the day ran past that end. The conjunction matters - see the note
+    // on this method.
+    if (ci >= workEndMinutes && isOffScheduleMidnightCrossing(r)) return 0;
     return ci - workStartMinutes;
   }
 }
@@ -302,6 +312,7 @@ AttendanceDeductionResult computeAttendanceDeductions({
     final lm = AttendanceDeductionRules.lateMinutesOf(
       r,
       workStartMinutes: workStartMinutes,
+      workEndMinutes: workEndMinutes,
       graceMinutes: graceMinutes,
     );
     if (lm > 0) {
