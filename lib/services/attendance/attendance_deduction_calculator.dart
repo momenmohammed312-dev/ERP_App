@@ -1,4 +1,5 @@
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/services/attendance/attendance_shift_bounds.dart';
 
 /// القاعدة الوحيدة لخصومات الحضور.
 ///
@@ -41,6 +42,20 @@ class AttendanceDeductionRules {
   /// -1 يعني "لا وقت مسجل".
   static int _minutesOf(DateTime? t) =>
       t == null ? -1 : (t.hour * 60 + t.minute);
+
+  /// يوم عمل خارج الجدول انتهى بعد نهاية الدوام (وردية بتعدّي نص الليل).
+  ///
+  ///Such a day is neither a late day nor an early-leave day: the employee
+  /// finished AFTER the scheduled end, so there is nothing left to dock and the
+  /// hours past the end are overtime instead.
+  ///
+  /// The bounds live in [AttendanceShiftBounds] so the engine and this class
+  /// cannot drift apart; see that file for why the 06:00 / 14h limits exist.
+  static bool isOffScheduleMidnightCrossing(Attendance r) =>
+      AttendanceShiftBounds.isOffScheduleMidnightCrossing(
+        co: r.checkOutTime,
+        ci: r.checkInTime,
+      );
 
   /// معامل عدد الأيام في الشهر: 30 يوم عمل (الأساس المعتمد في baseline
   /// 5eb58db — `hourlyRate = basicSalary / dailyDivisor / standardHoursPerDay`).
