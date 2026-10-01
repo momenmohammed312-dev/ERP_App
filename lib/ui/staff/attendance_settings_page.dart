@@ -33,6 +33,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
   double _perfectAttendanceBonus = 0.0;
   double _absencePenaltyAmount = 0;
   String _absenceMode = 'day_wage'; // 'day_wage' | 'fixed'
+  double _absencePenaltyDaysMultiplier = 1.0;
   // Overtime starts past the scheduled end + this grace (old rule)
   int _overtimeGraceMinutes = 30;
   double _overtimeRateMultiplier = 1.5;
@@ -78,6 +79,8 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             _perfectAttendanceBonus = double.tryParse(s.settingValue) ?? 0;
           case 'absence_deduction_mode':
             _absenceMode = s.settingValue == 'fixed' ? 'fixed' : 'day_wage';
+          case 'absence_penalty_days_multiplier':
+            _absencePenaltyDaysMultiplier = double.tryParse(s.settingValue) ?? 1.0;
           case 'overtime_grace_minutes':
             _overtimeGraceMinutes = int.tryParse(s.settingValue) ?? 30;
           case 'absence_penalty_amount':
@@ -121,6 +124,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         'late_penalty_per_hour': _latePenaltyMultiplier.toString(),
         'perfect_attendance_bonus': _perfectAttendanceBonus.toString(),
         'absence_deduction_mode': _absenceMode,
+        'absence_penalty_days_multiplier': _absencePenaltyDaysMultiplier.toString(),
         'overtime_grace_minutes': _overtimeGraceMinutes.toString(),
         'absence_penalty_amount': _absencePenaltyAmount.toString(),
         'overtime_rate_multiplier': _overtimeRateMultiplier.toString(),
@@ -514,6 +518,25 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
               });
             }
           },
+        ),
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('مضاعف خصم يوم الغياب'),
+          subtitle: Text('اليوم الغائب يُخصم بمعدل ${_absencePenaltyDaysMultiplier.toStringAsFixed(1)} يوم'),
+          trailing: DropdownButton<double>(
+            value: [1.0, 1.5, 2.0].contains(_absencePenaltyDaysMultiplier) ? _absencePenaltyDaysMultiplier : 1.0,
+            underline: const SizedBox(),
+            items: const [
+              DropdownMenuItem(value: 1.0, child: Text('1.0x (يوم بيوم)')),
+              DropdownMenuItem(value: 1.5, child: Text('1.5x (يوم ونصف)')),
+              DropdownMenuItem(value: 2.0, child: Text('2.0x (يومين)')),
+            ],
+            onChanged: (val) {
+              if (val != null) {
+                setState(() => _absencePenaltyDaysMultiplier = val);
+              }
+            },
+          ),
         ),
         const Divider(height: 1),
         ListTile(
