@@ -80,6 +80,7 @@ class SettingsService {
   static const _businessLogoKey = 'business_logo_path';
   static const _taxNumberKey = 'business_tax_number';
   static const _receiptFooterKey = 'receipt_footer_msg';
+  static const _businessPageUrlKey = 'business_page_url';
   static const _currencyKey = 'currency_symbol';
   static const _isFirstRunKey = 'is_first_run_complete';
 
@@ -133,6 +134,18 @@ class SettingsService {
     await prefs.setString(_receiptFooterKey, footer);
   }
 
+  /// لينك صفحة المحل (فيسبوك/موقع) — يُطبع كـ QR code على ملصقات الباركود.
+  /// فارغ = لا يوجد لينك (الـ QR يختفي تلقائيًا).
+  static Future<String> getBusinessPageUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_businessPageUrlKey) ?? '';
+  }
+
+  static Future<void> setBusinessPageUrl(String url) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_businessPageUrlKey, url.trim());
+  }
+
   static Future<Map<String, String>> getBusinessInfo() async {
     return {
       'name': await getBusinessName(),
@@ -140,6 +153,7 @@ class SettingsService {
       'address': await getBusinessAddress(),
       'taxNumber': await getTaxNumber(),
       'footer': await getReceiptFooter(),
+      'pageUrl': await getBusinessPageUrl(),
     };
   }
 

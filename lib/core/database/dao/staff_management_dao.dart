@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
-import 'package:pos_offline_desktop/core/database/tables/staff_management_tables.dart' as staff_tables;
+import 'package:pos_offline_desktop/core/database/tables/staff_management_tables.dart'
+    as staff_tables;
 
 part 'staff_management_dao.g.dart';
 
@@ -42,8 +43,9 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
 
   Future<int> getStaffCount() async {
     final countExp = staffTable.id.count();
-    final result = await (selectOnly(staffTable)..addColumns([countExp]))
-        .getSingle();
+    final result = await (selectOnly(
+      staffTable,
+    )..addColumns([countExp])).getSingle();
     return result.read(countExp) ?? 0;
   }
 
@@ -75,19 +77,53 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
     return query.get();
   }
 
-  Future<void> addAttendance(AttendanceTableCompanion entry) =>
-      into(attendanceTable).insert(entry);
+  Future<List<Attendance>> getAttendanceOnDate(String staffId, DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    final nextDay = day.add(const Duration(days: 1));
+    return (select(attendanceTable)..where(
+          (a) =>
+              a.staffId.equals(staffId) &
+              a.date.isBiggerOrEqualValue(day) &
+              a.date.isSmallerThanValue(nextDay),
+        ))
+        .get();
+  }
+
+  Future<void> addAttendance(AttendanceTableCompanion entry) {
+    final localDate = entry.date.value.toLocal();
+    return into(attendanceTable).insert(
+      entry.copyWith(
+        date: Value(DateTime(localDate.year, localDate.month, localDate.day)),
+      ),
+    );
+  }
 
   /// Returns the auto-generated ID after inserting an attendance record
-  Future<int> addAttendanceReturningId(AttendanceTableCompanion entry) =>
-      into(attendanceTable).insert(entry);
+  Future<int> addAttendanceReturningId(AttendanceTableCompanion entry) {
+    final localDate = entry.date.value.toLocal();
+    return into(attendanceTable).insert(
+      entry.copyWith(
+        date: Value(DateTime(localDate.year, localDate.month, localDate.day)),
+      ),
+    );
+  }
 
-  Future<Attendance?> getAttendanceById(int id) =>
-      (select(attendanceTable)..where((a) => a.id.equals(id)))
-          .getSingleOrNull();
+  Future<Attendance?> getAttendanceById(int id) => (select(
+    attendanceTable,
+  )..where((a) => a.id.equals(id))).getSingleOrNull();
 
-  Future<void> updateAttendance(Attendance entry) =>
-      update(attendanceTable).replace(entry);
+  Future<void> updateAttendance(Attendance entry) {
+    final localDate = entry.date.toLocal();
+    final normalizedEntry = entry
+        .toCompanion(false)
+        .copyWith(
+          date: Value(DateTime(localDate.year, localDate.month, localDate.day)),
+        );
+    return update(attendanceTable).replace(normalizedEntry);
+  }
+
+  Future<int> deleteAttendanceById(int id) =>
+      (delete(attendanceTable)..where((row) => row.id.equals(id))).go();
 
   Future<void> checkIn(
     String staffId, {
@@ -102,23 +138,26 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
     final tomorrow = today.add(const Duration(days: 1));
 
     // Check if a record already exists for today
-    final existing = await (select(attendanceTable)
-          ..where((a) => a.staffId.equals(staffId))
-          ..where((a) => a.date.isBetweenValues(today, tomorrow)))
-        .get();
+    final existing =
+        await (select(attendanceTable)
+              ..where((a) => a.staffId.equals(staffId))
+              ..where((a) => a.date.isBetweenValues(today, tomorrow)))
+            .get();
 
     if (existing.isNotEmpty) {
       // Update existing record with check-in time
       final record = existing.first;
-      await updateAttendance(record.copyWith(
-        checkInTime: Value(now),
-        checkInLocation: Value(location),
-        source: Value(source),
-        sourceDeviceId: Value(sourceDeviceId),
-        rawEventId: Value(rawEventId),
-        status: status,
-        updatedAt: now,
-      ));
+      await updateAttendance(
+        record.copyWith(
+          checkInTime: Value(now),
+          checkInLocation: Value(location),
+          source: Value(source),
+          sourceDeviceId: Value(sourceDeviceId),
+          rawEventId: Value(rawEventId),
+          status: status,
+          updatedAt: now,
+        ),
+      );
     } else {
       await addAttendance(
         AttendanceTableCompanion.insert(
@@ -212,16 +251,19 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
         ),
       );
 
-  Future<void> rejectVacation(int vacationId, String approvedBy, String reason) =>
-      (update(vacations)..where((v) => v.id.equals(vacationId))).write(
-        VacationsCompanion(
-          status: const Value('rejected'),
-          approvedBy: Value(approvedBy),
-          approvedAt: Value(DateTime.now()),
-          rejectionReason: Value(reason),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
+  Future<void> rejectVacation(
+    int vacationId,
+    String approvedBy,
+    String reason,
+  ) => (update(vacations)..where((v) => v.id.equals(vacationId))).write(
+    VacationsCompanion(
+      status: const Value('rejected'),
+      approvedBy: Value(approvedBy),
+      approvedAt: Value(DateTime.now()),
+      rejectionReason: Value(reason),
+      updatedAt: Value(DateTime.now()),
+    ),
+  );
 
   Future<List<Vacation>> getPendingVacations() =>
       (select(vacations)..where((v) => v.status.equals('pending'))).get();
@@ -258,18 +300,25 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
         ),
       );
 
-  Future<void> markPayrollPaid(int payrollId, {
+  Future<void> markPayrollPaid(
+    int payrollId, {
     required DateTime paymentDate,
     required String paymentMethod,
-  }) =>
-      (update(payrollTable)..where((p) => p.id.equals(payrollId))).write(
-        PayrollTableCompanion(
-          status: const Value('paid'),
-          paymentDate: Value(paymentDate),
-          paymentMethod: Value(paymentMethod),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
+  }) => (update(payrollTable)..where((p) => p.id.equals(payrollId))).write(
+    PayrollTableCompanion(
+      status: const Value('paid'),
+      paymentDate: Value(paymentDate),
+      paymentMethod: Value(paymentMethod),
+      updatedAt: Value(DateTime.now()),
+    ),
+  );
+
+  Future<Payroll?> getPayrollById(int payrollId) => (select(
+    payrollTable,
+  )..where((p) => p.id.equals(payrollId))).getSingleOrNull();
+
+  Future<void> deletePayroll(int payrollId) =>
+      (delete(payrollTable)..where((p) => p.id.equals(payrollId))).go();
 
   // PERFORMANCE MANAGEMENT
 

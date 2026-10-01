@@ -14,6 +14,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/utils/app_utils.dart';
+import 'package:pos_offline_desktop/core/config/app_flavor.dart';
 import 'package:pos_offline_desktop/core/services/backup_service.dart'
     as core_backup;
 
@@ -523,11 +524,24 @@ class EnhancedBackupService {
       throw Exception('File system operations not supported on web platform');
     }
     final appDir = await getApplicationDocumentsDirectory();
-    return path.join(
-      appDir.path,
-      'pos_offline_desktop_database',
-      'pos_offline_desktop_database.sqlite',
-    );
+    final dbName = AppFlavor.databaseName;
+
+    // فحص المسارات المحتملة بالترتيب للعثور على الملف الحقيقي
+    final candidatePaths = [
+      path.join(appDir.path, '$dbName.sqlite'),
+      path.join(appDir.path, dbName),
+      path.join(appDir.path, 'pos_offline_desktop_database', 'pos_offline_desktop_database.sqlite'),
+      path.join(appDir.path, 'pos_offline_desktop_database.sqlite'),
+    ];
+
+    for (final candidate in candidatePaths) {
+      if (await File(candidate).exists()) {
+        return candidate;
+      }
+    }
+
+    // كمسار افتراضي
+    return path.join(appDir.path, '$dbName.sqlite');
   }
 
   Future<List<String>> _copyConfigFiles(String tempDir) async {

@@ -9,6 +9,8 @@ import 'package:go_router/go_router.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
+import 'package:pos_offline_desktop/core/services/purchase_edit_service.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/day_closed_dialog.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/product_card.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/product_selection_modal.dart';
@@ -22,7 +24,14 @@ enum PaymentMethod { cash, visa, mastercard, transfer, wallet, other }
 class EnhancedPurchaseInvoicePage extends StatefulHookConsumerWidget {
   final AppDatabase db;
 
-  const EnhancedPurchaseInvoicePage({super.key, required this.db});
+  /// When set, the page edits this purchase instead of creating a new one.
+  /// The supplier stays locked (no cross-supplier moves); the invoice number
+  /// is preserved, never regenerated.
+  final String? purchaseId;
+
+  const EnhancedPurchaseInvoicePage({super.key, required this.db, this.purchaseId});
+
+  bool get isEdit => purchaseId != null;
 
   @override
   ConsumerState<EnhancedPurchaseInvoicePage> createState() =>
@@ -83,6 +92,60 @@ class _EnhancedPurchaseInvoicePageState
     _checkDayStatus();
   }
 
+  // Edit mode state: orphan lines (product deleted since, kept verbatim
+  // on save) + their frozen value (stays in the header total).
+  List<PurchaseItem> _orphanItems = [];
+  double _orphanTotal = 0.0;
+
+  /// Loads an existing purchase for editing. The supplier stays locked and
+  /// the invoice number is preserved. Lines whose product was deleted since
+  /// are carried forward untouched (never restocked, never deleted).
+  Future<void> _loadForEdit() async {
+    final purchase = await (widget.db.select(widget.db.purchases)
+          ..where((t) => t.id.equals(widget.purchaseId!)))
+        .getSingleOrNull();
+    if (purchase == null) throw Exception('فاتورة المشتريات غير موجودة');
+
+    _invoiceNumber = purchase.invoiceNumber;
+    _paidAmount = purchase.paidAmount;
+    _paidAmountController.text = purchase.paidAmount.toStringAsFixed(2);
+    _paymentMethod = PaymentMethod.values.firstWhere(
+      (m) => m.name == purchase.paymentMethod,
+      orElse: () => PaymentMethod.cash,
+    );
+    if (purchase.supplierId != null) {
+      final s = await widget.db.supplierDao.getSupplierById(
+        purchase.supplierId!,
+      );
+      if (s != null) _selectedSupplier = s;
+    }
+
+    final pairs = await widget.db.purchaseDao.getItemsWithProductsByPurchase(
+      purchase.id,
+    );
+    _productEntries.clear();
+    _orphanItems = [];
+    _orphanTotal = 0.0;
+    for (final pair in pairs) {
+      final item = pair.$1;
+      final product = pair.$2;
+      if (product == null) {
+        _orphanItems.add(item);
+        _orphanTotal += item.totalPrice;
+        continue;
+      }
+      final entry = ProductEntry(product: product)
+        ..quantity = item.quantity
+        ..unit = item.unit
+        ..unitPrice = item.unitPrice
+        ..discount = item.discount
+        ..tax = item.tax
+        ..lineTotal = item.totalPrice;
+      _productEntries.add(entry);
+    }
+    _calculateTotals();
+  }
+
   Future<void> _checkDayStatus() async {
     try {
       final isOpen = await widget.db.dayDao.isDayOpen();
@@ -113,8 +176,12 @@ class _EnhancedPurchaseInvoicePageState
       final products = await widget.db.productDao.getAllProducts();
       final suppliers = await widget.db.supplierDao.getAllSuppliers();
 
-      // Generate invoice number
-      _invoiceNumber = 'PUR-${DateTime.now().millisecondsSinceEpoch}';
+      // Bug 3: no pre-generated number. The PUR- sequence value is assigned
+      // at SAVE time (_nextPurchaseNumber), so abandoned forms leave no gaps.
+      // Edit mode loads the existing purchase instead (number preserved).
+      if (widget.purchaseId != null) {
+        await _loadForEdit();
+      }
 
       setState(() {
         _isDayOpen = true;
@@ -259,6 +326,30 @@ class _EnhancedPurchaseInvoicePageState
     _remainingAmount = _grandTotal - _paidAmount;
   }
 
+  /// Next supplier number: max existing `PUR-(\d+)` + 1 (own series,
+  /// never customer values). Existence loop closes even a theoretical
+  /// same-moment collision; legacy non-matching numbers are ignored.
+  Future<String> _nextPurchaseNumber() async {
+    final rows = await widget.db.customSelect(
+      "SELECT invoice_number AS n FROM purchases "
+      "WHERE invoice_number LIKE 'PUR-%'",
+    ).get();
+    var maxN = 0;
+    for (final r in rows) {
+      final n = parsePurchaseNumber(r.readNullable<String>('n'));
+      if (n != null && n > maxN) maxN = n;
+    }
+    var candidate = maxN + 1;
+    while (true) {
+      final num = formatPurchaseNumber(candidate);
+      final exists = await (widget.db.select(widget.db.purchases)
+            ..where((t) => t.id.equals(num)))
+          .getSingleOrNull();
+      if (exists == null) return num;
+      candidate++;
+    }
+  }
+
   Future<void> _savePurchaseInvoice() async {
     if (_selectedSupplier == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -270,7 +361,14 @@ class _EnhancedPurchaseInvoicePageState
       return;
     }
 
-    if (_productEntries.isEmpty) {
+    // Bug 3: supplier sequence (own series, never customer values).
+    // Edit mode keeps the existing number (assigned at original save).
+    if (widget.purchaseId == null) {
+      _invoiceNumber ??= await _nextPurchaseNumber();
+    }
+    if (!mounted) return;
+
+    if (_productEntries.isEmpty && _orphanItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('يرجى إضافة منتج واحد على الأقل'),
@@ -280,63 +378,68 @@ class _EnhancedPurchaseInvoicePageState
       return;
     }
 
+    // Edit mode: rewrite lines/stock/ledger around the preserved number.
+    if (widget.purchaseId != null) {
+      await _updatePurchaseInvoice();
+      return;
+    }
+
     try {
-      // Create purchase invoice
-      final purchaseInvoice = PurchasesCompanion.insert(
-        id: _invoiceNumber!,
-        invoiceNumber: _invoiceNumber!,
-        description: 'فاتورة مشتريات من ${_selectedSupplier!.name}',
-        totalAmount: _grandTotal,
-        purchaseDate: DateTime.now(),
-        createdAt: DateTime.now(),
-        supplierId: Value(_selectedSupplier!.id),
-        paidAmount: Value(_paidAmount),
-        paymentMethod: Value(_paymentMethod.name),
-        status: Value('completed'),
-      );
-
-      await widget.db.into(widget.db.purchases).insert(purchaseInvoice);
-
-      // Add purchase items
-      for (final entry in _productEntries) {
-        await widget.db
-            .into(widget.db.purchaseItems)
-            .insert(
-              PurchaseItemsCompanion.insert(
-                id: '${_invoiceNumber}_${entry.product!.id}',
-                purchaseId: _invoiceNumber!,
-                productId: entry.product!.id.toString(),
-                quantity: entry.quantity,
-                unitPrice: entry.unitPrice,
-                totalPrice: entry.lineTotal,
-                unit: entry.product!.unit ?? 'قطعة',
-                createdAt: DateTime.now(),
-              ),
-            );
-
-        // Update inventory - INCREASE stock for purchases
-        final currentProduct = entry.product!;
-        final updatedProduct = currentProduct.copyWith(
-          quantity: currentProduct.quantity + entry.quantity,
+      // One atomic unit: purchase + items + stock + supplier ledger.
+      // A partial save (e.g. stock updated but ledger missing) used to be
+      // the zero-balance-cards bug — it can no longer happen.
+      await widget.db.transaction(() async {
+        // Create purchase invoice
+        final purchaseInvoice = PurchasesCompanion.insert(
+          id: _invoiceNumber!,
+          invoiceNumber: _invoiceNumber!,
+          description: 'فاتورة مشتريات من ${_selectedSupplier!.name}',
+          totalAmount: _grandTotal,
+          purchaseDate: DateTime.now(),
+          createdAt: DateTime.now(),
+          supplierId: Value(_selectedSupplier!.id),
+          paidAmount: Value(_paidAmount),
+          paymentMethod: Value(_paymentMethod.name),
+          status: Value('completed'),
         );
-        await widget.db.productDao.updateProduct(updatedProduct);
-      }
 
-      // Add to supplier ledger if credit purchase
-      if (_paymentMethod != PaymentMethod.cash && _remainingAmount > 0) {
-        await widget.db.ledgerDao.insertTransaction(
-          LedgerTransactionsCompanion.insert(
-            id: '${_invoiceNumber}_ledger',
-            entityType: 'Supplier',
-            refId: _selectedSupplier!.id,
-            date: DateTime.now(),
-            description: 'شراء آجل: فاتورة $_invoiceNumber',
-            debit: const Value(0.0),
-            credit: Value(_remainingAmount),
-            origin: 'purchase',
-          ),
+        await widget.db.into(widget.db.purchases).insert(purchaseInvoice);
+
+        // Add purchase items
+        for (final entry in _productEntries) {
+          await widget.db
+              .into(widget.db.purchaseItems)
+              .insert(
+                PurchaseItemsCompanion.insert(
+                  id: '${_invoiceNumber}_${entry.product!.id}',
+                  purchaseId: _invoiceNumber!,
+                  productId: entry.product!.id.toString(),
+                  quantity: entry.quantity,
+                  unitPrice: entry.unitPrice,
+                  totalPrice: entry.lineTotal,
+                  unit: entry.product!.unit ?? 'قطعة',
+                  createdAt: DateTime.now(),
+                ),
+              );
+
+          // Update inventory - INCREASE stock for purchases
+          final currentProduct = entry.product!;
+          final updatedProduct = currentProduct.copyWith(
+            quantity: currentProduct.quantity + entry.quantity,
+          );
+          await widget.db.productDao.updateProduct(updatedProduct);
+        }
+
+        // Supplier ledger pair (due + payment) for EVERY payment method —
+        // cash purchases used to skip this and left balances at zero.
+        await widget.db.ledgerDao.recordSupplierPurchase(
+          supplierId: _selectedSupplier!.id,
+          invoiceNumber: _invoiceNumber!,
+          total: _grandTotal,
+          paid: _paidAmount,
+          date: DateTime.now(),
         );
-      }
+      });
 
       // Print invoice
       await _printPurchaseInvoice();
@@ -358,6 +461,65 @@ class _EnhancedPurchaseInvoicePageState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('خطأ في حفظ الفاتورة: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Edit-mode save: the supplier and invoice number are preserved; lines,
+  /// stock and the ledger pair are rewritten atomically around them.
+  /// Orphan lines (product deleted since) stay verbatim and their frozen
+  /// value remains part of the header total.
+  Future<void> _updatePurchaseInvoice() async {
+    final purchaseId = widget.purchaseId!;
+    final number = _invoiceNumber;
+    if (number == null || _selectedSupplier == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('بيانات الفاتورة غير مكتملة')),
+      );
+      return;
+    }
+    try {
+      await PurchaseEditService(widget.db).applyEdit(
+        purchaseId: purchaseId,
+        invoiceNumber: number,
+        supplierId: _selectedSupplier!.id,
+        total: _grandTotal + _orphanTotal,
+        paid: _paidAmount,
+        paymentMethod: _paymentMethod.name,
+        lines: [
+          for (final entry in _productEntries)
+            if (entry.product != null)
+              PurchaseEditLine(
+                productId: entry.product!.id,
+                quantity: entry.quantity,
+                unit: entry.unit,
+                unitPrice: entry.unitPrice,
+                discount: entry.discount,
+                tax: entry.tax,
+              ),
+        ],
+      );
+
+      await _printPurchaseInvoice();
+      _resetForm();
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم تعديل فاتورة المشتريات بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      log('Error updating purchase invoice: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ في تعديل الفاتورة: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -426,7 +588,7 @@ class _EnhancedPurchaseInvoicePageState
       _notesController.clear();
       _paymentMethod = PaymentMethod.cash;
       _calculateTotals();
-      _invoiceNumber = 'PUR-${DateTime.now().millisecondsSinceEpoch}';
+      _invoiceNumber = null; // Next save assigns a fresh sequence value.
     });
   }
 
@@ -469,7 +631,13 @@ class _EnhancedPurchaseInvoicePageState
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('فاتورة مشتريات جديدة #$_invoiceNumber'),
+        title: Text(
+          widget.purchaseId != null
+              ? 'تعديل فاتورة مشتريات ${_invoiceNumber ?? ''}'
+              : (_invoiceNumber == null
+                  ? 'فاتورة مشتريات جديدة'
+                  : 'فاتورة مشتريات جديدة #$_invoiceNumber'),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
@@ -517,7 +685,8 @@ class _EnhancedPurchaseInvoicePageState
                           ),
                           const Gap(8),
                           Text(
-                            'رقم الفاتورة: $_invoiceNumber',
+                            // Assigned at save; '...' while unposted.
+                            'رقم الفاتورة: ${_invoiceNumber ?? '...'}',
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
                                   color: Theme.of(
@@ -540,7 +709,8 @@ class _EnhancedPurchaseInvoicePageState
 
                     const Gap(16),
 
-                    // Supplier selection
+                    // Supplier selection (locked in edit mode: moving lines
+                    // across suppliers would split one invoice's ledger pair).
                     DropdownButtonFormField<Supplier>(
                       initialValue: _selectedSupplier,
                       decoration: const InputDecoration(
@@ -554,11 +724,13 @@ class _EnhancedPurchaseInvoicePageState
                           child: Text(supplier.name),
                         );
                       }).toList(),
-                      onChanged: (supplier) {
-                        setState(() {
-                          _selectedSupplier = supplier;
-                        });
-                      },
+                      onChanged: widget.purchaseId != null
+                          ? null
+                          : (supplier) {
+                              setState(() {
+                                _selectedSupplier = supplier;
+                              });
+                            },
                     ),
 
                     const Gap(8),

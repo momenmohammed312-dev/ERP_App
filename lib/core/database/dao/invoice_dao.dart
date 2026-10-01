@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/invoice_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/invoice_items_table.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_containers_table.dart';
 import '../../models/report_dtos.dart';
 
@@ -551,7 +552,8 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
       reportData.add(
         InvoiceReportDTO(
           id: invoice.id,
-          invoiceNumber: invoice.invoiceNumber ?? invoice.id.toString(),
+          invoiceNumber:
+              displayInvoiceNumber(invoice.invoiceNumber, invoice.id) ?? '',
           date: invoice.date,
           customerName:
               customer?.name ?? invoice.customerName ?? 'Walk-in Customer',

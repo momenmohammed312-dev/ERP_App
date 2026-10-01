@@ -24,7 +24,7 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
   List<DeviceEnrolledUser> _deviceUsers = [];
   List<Staff> _allStaff = [];
   Map<String, StaffBiometricMapping> _existingMappingsByExternalId = {};
-  
+
   // Selected staff mapping for each externalUserId
   final Map<String, String?> _selectedStaffForExternalId = {};
 
@@ -62,7 +62,7 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
           ipAddress: widget.device.ipAddress!,
           port: widget.device.port!,
           authToken: widget.device.authToken,
-          timeout: const Duration(seconds: 8),
+          timeout: const Duration(seconds: 15),
         );
 
         final connected = await source.connect();
@@ -109,7 +109,8 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
   Staff? _findSmartMatch(DeviceEnrolledUser user) {
     // Try matching externalUserId with staff numeric/code part
     for (final staff in _allStaff) {
-      if (staff.staffId.replaceAll(RegExp(r'[^0-9]'), '') == user.externalUserId) {
+      if (staff.staffId.replaceAll(RegExp(r'[^0-9]'), '') ==
+          user.externalUserId) {
         return staff;
       }
       if (user.name != null &&
@@ -132,8 +133,51 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تمت المطابقة التلقائية الذكية بالأسماء والأكواد')),
+      const SnackBar(
+        content: Text('تمت المطابقة التلقائية الذكية بالأسماء والأكواد'),
+      ),
     );
+  }
+
+  Future<void> _persistEnrolledMapping(
+    DeviceEnrolledUser user,
+    String staffId,
+  ) async {
+    final dao = ref.read(attendanceDeviceDaoProvider);
+    final db = ref.read(appDatabaseProvider);
+    await db.transaction(() async {
+      final existing = await dao.getMappingRecordByExternalId(
+        widget.device.id,
+        user.externalUserId,
+      );
+      if (existing != null) {
+        await dao.updateMapping(
+          existing.copyWith(
+            staffId: staffId,
+            cardNumber: Value(user.cardNumber),
+            enrollmentStatus: 'enrolled',
+            updatedAt: DateTime.now(),
+          ),
+        );
+      } else {
+        await dao.addMapping(
+          StaffBiometricMappingsCompanion.insert(
+            staffId: staffId,
+            deviceId: widget.device.id,
+            externalUserId: user.externalUserId,
+            cardNumber: Value(user.cardNumber),
+            enrollmentStatus: 'enrolled',
+            enrolledAt: Value(DateTime.now()),
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+      }
+      await dao.requeueUnmatchedEventsForExternalId(
+        widget.device.id,
+        user.externalUserId,
+      );
+    });
   }
 
   Future<void> _saveMapping(DeviceEnrolledUser user) async {
@@ -149,36 +193,13 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
     }
 
     final dao = ref.read(attendanceDeviceDaoProvider);
-    final existing = _existingMappingsByExternalId[user.externalUserId];
 
     try {
-      if (existing != null) {
-        // Update existing mapping
-        await dao.updateMapping(
-          existing.copyWith(
-            staffId: staffId,
-            cardNumber: Value(user.cardNumber),
-            enrollmentStatus: 'enrolled',
-            updatedAt: DateTime.now(),
-          ),
-        );
-      } else {
-        // Insert new mapping
-        await dao.addMapping(
-          StaffBiometricMappingsCompanion.insert(
-            staffId: staffId,
-            deviceId: widget.device.id,
-            externalUserId: user.externalUserId,
-            cardNumber: Value(user.cardNumber),
-            enrollmentStatus: 'enrolled',
-            enrolledAt: Value(DateTime.now()),
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ),
-        );
-      }
+      await _persistEnrolledMapping(user, staffId);
+      await ref
+          .read(attendanceSyncServiceProvider)
+          .processPendingEvents(widget.device.id);
 
-      // Refresh mappings
       final mappings = await dao.getMappingsForDevice(widget.device.id);
       setState(() {
         _existingMappingsByExternalId = {
@@ -197,7 +218,10 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ في حفظ الربط: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('خطأ في حفظ الربط: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -205,37 +229,28 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
 
   Future<void> _saveAllMapped() async {
     int savedCount = 0;
+    int failedCount = 0;
+    String? firstError;
     final dao = ref.read(attendanceDeviceDaoProvider);
 
     for (final u in _deviceUsers) {
       final staffId = _selectedStaffForExternalId[u.externalUserId];
-      if (staffId != null && staffId.isNotEmpty) {
-        final existing = _existingMappingsByExternalId[u.externalUserId];
-        if (existing != null) {
-          await dao.updateMapping(
-            existing.copyWith(
-              staffId: staffId,
-              cardNumber: Value(u.cardNumber),
-              enrollmentStatus: 'enrolled',
-              updatedAt: DateTime.now(),
-            ),
-          );
-        } else {
-          await dao.addMapping(
-            StaffBiometricMappingsCompanion.insert(
-              staffId: staffId,
-              deviceId: widget.device.id,
-              externalUserId: u.externalUserId,
-              cardNumber: Value(u.cardNumber),
-              enrollmentStatus: 'enrolled',
-              enrolledAt: Value(DateTime.now()),
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            ),
-          );
-        }
+      if (staffId == null || staffId.isEmpty) continue;
+      // Per-user guard: one bad row (e.g. duplicate mapping) must not abort
+      // the whole batch silently ("pressed save and nothing happened").
+      try {
+        await _persistEnrolledMapping(u, staffId);
         savedCount++;
+      } catch (e) {
+        failedCount++;
+        firstError ??= e.toString().replaceAll('Exception: ', '');
       }
+    }
+
+    if (savedCount > 0) {
+      await ref
+          .read(attendanceSyncServiceProvider)
+          .processPendingEvents(widget.device.id);
     }
 
     final mappings = await dao.getMappingsForDevice(widget.device.id);
@@ -246,12 +261,25 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
     });
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('تم حفظ $savedCount مستخدم بنجاح'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (failedCount == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم حفظ $savedCount مستخدم بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'تم حفظ $savedCount — فشل $failedCount'
+              '${firstError != null && firstError.length < 80 ? ': $firstError' : ''}',
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
     }
   }
 
@@ -263,10 +291,15 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
         appBar: AppBar(
           title: Text('استيراد ومطابقة مستخدمي: ${widget.device.name}'),
           actions: [
-            if (!_isLoading && _errorMessage == null && _deviceUsers.isNotEmpty) ...[
+            if (!_isLoading &&
+                _errorMessage == null &&
+                _deviceUsers.isNotEmpty) ...[
               TextButton.icon(
                 icon: const Icon(Icons.auto_fix_high, color: Colors.white),
-                label: const Text('مطابقة ذكية', style: TextStyle(color: Colors.white)),
+                label: const Text(
+                  'مطابقة ذكية',
+                  style: TextStyle(color: Colors.white),
+                ),
                 onPressed: _autoMatchAll,
               ),
               const SizedBox(width: 8),
@@ -316,7 +349,9 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
               const SizedBox(height: 16),
               Text(
                 'تعذر استيراد المستخدمين',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.red),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(color: Colors.red),
               ),
               const SizedBox(height: 8),
               Text(
@@ -370,7 +405,10 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
               Expanded(
                 child: Text(
                   'تم العثور على ${_deviceUsers.length} مستخدم في الجهاز. اختر الموظف المقابل لكل مستخدم ثم اضغط "حفظ".',
-                  style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.blue,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -383,15 +421,20 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
             separatorBuilder: (context, index) => const Divider(),
             itemBuilder: (context, index) {
               final user = _deviceUsers[index];
-              final isMapped = _existingMappingsByExternalId.containsKey(user.externalUserId);
-              final currentSelectedStaffId = _selectedStaffForExternalId[user.externalUserId];
+              final isMapped = _existingMappingsByExternalId.containsKey(
+                user.externalUserId,
+              );
+              final currentSelectedStaffId =
+                  _selectedStaffForExternalId[user.externalUserId];
 
               return Card(
                 elevation: 1,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                   side: BorderSide(
-                    color: isMapped ? Colors.green.shade300 : Colors.grey.shade300,
+                    color: isMapped
+                        ? Colors.green.shade300
+                        : Colors.grey.shade300,
                   ),
                 ),
                 child: Padding(
@@ -399,7 +442,9 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
                   child: Row(
                     children: [
                       CircleAvatar(
-                        backgroundColor: isMapped ? Colors.green.shade100 : Colors.grey.shade200,
+                        backgroundColor: isMapped
+                            ? Colors.green.shade100
+                            : Colors.grey.shade200,
                         child: Icon(
                           isMapped ? Icons.check_circle : Icons.fingerprint,
                           color: isMapped ? Colors.green : Colors.grey,
@@ -413,16 +458,23 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
                           children: [
                             Text(
                               'رقم المستخدم بالجهاز: ${user.externalUserId}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
                             ),
                             Text(
                               'الاسم بالجهاز: ${user.name?.isNotEmpty == true ? user.name : "(بدون اسم)"}',
                               style: TextStyle(color: Colors.grey.shade700),
                             ),
-                            if (user.cardNumber != null && user.cardNumber!.isNotEmpty)
+                            if (user.cardNumber != null &&
+                                user.cardNumber!.isNotEmpty)
                               Text(
                                 'رقم الكارت: ${user.cardNumber}',
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
                               ),
                           ],
                         ),
@@ -435,13 +487,21 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
                           isExpanded: true,
                           decoration: InputDecoration(
                             labelText: 'الموظف في النظام',
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                           items: [
                             const DropdownMenuItem<String>(
                               value: null,
-                              child: Text('--- غير مربوط ---', style: TextStyle(color: Colors.grey)),
+                              child: Text(
+                                '--- غير مربوط ---',
+                                style: TextStyle(color: Colors.grey),
+                              ),
                             ),
                             ..._allStaff.map(
                               (s) => DropdownMenuItem<String>(
@@ -452,7 +512,8 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
                           ],
                           onChanged: (val) {
                             setState(() {
-                              _selectedStaffForExternalId[user.externalUserId] = val;
+                              _selectedStaffForExternalId[user.externalUserId] =
+                                  val;
                             });
                           },
                         ),

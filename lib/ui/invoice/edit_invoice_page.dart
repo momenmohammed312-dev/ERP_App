@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/audit_log_service.dart';
 import 'package:pos_offline_desktop/core/services/invoice_service.dart';
@@ -307,7 +308,7 @@ class _EditInvoicePageState extends ConsumerState<EditInvoicePage> {
       textDirection: ui.TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: Text('تعديل فاتورة ${_invoice?.invoiceNumber ?? widget.invoiceId}'),
+          title: Text('تعديل فاتورة ${displayInvoiceNumber(_invoice?.invoiceNumber, _invoice?.id ?? widget.invoiceId) ?? widget.invoiceId}'),
           actions: [
             TextButton.icon(
               onPressed: _isLoading ? null : _save,

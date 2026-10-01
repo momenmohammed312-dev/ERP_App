@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
 import 'package:pos_offline_desktop/ui/shipments/widgets/shipment_form_dialog.dart';
 
@@ -368,7 +369,7 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       subtitle: Text(
-                        'فاتورة #${invoice.invoiceNumber ?? invoice.id} | تاريخ: ${DateFormat('yyyy/MM/dd HH:mm').format(invoice.date.toLocal())} | العميل: ${invoice.customerName ?? "عميل نقدي"}',
+                        'فاتورة ${displayInvoiceNumber(invoice.invoiceNumber, invoice.id) ?? ''} | تاريخ: ${DateFormat('yyyy/MM/dd HH:mm').format(invoice.date.toLocal())} | العميل: ${invoice.customerName ?? "عميل نقدي"}',
                       ),
                       trailing: Column(
                         mainAxisAlignment: MainAxisAlignment.center,

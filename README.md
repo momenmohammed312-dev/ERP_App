@@ -1,140 +1,182 @@
-# POS Offline Desktop — Flutter SaaS Point of Sale System
+# POS Offline Desktop — Offline-First Arabic ERP/POS
 
-A full-featured, offline-first Point of Sale desktop application built with Flutter. Designed as a SaaS product for Egyptian small and medium businesses, with tiered subscription plans, cloud sync, and a separate web admin dashboard.
+An offline-first, Arabic RTL point-of-sale and ERP system built with Flutter, for small and medium businesses in Egypt and the Middle East. Runs on Windows desktop today, with an Android mobile build in progress from the same codebase.
 
-## Overview
+![Version](https://img.shields.io/badge/version-2.3.0-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Android-blue)
+![Flutter](https://img.shields.io/badge/Flutter-3.41.4-02569B)
+![License](https://img.shields.io/badge/license-Proprietary-red)
 
-Most POS systems require constant internet. This one doesn’t. Built for Windows desktop with full offline capability, automatic local backups, and optional cloud sync — so businesses never lose a sale due to connectivity.
+## Contents
 
-## Key Features
+- [Why this exists](#why-this-exists)
+- [Platform status](#platform-status)
+- [ERP modules](#erp-modules)
+- [SaaS license plans](#saas-license-plans)
+- [Tech stack](#tech-stack)
+- [Getting started](#getting-started)
+- [Build flavors](#build-flavors)
+- [Currently working on](#currently-working-on)
+- [Project structure](#project-structure)
+- [Contributing](#contributing)
+- [License](#license)
+- [Author](#author)
 
-### Core POS
+## Why this exists
 
-- Sales management with cash and credit payment options
-- Smart printing — thermal for cash sales, A4 for credit invoices
-- Daily cashier open/close with vault balance tracking
-- Full invoice history with reprint support
+Most POS systems stop working when the internet drops. This one doesn't: sales, inventory, and cash tracking all run on an encrypted local database, with automatic backups and optional multi-device cloud sync for when connectivity returns. The full interface is Arabic RTL, with receipts, invoices, and reports to match.
 
-### Customer & Supplier Management
+## Platform status
 
-- Complete CRUD with balance tracking (color-coded: green/red)
-- Full transaction history per customer/supplier
-- Professional PDF account statements
+| Platform | Status | Notes |
+|---|---|---|
+| Windows desktop | ✅ Stable | Primary target, installer in `installer.iss` |
+| Android | 🚧 In progress | Responsive/mobile adaptations on the `mobile` branch |
+| Web admin dashboard | ✅ Available | Firebase-hosted panel, see `web_admin_dashboard/` |
 
-### Inventory
+## ERP modules
 
-- Product catalog with stock tracking
-- Purchase invoices from suppliers
-- Low stock alerts
+### FI — Finance 💰
 
-### Reports & Export
+- **General ledger** (`LedgerTransactions`) — every purchase posts a due + payment pair, so balances always reconcile.
+- **Cash custody (NEW)** — open/close cash advances (`CashCustodies`) with per-custody expense tracking (`CustodyExpenses`).
+- **Payroll v72 (active development)** — hourly rate from `/240` divisor, overtime multiplier, late-from-shift-start deduction, commitment bonus, advance cap, and first-class permission columns with a full breakdown per slip plus batch slip printing.
+- **Expenses & budgets** — categorized expenses, purchase budgets with alerts, supplier/customer statements as branded PDFs.
 
-- PDF and Excel export for all reports
-- Date-range filtering
-- Branded report formatting
+### HR — Human resources 👥
+
+- **Biometric attendance (active development)** — ZKTeco devices over TCP, raw-event pipeline with dedup hashes, and sync logs.
+- **File import** — attendance import from Excel/export files with fingerprint-number matching against staff records.
+- **Staff management** — employees, vacations, advances, rewards/penalties, performance reviews, and documents.
+
+### PP — Manufacturing 🏭 (in progress)
+
+- **Manufacturing recipes** — bill-of-material style recipes linking raw materials to finished products (currently in progress, not yet released).
+
+### SD/MM — Sales & inventory
+
+- Sales with cash and credit payments, thermal (cash) and A4 (credit) printing, full invoice history with reprint.
+- Purchases from suppliers with detail/edit/return flows, purchase orders, and damaged-goods tracking.
+- Product catalog with stock tracking, low-stock alerts, barcode label printing, and Excel import/export.
+- Customer & supplier management with color-coded balances and full transaction history.
+- **Industry flavors** — one codebase, separate entry points and databases:
+  - 🍅 Vegetable market (`FLAVOR=vegetable`): shipment tracking, empty-container (barnika) tracking, commission/per-unit/lump-sum pricing, day-close settlement.
+  - 👕 Clothing (`FLAVOR=clothing`): variant generator and returns flows.
+- **Multi-device sync** — offline-first local store with Supabase sync, conflict handling, and row-level security.
 
 ### Security
 
-- SQLCipher 256-bit database encryption
-- Hardware device binding (prevents license sharing)
-- HMAC digital signature for license keys
-- Full audit trail logging
-- Anti-tamper protection (time/date manipulation detection)
+- SQLCipher 256-bit database encryption, hardware device binding, AES-256 + HMAC-SHA256 license keys, audit-trail logging, and anti-tamper time/date protection.
 
-### SaaS License System
+## SaaS license plans
 
-|Plan        |Price/Month|Users|
-|------------|-----------|-----|
-|Basic       |1,000 EGP  |1    |
-|Standard    |2,500 EGP  |3    |
-|Professional|5,000 EGP  |5    |
-|Enterprise  |10,000 EGP |10   |
+| Plan | Price / month | Users |
+|---|---|---|
+| Basic | 1,000 EGP | 1 |
+| Standard | 2,500 EGP | 3 |
+| Professional | 5,000 EGP | 5 |
+| Enterprise | 10,000 EGP | 10 |
 
-Features unlock per plan — cashier and staff management require Professional+.
+Feature-gated modules (staff, accounting, cloud backup) unlock on higher tiers. The end-user install and activation guide ships with the installer as `readme.txt`.
 
-### Staff Management (Professional+)
+## Tech stack
 
-- Employee records and attendance tracking
-- Payroll and salary calculations
-- Leave and vacation management
+| Layer | Technology |
+|---|---|
+| Framework | Flutter 3.41.4 (see `.fvmrc`) |
+| Database | SQLite via Drift ORM, encrypted with SQLCipher |
+| State management | Riverpod |
+| Routing | GoRouter |
+| Sync backend / Auth | Supabase + Firebase (Auth, Hosting, Firestore) |
+| Export & printing | `pdf` + `printing`, `excel` |
+| Localization | Arabic RTL (`flutter_localizations`, NotoNaskhArabic) |
 
-### Web Admin Dashboard
+No alternative state-management or ORM swaps — Riverpod + Drift are the decided stack (see `AGENTS.md`).
 
-- Firebase-hosted web panel
-- Real-time sales analytics and charts
-- Inventory management
-- User and permission management
-- Full Arabic RTL interface
-
-## Tech Stack
-
-|Layer           |Technology                                     |
-|----------------|-----------------------------------------------|
-|Framework       |Flutter 3.32.5 (Desktop + Web)                 |
-|Database        |SQLite via Drift ORM (encrypted with SQLCipher)|
-|State Management|Riverpod                                       |
-|Backend / Auth  |Firebase (Auth + Hosting + Firestore)          |
-|Routing         |GoRouter                                       |
-|Export          |PDF + Excel generation                         |
-|Localization    |Arabic RTL                                     |
-
-## Architecture
-
-```
-lib/
-├── core/
-│   ├── database/       — Drift ORM, tables, DAOs, migrations
-│   ├── router/         — GoRouter configuration
-│   └── utils/          — Shared utilities
-├── services/
-│   ├── BackupService       — Local + cloud backup
-│   ├── LicenseManager      — License validation + hardware binding
-│   ├── UnifiedPrintService — Thermal + A4 printing
-│   └── ExportService       — PDF/Excel export
-└── ui/
-    ├── home/       — Dashboard
-    ├── sales/      — Sales & invoices
-    ├── customer/   — Customer management
-    ├── supplier/   — Supplier management
-    ├── products/   — Inventory
-    ├── reports/    — Analytics
-    ├── staff/      — Employee management
-    └── settings/   — System configuration
-```
-
-Design patterns used: Repository (DAO), Service Layer, Provider (Riverpod), Widget Composition.
-
-## Getting Started
+## Getting started
 
 ### Prerequisites
 
-- Flutter 3.0+ with Desktop support enabled
+- Flutter 3.41.4 via [FVM](https://fvm.app) (`fvm use` in the repo root), with desktop support enabled
 - Java 17+
 - Windows 10/11
 
 ### Run locally
 
 ```bash
-git clone https://github.com/momenmohammed312-dev/pOS-Offline-DesktoP
-cd pOS-Offline-DesktoP
-flutter pub get
-flutter run -d windows
+git clone https://github.com/momenmohammed312-dev/ERP_App.git
+cd ERP_App
+fvm flutter pub get
+fvm flutter run -d windows
 ```
 
-### Web admin dashboard
-
-Live at: <https://posmo2-13dc1.web.app>
+### Regenerate Drift code (after touching tables/DAOs)
 
 ```bash
-# Run locally
-flutter run -d chrome
+dart run build_runner build --delete-conflicting-outputs
 ```
 
-## Screenshots
+### Run tests
 
-> Coming soon
+```bash
+fvm flutter test
+```
+
+## Build flavors
+
+`AppFeatures` (`lib/core/config/app_features.dart`) is the single source of truth for flavor flags — no scattered `if flavor ==` checks. Each flavor has its own entry point and database name.
+
+```bash
+# Base (default)
+fvm flutter run -d windows
+
+# Vegetable market (سوق الخضار)
+fvm flutter run -t lib/main_vegetable.dart --dart-define=FLAVOR=vegetable
+fvm flutter build windows -t lib/main_vegetable.dart --dart-define=FLAVOR=vegetable
+
+# Clothing (محل ملابس)
+fvm flutter run -t lib/main_clothing.dart --dart-define=FLAVOR=clothing
+fvm flutter build apk -t lib/main_clothing.dart --dart-define=FLAVOR=clothing
+```
+
+> The base flavor stays untouched while flavor work is in progress.
+
+## Currently working on
+
+- Cash-custody module integration (`integration/attendance-import-good` branch)
+- Attendance file import + ZKTeco sync hardening
+- Payroll v72 invariants and batch slips
+- Manufacturing recipes (PP module)
+- Mobile/Android polish (`mobile` branch)
+
+## Project structure
+
+```
+lib/
+├── core/
+│   ├── database/
+│   │   ├── tables/   — Drift table definitions
+│   │   └── dao/      — Data access objects (@DriftAccessor)
+│   ├── router/       — GoRouter configuration
+│   └── config/       — Flavors (app_flavor.dart) + feature flags (app_features.dart)
+├── services/         — Backup, license, print, export, attendance (no business logic in widgets)
+├── ui/<feature>/     — One screen per feature, widgets under <feature>/widgets/
+└── main.dart / main_vegetable.dart / main_clothing.dart
+```
+
+Conventions: `camelCase` vars/functions, `PascalCase` classes, `snake_case` files. Money/stock operations run atomically in a single transaction. Soft delete (`status = 'Deleted'`) is the default. Never edit an applied migration step — new schema changes get a new version + `onUpgrade` step.
+
+## Contributing
+
+1. Read `AGENTS.md` first — database, flavor, and workflow rules are mandatory.
+2. Implement one plan phase at a time; don't close a phase without review.
+3. Add/extend tests for money, stock, and payroll logic; run `fvm flutter test` before pushing.
+
+## License
+
+Proprietary commercial license — see [license.txt](license.txt) for the full agreement. The user-facing install guide is [readme.txt](readme.txt) (also bundled by `installer.iss`).
 
 ## Author
 
-**Moamen Mohamed** — Flutter Developer  
+**Moamen Mohamed** — Flutter Developer
 [GitHub](https://github.com/momenmohammed312-dev)

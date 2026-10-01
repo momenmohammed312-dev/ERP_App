@@ -1,30 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
+import '../../core/provider/app_database_provider.dart';
 import '../../core/utils/currency_helper.dart';
 import 'attendance_page.dart';
+import 'biometric_enrollment_page.dart';
 import 'vacations_page.dart';
 import 'advances_page.dart';
 import 'payroll_page.dart';
 import 'performance_page.dart';
 import 'staff_form_page.dart';
 
-class StaffDetailsPage extends StatefulWidget {
+class StaffDetailsPage extends ConsumerStatefulWidget {
   final Staff staff;
 
   const StaffDetailsPage({super.key, required this.staff});
 
   @override
-  State<StaffDetailsPage> createState() => _StaffDetailsPageState();
+  ConsumerState<StaffDetailsPage> createState() => _StaffDetailsPageState();
 }
 
-class _StaffDetailsPageState extends State<StaffDetailsPage>
+class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
     with TickerProviderStateMixin {
   late TabController _tabController;
+  String? _biometricId;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 6, vsync: this);
+    _loadBiometricMapping();
+  }
+
+  Future<void> _loadBiometricMapping() async {
+    final dao = ref.read(attendanceDeviceDaoProvider);
+    final mappings = await dao.getMappingsForStaff(widget.staff.staffId);
+    if (mounted) {
+      setState(() {
+        _biometricId = mappings.isNotEmpty ? mappings.first.externalUserId : null;
+      });
+    }
   }
 
   @override
@@ -37,10 +52,23 @@ class _StaffDetailsPageState extends State<StaffDetailsPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('تفاصيل الموظف'),
+        title: const Text('تفاصيل الموظف'),
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.fingerprint),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => BiometricEnrollmentPage(staff: widget.staff),
+                ),
+              );
+              _loadBiometricMapping();
+            },
+            tooltip: 'ربط البصمة',
+          ),
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: _editStaff,
@@ -161,6 +189,13 @@ class _StaffDetailsPageState extends State<StaffDetailsPage>
                 CurrencyHelper.formatCurrency(widget.staff.basicSalary),
                 style: const TextStyle(color: Colors.white70),
               ),
+              const SizedBox(width: 24),
+              Icon(Icons.fingerprint, color: Colors.white70, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                _biometricId != null ? 'بصمة: $_biometricId' : 'بدون بصمة',
+                style: const TextStyle(color: Colors.white70),
+              ),
             ],
           ),
         ],
@@ -198,6 +233,10 @@ class _StaffDetailsPageState extends State<StaffDetailsPage>
             _buildInfoRow('الاسم الكامل', widget.staff.name),
             _buildInfoRow('الرقم الوظيفي', widget.staff.staffId),
             _buildInfoRow(
+              'رقم البصمة بالجهاز',
+              _biometricId != null ? '$_biometricId (مسجل في الجهاز)' : 'غير مربوط بجهاز بصمة',
+            ),
+            _buildInfoRow(
               'الرقم القومي',
               widget.staff.nationalId ?? 'غير محدد',
             ),
@@ -226,7 +265,11 @@ class _StaffDetailsPageState extends State<StaffDetailsPage>
                 '${widget.staff.contractEndDate!.day}/${widget.staff.contractEndDate!.month}/${widget.staff.contractEndDate!.year}',
               ),
             _buildInfoRow(
-              'الراتب الأساسي',
+              widget.staff.employmentType == 'weekly'
+                  ? 'الراتب الأسبوعي'
+                  : widget.staff.employmentType == 'daily'
+                      ? 'اليومية (الراتب اليومي)'
+                      : 'الراتب الأساسي',
               CurrencyHelper.formatCurrency(widget.staff.basicSalary),
             ),
             if (widget.staff.hourlyRate != null)
@@ -312,7 +355,11 @@ class _StaffDetailsPageState extends State<StaffDetailsPage>
   String _getEmploymentTypeText(String type) {
     switch (type) {
       case 'full_time':
-        return 'دوام كامل';
+        return 'دوام كامل (شهري)';
+      case 'weekly':
+        return 'راتب أسبوعي';
+      case 'daily':
+        return 'يومية / راتب يومي';
       case 'part_time':
         return 'دوام جزئي';
       case 'contract':

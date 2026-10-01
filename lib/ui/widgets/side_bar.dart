@@ -139,6 +139,14 @@ class SideBarMenu extends StatelessWidget {
           ),
         ),
 
+        // العهد المالية
+        _buildMenuItem(
+          context,
+          svgAssetPath: 'assets/svg/customer.svg',
+          title: 'العهد المالية',
+          page: SideBarPage.custody,
+        ),
+
         // الإعدادات - يتطلب صلاحية عرض الإعدادات
         PermissionGuard(
           permission: Permission.viewSettings,

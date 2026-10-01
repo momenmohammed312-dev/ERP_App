@@ -1,6 +1,8 @@
 import 'package:drift/drift.dart';
 import 'invoice_table.dart';
+import 'invoice_items_table.dart';
 import 'product_table.dart';
+import 'vegetable_shipments_table.dart';
 
 /// جدول مرتجعات المبيعات الرئيسي
 @DataClassName('SalesReturn')
@@ -21,7 +23,8 @@ class SalesReturns extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
-/// جدول أصناف مرتجعات المبيعات
+/// جدول أصناف مرتجعات المبيعات — يدعم المرتجع الجزئي على مستوى الصنف
+/// كل سطر يرتبط بسطر الفاتورة الأصلي عبر invoiceItemId لتتبع الكمية المرتجعة تراكمياً
 @DataClassName('SalesReturnItem')
 class SalesReturnItems extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -35,4 +38,14 @@ class SalesReturnItems extends Table {
   IntColumn get quantity => integer()();
   RealColumn get unitPrice => real()();
   RealColumn get totalPrice => real()(); // quantity * unitPrice
+
+  // === جزئي: ربط بسطر الفاتورة الأصلي ===
+  IntColumn get invoiceItemId =>
+      integer().nullable().references(InvoiceItems, #id)();
+  RealColumn get discount => real().withDefault(const Constant(0.0))();
+  RealColumn get commission => real().withDefault(const Constant(0.0))();
+  IntColumn get shipmentId =>
+      integer().nullable().references(VegetableShipments, #id)();
+  TextColumn get returnReason =>
+      text().withDefault(const Constant('customer_request'))();
 }

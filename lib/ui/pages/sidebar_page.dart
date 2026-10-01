@@ -5,6 +5,7 @@ enum SideBarPage {
   suppliers,
   invoice,
   expenses,
+  custody,
   purchases,
   cashier,
   reports,

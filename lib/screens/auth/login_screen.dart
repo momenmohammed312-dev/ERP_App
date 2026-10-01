@@ -7,11 +7,11 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/auth_service.dart';
 import 'package:pos_offline_desktop/ui/user/user_management_page.dart';
+import 'package:pos_offline_desktop/widgets/brand/madar_logo.dart';
 
 const Color _bgDark = Color(0xFF0D1117);
 const Color _bgCard = Color(0xFF161B22);
 const Color _gold = Color(0xFFC9A84C);
-const Color _goldLight = Color(0xFFE8C97A);
 const Color _border = Color(0xFF30363D);
 const Color _textMuted = Color(0xFF7D8590);
 
@@ -167,27 +167,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         textDirection: TextDirection.rtl,
         child: AlertDialog(
           backgroundColor: _bgCard,
-          title: const Row(children: [
-            Icon(Icons.admin_panel_settings, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('صلاحية المدير مطلوبة', style: TextStyle(color: Colors.white)),
-          ]),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('أدخل كلمة مرور المدير لإدارة المستخدمين:', style: TextStyle(color: _textMuted)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: passwordCtrl,
-              obscureText: true,
-              textDirection: TextDirection.ltr,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'كلمة مرور المدير',
-                labelStyle: TextStyle(color: _textMuted),
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.lock, color: _textMuted),
+          title: const Row(
+            children: [
+              Icon(Icons.admin_panel_settings, color: Colors.orange),
+              SizedBox(width: 8),
+              Text(
+                'صلاحية المدير مطلوبة',
+                style: TextStyle(color: Colors.white),
               ),
-            ),
-          ]),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'أدخل كلمة مرور المدير لإدارة المستخدمين:',
+                style: TextStyle(color: _textMuted),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passwordCtrl,
+                obscureText: true,
+                textDirection: TextDirection.ltr,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'كلمة مرور المدير',
+                  labelStyle: TextStyle(color: _textMuted),
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock, color: _textMuted),
+                ),
+              ),
+            ],
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -201,7 +212,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               onPressed: () async {
                 final db = ref.read(appDatabaseProvider);
                 final nav = Navigator.of(ctx);
-                final ok = await db.userDao.authenticate('admin', passwordCtrl.text);
+                final ok = await db.userDao.authenticate(
+                  'admin',
+                  passwordCtrl.text,
+                );
                 nav.pop(ok != null);
               },
               child: const Text('تأكيد'),
@@ -216,10 +230,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       final authService = ref.read(authServiceProvider);
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => UserManagementPage(
-            database: db,
-            authService: authService,
-          ),
+          builder: (_) =>
+              UserManagementPage(database: db, authService: authService),
         ),
       );
     }
@@ -234,11 +246,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0D1117),
-              Color(0xFF161B22),
-              Color(0xFF0D1117),
-            ],
+            colors: [Color(0xFF0D1117), Color(0xFF161B22), Color(0xFF0D1117)],
           ),
         ),
         child: Center(
@@ -253,54 +261,83 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     opacity: _logoFade,
                     child: ScaleTransition(
                       scale: _logoScale,
-                      child: Container(
-                        width: 88,
-                        height: 88,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [_gold, _goldLight],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: [
-                            BoxShadow(
-                              color: _gold.withValues(alpha: 0.3),
-                              blurRadius: 24,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.point_of_sale,
-                          size: 48,
-                          color: _bgDark,
-                        ),
-                      ),
+                      child: const MadarOrbitLogo(size: 80),
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 18),
+                  // Arabic Brand Title
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [
+                        Colors.white,
+                        MadarColors.goldLight,
+                        MadarColors.gold,
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ).createShader(bounds),
+                    child: const Text(
+                      'مِدار',
+                      style: TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: 1.5,
+                        height: 1.1,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  // English Brand Subtitle
                   const Text(
-                    'نظام نقطة البيع',
+                    'MADAR',
                     style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: _gold,
-                      letterSpacing: 1.2,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: MadarColors.gold,
+                      letterSpacing: 4.5,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'تسجيل الدخول',
+                  const SizedBox(height: 6),
+                  // Descriptor
+                  const Text(
+                    'منظومة إدارة الأعمال',
                     style: TextStyle(
-                      fontSize: 15,
-                      color: _textMuted,
+                      fontFamily: 'NotoSansArabic',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: MadarColors.textSecondary,
                       letterSpacing: 0.5,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 36),
+                  const SizedBox(height: 22),
+                  // Welcome message
+                  const Text(
+                    'مرحبًا بعودتك',
+                    style: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'سجّل الدخول للمتابعة',
+                    style: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontSize: 13,
+                      color: _textMuted,
+                      letterSpacing: 0.3,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 28),
 
                   FadeTransition(
                     opacity: _formSlide,
@@ -341,7 +378,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   decoration: const InputDecoration(
                                     labelText: 'اسم المستخدم',
                                     labelStyle: TextStyle(color: _textMuted),
-                                    prefixIcon: Icon(Icons.person_outline, color: _textMuted),
+                                    prefixIcon: Icon(
+                                      Icons.person_outline,
+                                      color: _textMuted,
+                                    ),
                                     border: OutlineInputBorder(),
                                     enabledBorder: OutlineInputBorder(
                                       borderSide: BorderSide(color: _border),
@@ -352,8 +392,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   ),
                                   validator: (v) =>
                                       (v == null || v.trim().isEmpty)
-                                          ? 'أدخل اسم المستخدم'
-                                          : null,
+                                      ? 'أدخل اسم المستخدم'
+                                      : null,
                                 ),
                                 const SizedBox(height: 16),
 
@@ -364,8 +404,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   style: const TextStyle(color: Colors.white),
                                   decoration: InputDecoration(
                                     labelText: 'كلمة المرور',
-                                    labelStyle: const TextStyle(color: _textMuted),
-                                    prefixIcon: const Icon(Icons.lock_outline, color: _textMuted),
+                                    labelStyle: const TextStyle(
+                                      color: _textMuted,
+                                    ),
+                                    prefixIcon: const Icon(
+                                      Icons.lock_outline,
+                                      color: _textMuted,
+                                    ),
                                     border: const OutlineInputBorder(),
                                     enabledBorder: const OutlineInputBorder(
                                       borderSide: BorderSide(color: _border),
@@ -381,13 +426,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                         color: _textMuted,
                                       ),
                                       onPressed: () => setState(
-                                        () => _obscurePassword = !_obscurePassword,
+                                        () => _obscurePassword =
+                                            !_obscurePassword,
                                       ),
                                     ),
                                   ),
                                   onFieldSubmitted: (_) => _login(),
-                                  validator: (v) =>
-                                      (v == null || v.isEmpty) ? 'أدخل كلمة المرور' : null,
+                                  validator: (v) => (v == null || v.isEmpty)
+                                      ? 'أدخل كلمة المرور'
+                                      : null,
                                 ),
 
                                 if (_errorMessage != null) ...[
@@ -401,7 +448,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                       color: Colors.red.withValues(alpha: 0.12),
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
-                                        color: Colors.red.withValues(alpha: 0.3),
+                                        color: Colors.red.withValues(
+                                          alpha: 0.3,
+                                        ),
                                       ),
                                     ),
                                     child: Row(
@@ -435,7 +484,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: _gold,
                                       foregroundColor: _bgDark,
-                                      disabledBackgroundColor: _gold.withValues(alpha: 0.4),
+                                      disabledBackgroundColor: _gold.withValues(
+                                        alpha: 0.4,
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
@@ -481,9 +532,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     onPressed: () => _openPreAuthUserManagement(),
                     icon: const Icon(Icons.admin_panel_settings, size: 18),
                     label: const Text('إدارة المستخدمين'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: _gold,
-                    ),
+                    style: TextButton.styleFrom(foregroundColor: _gold),
                   ),
                 ],
               ),

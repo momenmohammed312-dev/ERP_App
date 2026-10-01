@@ -162,35 +162,8 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
   ) async {
     setState(() => _isLoading = true);
     try {
-      // 1. Fetch transactions with running balance
-      final transactions = await widget.db.ledgerDao
-          .getTransactionsWithRunningBalance(
-            'Customer',
-            customer.id,
-            start,
-            end,
-          );
-
-      // 2. Map to format expected by ExportService
-      final mappedTransactions = transactions.map((tb) {
-        final t = tb.transaction;
-        return {
-          'date': t.date,
-          'receiptNumber': t.id.substring(0, 8), // Short ID
-          'description': t.description,
-          'debit': t.debit,
-          'credit': t.credit,
-          'balance': tb.runningBalance,
-        };
-      }).toList();
-
-      // 3. Get opening balance (balance before start date)
-      // The first running balance includes the transaction effect.
-      // So opening balance = first running balance - (firstDebit - firstCredit) ?
-      // actually getTransactionsWithRunningBalance handles internal logic.
-      // But we need to pass strict opening/current balance to export function if it asks for it.
-      // ExportService asks for 'openingBalance' and 'currentBalance'.
-      // We can calculate them from the fetched data or re-query.
+      // Opening/current balances for the selected range; the generator
+      // re-queries the ledger itself by customer id (Bug 1).
       final openingBalance = await widget.db.ledgerDao.getRunningBalance(
         'Customer',
         customer.id,
@@ -206,8 +179,10 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
       // 4. Export
       await _exportService.exportCustomerStatement(
         db: widget.db,
+        customerId: customer.id,
         customerName: customer.name,
-        transactions: mappedTransactions,
+        fromDate: start,
+        toDate: end,
         openingBalance: openingBalance,
         currentBalance: currentBalance,
       );

@@ -15,4 +15,10 @@ class AppFeatures {
   /// Vegetable flavor day-close settlement view (net cash, variance,
   /// settlement entry) inside CloseDayDialog.
   static bool get hasDaySettlement => flavor == Flavor.vegetable;
+
+  /// Staff module (employees tab + launcher). Active in the base build.
+  static bool get hasStaffModule => flavor == Flavor.base;
+
+  /// Damaged-goods module (launcher button). Active in the base build.
+  static bool get hasDamagedModule => flavor == Flavor.base;
 }

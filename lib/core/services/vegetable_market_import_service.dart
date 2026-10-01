@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../database/app_database.dart';
 
@@ -206,6 +207,49 @@ class VegetableMarketImportService {
   Future<void> _importSupplier(Map<String, dynamic> s) async {
     final name = s['name'] as String;
     if (_existingSupplierNames.contains(name)) return;
+    // Reconcile against the DB by stable id first, then by normalized
+    // identity. Never auto-merge: ambiguous matches are skipped and logged,
+    // and a locally deactivated supplier is never resurrected by import
+    // (its status is preserved).
+    final incomingId = s['id'] as String?;
+    if (incomingId != null) {
+      final byId = await _db.supplierDao.getSupplierById(incomingId);
+      if (byId != null) {
+        _existingSupplierNames.add(name);
+        return;
+      }
+    }
+    final conflicts = await _db.supplierDao.findDuplicateSuppliers(
+      name: name,
+      phone: (s['phone'] as String?)?.isNotEmpty == true
+          ? s['phone'] as String
+          : null,
+    );
+    if (conflicts.length == 1) {
+      final local = conflicts.first;
+      await _db.supplierDao.updateSupplier(
+        SuppliersCompanion(
+          id: Value(local.id),
+          name: Value(name),
+          phone: (s['phone'] as String?)?.isNotEmpty == true
+              ? Value(s['phone'] as String)
+              : Value(local.phone),
+          address: (s['address'] as String?)?.isNotEmpty == true
+              ? Value(s['address'] as String)
+              : Value(local.address),
+          status: Value(local.status),
+        ),
+      );
+      _existingSupplierNames.add(name);
+      return;
+    }
+    if (conflicts.length > 1) {
+      debugPrint(
+        '[Import] ambiguous supplier "$name" matches ${conflicts.length} rows — skipped, no auto-merge',
+      );
+      _existingSupplierNames.add(name);
+      return;
+    }
     await _db.into(_db.suppliers).insert(SuppliersCompanion.insert(
           id: s['id'] as String,
           name: name,

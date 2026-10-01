@@ -9,6 +9,7 @@ import 'staff_form_page.dart';
 import 'device_management_page.dart';
 import 'unmatched_attendance_page.dart';
 import 'attendance_settings_page.dart';
+import 'batch_payroll_slips_page.dart';
 
 class EmployeeDashboardPage extends ConsumerStatefulWidget {
   const EmployeeDashboardPage({super.key});
@@ -29,6 +30,7 @@ class _EmployeeDashboardPageState
   int _presentToday = 0;
   int _absentToday = 0;
   int _lateToday = 0;
+  int _excusedToday = 0;
   int _onLeaveToday = 0;
   int _pendingVacations = 0;
   double _pendingAdvancesTotal = 0.0;
@@ -52,6 +54,7 @@ class _EmployeeDashboardPageState
     _presentToday = 0;
     _absentToday = 0;
     _lateToday = 0;
+    _excusedToday = 0;
     _onLeaveToday = 0;
     _pendingVacations = 0;
     _pendingAdvancesTotal = 0;
@@ -79,13 +82,22 @@ class _EmployeeDashboardPageState
         final cnt = row.read<int>('cnt');
         switch (status) {
           case 'present':
-            _presentToday = cnt;
+            _presentToday += cnt;
+            break;
+          case 'excused':
+          case 'excused_late':
+            _excusedToday += cnt;
+            _presentToday += cnt;
+            break;
           case 'absent':
             _absentToday = cnt;
+            break;
           case 'late':
             _lateToday = cnt;
+            break;
           case 'leave':
             _onLeaveToday = cnt;
+            break;
         }
       }
 
@@ -295,6 +307,8 @@ class _EmployeeDashboardPageState
           const SizedBox(width: 8),
           _buildAttendanceStat('$_lateToday', 'متأخر', Colors.orange),
           const SizedBox(width: 8),
+          _buildAttendanceStat('$_excusedToday', 'إذن', Colors.teal),
+          const SizedBox(width: 8),
           _buildAttendanceStat('$_onLeaveToday', 'إجازة', Colors.blue),
         ],
       ),
@@ -439,7 +453,19 @@ class _EmployeeDashboardPageState
                 ),
               ),
               const SizedBox(width: 8),
-              const Expanded(child: SizedBox()),
+              Expanded(
+                child: _buildActionBtn(
+                  'المرتبات المجمعة',
+                  Icons.payments,
+                  Colors.green,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BatchPayrollSlipsPage(),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ],

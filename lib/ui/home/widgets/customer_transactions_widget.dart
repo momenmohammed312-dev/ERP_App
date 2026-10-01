@@ -341,51 +341,41 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
     );
   }
 
+  /// Single source for one customer's statement inputs over [_startDate]/
+  /// [_endDate]: opening balance, current balance, and the ledger rows.
+  /// Both the export and the print buttons consume this so they can never
+  /// drift apart (Bug 1).
+  Future<({double openingBalance, double currentBalance})>
+  _fetchStatementBalances(Customer customer) async {
+    final openingBalance = await widget.db.ledgerDao.getRunningBalance(
+      'Customer',
+      customer.id,
+      upToDate: _startDate.subtract(const Duration(days: 1)),
+    );
+    final currentBalance = await widget.db.ledgerDao.getRunningBalance(
+      'Customer',
+      customer.id,
+      upToDate: _endDate,
+    );
+    return (
+      openingBalance: openingBalance,
+      currentBalance: currentBalance,
+    );
+  }
+
   void _exportCustomerReport(BuildContext context, Customer customer) async {
     try {
-      // Get transactions with running balance for the selected date range
-      final transactionsWithBalance = await widget.db.ledgerDao
-          .getTransactionsWithRunningBalance(
-            'Customer',
-            customer.id,
-            _startDate,
-            _endDate,
-          );
-
-      final transactionData = transactionsWithBalance
-          .map(
-            (tx) => {
-              'date': tx.transaction.date,
-              'description': tx.transaction.description,
-              'debit': tx.transaction.debit,
-              'credit': tx.transaction.credit,
-              'balance': tx.runningBalance, // Include running balance
-              'receiptNumber': tx.transaction.receiptNumber,
-              'paymentMethod': tx.transaction.paymentMethod,
-            },
-          )
-          .toList();
-
-      // Calculate opening balance before the selected period
-      final openingBalance = await widget.db.ledgerDao.getRunningBalance(
-        'Customer',
-        customer.id,
-        upToDate: _startDate.subtract(const Duration(days: 1)),
-      );
-
-      final currentBalance = await widget.db.ledgerDao.getRunningBalance(
-        'Customer',
-        customer.id,
-        upToDate: _endDate,
-      );
+      final balances = await _fetchStatementBalances(customer);
 
       final exportService = ExportService();
       await exportService.exportCustomerStatement(
         db: widget.db,
+        customerId: customer.id,
         customerName: customer.name,
-        transactions: transactionData,
-        openingBalance: openingBalance,
-        currentBalance: currentBalance,
+        fromDate: _startDate,
+        toDate: _endDate,
+        openingBalance: balances.openingBalance,
+        currentBalance: balances.currentBalance,
       );
 
       if (mounted && context.mounted) {
@@ -410,27 +400,7 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
 
   void _printCustomerStatement(BuildContext context, Customer customer) async {
     try {
-      // Get transactions with running balance for the selected date range
-      final transactionsWithBalance = await widget.db.ledgerDao
-          .getTransactionsWithRunningBalance(
-            'Customer',
-            customer.id,
-            _startDate,
-            _endDate,
-          );
-
-      // Calculate opening balance before the selected period
-      final openingBalance = await widget.db.ledgerDao.getRunningBalance(
-        'Customer',
-        customer.id,
-        upToDate: _startDate.subtract(const Duration(days: 1)),
-      );
-
-      final currentBalance = await widget.db.ledgerDao.getRunningBalance(
-        'Customer',
-        customer.id,
-        upToDate: _endDate,
-      );
+      final balances = await _fetchStatementBalances(customer);
 
       // Use enhanced customer statement generator for better display
       await EnhancedCustomerStatementGenerator.generateStatement(
@@ -439,8 +409,8 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
         customerName: customer.name,
         fromDate: _startDate,
         toDate: _endDate,
-        openingBalance: openingBalance,
-        currentBalance: currentBalance,
+        openingBalance: balances.openingBalance,
+        currentBalance: balances.currentBalance,
       );
 
       if (mounted && context.mounted) {

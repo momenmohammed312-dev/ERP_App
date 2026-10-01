@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 
 /// Simple Store Info Model
 class StoreInfo {
@@ -97,7 +98,7 @@ class InvoicePrintView extends StatelessWidget {
           children: [
             Text('المشروع: '),
             Text(
-              'رقم الفاتورة: ${invoiceData.invoice.invoiceNumber ?? invoiceData.invoice.id}',
+              'رقم الفاتورة: ${displayInvoiceNumber(invoiceData.invoice.invoiceNumber, invoiceData.invoice.id) ?? ''}',
             ),
             Text('التاريخ: ${_formatDate(invoiceData.invoice.date)}'),
             Text('تاريخ البيع: ${_formatDate(invoiceData.invoice.date)}'),

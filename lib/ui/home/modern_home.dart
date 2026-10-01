@@ -13,6 +13,7 @@ import 'package:pos_offline_desktop/ui/reports/reports_page.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/enhanced_new_invoice_page.dart';
 import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
 import 'package:pos_offline_desktop/ui/staff/employee_dashboard_page.dart';
+import 'package:pos_offline_desktop/ui/custody/custody_page.dart';
 import 'package:pos_offline_desktop/ui/setting/settings.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
@@ -32,7 +33,11 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  static const int _tabCount = 7;
+  /// Tab count follows the staff flag (staff tab present or not) + custody tab.
+  int get _tabCount => AppFeatures.hasStaffModule ? 8 : 7;
+
+  /// Cashier tab index shifts when the staff tab is hidden.
+  int get _cashierTabIndex => AppFeatures.hasStaffModule ? 6 : 5;
 
   bool _licenseWarningShown = false;
 
@@ -84,14 +89,20 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
       Tab(icon: const Icon(Icons.people_outline), text: l10n.customer_list),
       // Index 3
       Tab(icon: const Icon(Icons.inventory_outlined), text: l10n.suppliers),
-      // Index 4
-      const Tab(icon: Icon(Icons.badge_outlined), text: 'الموظفين'),
-      // Index 5
+      // Staff tab — hidden in builds without the staff module.
+      if (AppFeatures.hasStaffModule)
+        const Tab(icon: Icon(Icons.badge_outlined), text: 'الموظفين'),
+      // Custody tab — العهد المالية
+      const Tab(
+        icon: Icon(Icons.account_balance_wallet_outlined),
+        text: 'العهد المالية',
+      ),
+      // Cash
       Tab(
-        icon: const Icon(Icons.account_balance_wallet_outlined),
+        icon: const Icon(Icons.point_of_sale_outlined),
         text: l10n.cash,
       ),
-      // Index 6
+      // Reports
       Tab(icon: const Icon(Icons.analytics), text: l10n.reports),
     ];
 
@@ -135,7 +146,9 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                             backgroundColor: Colors.red,
                             action: SnackBarAction(
                               label: 'الذهاب للكاشير',
-                              onPressed: () => _tabController.animateTo(5),
+                              onPressed: () => _tabController.animateTo(
+                                _cashierTabIndex,
+                              ),
                             ),
                           ),
                         );
@@ -166,9 +179,10 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                     Colors.orange,
                     () => _tabController.animateTo(1),
                   ),
-                  // Staff Management Button - Guarded
-                  FeatureGuard(
-                    featureName: 'staff_management',
+                  // Staff Management Button - Guarded + hidden without module
+                  if (AppFeatures.hasStaffModule)
+                    FeatureGuard(
+                      featureName: 'staff_management',
                     lockedWidget: _buildLauncherButton(
                       context,
                       'الموظفين (مغلق)',
@@ -184,31 +198,25 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                       () => _tabController.animateTo(4),
                     ),
                   ),
-                  // Backup Button
+                  // Custody Button — العهد المالية
                   _buildLauncherButton(
                     context,
-                    'النسخ الاحتياطي',
-                    Icons.backup,
-                    Colors.purple,
-                    () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EnhancedBackupScreen(),
-                        ),
-                      );
-                    },
+                    'العهد المالية',
+                    Icons.account_balance_wallet_outlined,
+                    Colors.teal.shade700,
+                    () => _tabController.animateTo(AppFeatures.hasStaffModule ? 5 : 4),
                   ),
-                  // Damaged Items Button
-                  _buildLauncherButton(
-                    context,
-                    'الهالك',
-                    Icons.delete_sweep,
-                    Colors.redAccent,
-                    () {
-                      context.push('/damaged-items');
-                    },
-                  ),
+                  // Damaged Items Button — hidden without the module.
+                  if (AppFeatures.hasDamagedModule)
+                    _buildLauncherButton(
+                      context,
+                      'الهالك',
+                      Icons.delete_sweep,
+                      Colors.redAccent,
+                      () {
+                        context.push('/damaged-items');
+                      },
+                    ),
                   // Barneka (Returnable Containers) Button — vegetable-market
                   // feature, hidden in the factory (base) flavor.
                   if (AppFeatures.hasEmptyContainerTracking)
@@ -275,14 +283,18 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
       CustomerTransactionsWidget(db: widget.db),
       // Index 3: Suppliers
       SuppliersWidget(db: widget.db),
-      // Index 4: Staff — Dashboard first
-      FeatureGuard(
-        featureName: 'staff_management',
-        child: const EmployeeDashboardPage(),
-      ),
-      // Index 5: Cash
+      // Staff — Dashboard first (absent without the module; cash/reports
+      // indices shift accordingly and _cashierTabIndex tracks it).
+      if (AppFeatures.hasStaffModule)
+        FeatureGuard(
+          featureName: 'staff_management',
+          child: const EmployeeDashboardPage(),
+        ),
+      // Custody
+      CustodyPage(db: widget.db),
+      // Cash
       const CashierPage(),
-      // Index 6: Reports
+      // Reports
       ReportsPage(),
     ];
 
@@ -347,6 +359,19 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                   children: [
                     const _LicenseBadge(),
                     const Gap(8),
+                    IconButton(
+                      icon: const Icon(Icons.backup_outlined),
+                      tooltip: 'النسخ الاحتياطي',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EnhancedBackupScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    const Gap(4),
                     IconButton(
                       icon: const Icon(Icons.notifications_outlined),
                       onPressed: () {},

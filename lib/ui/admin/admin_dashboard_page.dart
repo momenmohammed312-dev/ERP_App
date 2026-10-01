@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/ui/product/widgets/product_form.dart';
 import 'package:pos_offline_desktop/ui/customer/add_edit_customer_page.dart';
@@ -816,7 +817,8 @@ class _OverviewPageContentState extends State<_OverviewPageContent> {
                     ]
                   : invoices.map((invoice) {
                       final invoiceNumber =
-                          invoice.invoiceNumber ?? 'غير معروف';
+                          displayInvoiceNumber(invoice.invoiceNumber, invoice.id) ??
+                          'غير معروف';
                       final customerName = invoice.customerName ?? 'عميل نقدي';
                       final amount =
                           '${invoice.totalAmount?.toStringAsFixed(2) ?? '0.00'} ج.م';
@@ -2273,28 +2275,6 @@ class _CustomersPageContentState extends State<_CustomersPageContent> {
     try {
       final now = DateTime.now();
       final startOfMonth = DateTime(now.year, now.month, 1);
-      final transactionsWithBalance = await widget.db.ledgerDao
-          .getTransactionsWithRunningBalance(
-        'Customer',
-        customer.id,
-        startOfMonth,
-        now,
-      );
-
-      final transactionData = transactionsWithBalance
-          .map(
-            (tx) => {
-              'date': tx.transaction.date,
-              'description': tx.transaction.description,
-              'debit': tx.transaction.debit,
-              'credit': tx.transaction.credit,
-              'balance': tx.runningBalance,
-              'receiptNumber': tx.transaction.receiptNumber,
-              'paymentMethod': tx.transaction.paymentMethod,
-            },
-          )
-          .toList();
-
       final openingBalance = await widget.db.ledgerDao.getRunningBalance(
         'Customer',
         customer.id,
@@ -2310,8 +2290,10 @@ class _CustomersPageContentState extends State<_CustomersPageContent> {
       final exportService = ExportService();
       await exportService.exportCustomerStatement(
         db: widget.db,
+        customerId: customer.id,
         customerName: customer.name,
-        transactions: transactionData,
+        fromDate: startOfMonth,
+        toDate: now,
         openingBalance: openingBalance,
         currentBalance: currentBalance,
       );

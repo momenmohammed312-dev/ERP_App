@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,10 +17,9 @@ void main() {
         },
       );
 
-  test('migration v50 → v54 adds sync columns, sync_queue and backfills sync_id',
-      () async {
-    final dbPath = Directory.systemTemp.path +
-        '/pos_sync_migration_${DateTime.now().millisecondsSinceEpoch}.db';
+  test('migration v50 → v54 adds sync columns, sync_queue and backfills sync_id', () async {
+    final dbPath =
+        '${Directory.systemTemp.path}/pos_sync_migration_${DateTime.now().millisecondsSinceEpoch}.db';
     final file = File(dbPath);
 
     // Minimal v50 schema (pre-sync foundation) mirroring the existing migration
@@ -161,9 +159,17 @@ void main() {
 
     final db = AppDatabase(NativeDatabase(file));
     try {
-      final versionRow = await db.customSelect('PRAGMA user_version').getSingle();
+      final versionRow = await db
+          .customSelect('PRAGMA user_version')
+          .getSingle();
       final version = versionRow.read<int>('user_version');
-      expect(version, 54, reason: 'schema should be upgraded to 54');
+      // The database must end at the current schema contract. Asserted exactly,
+      // not as ">=": a lower value means a migration silently did not run, and a
+      // higher one means this build is not the one that stamped the file.
+      //
+      // v72 is current. 60/61 are deliberately not recreated - they mean other
+      // things on other branch lines.
+      expect(version, 72, reason: 'schema should be upgraded to current (72)');
 
       Future<List<String>> columnNames(String table) async {
         final rows = await db.customSelect('PRAGMA table_info($table)').get();
@@ -174,45 +180,71 @@ void main() {
       for (final table in ['products', 'invoices', 'invoice_items']) {
         final cols = await columnNames(table);
         expect(cols, contains('sync_id'), reason: '$table must have sync_id');
-        expect(cols, contains('created_at'), reason: '$table must have created_at');
-        expect(cols, contains('updated_at'), reason: '$table must have updated_at');
+        expect(
+          cols,
+          contains('created_at'),
+          reason: '$table must have created_at',
+        );
+        expect(
+          cols,
+          contains('updated_at'),
+          reason: '$table must have updated_at',
+        );
       }
 
       // v53 — sync_queue table exists.
-      final queueTables = await db.customSelect(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='sync_queue'",
-      ).get();
-      expect(queueTables.isNotEmpty, isTrue,
-          reason: 'sync_queue table must exist after v53 migration');
+      final queueTables = await db
+          .customSelect(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='sync_queue'",
+          )
+          .get();
+      expect(
+        queueTables.isNotEmpty,
+        isTrue,
+        reason: 'sync_queue table must exist after v53 migration',
+      );
 
       // v54 — device_name column on sync_queue.
       final queueCols = await columnNames('sync_queue');
-      expect(queueCols, contains('device_name'),
-          reason: 'sync_queue must have device_name after v54 migration');
+      expect(
+        queueCols,
+        contains('device_name'),
+        reason: 'sync_queue must have device_name after v54 migration',
+      );
 
       // v53 — backfill populated sync_id for existing rows.
       Future<bool> allSynced(String table, String idExpr) async {
-        final rows = await db.customSelect(
-          'SELECT sync_id FROM $table WHERE $idExpr',
-        ).get();
+        final rows = await db
+            .customSelect('SELECT sync_id FROM $table WHERE $idExpr')
+            .get();
         if (rows.isEmpty) return false;
         return rows.every(
-          (r) => r.read<String?>('sync_id') != null &&
+          (r) =>
+              r.read<String?>('sync_id') != null &&
               (r.read<String?>('sync_id') ?? '').isNotEmpty,
         );
       }
 
-      expect(await allSynced('products', "id=1"), isTrue,
-          reason: 'existing products must get a sync_id backfill');
-      expect(await allSynced('invoices', "id=1"), isTrue,
-          reason: 'existing invoices must get a sync_id backfill');
-      expect(await allSynced('invoice_items', "id=1"), isTrue,
-          reason: 'existing invoice_items must get a sync_id backfill');
+      expect(
+        await allSynced('products', "id=1"),
+        isTrue,
+        reason: 'existing products must get a sync_id backfill',
+      );
+      expect(
+        await allSynced('invoices', "id=1"),
+        isTrue,
+        reason: 'existing invoices must get a sync_id backfill',
+      );
+      expect(
+        await allSynced('invoice_items', "id=1"),
+        isTrue,
+        reason: 'existing invoice_items must get a sync_id backfill',
+      );
 
       // Existing data survived the upgrade.
-      final productRows = await db.customSelect(
-        "SELECT name FROM products WHERE id=1",
-      ).get();
+      final productRows = await db
+          .customSelect("SELECT name FROM products WHERE id=1")
+          .get();
       expect(productRows.single.read<String>('name'), 'طماطم');
     } finally {
       await db.close();

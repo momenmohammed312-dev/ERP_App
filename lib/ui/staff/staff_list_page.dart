@@ -1,3 +1,7 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
@@ -5,9 +9,11 @@ import '../../core/provider/app_database_provider.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
 import '../../services/staff_management_service.dart';
+import '../../services/attendance/attendance_file_import_service.dart';
 import 'staff_form_page.dart';
 import 'staff_details_page.dart';
 import 'attendance_page.dart';
+import 'biometric_enrollment_page.dart';
 import 'employee_dashboard_page.dart';
 
 class StaffListPage extends ConsumerStatefulWidget {
@@ -22,7 +28,10 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
   late StaffManagementDao _dao;
   List<Staff> _staffList = [];
   List<Staff> _filteredStaffList = [];
+  Map<String, String> _biometricIdByStaffId = {};
   bool _isLoading = true;
+  bool _isSyncingAttendance = false;
+  bool _isImportingFile = false;
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -53,9 +62,18 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
     setState(() => _isLoading = true);
     try {
       final staff = await _dao.getAllStaff();
+      final deviceDao = ref.read(attendanceDeviceDaoProvider);
+      final Map<String, String> biometricMap = {};
+      for (final s in staff) {
+        final mappings = await deviceDao.getMappingsForStaff(s.staffId);
+        if (mappings.isNotEmpty) {
+          biometricMap[s.staffId] = mappings.first.externalUserId;
+        }
+      }
       setState(() {
         _staffList = staff;
         _filteredStaffList = staff;
+        _biometricIdByStaffId = biometricMap;
         _isLoading = false;
       });
     } catch (e) {
@@ -65,6 +83,320 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
         SnackBar(content: Text('خطأ في تحميل بيانات الموظفين: $e')),
       );
     }
+  }
+
+  Future<void> _importAttendance() async {
+    if (_isSyncingAttendance) return;
+    setState(() => _isSyncingAttendance = true);
+    try {
+      final syncService = ref.read(attendanceSyncServiceProvider);
+      final user = ref.read(authProvider);
+      final result = await syncService.syncAllDevices(
+        triggeredBy: user?.username ?? 'manual_all',
+      );
+      await _loadStaff();
+      if (!mounted) return;
+      if (result.error != null && result.matched == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.error!.length < 140 ? result.error! : 'فشل استيراد الحضور',
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'تمت المزامنة: ${result.fetched} من الأجهزة، ${result.matched} اتسجل حضور'
+              '${result.info == null ? '' : '\n${result.info}'}',
+            ),
+            backgroundColor: result.matched > 0 ? Colors.green : Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل استيراد الحضور: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncingAttendance = false);
+    }
+  }
+
+  /// استيراد الحضور من ملف إكسل مُصدَّر من جهاز البصمة (.xls / .xlsx / .csv):
+  /// اختيار الملف ← معاينة ← تأكيد ← تنفيذ ← نتيجة بالأرقام.
+  Future<void> _importFromExcel() async {
+    if (_isImportingFile) return;
+    FilePickerResult? picked;
+    try {
+      picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xls', 'xlsx', 'csv'],
+        withData: true,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذّر فتح اختيار الملف: $e')),
+      );
+      return;
+    }
+    if (picked == null || picked.files.isEmpty || !mounted) return;
+    final file = picked.files.single;
+    Uint8List? bytes = file.bytes;
+    if (bytes == null && file.path != null) {
+      try {
+        bytes = await File(file.path!).readAsBytes();
+      } catch (_) {}
+    }
+    if (bytes == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذّرت قراءة الملف المختار')),
+      );
+      return;
+    }
+    if (!mounted) return;
+
+    setState(() => _isImportingFile = true);
+    try {
+      final service = ref.read(attendanceFileImportProvider);
+      final preview = await service.parseFile(
+        bytes: bytes,
+        fileName: file.name,
+      );
+      if (!mounted) return;
+      if (preview.punches.isEmpty) {
+        final hint = preview.errors.isNotEmpty
+            ? preview.errors.first
+            : 'لا توجد بصمات صالحة في الملف';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(hint), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (preview.importablePunches == 0) {
+        _showSkippedIdsDialog(
+          title: 'مفيش أرقام بصمة مربوطة في الملف',
+          unknownIds: preview.unknownIdList,
+          invalidIds: preview.invalidIdList,
+        );
+        return;
+      }
+      final confirmed = await _showExcelConfirmDialog(preview);
+      if (confirmed != true || !mounted) return;
+      final user = ref.read(authProvider);
+      final result = await service.importPunches(
+        preview,
+        triggeredBy: user?.username ?? 'excel_import',
+      );
+      await _loadStaff();
+      if (!mounted) return;
+      if (result.error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.error!), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      final skipped = result.skippedUnknown + result.skippedInvalid;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'تم الاستيراد: ${result.matched} حضور مسجّل '
+            '(${result.fetched} بصمة مربوطة'
+            '${result.duplicate > 0 ? '، ${result.duplicate} مكرر' : ''}'
+            '${skipped > 0 ? '، $skipped متخطية' : ''}'
+            '${result.linkedIds > 0 ? '، ${result.linkedIds} رقم بصمة تم ربطه' : ''}'
+            '${result.absencesCreated > 0 ? '، ${result.absencesCreated} غياب تلقائي' : ''})',
+          ),
+          backgroundColor: skipped > 0 || result.unmatched > 0
+              ? Colors.orange
+              : Colors.green,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+      if (result.unknownIds.isNotEmpty ||
+          result.invalidIds.isNotEmpty ||
+          result.unmatchedSamples.isNotEmpty) {
+        _showSkippedIdsDialog(
+          title: 'أرقام بصمة متخطاة',
+          unknownIds: result.unknownIds,
+          invalidIds: result.invalidIds,
+          unmatchedSamples: result.unmatchedSamples,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('فشل استيراد الملف: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isImportingFile = false);
+    }
+  }
+
+  Future<bool?> _showExcelConfirmDialog(AttendanceFilePreview preview) {
+    String range = '—';
+    if (preview.minTime != null && preview.maxTime != null) {
+      String fmt(DateTime t) => '${t.year}/${t.month}/${t.day}';
+      range = '${fmt(preview.minTime!)} ← ${fmt(preview.maxTime!)}';
+    }
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('تأكيد استيراد ${preview.fileName}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('البصمات: ${preview.punches.length}'),
+            Text('الفترة: $range'),
+            Text(
+              'الصفوف المقروءة من الملف: ${preview.rowsRead}',
+              style: const TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '✔ مرتبط بموظف موجود: ${preview.matchedIds} رقم بصمة '
+              '(${preview.importablePunches} بصمة)',
+              style: const TextStyle(color: Colors.green),
+            ),
+            if (preview.invalidIds > 0)
+              Text(
+                '⚠ أرقام مرتبطة بموظف غير صالح: ${preview.invalidIds} '
+                '(${preview.skippedInvalidPunches} بصمة) — سيتم تخطيها',
+                style: const TextStyle(color: Colors.orange),
+              ),
+            if (preview.unknownIds > 0)
+              Text(
+                '✖ أرقام بصمة غير معروفة: ${preview.unknownIds} '
+                '(${preview.skippedUnknownPunches} بصمة) — سيتم تخطيها',
+                style: const TextStyle(color: Colors.red),
+              ),
+            if (preview.skippedRows > 0)
+              Text('صفوف متجاوَزة: ${preview.skippedRows}'),
+            if (preview.blankRows > 0)
+              Text(
+                'صفوف فارغة متجاهلة: ${preview.blankRows}',
+                style: const TextStyle(fontSize: 12),
+              ),
+            if (preview.warnings.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text('تحذيرات القراءة:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              ...preview.warnings
+                  .take(4)
+                  .map((e) => Text('• $e',
+                      style: const TextStyle(fontSize: 12))),
+            ],
+            if (preview.errors.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text('ملاحظات:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              ...preview.errors
+                  .take(4)
+                  .map((e) => Text('• $e',
+                      style: const TextStyle(fontSize: 12))),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('تنفيذ الاستيراد'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// تقرير أرقام البصمة المتخطاة: غير معروفة (تحتاج ربط يدوي) وغير صالحة
+  /// (مع السبب)، مع توضيح أن الاستيراد ربط كل سجلاته بنفس الموظف.
+  void _showSkippedIdsDialog({
+    required String title,
+    required List<String> unknownIds,
+    required List<String> invalidIds,
+    List<String> unmatchedSamples = const [],
+  }) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 440,
+          height: 360,
+          child: ListView(
+            children: [
+              if (unknownIds.isNotEmpty) ...[
+                Text(
+                  'أرقام غير معروفة (${unknownIds.length}) — '
+                  'اربطها من إدارة الموظفين ← رقم البصمة ثم أعد الاستيراد:',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+                ...unknownIds.map(
+                  (s) => ListTile(
+                    dense: true,
+                    title: Text(s, style: const TextStyle(fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (invalidIds.isNotEmpty) ...[
+                Text(
+                  'أرقام مرتبطة بموظف غير صالح (${invalidIds.length}):',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
+                ...invalidIds.map(
+                  (s) => ListTile(
+                    dense: true,
+                    title: Text(s, style: const TextStyle(fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (unmatchedSamples.isNotEmpty) ...[
+                const Text(
+                  'حركات لم تُعتمد:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                ...unmatchedSamples.map(
+                  (s) => ListTile(
+                    dense: true,
+                    title: Text(s, style: const TextStyle(fontSize: 12)),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('موافق'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _filterStaff() {
@@ -100,6 +432,32 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
         foregroundColor: textColor,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: _isImportingFile
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.upload_file),
+            onPressed: (_isImportingFile || _isSyncingAttendance)
+                ? null
+                : _importFromExcel,
+            tooltip: 'استيراد الحضور من ملف إكسل',
+          ),
+          IconButton(
+            icon: _isSyncingAttendance
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync),
+            onPressed: (_isSyncingAttendance || _isImportingFile)
+                ? null
+                : _importAttendance,
+            tooltip: 'مزامنة الحضور من أجهزة البصمة',
+          ),
           IconButton(
             icon: const Icon(Icons.dashboard),
             onPressed: () {
@@ -324,15 +682,53 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
           children: [
             Text(staff.position, style: TextStyle(color: subTextColor)),
             const SizedBox(height: 4),
-            Row(
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
               children: [
-                Icon(Icons.badge, size: 16, color: subTextColor),
-                const SizedBox(width: 4),
-                Text(staff.staffId, style: TextStyle(color: subTextColor)),
-                const SizedBox(width: 16),
-                Icon(Icons.phone, size: 16, color: subTextColor),
-                const SizedBox(width: 4),
-                Text(staff.phone ?? 'لا يوجد', style: TextStyle(color: subTextColor)),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.badge, size: 16, color: subTextColor),
+                    const SizedBox(width: 4),
+                    Text(staff.staffId, style: TextStyle(color: subTextColor)),
+                  ],
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.fingerprint,
+                      size: 16,
+                      color: _biometricIdByStaffId.containsKey(staff.staffId)
+                          ? Colors.teal
+                          : subTextColor.withValues(alpha: 0.5),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _biometricIdByStaffId.containsKey(staff.staffId)
+                          ? 'بصمة: ${_biometricIdByStaffId[staff.staffId]}'
+                          : 'بدون بصمة',
+                      style: TextStyle(
+                        color: _biometricIdByStaffId.containsKey(staff.staffId)
+                            ? Colors.teal
+                            : subTextColor.withValues(alpha: 0.5),
+                        fontWeight: _biometricIdByStaffId.containsKey(staff.staffId)
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+                if (staff.phone != null && staff.phone!.isNotEmpty)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.phone, size: 16, color: subTextColor),
+                      const SizedBox(width: 4),
+                      Text(staff.phone!, style: TextStyle(color: subTextColor)),
+                    ],
+                  ),
               ],
             ),
             const SizedBox(height: 4),
@@ -341,8 +737,12 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
                 Icon(Icons.attach_money, size: 16, color: Colors.green),
                 const SizedBox(width: 4),
                 Text(
-                  'المرتب الأساسي: ${staff.basicSalary.toStringAsFixed(2)} ج.م',
-                  style: TextStyle(
+                  staff.employmentType == 'weekly'
+                      ? 'الراتب الأسبوعي: ${staff.basicSalary.toStringAsFixed(2)} ج.م'
+                      : staff.employmentType == 'daily'
+                          ? 'اليومية: ${staff.basicSalary.toStringAsFixed(2)} ج.م'
+                          : 'المرتب الأساسي: ${staff.basicSalary.toStringAsFixed(2)} ج.م',
+                  style: const TextStyle(
                     color: Colors.green,
                     fontWeight: FontWeight.w500,
                   ),
@@ -373,6 +773,16 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
                   Icon(Icons.edit, color: Colors.orange),
                   const SizedBox(width: 8),
                   Text('تعديل', style: TextStyle(color: textColor)),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'biometric',
+              child: Row(
+                children: [
+                  const Icon(Icons.fingerprint, color: Colors.teal),
+                  const SizedBox(width: 8),
+                  Text('ربط البصمة والجهاز', style: TextStyle(color: textColor)),
                 ],
               ),
             ),
@@ -423,6 +833,15 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
         break;
       case 'edit':
         _editStaff(staff);
+        break;
+      case 'biometric':
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => BiometricEnrollmentPage(staff: staff),
+          ),
+        );
+        _loadStaff();
         break;
       case 'attendance':
         _viewAttendance(staff);

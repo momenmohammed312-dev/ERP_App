@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:drift/drift.dart';
 import '../database/app_database.dart';
 import '../database/tables/vegetable_shipments_table.dart';
+import 'invoice_number_formatter.dart';
 import 'shipment_pricing_service.dart';
 
 class InvoiceItemParams {
@@ -56,13 +57,15 @@ class InvoiceService {
     List<SplitPaymentEntry>? splitPayments,
     int? primaryShipmentId,
   }) async {
-    final actualInvoiceNumber = invoiceNumber ?? 'INV${DateTime.now().millisecondsSinceEpoch}';
+    // Bug 3: no timestamp numbering. A caller-supplied value is preserved
+    // as legacy; otherwise the canonical display number derives from the
+    // row id (assigned below) — never generated before the insert.
     final rand = Random.secure();
 
     return _db.transaction(() async {
       final invoiceId = await _db.invoiceDao.insertInvoice(
         InvoicesCompanion(
-          invoiceNumber: Value(actualInvoiceNumber),
+          invoiceNumber: Value(invoiceNumber),
           customerName: Value(customerName),
           customerContact: Value(customerContact ?? ''),
           customerAddress: Value(customerAddress ?? ''),
@@ -178,7 +181,17 @@ class InvoiceService {
         }
       }
 
-      final desc = ledgerDescription ?? 'بيع #$actualInvoiceNumber';
+      final canonicalNumber = formatInvoiceNumber(invoiceId);
+      if (invoiceNumber == null) {
+        await (_db.update(_db.invoices)
+              ..where((t) => t.id.equals(invoiceId)))
+            .write(InvoicesCompanion(invoiceNumber: Value(canonicalNumber)));
+      }
+      // Resolved display number: legacy caller value, else canonical.
+      // (Wording of descriptions is Bug 2's commit; numbering only here.)
+      final actualInvoiceNumber = invoiceNumber ?? canonicalNumber;
+
+      final desc = ledgerDescription ?? 'فاتورة $actualInvoiceNumber';
 
       if (customerId != null && customerId != 'cash' && customerId.isNotEmpty) {
         final ledgerIdSale = '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_sale';
@@ -205,7 +218,7 @@ class InvoiceService {
               entityType: 'Customer',
               refId: customerId,
               date: DateTime.now(),
-              description: 'دفع #$actualInvoiceNumber',
+              description: 'سداد $actualInvoiceNumber',
               debit: const Value(0.0),
               credit: Value(paidAmount),
               origin: 'payment',
@@ -228,7 +241,7 @@ class InvoiceService {
             entityType: 'Supplier',
             refId: acc.supplierId,
             date: DateTime.now(),
-            description: 'عمولة بيع #$actualInvoiceNumber',
+            description: 'عمولة $actualInvoiceNumber',
             debit: Value(supplierDue),
             credit: const Value(0.0),
             origin: 'sale',
@@ -448,7 +461,7 @@ class InvoiceService {
               entityType: 'Customer',
               refId: customerId,
               date: DateTime.now(),
-              description: 'دفع #$actualInvoiceNumber',
+              description: 'سداد $actualInvoiceNumber',
               debit: const Value(0.0),
               credit: Value(paidAmount),
               origin: 'payment',
@@ -470,7 +483,7 @@ class InvoiceService {
             entityType: 'Supplier',
             refId: acc.supplierId,
             date: DateTime.now(),
-            description: 'عمولة بيع #$actualInvoiceNumber',
+            description: 'عمولة $actualInvoiceNumber',
             debit: Value(supplierDue),
             credit: const Value(0.0),
             origin: 'sale',

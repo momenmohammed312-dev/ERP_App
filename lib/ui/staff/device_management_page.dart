@@ -13,17 +13,99 @@ class DeviceManagementPage extends ConsumerStatefulWidget {
   const DeviceManagementPage({super.key});
 
   @override
-  ConsumerState<DeviceManagementPage> createState() => _DeviceManagementPageState();
+  ConsumerState<DeviceManagementPage> createState() =>
+      _DeviceManagementPageState();
 }
 
 class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
   List<BiometricDevice> _devices = [];
   bool _isLoading = true;
+  bool _autoSync = true;
+  bool _syncingAll = false;
 
   @override
   void initState() {
     super.initState();
     _loadDevices();
+    // Auto-sync runs app-wide from the provider (every 2 min); here we only
+    // reflect its state plus one silent catch-up sync on open.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _catchUpOnOpen());
+  }
+
+  Future<void> _catchUpOnOpen() async {
+    if (!mounted) return;
+    try {
+      final svc = ref.read(attendanceSyncServiceProvider);
+      if (mounted) setState(() => _autoSync = svc.isAutoSyncEnabled);
+    } catch (_) {}
+    // Silent catch-up: pull whatever the devices hold since last sync.
+    try {
+      final svc = ref.read(attendanceSyncServiceProvider);
+      await svc.syncAllDevices(triggeredBy: 'page_open');
+      await _loadDevices();
+    } catch (_) {}
+  }
+
+  Future<void> _toggleAutoSync(bool value) async {
+    try {
+      final svc = ref.read(attendanceSyncServiceProvider);
+      if (value) {
+        svc.startAutoSync(interval: const Duration(minutes: 2));
+      } else {
+        svc.stopAutoSync();
+      }
+      if (mounted) setState(() => _autoSync = svc.isAutoSyncEnabled);
+    } catch (_) {}
+  }
+
+  Future<void> _syncAllDevices() async {
+    if (_syncingAll) return;
+    setState(() => _syncingAll = true);
+    try {
+      final svc = ref.read(attendanceSyncServiceProvider);
+      final user = ref.read(authProvider);
+      final result = await svc.syncAllDevices(
+        triggeredBy: user?.username ?? 'manual_all',
+      );
+      await _loadDevices();
+      if (mounted) {
+        if (result.error != null && result.matched == 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                result.error!.length < 140 ? result.error! : 'فشلت المزامنة',
+              ),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'تمت مزامنة الكل: ${result.fetched} من الأجهزة، ${result.matched} اتسجل حضور'
+                '${result.info == null ? '' : '\n${result.info}'}',
+              ),
+              backgroundColor: result.matched > 0
+                  ? Colors.green
+                  : Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('فشلت مزامنة الكل: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _syncingAll = false);
+    }
   }
 
   Future<void> _loadDevices() async {
@@ -38,43 +120,120 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
     }
   }
 
-  Future<void> _syncDevice(BiometricDevice device) async {
-    try {
+  Future<void> _syncDevice(BiometricDevice device) async {    try {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('جاري مزامنة جهاز ${device.name}...')),
       );
       final syncService = ref.read(attendanceSyncServiceProvider);
       final user = ref.read(authProvider);
-      await syncService.syncDevice(device, triggeredBy: user?.username ?? 'manual');
-
-      final dao = ref.read(attendanceDeviceDaoProvider);
-      final updatedDevice = await dao.getDeviceById(device.id);
+      final result = await syncService.syncDevice(
+        device,
+        triggeredBy: user?.username ?? 'manual',
+      );
 
       await _loadDevices();
       if (mounted) {
-        if (updatedDevice?.lastSyncStatus == 'success') {
+        if (result.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تمت المزامنة بنجاح')),
+            SnackBar(
+              content: Text(
+                result.error!.length < 140 ? result.error! : 'فشلت المزامنة',
+              ),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
           );
         } else {
+          final parts = <String>['${result.fetched} من الجهاز'];
+          parts.add('${result.matched} اتسجل حضور');
+          if (result.unmatched > 0) {
+            parts.add('${result.unmatched} بلا موظف');
+          }
+          if (result.duplicate > 0) {
+            parts.add('${result.duplicate} مكرر');
+          }
+          if (result.info != null) {
+            parts.add(result.info!);
+          }
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('فشلت المزامنة'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('تمت المزامنة: ${parts.join('، ')}'),
+              backgroundColor: result.matched > 0
+                  ? Colors.green
+                  : Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('فشلت المزامنة'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('فشلت المزامنة: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// تصفير كيرسور جهاز (سحب كامل من الأول).
+  ///
+  /// آمن: منع التكرار بالـdedup hash، فإعادة السحب لا تنشئ دوبلكيت.
+  /// يُستخدم عند توقف المزامنة الصامت (كيرسور مسموم) أو بعد إصلاح الشبكة.
+  Future<void> _resyncDevice(BiometricDevice device) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('إعادة سحب كامل — ${device.name}؟'),
+        content: const Text(
+          'سيتم سحب كل سجلات الجهاز من الأول. '
+          'البصمات المسجلة قبل كده مش هتتكرر (حماية ضد التكرار). '
+          'استخدمها لو المزامنة بتقول "تمت" وصفر رغم وجود بصمات جديدة.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('تصفير وإعادة السحب'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref.read(attendanceDeviceDaoProvider).resetDeviceSyncCursor(device.id);
+      await _loadDevices();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('اتصفّر الكيرسور — دوس مزامنة الآن للسحب الكامل'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل تصفير الكيرسور: $e')),
         );
       }
     }
   }
 
   Future<void> _testDeviceConnection(BiometricDevice device) async {
-    if (device.connectionType != 'tcp_ip' || device.ipAddress == null || device.port == null) {
+    if (device.connectionType != 'tcp_ip' ||
+        device.ipAddress == null ||
+        device.port == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('فحص الاتصال متاح فقط للأجهزة المتصلة عبر الشبكة (TCP/IP)')),
+        const SnackBar(
+          content: Text(
+            'فحص الاتصال متاح فقط للأجهزة المتصلة عبر الشبكة (TCP/IP)',
+          ),
+        ),
       );
       return;
     }
@@ -91,7 +250,7 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
         ipAddress: device.ipAddress!,
         port: device.port!,
         authToken: device.authToken,
-        timeout: const Duration(seconds: 5),
+        timeout: const Duration(seconds: 10),
       );
 
       final connected = await source.connect();
@@ -122,9 +281,12 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
                 Text('اسم الجهاز: ${info.deviceName ?? device.name}'),
                 Text('عنوان IP: ${device.ipAddress}:${device.port}'),
                 Text('وقت الاستجابة: ${stopwatch.elapsedMilliseconds} ms'),
-                if (info.firmwareVersion != null) Text('إصدار الفيرموير: ${info.firmwareVersion}'),
-                if (info.serialNumber != null) Text('الرقم التسلسلي: ${info.serialNumber}'),
-                if (info.deviceTime != null) Text('توقيت الجهاز: ${info.deviceTime}'),
+                if (info.firmwareVersion != null)
+                  Text('إصدار الفيرموير: ${info.firmwareVersion}'),
+                if (info.serialNumber != null)
+                  Text('الرقم التسلسلي: ${info.serialNumber}'),
+                if (info.deviceTime != null)
+                  Text('توقيت الجهاز: ${info.deviceTime}'),
               ],
             ),
             actions: [
@@ -192,7 +354,8 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
   void _showEditDeviceDialog(BiometricDevice device) {
     showDialog(
       context: context,
-      builder: (context) => _AddDeviceDialog(onDeviceAdded: _loadDevices, device: device),
+      builder: (context) =>
+          _AddDeviceDialog(onDeviceAdded: _loadDevices, device: device),
     );
   }
 
@@ -219,12 +382,18 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
                 _loadDevices();
                 if (!mounted) return;
                 messenger.showSnackBar(
-                  const SnackBar(content: Text('تم حذف الجهاز'), backgroundColor: Colors.green),
+                  const SnackBar(
+                    content: Text('تم حذف الجهاز'),
+                    backgroundColor: Colors.green,
+                  ),
                 );
               } catch (e) {
                 if (!mounted) return;
                 messenger.showSnackBar(
-                  SnackBar(content: Text('خطأ في الحذف: $e'), backgroundColor: Colors.red),
+                  SnackBar(
+                    content: Text('خطأ في الحذف: $e'),
+                    backgroundColor: Colors.red,
+                  ),
                 );
               }
             },
@@ -244,6 +413,24 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
         appBar: AppBar(
           title: const Text('إدارة أجهزة الحضور'),
           actions: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.autorenew, size: 18),
+                Switch(value: _autoSync, onChanged: _toggleAutoSync),
+              ],
+            ),
+            IconButton(
+              icon: _syncingAll
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.sync),
+              onPressed: _syncingAll ? null : _syncAllDevices,
+              tooltip: 'مزامنة كل الأجهزة الآن',
+            ),
             IconButton(
               icon: const Icon(Icons.add),
               onPressed: _showAddDeviceDialog,
@@ -254,73 +441,100 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _devices.isEmpty
-                ? const Center(child: Text('لا توجد أجهزة مضافة. اضغط + لإضافة جهاز.'))
-                : ListView.builder(
-                    itemCount: _devices.length,
-                    itemBuilder: (context, index) {
-                      final device = _devices[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: ListTile(
-                          leading: const Icon(Icons.device_hub),
-                          title: Text(device.name),
-                          subtitle: Text('${device.connectionType} - ${device.ipAddress ?? "N/A"}'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                device.lastSyncStatus == null
-                                    ? 'لم يتم المزامنة'
-                                    : device.lastSyncStatus == 'success'
-                                        ? 'متصل'
-                                        : 'مفصول/خطأ',
-                                style: TextStyle(
-                                  color: device.lastSyncStatus == null
-                                      ? Colors.grey
-                                      : device.lastSyncStatus == 'success'
-                                          ? Colors.green
-                                          : Colors.red,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                icon: const Icon(Icons.wifi_find, color: Colors.teal),
-                                onPressed: () => _testDeviceConnection(device),
-                                tooltip: 'اختبار الاتصال',
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.group_add, color: Colors.blue),
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => DeviceUserImportPage(device: device),
-                                    ),
-                                  );
-                                },
-                                tooltip: 'استيراد ومطابقة المستخدمين',
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.sync),
-                                onPressed: () => _syncDevice(device),
-                                tooltip: 'مزامنة الآن',
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.edit, color: Colors.orange),
-                                onPressed: () => _showEditDeviceDialog(device),
-                                tooltip: 'تعديل البيانات',
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _confirmDeleteDevice(device),
-                                tooltip: 'حذف الجهاز',
-                              ),
-                            ],
+            ? const Center(
+                child: Text('لا توجد أجهزة مضافة. اضغط + لإضافة جهاز.'),
+              )
+            : ListView.builder(
+                itemCount: _devices.length,
+                itemBuilder: (context, index) {
+                  final device = _devices[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: ListTile(
+                      leading: const Icon(Icons.device_hub),
+                      title: Text(device.name),
+                      subtitle: Text(
+                        '${device.connectionType} - ${device.ipAddress ?? "N/A"}',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            device.lastSyncStatus == null
+                                ? 'لم يتم المزامنة'
+                                : device.lastSyncStatus == 'success'
+                                ? 'متصل'
+                                : device.lastSyncStatus == 'partial'
+                                ? 'جزئي — راجع غير المطابق'
+                                : 'مفصول/خطأ',
+                            style: TextStyle(
+                              color: device.lastSyncStatus == null
+                                  ? Colors.grey
+                                  : device.lastSyncStatus == 'success'
+                                  ? Colors.green
+                                  : device.lastSyncStatus == 'partial'
+                                  ? Colors.orange
+                                  : Colors.red,
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.wifi_find,
+                              color: Colors.teal,
+                            ),
+                            onPressed: () => _testDeviceConnection(device),
+                            tooltip: 'اختبار الاتصال',
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.group_add,
+                              color: Colors.blue,
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      DeviceUserImportPage(device: device),
+                                ),
+                              );
+                            },
+                            tooltip: 'استيراد ومطابقة المستخدمين',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.sync),
+                            onPressed: () => _syncDevice(device),
+                            tooltip: 'مزامنة الآن',
+                          ),
+                          if (device.connectionType == 'tcp_ip')
+                            IconButton(
+                              icon: const Icon(
+                                Icons.restore_page,
+                                color: Colors.purple,
+                              ),
+                              onPressed: () => _resyncDevice(device),
+                              tooltip: 'إعادة سحب كامل (تصفير الكيرسور)',
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.orange),
+                            onPressed: () => _showEditDeviceDialog(device),
+                            tooltip: 'تعديل البيانات',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _confirmDeleteDevice(device),
+                            tooltip: 'حذف الجهاز',
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
       ),
     );
   }
@@ -401,7 +615,8 @@ class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
                   labelText: 'اسم الجهاز *',
                   hintText: 'مثال: بوابة الدخول الرئيسية',
                 ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'مطلوب' : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -410,7 +625,8 @@ class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
                   labelText: 'كود الجهاز *',
                   hintText: 'مثال: BIO-001',
                 ),
-                validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'مطلوب' : null,
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -418,9 +634,15 @@ class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
                 decoration: const InputDecoration(labelText: 'نوع الاتصال *'),
                 items: const [
                   DropdownMenuItem(value: 'tcp_ip', child: Text('TCP/IP')),
-                  DropdownMenuItem(value: 'usb_import', child: Text('استيراد USB')),
+                  DropdownMenuItem(
+                    value: 'usb_import',
+                    child: Text('استيراد USB'),
+                  ),
                   DropdownMenuItem(value: 'sdk', child: Text('SDK')),
-                  DropdownMenuItem(value: 'file_import', child: Text('استيراد ملف')),
+                  DropdownMenuItem(
+                    value: 'file_import',
+                    child: Text('استيراد ملف'),
+                  ),
                 ],
                 onChanged: (v) {
                   if (v != null) setState(() => _connectionType = v);
@@ -436,7 +658,8 @@ class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
                   ),
                   keyboardType: TextInputType.number,
                   validator: (v) {
-                    if (_connectionType == 'tcp_ip' && (v == null || v.trim().isEmpty)) {
+                    if (_connectionType == 'tcp_ip' &&
+                        (v == null || v.trim().isEmpty)) {
                       return 'مطلوب للاتصال TCP/IP';
                     }
                     return null;
@@ -451,7 +674,8 @@ class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
                   ),
                   keyboardType: TextInputType.number,
                   validator: (v) {
-                    if (_connectionType == 'tcp_ip' && (v == null || v.trim().isEmpty)) {
+                    if (_connectionType == 'tcp_ip' &&
+                        (v == null || v.trim().isEmpty)) {
                       return 'مطلوب';
                     }
                     if (v != null && v.isNotEmpty && int.tryParse(v) == null) {
@@ -490,7 +714,9 @@ class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _authTokenController,
-                decoration: const InputDecoration(labelText: 'Auth Token (اختياري)'),
+                decoration: const InputDecoration(
+                  labelText: 'Auth Token (اختياري)',
+                ),
               ),
             ],
           ),
@@ -501,10 +727,7 @@ class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('إلغاء'),
         ),
-        ElevatedButton(
-          onPressed: _save,
-          child: const Text('حفظ'),
-        ),
+        ElevatedButton(onPressed: _save, child: const Text('حفظ')),
       ],
     );
   }
@@ -520,7 +743,9 @@ class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
       // التحقق من عدم تكرار كود الجهاز (مع استثناء الجهاز نفسه في وضع التعديل)
       final existingDevices = await dao.getAllDevices();
       final codeExists = existingDevices.any(
-        (d) => d.deviceCode == _deviceCodeController.text.trim() && d.id != widget.device?.id,
+        (d) =>
+            d.deviceCode == _deviceCodeController.text.trim() &&
+            d.id != widget.device?.id,
       );
       if (codeExists) {
         if (!mounted) return;
@@ -539,15 +764,37 @@ class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
           deviceCode: _deviceCodeController.text.trim(),
           name: _nameController.text.trim(),
           connectionType: _connectionType,
-          vendor: Value(_vendorController.text.trim().isEmpty ? null : _vendorController.text.trim()),
-          model: Value(_modelController.text.trim().isEmpty ? null : _modelController.text.trim()),
-          ipAddress: _connectionType == 'tcp_ip' ? Value(_ipController.text.trim()) : const Value(null),
+          vendor: Value(
+            _vendorController.text.trim().isEmpty
+                ? null
+                : _vendorController.text.trim(),
+          ),
+          model: Value(
+            _modelController.text.trim().isEmpty
+                ? null
+                : _modelController.text.trim(),
+          ),
+          ipAddress: _connectionType == 'tcp_ip'
+              ? Value(_ipController.text.trim())
+              : const Value(null),
           port: _connectionType == 'tcp_ip' && _portController.text.isNotEmpty
               ? Value(int.tryParse(_portController.text.trim()))
               : const Value(null),
-          serialNumber: Value(_serialController.text.trim().isEmpty ? null : _serialController.text.trim()),
-          location: Value(_locationController.text.trim().isEmpty ? null : _locationController.text.trim()),
-          authToken: Value(_authTokenController.text.trim().isEmpty ? null : _authTokenController.text.trim()),
+          serialNumber: Value(
+            _serialController.text.trim().isEmpty
+                ? null
+                : _serialController.text.trim(),
+          ),
+          location: Value(
+            _locationController.text.trim().isEmpty
+                ? null
+                : _locationController.text.trim(),
+          ),
+          authToken: Value(
+            _authTokenController.text.trim().isEmpty
+                ? null
+                : _authTokenController.text.trim(),
+          ),
           updatedAt: now,
         );
         await dao.updateDevice(updated);
@@ -565,22 +812,46 @@ class _AddDeviceDialogState extends ConsumerState<_AddDeviceDialog> {
       }
 
       // إضافة جهاز جديد
-      await dao.addDevice(BiometricDevicesCompanion.insert(
-        deviceCode: _deviceCodeController.text.trim(),
-        name: _nameController.text.trim(),
-        connectionType: _connectionType,
-        vendor: Value(_vendorController.text.trim().isEmpty ? null : _vendorController.text.trim()),
-        model: Value(_modelController.text.trim().isEmpty ? null : _modelController.text.trim()),
-        ipAddress: _connectionType == 'tcp_ip' ? Value(_ipController.text.trim()) : const Value(null),
-        port: _connectionType == 'tcp_ip' && _portController.text.isNotEmpty
-            ? Value(int.parse(_portController.text.trim()))
-            : const Value(null),
-        serialNumber: Value(_serialController.text.trim().isEmpty ? null : _serialController.text.trim()),
-        location: Value(_locationController.text.trim().isEmpty ? null : _locationController.text.trim()),
-        authToken: Value(_authTokenController.text.trim().isEmpty ? null : _authTokenController.text.trim()),
-        createdAt: now,
-        updatedAt: now,
-      ));
+      await dao.addDevice(
+        BiometricDevicesCompanion.insert(
+          deviceCode: _deviceCodeController.text.trim(),
+          name: _nameController.text.trim(),
+          connectionType: _connectionType,
+          vendor: Value(
+            _vendorController.text.trim().isEmpty
+                ? null
+                : _vendorController.text.trim(),
+          ),
+          model: Value(
+            _modelController.text.trim().isEmpty
+                ? null
+                : _modelController.text.trim(),
+          ),
+          ipAddress: _connectionType == 'tcp_ip'
+              ? Value(_ipController.text.trim())
+              : const Value(null),
+          port: _connectionType == 'tcp_ip' && _portController.text.isNotEmpty
+              ? Value(int.parse(_portController.text.trim()))
+              : const Value(null),
+          serialNumber: Value(
+            _serialController.text.trim().isEmpty
+                ? null
+                : _serialController.text.trim(),
+          ),
+          location: Value(
+            _locationController.text.trim().isEmpty
+                ? null
+                : _locationController.text.trim(),
+          ),
+          authToken: Value(
+            _authTokenController.text.trim().isEmpty
+                ? null
+                : _authTokenController.text.trim(),
+          ),
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
 
       if (!mounted) return;
       Navigator.pop(context);

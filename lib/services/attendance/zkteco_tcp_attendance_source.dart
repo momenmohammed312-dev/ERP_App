@@ -14,18 +14,23 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
   @override
   AttendanceSourceStatus get status => _status;
 
+  /// Last client failure detail (Arabic) — restored for truthful sync errors.
+  String? get lastError => _client.lastError;
+
+  ZkFetchReport? get lastFetchReport => _client.lastFetchReport;
+
   ZKTecoTcpAttendanceSource({
     required this.ipAddress,
     required this.port,
     this.authToken,
     Duration timeout = const Duration(seconds: 8),
-  })  : _client = ZKTecoClient(
-          host: ipAddress,
-          port: port,
-          commKey: int.tryParse(authToken ?? '') ?? 0,
-          timeout: timeout,
-        ),
-        super(deviceIdentifier: '$ipAddress:$port');
+  }) : _client = ZKTecoClient(
+         host: ipAddress,
+         port: port,
+         commKey: int.tryParse(authToken ?? '') ?? 0,
+         timeout: timeout,
+       ),
+       super(deviceIdentifier: '$ipAddress:$port');
 
   @override
   Future<bool> connect() async {
@@ -58,19 +63,28 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
   Future<List<RawAttendanceEvent>> fetchEvents({DateTime? since}) async {
     _status = AttendanceSourceStatus.fetching;
     try {
-      final records = await _client.getAttendanceRecords(since: since);
+      final report = await _client.fetchAttendanceReport(since: since);
       _status = AttendanceSourceStatus.connected;
 
-      return records.map((r) {
+      return report.records.map((record) {
+        final timestamp = record.timestamp;
+        final eventTime = DateTime(
+          timestamp.year,
+          timestamp.month,
+          timestamp.day,
+          timestamp.hour,
+          timestamp.minute,
+          timestamp.second,
+        );
         return RawAttendanceEvent(
-          externalUserId: r.userId,
-          eventTime: r.timestamp,
-          eventType: r.eventType,
+          externalUserId: record.userId,
+          eventTime: eventTime,
+          eventType: record.eventType,
           rawPayload:
-              '{"userId":"${r.userId}","time":"${r.timestamp.toIso8601String()}","status":${r.status},"verifyType":${r.verifyType}}',
+              '{"userId":"${record.userId}","time":"${eventTime.toIso8601String()}","status":${record.status},"verifyType":${record.verifyType}}',
         );
       }).toList();
-    } catch (e) {
+    } catch (_) {
       _status = AttendanceSourceStatus.error;
       rethrow;
     }
@@ -78,6 +92,9 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
 
   @override
   Future<List<DeviceEnrolledUser>> fetchEnrolledUsers() async {
+    // Restored: never swallow into an empty list — an empty-looking device
+    // ("nothing happens" on import) is indistinguishable from a fetch
+    // failure unless the error surfaces.
     try {
       final users = await _client.getUsers();
       return users.map((u) {
@@ -87,11 +104,17 @@ class ZKTecoTcpAttendanceSource extends AttendanceSource {
           cardNumber: u.card,
         );
       }).toList();
-    } catch (_) {
-      return [];
+    } catch (e) {
+      final detail = _client.lastError;
+      if (detail != null && detail.isNotEmpty) throw Exception(detail);
+      throw Exception('تعذر قراءة مستخدمي الجهاز: $e');
     }
   }
 
   /// Direct access to device info (Firmware, serial number, device time)
   Future<ZkDeviceInfo> getDeviceInfo() => _client.getDeviceInfo();
+
+  /// Corrects a drifting terminal clock (restored — clock skew shifts event
+  /// timestamps outside the `since` filter and imports silently miss).
+  Future<bool> setDeviceTime(DateTime dt) => _client.setDeviceTime(dt);
 }

@@ -24,7 +24,11 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   final Map<int, TextEditingController> _barcodeCtrls = {};
 
   final _companyCtrl = TextEditingController();
+  final _pageUrlCtrl = TextEditingController();
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
   bool _showPrice = true;
+  bool _showQr = false;
   bool _loading = true;
   String? _detectedPrinter;
   String? _detectedSizeText;
@@ -56,6 +60,10 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   Future<void> _init() async {
     final company = await SettingsService.getBusinessName();
     _companyCtrl.text = company;
+    final pageUrl = await SettingsService.getBusinessPageUrl();
+    _pageUrlCtrl.text = pageUrl;
+    // لو فيه لينك محفوظ — فعّل الـ QR افتراضيًا (المستخدم يقدر يطفيه).
+    if (pageUrl.trim().isNotEmpty) _showQr = true;
 
     final products = await widget.db.productDao.getAllProducts();
     // لو فيه منتجات قديمة لسه مالهاش باركود محفوظ — نولّد ونحفظ لها باركود
@@ -115,7 +123,9 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
 
   @override
   void dispose() {
+    _searchCtrl.dispose();
     _companyCtrl.dispose();
+    _pageUrlCtrl.dispose();
     for (final c in _barcodeCtrls.values) {
       c.dispose();
     }
@@ -123,6 +133,18 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
       c.dispose();
     }
     super.dispose();
+  }
+
+  List<Product> get _filteredProducts {
+    if (_searchQuery.isEmpty) return _products;
+    return _products.where((p) {
+      final nameMatches = p.name.toLowerCase().contains(_searchQuery);
+      final barcodeMatches =
+          p.barcode?.toLowerCase().contains(_searchQuery) ?? false;
+      final tempBarcodeMatches =
+          _barcodeCtrls[p.id]?.text.toLowerCase().contains(_searchQuery) ?? false;
+      return nameMatches || barcodeMatches || tempBarcodeMatches;
+    }).toList();
   }
 
   List<Product> get _selectedProducts =>
@@ -134,9 +156,11 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   double get _currentHeight => _customSize ? _customHeight : _presets[_selectedPreset]![1];
 
   void _selectAll() {
+    final list = _searchQuery.isEmpty ? _products : _filteredProducts;
+    if (list.isEmpty) return;
     setState(() {
-      final allSelected = _products.every((p) => _selected[p.id] == true);
-      for (final p in _products) {
+      final allSelected = list.every((p) => _selected[p.id] == true);
+      for (final p in list) {
         _selected[p.id] = !allSelected;
       }
     });
@@ -252,6 +276,7 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
         barcodeData: barcodeData,
         widthMm: _currentWidth,
         heightMm: _currentHeight,
+        qrData: _showQr ? _pageUrlCtrl.text.trim() : null,
       );
       if (mounted) {
         Navigator.of(context).pop(); // إغلاق مؤشر التحميل
@@ -334,6 +359,76 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
             onChanged: (v) => setState(() => _showPrice = v),
             contentPadding: EdgeInsets.zero,
           ),
+          SwitchListTile(
+            title: const Text('QR بجانب الباركود (لينك الصفحة)'),
+            value: _showQr,
+            onChanged: (v) => setState(() => _showQr = v),
+            contentPadding: EdgeInsets.zero,
+          ),
+          if (_showQr) ...[
+            TextField(
+              controller: _pageUrlCtrl,
+              textDirection: TextDirection.ltr,
+              decoration: const InputDecoration(
+                labelText: 'لينك الصفحة',
+                hintText: 'https://facebook.com/...',
+                prefixIcon: Icon(Icons.qr_code),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const Gap(8),
+            if (_currentWidth < 50)
+              Builder(
+                builder: (context) {
+                  final isDark =
+                      Theme.of(context).brightness == Brightness.dark;
+                  return Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.orange.shade900.withValues(alpha: 0.5)
+                          : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.orange.shade700
+                            : Colors.orange.shade300,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber,
+                          size: 18,
+                          color: isDark
+                              ? Colors.orange.shade200
+                              : Colors.orange.shade800,
+                        ),
+                        const Gap(6),
+                        Expanded(
+                          child: Text(
+                            'المقاس ضيق على باركود + QR معًا — انصح بمقاس 50×30 أو أكبر، أو لينك أقصر.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? Colors.orange.shade100
+                                  : Colors.orange.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              )
+            else
+              const Text(
+                'نصيحة: كلما كان اللينك أقصر كان الـ QR أوضح وأسرع في المسح.',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+          ],
           const Gap(8),
 
           Text('مقاس الملصق', style: theme.textTheme.labelLarge),
@@ -475,14 +570,40 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
             ),
           const Gap(4),
           if (barcodeValue.isNotEmpty)
-            BarcodeWidget(
-              barcode: Barcode.code128(),
-              data: barcodeValue,
-              width: 200,
-              height: 50,
-              drawText: true,
-              style: const TextStyle(fontSize: 10),
-            )
+            if (_showQr && _pageUrlCtrl.text.trim().isNotEmpty)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: BarcodeWidget(
+                      barcode: Barcode.code128(),
+                      data: barcodeValue,
+                      width: 140,
+                      height: 50,
+                      drawText: true,
+                      style: const TextStyle(fontSize: 9),
+                    ),
+                  ),
+                  const Gap(6),
+                  BarcodeWidget(
+                    barcode: Barcode.qrCode(),
+                    data: _pageUrlCtrl.text.trim(),
+                    width: 64,
+                    height: 64,
+                    drawText: false,
+                  ),
+                ],
+              )
+            else
+              BarcodeWidget(
+                barcode: Barcode.code128(),
+                data: barcodeValue,
+                width: 200,
+                height: 50,
+                drawText: true,
+                style: const TextStyle(fontSize: 10),
+              )
           else
             Container(
               width: 200,
@@ -497,50 +618,116 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
   }
 
   Widget _buildProductList(ThemeData theme) {
+    final displayProducts = _filteredProducts;
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+          child: TextField(
+            controller: _searchCtrl,
+            decoration: InputDecoration(
+              hintText: 'بحث باسم المنتج أو الباركود...',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      tooltip: 'مسح البحث',
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            onChanged: (v) =>
+                setState(() => _searchQuery = v.trim().toLowerCase()),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Row(
             children: [
-              Text('المنتجات (${_selectedProducts.length}/${_products.length})',
-                  style: theme.textTheme.titleSmall),
+              Text(
+                _searchQuery.isEmpty
+                    ? 'المنتجات (${_selectedProducts.length}/${_products.length})'
+                    : 'المنتجات (${_selectedProducts.length}/${_products.length}) · المعروض: ${displayProducts.length}',
+                style: theme.textTheme.titleSmall,
+              ),
               const Spacer(),
               TextButton.icon(
-                onPressed: _selectAll,
+                onPressed: displayProducts.isEmpty ? null : _selectAll,
                 icon: const Icon(Icons.select_all, size: 18),
-                label: const Text('تحديد الكل'),
+                label: Text(
+                  _searchQuery.isEmpty ? 'تحديد الكل' : 'تحديد النتائج',
+                ),
               ),
             ],
           ),
         ),
+        const Divider(height: 1),
         Expanded(
-          child: ListView.builder(
-            itemCount: _products.length,
-            itemBuilder: (context, index) {
-              final p = _products[index];
-              final isSelected = _selected[p.id] == true;
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                color: isSelected ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3) : null,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Row(
+          child: displayProducts.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Checkbox(
-                        value: isSelected,
-                        onChanged: (v) => setState(() => _selected[p.id] = v ?? false),
+                      Icon(Icons.search_off,
+                          size: 48, color: Colors.grey.shade400),
+                      const Gap(8),
+                      Text(
+                        'لا توجد منتجات مطابقة للبحث',
+                        style: TextStyle(color: Colors.grey.shade500),
                       ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: displayProducts.length,
+                  itemBuilder: (context, index) {
+                    final p = displayProducts[index];
+                    final isSelected = _selected[p.id] == true;
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 4),
+                      color: isSelected
+                          ? theme.colorScheme.primaryContainer
+                              .withValues(alpha: 0.3)
+                          : null,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Row(
                           children: [
-                            Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            Text('${p.price} ج.م',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                          ],
-                        ),
-                      ),
+                            Checkbox(
+                              value: isSelected,
+                              onChanged: (v) => setState(
+                                  () => _selected[p.id] = v ?? false),
+                            ),
+                            Expanded(
+                              child: InkWell(
+                                onTap: () => setState(
+                                    () => _selected[p.id] = !isSelected),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(p.name,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13)),
+                                    Text('${p.price} ج.م',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey.shade600)),
+                                  ],
+                                ),
+                              ),
+                            ),
                       if (isSelected) ...[
                         SizedBox(
                           width: 120,

@@ -6,7 +6,13 @@ import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/core/utils/app_utils.dart';
+import 'package:pos_offline_desktop/ui/purchase/widgets/purchase_detail_dialog.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
+
+/// List filter for the suppliers screen. Defaults to active only so that
+/// deactivated (soft-deleted) suppliers disappear while their financial
+/// history stays intact in the ledger.
+final supplierStatusFilterProvider = StateProvider<String>((_) => 'active');
 
 class SuppliersWidget extends ConsumerWidget {
   final AppDatabase db;
@@ -16,6 +22,7 @@ class SuppliersWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    final statusFilter = ref.watch(supplierStatusFilterProvider);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -107,6 +114,7 @@ class SuppliersWidget extends ConsumerWidget {
               ),
               const Gap(12), // Reduced gap
               DropdownButton<String>(
+                value: statusFilter,
                 items: [
                   DropdownMenuItem(value: 'all', child: Text(l10n.all)),
                   DropdownMenuItem(value: 'active', child: Text(l10n.active)),
@@ -117,7 +125,10 @@ class SuppliersWidget extends ConsumerWidget {
                   DropdownMenuItem(value: 'debt', child: Text(l10n.has_debt)),
                 ],
                 onChanged: (value) {
-                  // Filter suppliers
+                  if (value != null) {
+                    ref.read(supplierStatusFilterProvider.notifier).state =
+                        value;
+                  }
                 },
               ),
               const Gap(12), // Reduced gap
@@ -136,7 +147,9 @@ class SuppliersWidget extends ConsumerWidget {
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 600),
             child: StreamBuilder<List<Supplier>>(
-              stream: db.select(db.suppliers).watch(),
+              stream: statusFilter == 'debt'
+                  ? db.supplierDao.watchSuppliersWithDebt()
+                  : db.supplierDao.watchSuppliersByStatus(statusFilter),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -215,7 +228,9 @@ class SuppliersWidget extends ConsumerWidget {
       return result.map((row) {
         final d = row.data;
         return {
-          'id': int.tryParse(d['id']?.toString() ?? '') ?? 0,
+          // Keep the TEXT purchase id verbatim (int.tryParse used to
+          // collapse every PUR- id to 0, breaking detail/edit/return).
+          'id': d['id']?.toString() ?? '',
           'invoice_number': d['invoice_number']?.toString(),
           'purchase_date': parseDate(d['purchase_date']).toIso8601String(),
           'total_amount': (d['total_amount'] as num?)?.toDouble() ?? 0.0,
@@ -300,6 +315,30 @@ class SuppliersWidget extends ConsumerWidget {
               onPressed: () async {
                 if (nameController.text.isNotEmpty) {
                   try {
+                    // Duplicate guard: same normalized name (+phone when both
+                    // present) blocks the insert with a conflict message.
+                    // Never auto-merges; the user picks use-existing vs edit.
+                    final conflicts =
+                        await db.supplierDao.findDuplicateSuppliers(
+                      name: nameController.text,
+                      phone: phoneController.text.isNotEmpty
+                          ? phoneController.text
+                          : null,
+                    );
+                    if (conflicts.isNotEmpty) {
+                      if (dialogContext.mounted) {
+                        Navigator.pop(dialogContext);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'المورد موجود بالفعل: ${conflicts.first.name} — استخدم الموجود أو عدّله بدل التكرار',
+                            ),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                      return;
+                    }
                     // Add supplier to database
                     await db.supplierDao.insertSupplier(
                       SuppliersCompanion.insert(
@@ -631,7 +670,24 @@ class _SupplierCard extends StatelessWidget {
                                 purchase['paid_amount'] as double;
                             final remaining = amount - paidAmount;
                             final isPaid = remaining <= 0;
-                            return Container(
+                            // Tap opens the purchase detail (عرض/تعديل/
+                            // استرجاع), mirroring customer invoices. The
+                            // subtree rebuild on close refreshes balances.
+                            return InkWell(
+                              onTap: () async {
+                                await showDialog(
+                                  context: context,
+                                  builder: (_) => PurchaseDetailDialog(
+                                    db: db,
+                                    purchaseId:
+                                        purchase['id']?.toString() ?? '',
+                                  ),
+                                );
+                                if (context.mounted) {
+                                  (context as Element).markNeedsBuild();
+                                }
+                              },
+                              child: Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 border: Border(
@@ -649,8 +705,36 @@ class _SupplierCard extends StatelessWidget {
                                     ),
                                   ),
                                   Expanded(
-                                    child: Text(
-                                      'فاتورة ${purchase['invoice_number'] ?? 'غير محدد'}',
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'فاتورة ${purchase['invoice_number'] ?? 'غير محدد'}',
+                                        ),
+                                        const Gap(2),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.withValues(
+                                              alpha: 0.1,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: const Text(
+                                            'شراء',
+                                            style: TextStyle(
+                                              color: Colors.blue,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   Expanded(
@@ -692,6 +776,7 @@ class _SupplierCard extends StatelessWidget {
                                   ),
                                 ],
                               ),
+                            ),
                             );
                           }),
                         ],
@@ -702,19 +787,12 @@ class _SupplierCard extends StatelessWidget {
 
                 const Gap(16),
 
-                // Action Buttons
+                // Action Buttons (supplier quick-purchase removed permanently:
+                // it posted debit-side ledger rows with no purchase, items or
+                // stock — see Item 3; purchases are created from the supply
+                // invoice page only).
                 Row(
                   children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          _showAddPurchaseDialog(supplier);
-                        },
-                        icon: const Icon(Icons.shopping_cart),
-                        label: Text(AppLocalizations.of(context).add_purchase),
-                      ),
-                    ),
-                    const Gap(16),
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () {
@@ -835,6 +913,28 @@ class _SupplierCard extends StatelessWidget {
               onPressed: () async {
                 if (nameController.text.isNotEmpty) {
                   try {
+                    final conflicts =
+                        await db.supplierDao.findDuplicateSuppliers(
+                      name: nameController.text,
+                      phone: phoneController.text.isNotEmpty
+                          ? phoneController.text
+                          : null,
+                      excludeId: supplier.id,
+                    );
+                    if (conflicts.isNotEmpty) {
+                      if (dialogContext.mounted) {
+                        Navigator.pop(dialogContext);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'الاسم/الهاتف يطابق موردًا آخر: ${conflicts.first.name} — راجع البيانات بدل التكرار',
+                            ),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                      return;
+                    }
                     await db.supplierDao.updateSupplier(
                       SuppliersCompanion(
                         id: Value(supplier.id),
@@ -848,7 +948,9 @@ class _SupplierCard extends StatelessWidget {
                         openingBalance: Value(
                           double.tryParse(balanceController.text) ?? 0.0,
                         ),
-                        status: const Value('Active'),
+                        // Preserve lifecycle status: editing must never
+                        // resurrect a deactivated supplier.
+                        status: Value(supplier.status),
                       ),
                     );
 
@@ -888,7 +990,10 @@ class _SupplierCard extends StatelessWidget {
       builder: (dialogContext) {
         return AlertDialog(
           title: Text('حذف المورد'),
-          content: Text('هل أنت متأكد من حذف المورد "${supplier.name}"؟'),
+          content: Text(
+            'سيتم إخفاء "${supplier.name}" من القوائم مع الاحتفاظ الكامل '
+            'بسجل فواتيره ومدفوعاته في الدفتر.',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
@@ -897,13 +1002,15 @@ class _SupplierCard extends StatelessWidget {
             ElevatedButton(
               onPressed: () async {
                 try {
-                  await db.supplierDao.deleteSupplier(supplier.id);
+                  // Soft delete: deactivate so history (purchases, ledger)
+                  // is never orphaned. The default list shows Active only.
+                  await db.supplierDao.deactivateSupplier(supplier.id);
 
                   if (dialogContext.mounted) {
                     Navigator.pop(dialogContext);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('تم حذف المورد بنجاح'),
+                        content: Text('تم حذف المورد مع الاحتفاظ بالسجلات'),
                         backgroundColor: Colors.green,
                       ),
                     );
@@ -925,96 +1032,6 @@ class _SupplierCard extends StatelessWidget {
                 foregroundColor: Colors.white,
               ),
               child: Text('حذف'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showAddPurchaseDialog(Supplier supplier) {
-    final amountController = TextEditingController();
-    final descriptionController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text('إضافة مشتريات من ${supplier.name}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: amountController,
-                decoration: InputDecoration(
-                  labelText: 'المبلغ',
-                  border: const OutlineInputBorder(),
-                  prefixText: 'ج.م',
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const Gap(16),
-              TextField(
-                controller: descriptionController,
-                decoration: InputDecoration(
-                  labelText: 'الوصف',
-                  border: const OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('إلغاء'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (amountController.text.isNotEmpty) {
-                  try {
-                    // Add purchase transaction
-                    await db.ledgerDao.insertTransaction(
-                      LedgerTransactionsCompanion.insert(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        entityType: 'Supplier',
-                        refId: supplier.id,
-                        date: DateTime.now(),
-                        description: descriptionController.text.isNotEmpty
-                            ? descriptionController.text
-                            : 'شراء من المورد',
-                        debit: Value(
-                          double.tryParse(amountController.text) ?? 0.0,
-                        ),
-                        origin: 'purchase',
-                        paymentMethod: const Value('cash'),
-                        createdAt: Value(DateTime.now()),
-                      ),
-                    );
-
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(
-                          content: Text('تم إضافة المشتريات بنجاح'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(
-                          content: Text('خطأ: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                }
-              },
-              child: Text('إضافة'),
             ),
           ],
         );
@@ -1063,7 +1080,10 @@ class _SupplierCard extends StatelessWidget {
               onPressed: () async {
                 if (amountController.text.isNotEmpty) {
                   try {
-                    // Add payment transaction
+                    // Add payment transaction: paying a supplier REDUCES what
+                    // we owe, so it is a DEBIT (credit would increase the
+                    // debt — the old code had this backwards and each
+                    // payment grew the balance instead of shrinking it).
                     await db.ledgerDao.insertTransaction(
                       LedgerTransactionsCompanion.insert(
                         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -1073,9 +1093,10 @@ class _SupplierCard extends StatelessWidget {
                         description: descriptionController.text.isNotEmpty
                             ? descriptionController.text
                             : 'سداد دفعة للمورد',
-                        credit: Value(
+                        debit: Value(
                           double.tryParse(amountController.text) ?? 0.0,
                         ),
+                        credit: const Value(0.0),
                         origin: 'payment',
                         paymentMethod: const Value('cash'),
                         createdAt: Value(DateTime.now()),

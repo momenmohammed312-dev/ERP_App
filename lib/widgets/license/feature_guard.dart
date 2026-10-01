@@ -22,6 +22,7 @@ class FeatureGuard extends StatelessWidget {
       'inventory',
       'customers',
       'reports',
+      'staff_management',
     ];
     if (bypassFeatures.contains(featureName)) {
       return child;

@@ -55,11 +55,16 @@ class StaffTable extends Table {
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
 
   // ── Work Schedule (per-employee overrides) ──────────────────────────
-  TextColumn get workScheduleStart => text().nullable()(); // '09:00' or null = use default
-  TextColumn get workScheduleEnd => text().nullable()();   // '17:00' or null = use default
-  TextColumn get workDays => text().nullable()();          // 'sun,mon,tue,wed,thu' or null = use default
-  TextColumn get weekendDay => text().nullable()();        // 'fri' or null = use default
-  BoolColumn get useDefaultSchedule => boolean().withDefault(const Constant(true))();
+  TextColumn get workScheduleStart =>
+      text().nullable()(); // '09:00' or null = use default
+  TextColumn get workScheduleEnd =>
+      text().nullable()(); // '17:00' or null = use default
+  TextColumn get workDays =>
+      text().nullable()(); // 'sun,mon,tue,wed,thu' or null = use default
+  TextColumn get weekendDay =>
+      text().nullable()(); // 'fri' or null = use default
+  BoolColumn get useDefaultSchedule =>
+      boolean().withDefault(const Constant(true))();
 }
 
 /// Attendance table for tracking employee attendance
@@ -86,21 +91,42 @@ class AttendanceTable extends Table {
   TextColumn get status =>
       text()(); // 'present', 'absent', 'late', 'half_day', 'leave'
 
+  // v72: permission/excuse model restored from baseline 5eb58db.
+  // `excused` is the authoritative flag: a row is a permission when it is set,
+  // regardless of how the `status` string was written by an older build.
+  BoolColumn get excused =>
+      boolean().withDefault(const Constant(false))(); // permission / عذر granted
+  // Hours of the permission that actually cost money. 0 = fully exempt day.
+  RealColumn get excusedHours =>
+      real().withDefault(const Constant(0.0))(); // partial permission hours
+
   TextColumn get leaveType =>
       text().nullable()(); // 'sick', 'annual', 'emergency', 'unpaid'
 
   TextColumn get notes => text().nullable()(); // Attendance notes
 
-  TextColumn get source => text().nullable()(); // 'manual' | 'device' | 'import' | 'admin_override'
+  TextColumn get source =>
+      text().nullable()(); // 'manual' | 'device' | 'import' | 'admin_override'
 
-  IntColumn get sourceDeviceId => integer().nullable()(); // references BiometricDevices.id, null if manual
+  IntColumn get sourceDeviceId =>
+      integer().nullable()(); // references BiometricDevices.id, null if manual
 
-  IntColumn get rawEventId => integer().nullable()(); // references AttendanceRawEvents.id, null if manual
+  IntColumn get rawEventId => integer()
+      .nullable()(); // references AttendanceRawEvents.id, null if manual
 
-  TextColumn get overrideReason => text().nullable()(); // required when source = 'admin_override'
+  TextColumn get overrideReason =>
+      text().nullable()(); // required when source = 'admin_override'
 
   RealColumn get overtimeHours =>
       real().withDefault(const Constant(0))(); // Overtime hours
+
+  // v72: late minutes are measured from the SHIFT START (grace only decides
+  // whether the row is late at all), matching baseline 5eb58db:871/900.
+  IntColumn get lateMinutes =>
+      integer().withDefault(const Constant(0))();
+  // v72: hours of partial permission (left early) entered by an admin.
+  RealColumn get permissionHours =>
+      real().withDefault(const Constant(0.0))();
 
   TextColumn get approvedBy => text().nullable()(); // Manager who approved
 
@@ -111,7 +137,11 @@ class AttendanceTable extends Table {
 
   DateTimeColumn get updatedAt => dateTime()();
 
-  // No custom primaryKey needed - using default composite key
+  // No custom primaryKey needed - using default composite key.
+  // NOTE: the `uniqueKeys => [{staffId, date}]` constraint introduced by the
+  // uncommitted v59 work was REMOVED. It converts pre-existing duplicate
+  // attendance rows into a hard SqliteException on any device sync that races.
+  // The v59 dedupe migration that would have cleaned those rows is frozen too.
 }
 
 /// Vacations table for managing employee leave requests
@@ -275,6 +305,24 @@ class PayrollTable extends Table {
   RealColumn get rewardsTotal => real().withDefault(const Constant(0.0))();
   RealColumn get penaltiesTotal => real().withDefault(const Constant(0.0))();
   TextColumn get expenseRefId => text().nullable()();
+
+  // Bug 4(b): flat fine per late instance (late_penalty_amount setting).
+  // Additive v56 columns with safe defaults — old rows read as zero.
+  IntColumn get lateDays =>
+      integer().withDefault(const Constant(0))(); // Days with status 'late'
+  RealColumn get lateDeduction =>
+      real().withDefault(const Constant(0.0))(); // lateDays × setting
+
+  // v72: first-class permission/late values restored from baseline 5eb58db.
+  // These are no longer squeezed into `otherDeductions` — they get their own
+  // columns so the slip, the PDF and the attendance card all read the same
+  // stored number instead of reverse-engineering it by subtraction.
+  RealColumn get lateHours =>
+      real().withDefault(const Constant(0.0))(); // totalLateHours actually deducted
+  RealColumn get permissionHours =>
+      real().withDefault(const Constant(0.0))(); // permission hours in the period
+  RealColumn get permissionDeduction =>
+      real().withDefault(const Constant(0.0))(); // permissionHours × hourly
 
   DateTimeColumn get createdAt => dateTime()();
 
