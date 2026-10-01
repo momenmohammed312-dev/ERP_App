@@ -19,6 +19,19 @@ DateTime recentPastWeekday(int weekday) {
   return DateTime(d.year, d.month, d.day);
 }
 
+/// مثل [recentPastWeekday] لكن يضمن ألّا يقلّ اليوم المُعاد عن [minDaysAgo] يوم،
+/// ليبقى يومه التالي داخل نطاق "الأيام المغلقة".
+///
+/// [recentPastWeekday] وحدها قد ترجع بأمس، فيصير اليوم التالي هو اليوم الحالي
+/// تماماً — والمحرك يقصّ اليوم الحالي عمداً (اليوم مفتوح)، فتفشل التوقعات.
+DateTime recentClosedWeekday(int weekday, {int minDaysAgo = 2}) {
+  var d = DateTime.now().subtract(Duration(days: minDaysAgo));
+  while (d.weekday != weekday) {
+    d = d.subtract(const Duration(days: 1));
+  }
+  return DateTime(d.year, d.month, d.day);
+}
+
 class _FakeSource extends AttendanceSource {
   final List<RawAttendanceEvent> events;
   _FakeSource(this.events) : super(deviceIdentifier: 'fake-absence');
@@ -85,7 +98,7 @@ void main() {
     test('creates absents only for missing staff on closed workdays',
         () async {
       final (_, staffDao, engine) = await setupDb();
-      final d1 = recentPastWeekday(DateTime.wednesday);
+      final d1 = recentClosedWeekday(DateTime.wednesday);
       final d2 = d1.add(const Duration(days: 1)); // الخميس
       await addStaff(staffDao, 'A', 'حاضر');
       await addStaff(staffDao, 'B', 'غايب');
@@ -156,7 +169,7 @@ void main() {
 
     test('skips days before hire date', () async {
       final (_, staffDao, engine) = await setupDb();
-      final d1 = recentPastWeekday(DateTime.wednesday);
+      final d1 = recentClosedWeekday(DateTime.wednesday);
       final d2 = d1.add(const Duration(days: 1));
       await addStaff(staffDao, 'A', 'جديد', hireDate: d2);
 
