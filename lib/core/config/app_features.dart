@@ -21,4 +21,10 @@ class AppFeatures {
 
   /// Damaged-goods module (launcher button). Active in the base build.
   static bool get hasDamagedModule => flavor == Flavor.base;
+
+  /// Custody module (العهد المالية). Hidden in clothing flavor.
+  static bool get hasCustodyModule => flavor != Flavor.clothing;
+
+  /// Suppliers module (الموردين). Available across flavors.
+  static bool get hasSuppliersModule => true;
 }
