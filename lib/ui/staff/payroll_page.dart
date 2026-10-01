@@ -8,6 +8,7 @@ import '../../core/utils/currency_helper.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../services/staff_management_service.dart';
 import 'services/staff_payroll_statement_generator.dart';
+import 'batch_payroll_slips_page.dart';
 
 class PayrollPage extends ConsumerStatefulWidget {
   final Staff staff;
@@ -51,6 +52,34 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: Text('مرتبات: ${widget.staff.name}'),
+        actions: [
+          ElevatedButton.icon(
+            onPressed: () {
+              final latestPeriod = _payrollHistory.isNotEmpty
+                  ? _payrollHistory.first.payrollPeriod
+                  : null;
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => BatchPayrollSlipsPage(
+                    initialPeriod: latestPeriod,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.receipt_long, size: 18),
+            label: const Text('طباعة القسائم / كشف الصرف'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _payrollHistory.isEmpty
