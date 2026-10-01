@@ -263,8 +263,6 @@ class StaffPayrollStatementGenerator {
     final dateFormat = DateFormat('yyyy-MM-dd');
     final issueDateStr = dateFormat.format(DateTime.now());
     final t = computeVoucherTotals(payrolls);
-    final shown = payrolls.take(voucherMaxRows).toList();
-    final hidden = payrolls.length - shown.length;
 
     pw.Widget signatureBox(String role) {
       return pw.Container(
@@ -338,110 +336,81 @@ class StaffPayrollStatementGenerator {
               _b('الفترة: $period'),
               style: pw.TextStyle(font: arabicBoldFont, fontSize: 13),
             ),
-            pw.SizedBox(height: 8),
-            // شريط المجاميع: أساسي | إضافات | خصومات | الصافي
-            pw.Row(
-              children: [
-                for (final cell in [
-                  ('الأساسي', t.basic, PdfColors.black),
-                  ('إضافات', t.additions, PdfColors.teal900),
-                  ('خصومات', t.deductions, PdfColors.red900),
-                  ('الصافي (${payrolls.length})', t.net, PdfColors.green900),
-                ])
-                  pw.Expanded(
-                    child: pw.Container(
-                      margin: const pw.EdgeInsets.symmetric(horizontal: 2),
-                      decoration: pw.BoxDecoration(
-                        border: pw.Border.all(
-                          color: cell.$3,
-                          width: cell.$1.startsWith('الصافي') ? 1.2 : 0.6,
-                        ),
-                        borderRadius: const pw.BorderRadius.all(
-                          pw.Radius.circular(4),
-                        ),
-                      ),
-                      padding: const pw.EdgeInsets.symmetric(vertical: 6),
-                      child: pw.Column(
-                        children: [
-                          pw.Text(
-                            _b(cell.$1),
-                            style: pw.TextStyle(
-                              font: arabicFont,
-                              fontSize: 8,
-                              color: PdfColors.grey700,
-                            ),
-                          ),
-                          pw.Text(
-                            _b(cell.$2.toStringAsFixed(0)),
-                            style: pw.TextStyle(
-                              font: arabicBoldFont,
-                              fontSize: 14,
-                              color: cell.$3,
-                            ),
-                          ),
-                        ],
+            pw.SizedBox(height: 16),
+            // مربع الإجمالي الصافي فقط
+            pw.Center(
+              child: pw.Container(
+                width: 280,
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(
+                    color: PdfColors.green900,
+                    width: 1.5,
+                  ),
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(6),
+                  ),
+                  color: PdfColors.green50,
+                ),
+                padding: const pw.EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                child: pw.Column(
+                  children: [
+                    pw.Text(
+                      _b('إجمالي (${payrolls.length} مرتب)'),
+                      style: pw.TextStyle(
+                        font: arabicFont,
+                        fontSize: 12,
+                        color: PdfColors.grey800,
                       ),
                     ),
-                  ),
-              ],
-            ),
-            pw.SizedBox(height: 8),
-            // جدول المشمولين: اسم/كود/صافي (مضغوط، بحد أقصى للصفحة الواحدة)
-            pw.TableHelper.fromTextArray(
-              headers: [_b('م'), _b('الاسم'), _b('الكود'), _b('الصافي')],
-              data: [
-                for (int i = 0; i < shown.length; i++)
-                  [
-                    _b('${i + 1}'),
-                    _b(staffMap[shown[i].staffId]?.name ?? shown[i].staffId),
-                    _b(shown[i].staffId),
-                    _b(shown[i].netSalary.toStringAsFixed(0)),
+                    pw.SizedBox(height: 6),
+                    pw.Text(
+                      _b(t.net.toStringAsFixed(0)),
+                      style: pw.TextStyle(
+                        font: arabicBoldFont,
+                        fontSize: 28,
+                        color: PdfColors.green900,
+                      ),
+                    ),
                   ],
-              ],
-              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.4),
-              headerStyle: pw.TextStyle(font: arabicBoldFont, fontSize: 8),
-              cellStyle: pw.TextStyle(font: arabicFont, fontSize: 8),
-              headerDecoration: const pw.BoxDecoration(
-                color: PdfColors.grey200,
-              ),
-              cellAlignment: pw.Alignment.center,
-              headerAlignment: pw.Alignment.center,
-              columnWidths: {
-                0: const pw.FlexColumnWidth(0.6),
-                1: const pw.FlexColumnWidth(3),
-                2: const pw.FlexColumnWidth(2),
-                3: const pw.FlexColumnWidth(1.6),
-              },
-            ),
-            if (hidden > 0)
-              pw.Padding(
-                padding: const pw.EdgeInsets.only(top: 2),
-                child: pw.Text(
-                  _b('و $hidden موظف آخرون ضمن الإجمالي أعلاه'),
-                  style: pw.TextStyle(
-                    font: arabicFont,
-                    fontSize: 8,
-                    color: PdfColors.grey700,
-                  ),
                 ),
               ),
-            pw.SizedBox(height: 6),
-            pw.Text(
-              _b(
-                'مدفوع مسبقاً: $paidCount • ${paidTotal.toStringAsFixed(0)} | منتهون: $excludedCount • ${excludedTotal.toStringAsFixed(0)} | الصرف: $methodLabel',
-              ),
-              style: pw.TextStyle(
-                font: arabicFont,
-                fontSize: 8,
-                color: PdfColors.grey700,
-              ),
             ),
-            pw.SizedBox(height: 6),
-            pw.Text(
-              _b(
-                'عهدة/مستلم المبلغ للتوزيع: ........................................',
+            pw.SizedBox(height: 24),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300, width: 0.6),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
               ),
-              style: pw.TextStyle(font: arabicFont, fontSize: 10),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    _b(
+                      'طريقة الصرف: $methodLabel',
+                    ),
+                    style: pw.TextStyle(
+                      font: arabicBoldFont,
+                      fontSize: 10,
+                      color: PdfColors.grey800,
+                    ),
+                  ),
+                  pw.SizedBox(height: 8),
+                  pw.Text(
+                    _b(
+                      'عهدة/مستلم المبلغ للتوزيع: ........................................',
+                    ),
+                    style: pw.TextStyle(font: arabicFont, fontSize: 10),
+                  ),
+                  pw.SizedBox(height: 8),
+                  pw.Text(
+                    _b(
+                      'ملاحظات: ........................................................................................................',
+                    ),
+                    style: pw.TextStyle(font: arabicFont, fontSize: 9, color: PdfColors.grey700),
+                  ),
+                ],
+              ),
             ),
             pw.Spacer(),
             pw.Row(
@@ -452,6 +421,7 @@ class StaffPayrollStatementGenerator {
                 signatureBox('استلم المبلغ (الموزع)'),
               ],
             ),
+            pw.SizedBox(height: 16),
           ],
         ),
       ),
