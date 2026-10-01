@@ -31,6 +31,8 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
   int _gracePeriodMinutes = 15;
   double _latePenaltyMultiplier = 1.5;
   double _perfectAttendanceBonus = 0.0;
+  bool _perfectAttendanceEnabled = true;
+  bool _perfectAttendanceApplyWeekly = false;
   double _absencePenaltyAmount = 0;
   String _absenceMode = 'day_wage'; // 'day_wage' | 'fixed'
   double _absencePenaltyDaysMultiplier = 1.0;
@@ -77,6 +79,10 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             _latePenaltyMultiplier = double.tryParse(s.settingValue) ?? 1.5;
           case 'perfect_attendance_bonus':
             _perfectAttendanceBonus = double.tryParse(s.settingValue) ?? 0;
+          case 'perfect_attendance_enabled':
+            _perfectAttendanceEnabled = s.settingValue.toLowerCase() != 'false';
+          case 'perfect_attendance_apply_weekly':
+            _perfectAttendanceApplyWeekly = s.settingValue.toLowerCase() == 'true';
           case 'absence_deduction_mode':
             _absenceMode = s.settingValue == 'fixed' ? 'fixed' : 'day_wage';
           case 'absence_penalty_days_multiplier':
@@ -123,6 +129,8 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
         'grace_period_minutes': _gracePeriodMinutes.toString(),
         'late_penalty_per_hour': _latePenaltyMultiplier.toString(),
         'perfect_attendance_bonus': _perfectAttendanceBonus.toString(),
+        'perfect_attendance_enabled': _perfectAttendanceEnabled.toString(),
+        'perfect_attendance_apply_weekly': _perfectAttendanceApplyWeekly.toString(),
         'absence_deduction_mode': _absenceMode,
         'absence_penalty_days_multiplier': _absencePenaltyDaysMultiplier.toString(),
         'overtime_grace_minutes': _overtimeGraceMinutes.toString(),
@@ -628,6 +636,65 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
               setState(() => _overtimeGraceMinutes = result);
             }
           },
+        ),
+        const Divider(height: 1),
+        ListTile(
+          title: const Text('مكافأة الحضور الكامل (الانتظام)'),
+          subtitle: Text(
+            _perfectAttendanceBonus > 0
+                ? '${_perfectAttendanceBonus.toStringAsFixed(0)} ج.م (للفترة بدون أي غياب أو تأخير)'
+                : 'غير مفعلة (0 ج.م)',
+          ),
+          trailing: const Icon(Icons.stars, color: Colors.amber),
+          onTap: () async {
+            final controller = TextEditingController(
+              text: _perfectAttendanceBonus > 0 ? _perfectAttendanceBonus.toString() : '',
+            );
+            final result = await showDialog<double>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('مكافأة الحضور الكامل'),
+                content: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'مبلغ المكافأة',
+                    suffixText: 'ج.م',
+                    hintText: '0 = بدون مكافأة',
+                  ),
+                ),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                  ElevatedButton(
+                    onPressed: () {
+                      final val = double.tryParse(controller.text) ?? 0.0;
+                      Navigator.pop(ctx, val);
+                    },
+                    child: const Text('موافق'),
+                  ),
+                ],
+              ),
+            );
+            if (result != null) {
+              setState(() => _perfectAttendanceBonus = result);
+            }
+          },
+        ),
+        const Divider(height: 1),
+        SwitchListTile(
+          title: const Text('تفعيل مكافأة الانتظام'),
+          subtitle: const Text('إضافة مكافأة الحضور الكامل تلقائياً عند احتساب المرتب'),
+          value: _perfectAttendanceEnabled,
+          onChanged: (val) => setState(() => _perfectAttendanceEnabled = val),
+        ),
+        const Divider(height: 1),
+        SwitchListTile(
+          title: const Text('تطبيق المكافأة على الموظفين بالأسبوع'),
+          subtitle: const Text('افتراضياً غير مفعلة لموظفي الأسبوعي لمنع تكرار صرفها أسبوعياً'),
+          value: _perfectAttendanceApplyWeekly,
+          onChanged: _perfectAttendanceEnabled
+              ? (val) => setState(() => _perfectAttendanceApplyWeekly = val)
+              : null,
         ),
       ],
     );

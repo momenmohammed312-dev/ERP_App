@@ -1048,16 +1048,23 @@ class StaffManagementService {
       }
     } else {
       try {
-        final row = await (db.select(db.attendanceSettings)
-              ..where((t) =>
-                  t.settingKey.equals('perfect_attendance_bonus')))
-            .getSingleOrNull();
-        final configured = double.tryParse(row?.settingValue ?? '0') ?? 0.0;
-        if (configured > 0 &&
-            attendanceSummary.absentDays == 0 &&
-            attendanceSummary.leaveDays == 0 &&
-            deduction.totalLateMinutes == 0) {
-          perfectAttendanceBonus = configured;
+        final settingsRows = await db.select(db.attendanceSettings).get();
+        final settingsMap = {for (final s in settingsRows) s.settingKey: s.settingValue};
+
+        final isEnabled = settingsMap['perfect_attendance_enabled']?.toLowerCase() != 'false';
+        final applyWeekly = settingsMap['perfect_attendance_apply_weekly']?.toLowerCase() == 'true';
+        final isWeeklyEmployee = staff.employmentType == 'weekly';
+
+        final shouldApply = isEnabled && (!isWeeklyEmployee || applyWeekly);
+
+        if (shouldApply) {
+          final configured = double.tryParse(settingsMap['perfect_attendance_bonus'] ?? '0') ?? 0.0;
+          if (configured > 0 &&
+              attendanceSummary.absentDays == 0 &&
+              attendanceSummary.leaveDays == 0 &&
+              deduction.totalLateMinutes == 0) {
+            perfectAttendanceBonus = configured;
+          }
         }
       } catch (_) {}
     }
