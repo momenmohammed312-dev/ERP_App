@@ -72,34 +72,88 @@ class UnifiedPrintService {
     );
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         textDirection: pw.TextDirection.rtl,
         theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicFontBold),
-        margin: const pw.EdgeInsets.all(32),
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              /// MANDATORY: Global Header
-              _buildGlobalHeader(
-                pdf,
-                arabicFont,
-                arabicFontBold,
-                documentType,
-                effectiveStoreInfo,
-                logoImage,
+        margin: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        header: (pw.Context context) {
+          if (context.pageNumber == 1) {
+            return pw.Column(
+              children: [
+                _buildGlobalHeader(
+                  pdf,
+                  arabicFont,
+                  arabicFontBold,
+                  documentType,
+                  effectiveStoreInfo,
+                  logoImage,
+                ),
+                pw.SizedBox(height: 12),
+              ],
+            );
+          }
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 10),
+            padding: const pw.EdgeInsets.only(bottom: 4),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(
+                bottom: pw.BorderSide(color: PdfColors.grey400, width: 0.5),
               ),
-              pw.SizedBox(height: 20),
-
-              /// Document-specific content
-              ...documentContent,
-
-              /// MANDATORY: Footer
-              pw.Expanded(child: pw.Container()),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  effectiveStoreInfo.storeName,
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                    font: arabicFontBold,
+                  ),
+                ),
+                pw.Text(
+                  '${_getDocumentTitle(documentType)} (تابع)',
+                  style: pw.TextStyle(
+                    fontSize: 9,
+                    font: arabicFont,
+                    color: PdfColors.grey700,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+        footer: (pw.Context context) {
+          return pw.Column(
+            children: [
               _buildGlobalFooter(arabicFont, footerMsg),
+              pw.SizedBox(height: 4),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'صفحة ${context.pageNumber} من ${context.pagesCount}',
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      color: PdfColors.grey600,
+                      font: arabicFont,
+                    ),
+                  ),
+                  pw.Text(
+                    'Developed by MO2',
+                    style: const pw.TextStyle(
+                      fontSize: 7,
+                      color: PdfColors.grey500,
+                    ),
+                  ),
+                ],
+              ),
             ],
           );
+        },
+        build: (pw.Context context) {
+          return documentContent;
         },
       ),
     );
@@ -360,16 +414,17 @@ class UnifiedPrintService {
       /// MANDATORY: 4-Column Grid Table
       pw.Table(
         border: pw.TableBorder.all(color: PdfColors.grey400),
-        columnWidths: {
-          0: const pw.FlexColumnWidth(3), // Description
-          1: const pw.FlexColumnWidth(1), // Quantity
-          2: const pw.FlexColumnWidth(1.5), // Price
-          3: const pw.FlexColumnWidth(1.5), // Total
+        columnWidths: const {
+          0: pw.FlexColumnWidth(3.2), // Description
+          1: pw.FlexColumnWidth(1),   // Quantity
+          2: pw.FlexColumnWidth(1.4), // Price
+          3: pw.FlexColumnWidth(1.4), // Total
         },
         children: [
           /// Table Header
           pw.TableRow(
-            decoration: pw.BoxDecoration(color: PdfColors.grey300),
+            decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+            repeat: true,
             children: [
               _buildTableCell('الوصف', isHeader: true, font: arabicFontBold),
               _buildTableCell('الكمية', isHeader: true, font: arabicFontBold),
@@ -386,16 +441,31 @@ class UnifiedPrintService {
                   item.description,
                   isBold: true,
                   font: arabicFontBold,
+                  padding: invoiceData.items.length > 10
+                      ? const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3)
+                      : const pw.EdgeInsets.all(5),
                 ),
-                _buildTableCell('${item.quantity}', font: arabicFont),
+                _buildTableCell(
+                  '${item.quantity}',
+                  font: arabicFont,
+                  padding: invoiceData.items.length > 10
+                      ? const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3)
+                      : const pw.EdgeInsets.all(5),
+                ),
                 _buildTableCell(
                   '${item.unitPrice.toStringAsFixed(2)} ج.م',
                   font: arabicFont,
+                  padding: invoiceData.items.length > 10
+                      ? const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3)
+                      : const pw.EdgeInsets.all(5),
                 ),
                 _buildTableCell(
                   '${item.totalPrice.toStringAsFixed(2)} ج.م',
                   isBold: true,
                   font: arabicFontBold,
+                  padding: invoiceData.items.length > 10
+                      ? const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3)
+                      : const pw.EdgeInsets.all(5),
                 ),
               ],
             ),
@@ -404,9 +474,9 @@ class UnifiedPrintService {
       ),
       pw.SizedBox(height: 10),
 
-      /// Summary Section
+      /// Summary Section (keep intact on page boundary)
       pw.Container(
-        padding: const pw.EdgeInsets.all(10),
+        padding: const pw.EdgeInsets.all(8),
         decoration: pw.BoxDecoration(
           border: pw.Border.all(color: PdfColors.grey400),
           borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
@@ -760,9 +830,10 @@ class UnifiedPrintService {
     bool isBold = false,
     PdfColor? color,
     pw.Font? font,
+    pw.EdgeInsets? padding,
   }) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(6),
+      padding: padding ?? const pw.EdgeInsets.all(6),
       child: pw.Text(
         text,
         textAlign: pw.TextAlign.center,

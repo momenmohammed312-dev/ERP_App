@@ -33,11 +33,23 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  /// Tab count follows the staff flag (staff tab present or not) + custody tab.
-  int get _tabCount => AppFeatures.hasStaffModule ? 8 : 7;
+  /// Tab count follows the active feature flags.
+  int get _tabCount {
+    int count = 5; // Dashboard, Products, Customers, Cash, Reports
+    if (AppFeatures.hasSuppliersModule) count++;
+    if (AppFeatures.hasStaffModule) count++;
+    if (AppFeatures.hasCustodyModule) count++;
+    return count;
+  }
 
-  /// Cashier tab index shifts when the staff tab is hidden.
-  int get _cashierTabIndex => AppFeatures.hasStaffModule ? 6 : 5;
+  /// Cashier tab index shifts when preceding tabs are hidden.
+  int get _cashierTabIndex {
+    int index = 3; // after Dashboard(0), Products(1), Customers(2)
+    if (AppFeatures.hasSuppliersModule) index++;
+    if (AppFeatures.hasStaffModule) index++;
+    if (AppFeatures.hasCustodyModule) index++;
+    return index;
+  }
 
   bool _licenseWarningShown = false;
 
@@ -87,16 +99,18 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
       Tab(icon: const Icon(Icons.shopping_bag_outlined), text: l10n.products),
       // Index 2
       Tab(icon: const Icon(Icons.people_outline), text: l10n.customer_list),
-      // Index 3
-      Tab(icon: const Icon(Icons.inventory_outlined), text: l10n.suppliers),
+      // Suppliers
+      if (AppFeatures.hasSuppliersModule)
+        Tab(icon: const Icon(Icons.inventory_outlined), text: l10n.suppliers),
       // Staff tab — hidden in builds without the staff module.
       if (AppFeatures.hasStaffModule)
         const Tab(icon: Icon(Icons.badge_outlined), text: 'الموظفين'),
       // Custody tab — العهد المالية
-      const Tab(
-        icon: Icon(Icons.account_balance_wallet_outlined),
-        text: 'العهد المالية',
-      ),
+      if (AppFeatures.hasCustodyModule)
+        const Tab(
+          icon: Icon(Icons.account_balance_wallet_outlined),
+          text: 'العهد المالية',
+        ),
       // Cash
       Tab(
         icon: const Icon(Icons.point_of_sale_outlined),
@@ -199,13 +213,19 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                     ),
                   ),
                   // Custody Button — العهد المالية
-                  _buildLauncherButton(
-                    context,
-                    'العهد المالية',
-                    Icons.account_balance_wallet_outlined,
-                    Colors.teal.shade700,
-                    () => _tabController.animateTo(AppFeatures.hasStaffModule ? 5 : 4),
-                  ),
+                  if (AppFeatures.hasCustodyModule)
+                    _buildLauncherButton(
+                      context,
+                      'العهد المالية',
+                      Icons.account_balance_wallet_outlined,
+                      Colors.teal.shade700,
+                      () {
+                        int index = 3;
+                        if (AppFeatures.hasSuppliersModule) index++;
+                        if (AppFeatures.hasStaffModule) index++;
+                        _tabController.animateTo(index);
+                      },
+                    ),
                   // Damaged Items Button — hidden without the module.
                   if (AppFeatures.hasDamagedModule)
                     _buildLauncherButton(
@@ -281,8 +301,9 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
       ProductScreen(db: widget.db),
       // Index 2: Customers
       CustomerTransactionsWidget(db: widget.db),
-      // Index 3: Suppliers
-      SuppliersWidget(db: widget.db),
+      // Suppliers
+      if (AppFeatures.hasSuppliersModule)
+        SuppliersWidget(db: widget.db),
       // Staff — Dashboard first (absent without the module; cash/reports
       // indices shift accordingly and _cashierTabIndex tracks it).
       if (AppFeatures.hasStaffModule)
@@ -291,7 +312,8 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
           child: const EmployeeDashboardPage(),
         ),
       // Custody
-      CustodyPage(db: widget.db),
+      if (AppFeatures.hasCustodyModule)
+        CustodyPage(db: widget.db),
       // Cash
       const CashierPage(),
       // Reports

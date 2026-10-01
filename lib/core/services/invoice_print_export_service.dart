@@ -127,197 +127,269 @@ class InvoicePrintExportService {
     final arabicFontBold = await PdfGoogleFonts.cairoBold();
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         textDirection: pw.TextDirection.rtl,
         theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicFontBold),
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              /// MANDATORY: Developer tag must appear on ALL PDFs
-              pw.Center(
-                child: pw.Text(
-                  'Developed by MO2',
-                  style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
-                ),
-              ),
-              pw.SizedBox(height: 10),
-
-              // Header
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    'عرض أسعار',
-                    style: pw.TextStyle(
-                      fontSize: 20,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
+        margin: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        header: (pw.Context context) {
+          if (context.pageNumber == 1) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Center(
+                  child: pw.Text(
+                    'Developed by MO2',
+                    style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
                   ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text(
-                        invoiceData.storeInfo.storeName,
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                      ),
-                      pw.Text(invoiceData.storeInfo.phone),
-                      pw.Text(invoiceData.storeInfo.zipCode),
-                      pw.Text(invoiceData.storeInfo.state),
-                      if (invoiceData.storeInfo.taxNumber != null &&
-                          invoiceData.storeInfo.taxNumber!.isNotEmpty)
-                        pw.Text(
-                          'الرقم الضريبي: ${invoiceData.storeInfo.taxNumber}',
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 20),
-
-              // Customer Info
-              pw.Container(
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.grey400),
-                  borderRadius: pw.BorderRadius.circular(4),
                 ),
-                child: pw.Row(
+                pw.SizedBox(height: 10),
+                pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        if (invoiceData.invoice.projectName != null)
-                          pw.Text(
-                            'المشروع: ${invoiceData.invoice.projectName}',
-                          ),
-                        pw.Text(
-                          'رقم الفاتورة: ${invoiceData.invoice.invoiceNumber}',
-                        ),
-                        pw.Text(
-                          'التاريخ: ${_formatDate(invoiceData.invoice.invoiceDate)}',
-                        ),
-                      ],
+                    pw.Text(
+                      'عرض أسعار',
+                      style: pw.TextStyle(
+                        fontSize: 20,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
                     ),
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
                         pw.Text(
-                          'العميل: ${invoiceData.invoice.customerName}',
+                          invoiceData.storeInfo.storeName,
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                         ),
-                        pw.Text(
-                          'الموبايل: ${invoiceData.invoice.customerPhone}',
-                        ),
-                        pw.Text(
-                          'المدينة: ${invoiceData.invoice.customerZipCode}',
-                        ),
-                        pw.Text(
-                          'الولاية: ${invoiceData.invoice.customerState}',
-                        ),
+                        pw.Text(invoiceData.storeInfo.phone),
+                        pw.Text(invoiceData.storeInfo.zipCode),
+                        pw.Text(invoiceData.storeInfo.state),
+                        if (invoiceData.storeInfo.taxNumber != null &&
+                            invoiceData.storeInfo.taxNumber!.isNotEmpty)
+                          pw.Text(
+                            'الرقم الضريبي: ${invoiceData.storeInfo.taxNumber}',
+                          ),
                       ],
                     ),
                   ],
                 ),
-              ),
-              pw.SizedBox(height: 20),
-
-              /// MANDATORY: 4-column table format (SOP 4.0)
-              pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey400),
-                columnWidths: {
-                  0: pw.FlexColumnWidth(3), // Description
-                  1: pw.FlexColumnWidth(1), // Quantity
-                  2: pw.FlexColumnWidth(1.5), // Price
-                  3: pw.FlexColumnWidth(1.5), // Total
-                },
-                children: [
-                  // Header
-                  pw.TableRow(
-                    decoration: pw.BoxDecoration(color: PdfColors.grey300),
-                    children: [
-                      _pdfTableCell('الوصف', isHeader: true),
-                      _pdfTableCell('الكمية', isHeader: true),
-                      _pdfTableCell('السعر', isHeader: true),
-                      _pdfTableCell('الإجمالي', isHeader: true),
-                    ],
-                  ),
-                  // Items
-                  ...invoiceData.items.map(
-                    (item) => pw.TableRow(
-                      children: [
-                        _pdfTableCell(item.description, isBold: true),
-                        _pdfTableCell('${item.quantity}'),
-                        _pdfTableCell(
-                          '${item.unitPrice.toStringAsFixed(2)} ج.م',
-                        ),
-                        _pdfTableCell(
-                          '${item.totalPrice.toStringAsFixed(2)} ج.م',
-                          isBold: true,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 10),
-
-              /// MANDATORY: Totals section with "الصافى"
-              pw.Container(
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.grey400),
-                  borderRadius: pw.BorderRadius.circular(4),
-                ),
-                child: pw.Column(
-                  children: [
-                    _pdfTotalRow('الصافي', invoiceData.subtotal),
-                    if (invoiceData.invoice.isCreditAccount) ...[
-                      pw.Divider(thickness: 2),
-                      _pdfTotalRow(
-                        'الرصيد الافتتاحي',
-                        invoiceData.invoice.previousBalance,
-                      ),
-                      pw.Divider(thickness: 2),
-                      _pdfTotalRow(
-                        'إجمالي الرصيد المستحق',
-                        invoiceData.grandTotal,
-                        isBold: true,
-                        fontSize: 14,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-              // Notes
-              if (invoiceData.invoice.notes != null &&
-                  invoiceData.invoice.notes!.isNotEmpty) ...[
                 pw.SizedBox(height: 15),
                 pw.Container(
                   padding: const pw.EdgeInsets.all(10),
                   decoration: pw.BoxDecoration(
                     border: pw.Border.all(color: PdfColors.grey400),
                     borderRadius: pw.BorderRadius.circular(4),
-                    color: PdfColors.grey100,
                   ),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text(
-                        'ملاحظات:',
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          if (invoiceData.invoice.projectName != null)
+                            pw.Text(
+                              'المشروع: ${invoiceData.invoice.projectName}',
+                            ),
+                          pw.Text(
+                            'رقم الفاتورة: ${invoiceData.invoice.invoiceNumber}',
+                          ),
+                          pw.Text(
+                            'التاريخ: ${_formatDate(invoiceData.invoice.invoiceDate)}',
+                          ),
+                        ],
                       ),
-                      pw.SizedBox(height: 5),
-                      pw.Text(invoiceData.invoice.notes!),
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.end,
+                        children: [
+                          pw.Text(
+                            'العميل: ${invoiceData.invoice.customerName}',
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                          ),
+                          pw.Text(
+                            'الموبايل: ${invoiceData.invoice.customerPhone}',
+                          ),
+                          pw.Text(
+                            'المدينة: ${invoiceData.invoice.customerZipCode}',
+                          ),
+                          pw.Text(
+                            'الولاية: ${invoiceData.invoice.customerState}',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 15),
+              ],
+            );
+          }
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 10),
+            padding: const pw.EdgeInsets.only(bottom: 4),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(
+                bottom: pw.BorderSide(color: PdfColors.grey400, width: 0.5),
+              ),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  invoiceData.storeInfo.storeName,
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.Text(
+                  'فاتورة رقم: ${invoiceData.invoice.invoiceNumber} (تابع)',
+                  style: const pw.TextStyle(
+                    fontSize: 9,
+                    color: PdfColors.grey700,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+        footer: (pw.Context context) {
+          return pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 8),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'صفحة ${context.pageNumber} من ${context.pagesCount}',
+                  style: const pw.TextStyle(
+                    fontSize: 8,
+                    color: PdfColors.grey600,
+                  ),
+                ),
+                pw.Text(
+                  'Developed by MO2',
+                  style: const pw.TextStyle(
+                    fontSize: 8,
+                    color: PdfColors.grey600,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+        build: (pw.Context context) {
+          final isCompact = invoiceData.items.length > 10;
+          return [
+            /// MANDATORY: 4-column table format (SOP 4.0)
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey400),
+              columnWidths: const {
+                0: pw.FlexColumnWidth(3.2), // Description
+                1: pw.FlexColumnWidth(1),   // Quantity
+                2: pw.FlexColumnWidth(1.4), // Price
+                3: pw.FlexColumnWidth(1.4), // Total
+              },
+              children: [
+                // Header
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                  repeat: true,
+                  children: [
+                    _pdfTableCell('الوصف', isHeader: true),
+                    _pdfTableCell('الكمية', isHeader: true),
+                    _pdfTableCell('السعر', isHeader: true),
+                    _pdfTableCell('الإجمالي', isHeader: true),
+                  ],
+                ),
+                // Items
+                ...invoiceData.items.map(
+                  (item) => pw.TableRow(
+                    children: [
+                      _pdfTableCell(
+                        item.description,
+                        isBold: true,
+                        padding: isCompact
+                            ? const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3)
+                            : const pw.EdgeInsets.all(6),
+                      ),
+                      _pdfTableCell(
+                        '${item.quantity}',
+                        padding: isCompact
+                            ? const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3)
+                            : const pw.EdgeInsets.all(6),
+                      ),
+                      _pdfTableCell(
+                        '${item.unitPrice.toStringAsFixed(2)} ج.م',
+                        padding: isCompact
+                            ? const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3)
+                            : const pw.EdgeInsets.all(6),
+                      ),
+                      _pdfTableCell(
+                        '${item.totalPrice.toStringAsFixed(2)} ج.م',
+                        isBold: true,
+                        padding: isCompact
+                            ? const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3)
+                            : const pw.EdgeInsets.all(6),
+                      ),
                     ],
                   ),
                 ),
               ],
+            ),
+            pw.SizedBox(height: 10),
+
+            /// MANDATORY: Totals section with "الصافى"
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400),
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Column(
+                children: [
+                  _pdfTotalRow('الصافي', invoiceData.subtotal),
+                  if (invoiceData.invoice.isCreditAccount) ...[
+                    pw.Divider(thickness: 2),
+                    _pdfTotalRow(
+                      'الرصيد الافتتاحي',
+                      invoiceData.invoice.previousBalance,
+                    ),
+                    pw.Divider(thickness: 2),
+                    _pdfTotalRow(
+                      'إجمالي الرصيد المستحق',
+                      invoiceData.grandTotal,
+                      isBold: true,
+                      fontSize: 14,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // Notes
+            if (invoiceData.invoice.notes != null &&
+                invoiceData.invoice.notes!.isNotEmpty) ...[
+              pw.SizedBox(height: 15),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey400),
+                  borderRadius: pw.BorderRadius.circular(4),
+                  color: PdfColors.grey100,
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'ملاحظات:',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.SizedBox(height: 5),
+                    pw.Text(invoiceData.invoice.notes!),
+                  ],
+                ),
+              ),
             ],
-          );
+          ];
         },
       ),
     );
@@ -330,9 +402,10 @@ class InvoicePrintExportService {
     String text, {
     bool isHeader = false,
     bool isBold = false,
+    pw.EdgeInsets? padding,
   }) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.all(6),
+      padding: padding ?? const pw.EdgeInsets.all(6),
       child: pw.Text(
         text,
         textAlign: pw.TextAlign.right,

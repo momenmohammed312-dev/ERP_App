@@ -5,6 +5,7 @@ import 'package:pos_offline_desktop/l10n/l10n.dart';
 import 'package:pos_offline_desktop/ui/pages/sidebar_page.dart';
 import 'package:pos_offline_desktop/widgets/permission_guard.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
 import '../../services/feature_gate_service.dart';
 
 class SideBarMenu extends StatelessWidget {
@@ -140,12 +141,13 @@ class SideBarMenu extends StatelessWidget {
         ),
 
         // العهد المالية
-        _buildMenuItem(
-          context,
-          svgAssetPath: 'assets/svg/customer.svg',
-          title: 'العهد المالية',
-          page: SideBarPage.custody,
-        ),
+        if (AppFeatures.hasCustodyModule)
+          _buildMenuItem(
+            context,
+            svgAssetPath: 'assets/svg/customer.svg',
+            title: 'العهد المالية',
+            page: SideBarPage.custody,
+          ),
 
         // الإعدادات - يتطلب صلاحية عرض الإعدادات
         PermissionGuard(
