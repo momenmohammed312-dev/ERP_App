@@ -218,6 +218,22 @@ class StaffPayrollStatementGenerator {
     await Printing.layoutPdf(onLayout: (f) async => pdf.save());
   }
 
+  /// قسيمة مرتب فردية لموظف واحد
+  static Future<void> generateAndPrintSingleSlip({
+    required BuildContext context,
+    required AppDatabase db,
+    required Payroll payroll,
+    required Staff staff,
+  }) async {
+    await generateAndPrintBatchSlips(
+      context: context,
+      db: db,
+      payrolls: [payroll],
+      staffMap: {staff.staffId: staff},
+      period: payroll.payrollPeriod,
+    );
+  }
+
   /// 3 قسائم مرتب في ورقة A4 واحدة (توفير ورق + قص).
   /// كل قسيمة سليمة لوحدها (اسم/كود/فترة/تواريخ/توقيعات) + خط قص بين القسائم.
   static Future<void> generateAndPrintBatchSlips({

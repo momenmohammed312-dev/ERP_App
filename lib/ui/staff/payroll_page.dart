@@ -495,12 +495,11 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
   Future<void> _printPayroll(Payroll payroll) async {
     try {
       final db = ref.read(appDatabaseProvider);
-      await StaffPayrollStatementGenerator.generateAndPrintBatchSlips(
+      await StaffPayrollStatementGenerator.generateAndPrintSingleSlip(
         context: context,
         db: db,
-        payrolls: [payroll],
-        staffMap: {widget.staff.staffId: widget.staff},
-        period: payroll.payrollPeriod,
+        payroll: payroll,
+        staff: widget.staff,
       );
     } catch (e) {
       if (!mounted) return;
