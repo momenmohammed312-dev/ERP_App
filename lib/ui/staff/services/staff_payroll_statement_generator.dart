@@ -218,6 +218,248 @@ class StaffPayrollStatementGenerator {
     await Printing.layoutPdf(onLayout: (f) async => pdf.save());
   }
 
+  /// مجاميع شريط الوثيقة من قيم Payroll المحفوظة (مصدر الحقيقة):
+  /// أساسي + إضافات (إضافي/انتظام/بدلات/مكافآت) - خصومات (المخزنة) = صافي.
+  static ({double basic, double additions, double deductions, double net})
+  computeVoucherTotals(List<Payroll> payrolls) {
+    double basic = 0, additions = 0, deductions = 0, net = 0;
+    for (final p in payrolls) {
+      basic += p.basicSalary;
+      additions += p.overtimePay + p.bonus + p.allowances + p.rewardsTotal;
+      deductions += p.deductions;
+      net += p.netSalary;
+    }
+    return (
+      basic: basic,
+      additions: additions,
+      deductions: deductions,
+      net: net,
+    );
+  }
+
+  /// مستند صرف رسمي: صفحة A4 واحدة مضمونة — ترويسة + شريط مجاميع +
+  /// جدول (اسم/كود/صافي) + سطر استبعاد + الطريقة/المستلم + 3 توقيعات.
+  /// الجدول يُعرض أول 22 اسماً فقط مع سطر 「و N آخرون」 عند التجاوز
+  /// (المجاميع دائماً على الكل) — لضمان عدم تجاوز صفحة واحدة أياً كان العدد.
+  static const int voucherMaxRows = 22;
+
+  static Future<void> generateAndPrintBatchVoucher({
+    required BuildContext context,
+    required AppDatabase db,
+    required String period,
+    required String voucherNo,
+    required List<Payroll> payrolls,
+    required Map<String, Staff> staffMap,
+    required int paidCount,
+    required double paidTotal,
+    required int excludedCount,
+    required double excludedTotal,
+    required String methodLabel,
+  }) async {
+    final fonts = await _loadFonts();
+    final arabicFont = fonts['arabic'];
+    final arabicBoldFont = fonts['arabicBold'];
+    final pdf = pw.Document();
+    final dateFormat = DateFormat('yyyy-MM-dd');
+    final issueDateStr = dateFormat.format(DateTime.now());
+    final t = computeVoucherTotals(payrolls);
+    final shown = payrolls.take(voucherMaxRows).toList();
+    final hidden = payrolls.length - shown.length;
+
+    pw.Widget signatureBox(String role) {
+      return pw.Container(
+        width: 150,
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey500, width: 0.6),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        ),
+        padding: const pw.EdgeInsets.all(8),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              _b(role),
+              style: pw.TextStyle(font: arabicBoldFont, fontSize: 10),
+            ),
+            pw.SizedBox(height: 14),
+            pw.Text(
+              _b('الاسم: ....................'),
+              style: pw.TextStyle(font: arabicFont, fontSize: 8),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Text(
+              _b('التوقيع: ....................'),
+              style: pw.TextStyle(font: arabicFont, fontSize: 8),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Text(
+              _b('التاريخ: .... / .... / ....'),
+              style: pw.TextStyle(font: arabicFont, fontSize: 8),
+            ),
+          ],
+        ),
+      );
+    }
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(24),
+        theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicBoldFont),
+        build: (pw.Context ctx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            pw.Center(
+              child: pw.Text(
+                _b('مستند صرف مرتبات'),
+                style: pw.TextStyle(font: arabicBoldFont, fontSize: 20),
+              ),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  _b('رقم المستند: $voucherNo'),
+                  style: pw.TextStyle(font: arabicBoldFont, fontSize: 11),
+                ),
+                pw.Text(
+                  _b('تاريخ الإصدار: $issueDateStr'),
+                  style: pw.TextStyle(
+                    font: arabicFont,
+                    fontSize: 10,
+                    color: PdfColors.grey700,
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 2),
+            pw.Text(
+              _b('الفترة: $period'),
+              style: pw.TextStyle(font: arabicBoldFont, fontSize: 13),
+            ),
+            pw.SizedBox(height: 8),
+            // شريط المجاميع: أساسي | إضافات | خصومات | الصافي
+            pw.Row(
+              children: [
+                for (final cell in [
+                  ('الأساسي', t.basic, PdfColors.black),
+                  ('إضافات', t.additions, PdfColors.teal900),
+                  ('خصومات', t.deductions, PdfColors.red900),
+                  ('الصافي (${payrolls.length})', t.net, PdfColors.green900),
+                ])
+                  pw.Expanded(
+                    child: pw.Container(
+                      margin: const pw.EdgeInsets.symmetric(horizontal: 2),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(
+                          color: cell.$3,
+                          width: cell.$1.startsWith('الصافي') ? 1.2 : 0.6,
+                        ),
+                        borderRadius: const pw.BorderRadius.all(
+                          pw.Radius.circular(4),
+                        ),
+                      ),
+                      padding: const pw.EdgeInsets.symmetric(vertical: 6),
+                      child: pw.Column(
+                        children: [
+                          pw.Text(
+                            _b(cell.$1),
+                            style: pw.TextStyle(
+                              font: arabicFont,
+                              fontSize: 8,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                          pw.Text(
+                            _b(cell.$2.toStringAsFixed(0)),
+                            style: pw.TextStyle(
+                              font: arabicBoldFont,
+                              fontSize: 14,
+                              color: cell.$3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            pw.SizedBox(height: 8),
+            // جدول المشمولين: اسم/كود/صافي (مضغوط، بحد أقصى للصفحة الواحدة)
+            pw.TableHelper.fromTextArray(
+              headers: [_b('م'), _b('الاسم'), _b('الكود'), _b('الصافي')],
+              data: [
+                for (int i = 0; i < shown.length; i++)
+                  [
+                    _b('${i + 1}'),
+                    _b(staffMap[shown[i].staffId]?.name ?? shown[i].staffId),
+                    _b(shown[i].staffId),
+                    _b(shown[i].netSalary.toStringAsFixed(0)),
+                  ],
+              ],
+              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.4),
+              headerStyle: pw.TextStyle(font: arabicBoldFont, fontSize: 8),
+              cellStyle: pw.TextStyle(font: arabicFont, fontSize: 8),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey200,
+              ),
+              cellAlignment: pw.Alignment.center,
+              headerAlignment: pw.Alignment.center,
+              columnWidths: {
+                0: const pw.FlexColumnWidth(0.6),
+                1: const pw.FlexColumnWidth(3),
+                2: const pw.FlexColumnWidth(2),
+                3: const pw.FlexColumnWidth(1.6),
+              },
+            ),
+            if (hidden > 0)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 2),
+                child: pw.Text(
+                  _b('و $hidden موظف آخرون ضمن الإجمالي أعلاه'),
+                  style: pw.TextStyle(
+                    font: arabicFont,
+                    fontSize: 8,
+                    color: PdfColors.grey700,
+                  ),
+                ),
+              ),
+            pw.SizedBox(height: 6),
+            pw.Text(
+              _b(
+                'مدفوع مسبقاً: $paidCount • ${paidTotal.toStringAsFixed(0)} | منتهون: $excludedCount • ${excludedTotal.toStringAsFixed(0)} | الصرف: $methodLabel',
+              ),
+              style: pw.TextStyle(
+                font: arabicFont,
+                fontSize: 8,
+                color: PdfColors.grey700,
+              ),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Text(
+              _b(
+                'عهدة/مستلم المبلغ للتوزيع: ........................................',
+              ),
+              style: pw.TextStyle(font: arabicFont, fontSize: 10),
+            ),
+            pw.Spacer(),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                signatureBox('أعدّه (المحاسب)'),
+                signatureBox('اعتمده (المدير)'),
+                signatureBox('استلم المبلغ (الموزع)'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await Printing.layoutPdf(onLayout: (f) async => pdf.save());
+  }
+
   /// قسيمة مرتب فردية لموظف واحد
   static Future<void> generateAndPrintSingleSlip({
     required BuildContext context,

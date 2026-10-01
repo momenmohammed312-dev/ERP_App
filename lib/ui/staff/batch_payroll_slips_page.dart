@@ -10,7 +10,9 @@ import 'package:pos_offline_desktop/ui/staff/services/staff_payroll_statement_ge
 /// (شهر/أسبوع) مع حساب تلقائي للناقص وطباعة الكل مرة واحدة:
 /// كشف إجمالي + 3 قسائم في ورقة A4.
 class BatchPayrollSlipsPage extends ConsumerStatefulWidget {
-  const BatchPayrollSlipsPage({super.key});
+  final String? initialPeriod;
+
+  const BatchPayrollSlipsPage({super.key, this.initialPeriod});
 
   @override
   ConsumerState<BatchPayrollSlipsPage> createState() =>
@@ -76,11 +78,35 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
   @override
   void initState() {
     super.initState();
-    final currentWeek = ref
-        .read(staffManagementServiceProvider)
-        .weekPeriodForDate(DateTime.now());
-    _month = DateTime(currentWeek.year, currentWeek.month, 1);
-    _week = currentWeek.week;
+    if (widget.initialPeriod != null && widget.initialPeriod!.isNotEmpty) {
+      final p = widget.initialPeriod!;
+      if (p.contains('-W')) {
+        _isMonthly = false;
+        final parts = p.split('-W');
+        final ymParts = parts[0].split('-');
+        if (ymParts.length == 2) {
+          final y = int.tryParse(ymParts[0]) ?? DateTime.now().year;
+          final m = int.tryParse(ymParts[1]) ?? DateTime.now().month;
+          _month = DateTime(y, m, 1);
+        }
+        _week = int.tryParse(parts[1]) ?? 1;
+      } else {
+        _isMonthly = true;
+        final ymParts = p.split('-');
+        if (ymParts.length == 2) {
+          final y = int.tryParse(ymParts[0]) ?? DateTime.now().year;
+          final m = int.tryParse(ymParts[1]) ?? DateTime.now().month;
+          _month = DateTime(y, m, 1);
+        }
+      }
+    } else {
+      final currentWeek = ref
+          .read(staffManagementServiceProvider)
+          .weekPeriodForDate(DateTime.now());
+      _month = DateTime(currentWeek.year, currentWeek.month, 1);
+      _week = currentWeek.week;
+    }
+    _clampWeek();
     _load();
   }
 
@@ -277,6 +303,44 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
     }
   }
 
+  Future<void> _printVoucher() async {
+    final selected = _selectedPayrolls;
+    if (selected.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('اختر مرتباً واحداً على الأقل للطباعة'),
+        ),
+      );
+      return;
+    }
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final paidList = selected.where((p) => p.status == 'paid').toList();
+      final paidCount = paidList.length;
+      final paidTotal = paidList.fold<double>(0, (sum, p) => sum + p.netSalary);
+
+      await StaffPayrollStatementGenerator.generateAndPrintBatchVoucher(
+        context: context,
+        db: db,
+        period: _period,
+        voucherNo: 'PAY-$_period-1',
+        payrolls: selected,
+        staffMap: _staffMap,
+        paidCount: paidCount,
+        paidTotal: paidTotal,
+        excludedCount: 0,
+        excludedTotal: 0.0,
+        methodLabel: 'كشف صرف',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('خطأ في الطباعة: $e')));
+      }
+    }
+  }
+
   String _statusText(String status) {
     switch (status) {
       case 'paid':
@@ -299,6 +363,12 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
       appBar: AppBar(
         title: Text('المرتبات المجمعة - $_period'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.receipt_long),
+            tooltip: 'طباعة كشف الصرف / المستند (المحدد)',
+            onPressed:
+                (selected.isEmpty || _calculating) ? null : _printVoucher,
+          ),
           IconButton(
             icon: const Icon(Icons.table_chart),
             tooltip: 'طباعة الكشف الإجمالي (المحدد)',
@@ -428,35 +498,54 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
                       label: Text('حساب الناقص (${missing.length})'),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: (selected.isEmpty || _calculating)
+                          ? null
+                          : _printVoucher,
+                      icon: const Icon(Icons.receipt_long, color: Colors.white, size: 18),
+                      label: const Text(
+                        'كشف الصرف',
+                        style: TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.indigo,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: (selected.isEmpty || _calculating)
                           ? null
                           : _printAll,
-                      icon: const Icon(Icons.table_chart, color: Colors.white),
+                      icon: const Icon(Icons.table_chart, color: Colors.white, size: 18),
                       label: const Text(
-                        'طباعة الكل',
-                        style: TextStyle(color: Colors.white),
+                        'الكشف الإجمالي',
+                        style: TextStyle(color: Colors.white, fontSize: 13),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blueGrey,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: (selected.isEmpty || _calculating)
                           ? null
                           : _printBatch,
-                      icon: const Icon(Icons.print, color: Colors.white),
+                      icon: const Icon(Icons.print, color: Colors.white, size: 18),
                       label: const Text(
-                        'طباعة 3 / صفحة',
-                        style: TextStyle(color: Colors.white),
+                        '3 / صفحة',
+                        style: TextStyle(color: Colors.white, fontSize: 13),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.teal,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
                       ),
                     ),
                   ),
