@@ -460,6 +460,13 @@ class BackupService {
       'staff_biometric_mappings',
       'attendance_raw_events',
       'attendance_sync_logs',
+      // ── Manufacturing (v73-v75) ──
+      // Export order is irrelevant; grouped here for readability.
+      'bill_of_materials',
+      'bom_items',
+      'manufacturing_orders',
+      'manufacturing_cost_components',
+      'manufacturing_scrap',
     ];
 
     for (final tableName in tables) {
@@ -541,6 +548,22 @@ class BackupService {
       'staff_biometric_mappings',
       'attendance_raw_events',
       'attendance_sync_logs',
+      // ── Manufacturing (v73-v75) ──
+      // Restore order is FK-safe: parents before children. bill_of_materials and
+      // manufacturing_orders both reference products (restored above); bom_items
+      // needs bill_of_materials; manufacturing_cost_components and
+      // manufacturing_scrap need manufacturing_orders; manufacturing_scrap also
+      // needs bom_items, so it goes last.
+      //
+      // Appended rather than inserted so no existing entry's position shifts.
+      // _restoreTable deletes and re-inserts each table in this forward order
+      // with PRAGMA foreign_keys = OFF, and PRAGMA foreign_key_check runs after
+      // the loop, so there is no separate reversed delete list to maintain.
+      'bill_of_materials',
+      'bom_items',
+      'manufacturing_orders',
+      'manufacturing_cost_components',
+      'manufacturing_scrap',
     ];
 
     await _db.exclusively(() async {
