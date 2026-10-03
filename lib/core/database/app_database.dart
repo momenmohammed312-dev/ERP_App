@@ -66,6 +66,12 @@ import 'package:pos_offline_desktop/core/database/dao/vegetable_shipment_dao.dar
 import 'package:pos_offline_desktop/core/database/dao/empty_barnika_tracking_dao.dart';
 import 'package:pos_offline_desktop/core/database/tables/cash_custody_tables.dart';
 import 'package:pos_offline_desktop/core/database/dao/custody_dao.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_cost_components_table.dart';
+import 'package:pos_offline_desktop/core/database/dao/bom_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/manufacturing_cost_component_dao.dart';
 import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
 import 'supplier_ledger_backfill.dart';
@@ -133,6 +139,10 @@ part 'app_database.g.dart';
     SyncQueue,
     CashCustodies,
     CustodyExpenses,
+    BillOfMaterials,
+    BomItems,
+    ManufacturingOrders,
+    ManufacturingCostComponents,
   ],
   daos: [
     ProductDao,
@@ -162,6 +172,9 @@ part 'app_database.g.dart';
     EmptyBarnikaTrackingDao,
     SyncQueueDao,
     CustodyDao,
+    BomDao,
+    ManufacturingOrderDao,
+    ManufacturingCostComponentDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -172,7 +185,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 72;
+  int get schemaVersion => 74;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -326,6 +339,21 @@ class AppDatabase extends _$AppDatabase {
       // excused/excused_hours on the v69/v71 line.
       if (from < 72) {
         await _runV72BaselinePayrollColumns(m);
+      }
+
+      // Schema v73 — products.product_type (manufacturing foundation, part 1).
+      // Purely additive: one nullable column, no data rewrite. NULL means
+      // "standard/retail product", so existing rows keep their meaning.
+      if (from < 73) {
+        await _runV73Migrations(m);
+      }
+
+      // Schema v74 — bill_of_materials / bom_items / manufacturing_orders /
+      // manufacturing_cost_components (manufacturing foundation, part 2).
+      // Four new tables, additive and idempotent. Material issue/receipt runs
+      // through the EXISTING inventory_movements table, so nothing else moves.
+      if (from < 74) {
+        await _runV74Migrations(m);
       }
 
       // 6. Special data fixes
@@ -2598,6 +2626,91 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(
         72,
         'baseline_payroll_columns',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// Schema v73 — products.product_type.
+  ///
+  /// Manufacturing foundation, part 1 of 2. One nullable column, no data
+  /// rewrite: NULL means "standard/retail product", so every existing row
+  /// keeps its meaning and no backfill is required.
+  ///
+  /// Deliberately NOT numbered 56: on `test-restore-16-sep` (4f7e2a0) v56 was
+  /// used for this same column, but on this line v56 means
+  /// `payroll_late_columns`. AGENTS.md 4.3 forbids editing a migration step
+  /// that has already run, so the work is recreated additively at v73.
+  Future<void> _runV73Migrations(Migrator m) async {
+    await _logMigrationStep(73, 'manufacturing_product_type', 'started');
+    try {
+      try {
+        await customStatement('ALTER TABLE products ADD COLUMN product_type TEXT');
+        log('v73: Added products.product_type column');
+      } catch (e) {
+        log('v73: products.product_type likely already exists: $e');
+      }
+      await _logMigrationStep(73, 'manufacturing_product_type', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        73,
+        'manufacturing_product_type',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// Schema v74 — the four manufacturing tables.
+  ///
+  /// Manufacturing foundation, part 2 of 2:
+  ///   * bill_of_materials            - the recipe header (a product to make)
+  ///   * bom_items                    - raw material lines, cascade on the BOM
+  ///   * manufacturing_orders         - the production document
+  ///   * manufacturing_cost_components- overhead lines, frozen on completion
+  ///
+  /// Additive and idempotent: four CREATE TABLEs, each guarded so a re-run is
+  /// a no-op rather than an error. Nothing pre-existing is altered.
+  ///
+  /// Stock does NOT get its own table here. Issue and receipt post through the
+  /// EXISTING inventory_movements table (movementType 'manufacturing_consumption'
+  /// and 'manufacturing_output'), so inventory valuation keeps one source of
+  /// truth.
+  Future<void> _runV74Migrations(Migrator m) async {
+    await _logMigrationStep(74, 'manufacturing_foundation', 'started');
+    try {
+      try {
+        await m.createTable(billOfMaterials);
+        log('v74: Created bill_of_materials table');
+      } catch (e) {
+        log('v74: bill_of_materials likely already exists: $e');
+      }
+      try {
+        await m.createTable(bomItems);
+        log('v74: Created bom_items table');
+      } catch (e) {
+        log('v74: bom_items likely already exists: $e');
+      }
+      try {
+        await m.createTable(manufacturingOrders);
+        log('v74: Created manufacturing_orders table');
+      } catch (e) {
+        log('v74: manufacturing_orders likely already exists: $e');
+      }
+      try {
+        await m.createTable(manufacturingCostComponents);
+        log('v74: Created manufacturing_cost_components table');
+      } catch (e) {
+        log('v74: manufacturing_cost_components likely already exists: $e');
+      }
+      await _logMigrationStep(74, 'manufacturing_foundation', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        74,
+        'manufacturing_foundation',
         'failed',
         error: e.toString(),
       );

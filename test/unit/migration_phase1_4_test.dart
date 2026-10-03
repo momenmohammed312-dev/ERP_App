@@ -171,14 +171,15 @@ void main() {
       // exact version on purpose: a ">=" would hide a wrong version and a lower
       // one would mean a migration silently did not run.
       //
-      // v72 is the current schema. 60 and 61 are deliberately NOT recreated -
-      // they already mean manufacturing / accounting / equity on other branch
-      // lines and excused / excused_hours on the v69/v71 line.
+      // v74 is the current schema (v73 product_type + v74 manufacturing
+      // tables). 60 and 61 are deliberately NOT recreated - they already mean
+      // manufacturing / accounting / equity on other branch lines and
+      // excused / excused_hours on the v69/v71 line.
       final versionRow = await db
           .customSelect('PRAGMA user_version')
           .getSingle();
       final version = versionRow.read<int>('user_version');
-      expect(version, 72, reason: 'schema should be upgraded to current (72)');
+      expect(version, 74, reason: 'schema should be upgraded to current (74)');
 
       // Verify vegetable_shipments table was created by v51 migration.
       final shipmentTables = await db

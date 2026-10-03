@@ -9,7 +9,6 @@ import 'package:pos_offline_desktop/core/database/dao/manufacturing_cost_compone
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_cost_components_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
-import 'package:pos_offline_desktop/core/database/tables/manufacturing_tables.dart';
 
 /// عقد [ManufacturingOrderDao.completeManufacturingOrder].
 ///
@@ -508,17 +507,33 @@ void main() {
       expect(await f.invDao.getAllMovements(), isEmpty);
     });
 
-    test('C6 losing the finished product mid-flight writes nothing', () async {
+    test('C6 the finished product cannot be deleted while an order references it',
+        () async {
+      // The original C6 tried to build "the finished product row vanished
+      // mid-flight", but that state is unreachable: manufacturing_orders.
+      // finishedProductId is a foreign key and PRAGMA foreign_keys is ON, and
+      // ProductDao.deleteProduct falls back to a soft delete when the hard
+      // delete is refused. So instead of faking an impossible state, assert the
+      // guard that actually makes it impossible — and that the row survives.
       final f = await chairRecipe();
-      // Simulate the row disappearing between create and complete.
       final chair = (await f.db.productDao.getProductById(f.chair))!;
-      await f.db.productDao.deleteProduct(chair);
 
+      // Hard delete must be refused while the order references the product.
       await expectLater(
-        f.moDao.completeManufacturingOrder(orderId: f.orderId),
-        throwsA(isA<StateError>()),
+        f.db.delete(f.db.products).delete(chair),
+        throwsA(anything),
+        reason: 'FK on manufacturing_orders.finishedProductId must block this',
       );
-      expect(await qtyOf(f.db, f.wood), 100, reason: 'الخشب ما يتحشش');
+      expect(await f.db.productDao.getProductById(f.chair), isNotNull);
+
+      // The soft-delete fallback leaves the row readable, so completion still
+      // resolves the finished product and remains a no-op-free normal path.
+      await f.db.productDao.deleteProduct(chair);
+      final after = await f.db.productDao.getProductById(f.chair);
+      expect(after, isNotNull);
+      expect(after!.quantity, 0, reason: 'nothing was produced yet');
+
+      expect(await qtyOf(f.db, f.wood), 100, reason: 'stock untouched');
       expect(await f.invDao.getAllMovements(), isEmpty);
     });
   });
@@ -639,10 +654,10 @@ void main() {
       final result =
           await f.moDao.completeManufacturingOrder(orderId: f.orderId);
 
-      expect(result.materialCost, closeTo(40, 0.0001));
+      expect(result.materialCost, closeTo(56, 0.0001)); // 4 wood @10 + 8 screws @2
       expect(result.componentsCost, closeTo(500, 0.0001));
-      expect(result.totalCost, closeTo(540, 0.0001));
-      expect(result.unitCost, closeTo(540, 0.0001));
+      expect(result.totalCost, closeTo(556, 0.0001));
+      expect(result.unitCost, closeTo(556, 0.0001));
     });
 
     test('E2 percentage is taken on material cost only', () async {
@@ -655,9 +670,9 @@ void main() {
       final result =
           await f.moDao.completeManufacturingOrder(orderId: f.orderId);
 
-      expect(result.materialCost, closeTo(40, 0.0001));
-      expect(result.componentsCost, closeTo(4, 0.0001)); // 10% of 40
-      expect(result.totalCost, closeTo(44, 0.0001));
+      expect(result.materialCost, closeTo(56, 0.0001));
+      expect(result.componentsCost, closeTo(5.6, 0.0001)); // 10% of 56
+      expect(result.totalCost, closeTo(61.6, 0.0001));
     });
 
     test('E3 per_unit multiplies by the produced quantity', () async {
@@ -668,7 +683,7 @@ void main() {
       final result = await f.moDao.completeManufacturingOrder(
           orderId: f.orderId, actualProducedQuantity: 3);
 
-      expect(result.materialCost, closeTo(120, 0.0001)); // 4*3 wood @10
+      expect(result.materialCost, closeTo(168, 0.0001)); // (4 wood @10)+(8 screws @2) x3
       expect(result.componentsCost, closeTo(75, 0.0001)); // 25 * 3
     });
 
@@ -687,10 +702,10 @@ void main() {
       final result = await f.moDao.completeManufacturingOrder(
           orderId: f.orderId, actualProducedQuantity: 3);
 
-      expect(result.materialCost, closeTo(120, 0.0001));
-      expect(result.componentsCost, closeTo(591.8, 0.0001)); // 500 + 12 + 75
-      expect(result.totalCost, closeTo(711.8, 0.0001));
-      expect(result.unitCost, closeTo(237.27, 0.01)); // 711.8 / 3
+      expect(result.materialCost, closeTo(168, 0.0001));
+      expect(result.componentsCost, closeTo(591.8, 0.0001)); // 500 + 16.8 + 75
+      expect(result.totalCost, closeTo(759.8, 0.0001));
+      expect(result.unitCost, closeTo(253.27, 0.01)); // 759.8 / 3
     });
 
     test('E5 computedAmount is null before completion and frozen after',
@@ -735,7 +750,7 @@ void main() {
       final result =
           await f.moDao.completeManufacturingOrder(orderId: f.orderId);
 
-      expect(result.componentsCost, closeTo(1.2, 0.0001));
+      expect(result.componentsCost, closeTo(1.68, 0.0001)); // 3% of 56
       final decimals = result.totalCost.toString().split('.');
       expect(decimals.length == 1 || decimals[1].length <= 2, isTrue);
     });
