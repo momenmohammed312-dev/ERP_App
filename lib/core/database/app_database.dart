@@ -72,6 +72,8 @@ import 'package:pos_offline_desktop/core/database/tables/manufacturing_cost_comp
 import 'package:pos_offline_desktop/core/database/dao/bom_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_cost_component_dao.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
+import 'package:pos_offline_desktop/core/database/dao/manufacturing_scrap_dao.dart';
 import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
 import 'supplier_ledger_backfill.dart';
@@ -143,6 +145,7 @@ part 'app_database.g.dart';
     BomItems,
     ManufacturingOrders,
     ManufacturingCostComponents,
+    ManufacturingScraps,
   ],
   daos: [
     ProductDao,
@@ -175,6 +178,7 @@ part 'app_database.g.dart';
     BomDao,
     ManufacturingOrderDao,
     ManufacturingCostComponentDao,
+    ManufacturingScrapDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -185,7 +189,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 74;
+  int get schemaVersion => 75;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -354,6 +358,13 @@ class AppDatabase extends _$AppDatabase {
       // through the EXISTING inventory_movements table, so nothing else moves.
       if (from < 74) {
         await _runV74Migrations(m);
+      }
+
+      // Schema v75 — manufacturing_scrap (recorded write-offs).
+      // Additive: one new table. Scrap keeps waste_percentage as the plan and
+      // records what actually happened, so the variance is measurable.
+      if (from < 75) {
+        await _runV75Migrations(m);
       }
 
       // 6. Special data fixes
@@ -2711,6 +2722,38 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(
         74,
         'manufacturing_foundation',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// Schema v75 — manufacturing_scrap.
+  ///
+  /// One new table recording quantities written off against a completed order.
+  /// Deliberately separate from the BOM's waste_percentage: that column says
+  /// what to plan for, this says what actually happened. Without both, a recipe
+  /// that silently absorbs waste cannot distinguish a good unit from a scrapped
+  /// one and unit cost becomes fiction.
+  ///
+  /// Stock is NOT touched here. Scrap reduces stock through the EXISTING
+  /// inventory_movements table (movementType 'manufacturing_scrap') so
+  /// valuation keeps one source of truth.
+  Future<void> _runV75Migrations(Migrator m) async {
+    await _logMigrationStep(75, 'manufacturing_scrap', 'started');
+    try {
+      try {
+        await m.createTable(manufacturingScraps);
+        log('v75: Created manufacturing_scrap table');
+      } catch (e) {
+        log('v75: manufacturing_scrap likely already exists: $e');
+      }
+      await _logMigrationStep(75, 'manufacturing_scrap', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        75,
+        'manufacturing_scrap',
         'failed',
         error: e.toString(),
       );

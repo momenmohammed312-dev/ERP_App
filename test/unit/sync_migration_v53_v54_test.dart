@@ -167,10 +167,10 @@ void main() {
       // not as ">=": a lower value means a migration silently did not run, and a
       // higher one means this build is not the one that stamped the file.
       //
-      // v74 is current (v73 product_type + v74 manufacturing tables).
+      // v75 is current (v73 product_type, v74 manufacturing tables, v75 scrap).
       // 60/61 are deliberately not recreated - they mean other things on other
       // branch lines.
-      expect(version, 74, reason: 'schema should be upgraded to current (74)');
+      expect(version, 75, reason: 'schema should be upgraded to current (75)');
 
       Future<List<String>> columnNames(String table) async {
         final rows = await db.customSelect('PRAGMA table_info($table)').get();

@@ -179,7 +179,7 @@ void main() {
           .customSelect('PRAGMA user_version')
           .getSingle();
       final version = versionRow.read<int>('user_version');
-      expect(version, 74, reason: 'schema should be upgraded to current (74)');
+      expect(version, 75, reason: 'schema should be upgraded to current (75)');
 
       // Verify vegetable_shipments table was created by v51 migration.
       final shipmentTables = await db

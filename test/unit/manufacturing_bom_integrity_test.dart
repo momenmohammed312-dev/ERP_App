@@ -205,7 +205,11 @@ void main() {
       // a unit cost derived from the BOM as it stood. Editing the BOM afterwards
       // must not be possible, so the recorded cost can never be reinterpreted.
       final (bomDao, moDao, db) = await setup();
-      final wood = await seedProduct(db, name: 'خشب', cost: 10);
+      // Stocked, because this case completes the order to capture a real unit
+      // cost before trying to edit the recipe. With the default quantity of 0
+      // the completion threw InsufficientStockException and the freeze
+      // assertion was never reached.
+      final wood = await seedProduct(db, name: 'خشب', quantity: 100, cost: 10);
       final chair = await seedProduct(db, name: 'كرسي');
       final bomId = await seedBom(
         bomDao,
@@ -319,7 +323,7 @@ void main() {
       addTearDown(second.close);
       await second.customSelect('SELECT 1').get();
 
-      expect(await userVersion(second), 74);
+      expect(await userVersion(second), 75);
       final names = await tableNames(second);
       expect(names, contains('bill_of_materials'));
       expect(names, contains('bom_items'));

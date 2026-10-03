@@ -8,7 +8,6 @@ import 'package:pos_offline_desktop/core/database/dao/inventory_movement_dao.dar
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_scrap_dao.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
-import 'package:pos_offline_desktop/core/database/tables/manufacturing_tables.dart';
 
 /// Scrap records and product_type validation at the BOM boundary.
 ///
@@ -111,6 +110,9 @@ void main() {
         ],
       );
       final orderId = await seedOrder(moDao, bomId, chair);
+      // Scrap is only recordable against a completed order. Completing also
+      // consumes 4 wood (100 -> 96), so H1 scrapps one of the remaining 96.
+      await moDao.completeManufacturingOrder(orderId: orderId);
 
       await scrapDao.recordScrap(
         orderId: orderId,
@@ -120,13 +122,13 @@ void main() {
         responsibleParty: 'عامل المورد',
       );
 
-      expect(await qtyOf(db, wood), 98);
+      expect(await qtyOf(db, wood), 94);
       final rows = await invDao.getMovementsByType('manufacturing_scrap');
       expect(rows.length, 1);
       expect(rows.single.productId, wood);
       expect(rows.single.quantity, -2);
-      expect(rows.single.previousQuantity, 100);
-      expect(rows.single.newQuantity, 98);
+      expect(rows.single.previousQuantity, 96);
+      expect(rows.single.newQuantity, 94);
     });
 
     test('H2 scrapping more than is on hand writes nothing', () async {
@@ -205,7 +207,7 @@ void main() {
         reason: ManufacturingScrapReason.defective,
         responsibleParty: 'x',
       );
-      expect(await qtyOf(db, wood), 99);
+      expect(await qtyOf(db, wood), 95);
     });
 
     test('H4 scrap never rewrites the order produced quantity', () async {
@@ -339,7 +341,7 @@ void main() {
       final raw = await seedProduct(db, name: 'خشب', cost: 10); // no type
       final finished = await seedProduct(db, name: 'كرسي'); // no type
 
-      final result = await bomDao.insertBomWithItems(
+      final result = await bomDao.insertBomWithItemsChecked(
         bom: BillOfMaterialsCompanion(
           finishedProductId: Value(finished),
           name: const Value('بوم بدون أنواع'),
@@ -375,7 +377,7 @@ void main() {
           name: 'منتج نهائي', productType: 'raw_material');
 
       await expectLater(
-        bomDao.insertBomWithItems(
+        bomDao.insertBomWithItemsChecked(
           bom: BillOfMaterialsCompanion(
             finishedProductId: Value(wrongFinished),
             name: const Value('بوم غلط'),
@@ -401,7 +403,7 @@ void main() {
       final finished = await seedProduct(db,
           name: 'كرسي', productType: 'finished_product');
 
-      final result = await bomDao.insertBomWithItems(
+      final result = await bomDao.insertBomWithItemsChecked(
         bom: BillOfMaterialsCompanion(
           finishedProductId: Value(finished),
           name: const Value('بوم صحيح'),

@@ -46460,6 +46460,652 @@ class ManufacturingCostComponentsCompanion
   }
 }
 
+class $ManufacturingScrapsTable extends ManufacturingScraps
+    with TableInfo<$ManufacturingScrapsTable, ManufacturingScrap> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ManufacturingScrapsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _manufacturingOrderIdMeta =
+      const VerificationMeta('manufacturingOrderId');
+  @override
+  late final GeneratedColumn<int> manufacturingOrderId = GeneratedColumn<int>(
+    'manufacturing_order_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES manufacturing_orders (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _bomItemIdMeta = const VerificationMeta(
+    'bomItemId',
+  );
+  @override
+  late final GeneratedColumn<int> bomItemId = GeneratedColumn<int>(
+    'bom_item_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES bom_items (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _quantityMeta = const VerificationMeta(
+    'quantity',
+  );
+  @override
+  late final GeneratedColumn<double> quantity = GeneratedColumn<double>(
+    'quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _responsiblePartyMeta = const VerificationMeta(
+    'responsibleParty',
+  );
+  @override
+  late final GeneratedColumn<String> responsibleParty = GeneratedColumn<String>(
+    'responsible_party',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dispositionNoteMeta = const VerificationMeta(
+    'dispositionNote',
+  );
+  @override
+  late final GeneratedColumn<String> dispositionNote = GeneratedColumn<String>(
+    'disposition_note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _performedByMeta = const VerificationMeta(
+    'performedBy',
+  );
+  @override
+  late final GeneratedColumn<String> performedBy = GeneratedColumn<String>(
+    'performed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    manufacturingOrderId,
+    productId,
+    bomItemId,
+    quantity,
+    reason,
+    responsibleParty,
+    dispositionNote,
+    performedBy,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'manufacturing_scrap';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ManufacturingScrap> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('manufacturing_order_id')) {
+      context.handle(
+        _manufacturingOrderIdMeta,
+        manufacturingOrderId.isAcceptableOrUnknown(
+          data['manufacturing_order_id']!,
+          _manufacturingOrderIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_manufacturingOrderIdMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('bom_item_id')) {
+      context.handle(
+        _bomItemIdMeta,
+        bomItemId.isAcceptableOrUnknown(data['bom_item_id']!, _bomItemIdMeta),
+      );
+    }
+    if (data.containsKey('quantity')) {
+      context.handle(
+        _quantityMeta,
+        quantity.isAcceptableOrUnknown(data['quantity']!, _quantityMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_quantityMeta);
+    }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_reasonMeta);
+    }
+    if (data.containsKey('responsible_party')) {
+      context.handle(
+        _responsiblePartyMeta,
+        responsibleParty.isAcceptableOrUnknown(
+          data['responsible_party']!,
+          _responsiblePartyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_responsiblePartyMeta);
+    }
+    if (data.containsKey('disposition_note')) {
+      context.handle(
+        _dispositionNoteMeta,
+        dispositionNote.isAcceptableOrUnknown(
+          data['disposition_note']!,
+          _dispositionNoteMeta,
+        ),
+      );
+    }
+    if (data.containsKey('performed_by')) {
+      context.handle(
+        _performedByMeta,
+        performedBy.isAcceptableOrUnknown(
+          data['performed_by']!,
+          _performedByMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ManufacturingScrap map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ManufacturingScrap(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      manufacturingOrderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}manufacturing_order_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      )!,
+      bomItemId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}bom_item_id'],
+      ),
+      quantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}quantity'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+      responsibleParty: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}responsible_party'],
+      )!,
+      dispositionNote: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}disposition_note'],
+      ),
+      performedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}performed_by'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ManufacturingScrapsTable createAlias(String alias) {
+    return $ManufacturingScrapsTable(attachedDatabase, alias);
+  }
+}
+
+class ManufacturingScrap extends DataClass
+    implements Insertable<ManufacturingScrap> {
+  final int id;
+  final int manufacturingOrderId;
+
+  /// What was thrown away. May be a raw material or the finished good itself;
+  /// use [bomItemId] to tell which recipe line it came from.
+  final int productId;
+
+  /// The recipe line, when the scrap came from raw material.
+  final int? bomItemId;
+
+  /// How many units were written off. REAL because a recipe can be fractional
+  /// (0.2 litre), and the record must not lose that precision.
+  final double quantity;
+
+  /// One of [ManufacturingScrapReason].
+  final String reason;
+
+  /// Who is accountable. Required and non-blank — a scrap line with no owner
+  /// is not auditable.
+  final String responsibleParty;
+
+  /// Free text, typically an authorisation reference for the write-off.
+  final String? dispositionNote;
+  final String? performedBy;
+  final DateTime createdAt;
+  const ManufacturingScrap({
+    required this.id,
+    required this.manufacturingOrderId,
+    required this.productId,
+    this.bomItemId,
+    required this.quantity,
+    required this.reason,
+    required this.responsibleParty,
+    this.dispositionNote,
+    this.performedBy,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['manufacturing_order_id'] = Variable<int>(manufacturingOrderId);
+    map['product_id'] = Variable<int>(productId);
+    if (!nullToAbsent || bomItemId != null) {
+      map['bom_item_id'] = Variable<int>(bomItemId);
+    }
+    map['quantity'] = Variable<double>(quantity);
+    map['reason'] = Variable<String>(reason);
+    map['responsible_party'] = Variable<String>(responsibleParty);
+    if (!nullToAbsent || dispositionNote != null) {
+      map['disposition_note'] = Variable<String>(dispositionNote);
+    }
+    if (!nullToAbsent || performedBy != null) {
+      map['performed_by'] = Variable<String>(performedBy);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  ManufacturingScrapsCompanion toCompanion(bool nullToAbsent) {
+    return ManufacturingScrapsCompanion(
+      id: Value(id),
+      manufacturingOrderId: Value(manufacturingOrderId),
+      productId: Value(productId),
+      bomItemId: bomItemId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bomItemId),
+      quantity: Value(quantity),
+      reason: Value(reason),
+      responsibleParty: Value(responsibleParty),
+      dispositionNote: dispositionNote == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dispositionNote),
+      performedBy: performedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(performedBy),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory ManufacturingScrap.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ManufacturingScrap(
+      id: serializer.fromJson<int>(json['id']),
+      manufacturingOrderId: serializer.fromJson<int>(
+        json['manufacturingOrderId'],
+      ),
+      productId: serializer.fromJson<int>(json['productId']),
+      bomItemId: serializer.fromJson<int?>(json['bomItemId']),
+      quantity: serializer.fromJson<double>(json['quantity']),
+      reason: serializer.fromJson<String>(json['reason']),
+      responsibleParty: serializer.fromJson<String>(json['responsibleParty']),
+      dispositionNote: serializer.fromJson<String?>(json['dispositionNote']),
+      performedBy: serializer.fromJson<String?>(json['performedBy']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'manufacturingOrderId': serializer.toJson<int>(manufacturingOrderId),
+      'productId': serializer.toJson<int>(productId),
+      'bomItemId': serializer.toJson<int?>(bomItemId),
+      'quantity': serializer.toJson<double>(quantity),
+      'reason': serializer.toJson<String>(reason),
+      'responsibleParty': serializer.toJson<String>(responsibleParty),
+      'dispositionNote': serializer.toJson<String?>(dispositionNote),
+      'performedBy': serializer.toJson<String?>(performedBy),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  ManufacturingScrap copyWith({
+    int? id,
+    int? manufacturingOrderId,
+    int? productId,
+    Value<int?> bomItemId = const Value.absent(),
+    double? quantity,
+    String? reason,
+    String? responsibleParty,
+    Value<String?> dispositionNote = const Value.absent(),
+    Value<String?> performedBy = const Value.absent(),
+    DateTime? createdAt,
+  }) => ManufacturingScrap(
+    id: id ?? this.id,
+    manufacturingOrderId: manufacturingOrderId ?? this.manufacturingOrderId,
+    productId: productId ?? this.productId,
+    bomItemId: bomItemId.present ? bomItemId.value : this.bomItemId,
+    quantity: quantity ?? this.quantity,
+    reason: reason ?? this.reason,
+    responsibleParty: responsibleParty ?? this.responsibleParty,
+    dispositionNote: dispositionNote.present
+        ? dispositionNote.value
+        : this.dispositionNote,
+    performedBy: performedBy.present ? performedBy.value : this.performedBy,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  ManufacturingScrap copyWithCompanion(ManufacturingScrapsCompanion data) {
+    return ManufacturingScrap(
+      id: data.id.present ? data.id.value : this.id,
+      manufacturingOrderId: data.manufacturingOrderId.present
+          ? data.manufacturingOrderId.value
+          : this.manufacturingOrderId,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      bomItemId: data.bomItemId.present ? data.bomItemId.value : this.bomItemId,
+      quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      responsibleParty: data.responsibleParty.present
+          ? data.responsibleParty.value
+          : this.responsibleParty,
+      dispositionNote: data.dispositionNote.present
+          ? data.dispositionNote.value
+          : this.dispositionNote,
+      performedBy: data.performedBy.present
+          ? data.performedBy.value
+          : this.performedBy,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ManufacturingScrap(')
+          ..write('id: $id, ')
+          ..write('manufacturingOrderId: $manufacturingOrderId, ')
+          ..write('productId: $productId, ')
+          ..write('bomItemId: $bomItemId, ')
+          ..write('quantity: $quantity, ')
+          ..write('reason: $reason, ')
+          ..write('responsibleParty: $responsibleParty, ')
+          ..write('dispositionNote: $dispositionNote, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    manufacturingOrderId,
+    productId,
+    bomItemId,
+    quantity,
+    reason,
+    responsibleParty,
+    dispositionNote,
+    performedBy,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ManufacturingScrap &&
+          other.id == this.id &&
+          other.manufacturingOrderId == this.manufacturingOrderId &&
+          other.productId == this.productId &&
+          other.bomItemId == this.bomItemId &&
+          other.quantity == this.quantity &&
+          other.reason == this.reason &&
+          other.responsibleParty == this.responsibleParty &&
+          other.dispositionNote == this.dispositionNote &&
+          other.performedBy == this.performedBy &&
+          other.createdAt == this.createdAt);
+}
+
+class ManufacturingScrapsCompanion extends UpdateCompanion<ManufacturingScrap> {
+  final Value<int> id;
+  final Value<int> manufacturingOrderId;
+  final Value<int> productId;
+  final Value<int?> bomItemId;
+  final Value<double> quantity;
+  final Value<String> reason;
+  final Value<String> responsibleParty;
+  final Value<String?> dispositionNote;
+  final Value<String?> performedBy;
+  final Value<DateTime> createdAt;
+  const ManufacturingScrapsCompanion({
+    this.id = const Value.absent(),
+    this.manufacturingOrderId = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.bomItemId = const Value.absent(),
+    this.quantity = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.responsibleParty = const Value.absent(),
+    this.dispositionNote = const Value.absent(),
+    this.performedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  ManufacturingScrapsCompanion.insert({
+    this.id = const Value.absent(),
+    required int manufacturingOrderId,
+    required int productId,
+    this.bomItemId = const Value.absent(),
+    required double quantity,
+    required String reason,
+    required String responsibleParty,
+    this.dispositionNote = const Value.absent(),
+    this.performedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : manufacturingOrderId = Value(manufacturingOrderId),
+       productId = Value(productId),
+       quantity = Value(quantity),
+       reason = Value(reason),
+       responsibleParty = Value(responsibleParty);
+  static Insertable<ManufacturingScrap> custom({
+    Expression<int>? id,
+    Expression<int>? manufacturingOrderId,
+    Expression<int>? productId,
+    Expression<int>? bomItemId,
+    Expression<double>? quantity,
+    Expression<String>? reason,
+    Expression<String>? responsibleParty,
+    Expression<String>? dispositionNote,
+    Expression<String>? performedBy,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (manufacturingOrderId != null)
+        'manufacturing_order_id': manufacturingOrderId,
+      if (productId != null) 'product_id': productId,
+      if (bomItemId != null) 'bom_item_id': bomItemId,
+      if (quantity != null) 'quantity': quantity,
+      if (reason != null) 'reason': reason,
+      if (responsibleParty != null) 'responsible_party': responsibleParty,
+      if (dispositionNote != null) 'disposition_note': dispositionNote,
+      if (performedBy != null) 'performed_by': performedBy,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  ManufacturingScrapsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? manufacturingOrderId,
+    Value<int>? productId,
+    Value<int?>? bomItemId,
+    Value<double>? quantity,
+    Value<String>? reason,
+    Value<String>? responsibleParty,
+    Value<String?>? dispositionNote,
+    Value<String?>? performedBy,
+    Value<DateTime>? createdAt,
+  }) {
+    return ManufacturingScrapsCompanion(
+      id: id ?? this.id,
+      manufacturingOrderId: manufacturingOrderId ?? this.manufacturingOrderId,
+      productId: productId ?? this.productId,
+      bomItemId: bomItemId ?? this.bomItemId,
+      quantity: quantity ?? this.quantity,
+      reason: reason ?? this.reason,
+      responsibleParty: responsibleParty ?? this.responsibleParty,
+      dispositionNote: dispositionNote ?? this.dispositionNote,
+      performedBy: performedBy ?? this.performedBy,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (manufacturingOrderId.present) {
+      map['manufacturing_order_id'] = Variable<int>(manufacturingOrderId.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<int>(productId.value);
+    }
+    if (bomItemId.present) {
+      map['bom_item_id'] = Variable<int>(bomItemId.value);
+    }
+    if (quantity.present) {
+      map['quantity'] = Variable<double>(quantity.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
+    if (responsibleParty.present) {
+      map['responsible_party'] = Variable<String>(responsibleParty.value);
+    }
+    if (dispositionNote.present) {
+      map['disposition_note'] = Variable<String>(dispositionNote.value);
+    }
+    if (performedBy.present) {
+      map['performed_by'] = Variable<String>(performedBy.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ManufacturingScrapsCompanion(')
+          ..write('id: $id, ')
+          ..write('manufacturingOrderId: $manufacturingOrderId, ')
+          ..write('productId: $productId, ')
+          ..write('bomItemId: $bomItemId, ')
+          ..write('quantity: $quantity, ')
+          ..write('reason: $reason, ')
+          ..write('responsibleParty: $responsibleParty, ')
+          ..write('dispositionNote: $dispositionNote, ')
+          ..write('performedBy: $performedBy, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -46571,6 +47217,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $ManufacturingOrdersTable(this);
   late final $ManufacturingCostComponentsTable manufacturingCostComponents =
       $ManufacturingCostComponentsTable(this);
+  late final $ManufacturingScrapsTable manufacturingScraps =
+      $ManufacturingScrapsTable(this);
   late final ProductDao productDao = ProductDao(this as AppDatabase);
   late final CustomerDao customerDao = CustomerDao(this as AppDatabase);
   late final SupplierDao supplierDao = SupplierDao(this as AppDatabase);
@@ -46630,6 +47278,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       ManufacturingOrderDao(this as AppDatabase);
   late final ManufacturingCostComponentDao manufacturingCostComponentDao =
       ManufacturingCostComponentDao(this as AppDatabase);
+  late final ManufacturingScrapDao manufacturingScrapDao =
+      ManufacturingScrapDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -46696,6 +47346,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     bomItems,
     manufacturingOrders,
     manufacturingCostComponents,
+    manufacturingScraps,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -46784,6 +47435,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       result: [
         TableUpdate('manufacturing_cost_components', kind: UpdateKind.delete),
       ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'manufacturing_orders',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('manufacturing_scrap', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'bom_items',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('manufacturing_scrap', kind: UpdateKind.update)],
     ),
   ]);
 }
@@ -47084,6 +47749,33 @@ final class $$ProductsTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _manufacturingOrdersRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $ManufacturingScrapsTable,
+    List<ManufacturingScrap>
+  >
+  _manufacturingScrapsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.manufacturingScraps,
+        aliasName: $_aliasNameGenerator(
+          db.products.id,
+          db.manufacturingScraps.productId,
+        ),
+      );
+
+  $$ManufacturingScrapsTableProcessedTableManager get manufacturingScrapsRefs {
+    final manager = $$ManufacturingScrapsTableTableManager(
+      $_db,
+      $_db.manufacturingScraps,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _manufacturingScrapsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -47452,6 +48144,31 @@ class $$ProductsTableFilterComposer
           }) => $$ManufacturingOrdersTableFilterComposer(
             $db: $db,
             $table: $db.manufacturingOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> manufacturingScrapsRefs(
+    Expression<bool> Function($$ManufacturingScrapsTableFilterComposer f) f,
+  ) {
+    final $$ManufacturingScrapsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.manufacturingScraps,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturingScrapsTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturingScraps,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -47905,6 +48622,32 @@ class $$ProductsTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> manufacturingScrapsRefs<T extends Object>(
+    Expression<T> Function($$ManufacturingScrapsTableAnnotationComposer a) f,
+  ) {
+    final $$ManufacturingScrapsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.manufacturingScraps,
+          getReferencedColumn: (t) => t.productId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingScrapsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.manufacturingScraps,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$ProductsTableTableManager
@@ -47932,6 +48675,7 @@ class $$ProductsTableTableManager
             bool billOfMaterialsRefs,
             bool bomItemsRefs,
             bool manufacturingOrdersRefs,
+            bool manufacturingScrapsRefs,
           })
         > {
   $$ProductsTableTableManager(_$AppDatabase db, $ProductsTable table)
@@ -48042,6 +48786,7 @@ class $$ProductsTableTableManager
                 billOfMaterialsRefs = false,
                 bomItemsRefs = false,
                 manufacturingOrdersRefs = false,
+                manufacturingScrapsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -48057,6 +48802,7 @@ class $$ProductsTableTableManager
                     if (billOfMaterialsRefs) db.billOfMaterials,
                     if (bomItemsRefs) db.bomItems,
                     if (manufacturingOrdersRefs) db.manufacturingOrders,
+                    if (manufacturingScrapsRefs) db.manufacturingScraps,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -48292,6 +49038,27 @@ class $$ProductsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (manufacturingScrapsRefs)
+                        await $_getPrefetchedData<
+                          Product,
+                          $ProductsTable,
+                          ManufacturingScrap
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._manufacturingScrapsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).manufacturingScrapsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -48324,6 +49091,7 @@ typedef $$ProductsTableProcessedTableManager =
         bool billOfMaterialsRefs,
         bool bomItemsRefs,
         bool manufacturingOrdersRefs,
+        bool manufacturingScrapsRefs,
       })
     >;
 typedef $$CustomersTableCreateCompanionBuilder =
@@ -77027,6 +77795,33 @@ final class $$BomItemsTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static MultiTypedResultKey<
+    $ManufacturingScrapsTable,
+    List<ManufacturingScrap>
+  >
+  _manufacturingScrapsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.manufacturingScraps,
+        aliasName: $_aliasNameGenerator(
+          db.bomItems.id,
+          db.manufacturingScraps.bomItemId,
+        ),
+      );
+
+  $$ManufacturingScrapsTableProcessedTableManager get manufacturingScrapsRefs {
+    final manager = $$ManufacturingScrapsTableTableManager(
+      $_db,
+      $_db.manufacturingScraps,
+    ).filter((f) => f.bomItemId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _manufacturingScrapsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$BomItemsTableFilterComposer
@@ -77112,6 +77907,31 @@ class $$BomItemsTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> manufacturingScrapsRefs(
+    Expression<bool> Function($$ManufacturingScrapsTableFilterComposer f) f,
+  ) {
+    final $$ManufacturingScrapsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.manufacturingScraps,
+      getReferencedColumn: (t) => t.bomItemId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturingScrapsTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturingScraps,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 }
 
@@ -77277,6 +78097,32 @@ class $$BomItemsTableAnnotationComposer
     );
     return composer;
   }
+
+  Expression<T> manufacturingScrapsRefs<T extends Object>(
+    Expression<T> Function($$ManufacturingScrapsTableAnnotationComposer a) f,
+  ) {
+    final $$ManufacturingScrapsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.manufacturingScraps,
+          getReferencedColumn: (t) => t.bomItemId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingScrapsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.manufacturingScraps,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$BomItemsTableTableManager
@@ -77292,7 +78138,11 @@ class $$BomItemsTableTableManager
           $$BomItemsTableUpdateCompanionBuilder,
           (BomItem, $$BomItemsTableReferences),
           BomItem,
-          PrefetchHooks Function({bool bomId, bool rawMaterialProductId})
+          PrefetchHooks Function({
+            bool bomId,
+            bool rawMaterialProductId,
+            bool manufacturingScrapsRefs,
+          })
         > {
   $$BomItemsTableTableManager(_$AppDatabase db, $BomItemsTable table)
     : super(
@@ -77354,10 +78204,16 @@ class $$BomItemsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({bomId = false, rawMaterialProductId = false}) {
+              ({
+                bomId = false,
+                rawMaterialProductId = false,
+                manufacturingScrapsRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
-                  explicitlyWatchedTables: [],
+                  explicitlyWatchedTables: [
+                    if (manufacturingScrapsRefs) db.manufacturingScraps,
+                  ],
                   addJoins:
                       <
                         T extends TableManagerState<
@@ -77404,7 +78260,29 @@ class $$BomItemsTableTableManager
                         return state;
                       },
                   getPrefetchedDataCallback: (items) async {
-                    return [];
+                    return [
+                      if (manufacturingScrapsRefs)
+                        await $_getPrefetchedData<
+                          BomItem,
+                          $BomItemsTable,
+                          ManufacturingScrap
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BomItemsTableReferences
+                              ._manufacturingScrapsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BomItemsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).manufacturingScrapsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.bomItemId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
                   },
                 );
               },
@@ -77424,7 +78302,11 @@ typedef $$BomItemsTableProcessedTableManager =
       $$BomItemsTableUpdateCompanionBuilder,
       (BomItem, $$BomItemsTableReferences),
       BomItem,
-      PrefetchHooks Function({bool bomId, bool rawMaterialProductId})
+      PrefetchHooks Function({
+        bool bomId,
+        bool rawMaterialProductId,
+        bool manufacturingScrapsRefs,
+      })
     >;
 typedef $$ManufacturingOrdersTableCreateCompanionBuilder =
     ManufacturingOrdersCompanion Function({
@@ -77547,6 +78429,36 @@ final class $$ManufacturingOrdersTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _manufacturingCostComponentsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $ManufacturingScrapsTable,
+    List<ManufacturingScrap>
+  >
+  _manufacturingScrapsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.manufacturingScraps,
+        aliasName: $_aliasNameGenerator(
+          db.manufacturingOrders.id,
+          db.manufacturingScraps.manufacturingOrderId,
+        ),
+      );
+
+  $$ManufacturingScrapsTableProcessedTableManager get manufacturingScrapsRefs {
+    final manager =
+        $$ManufacturingScrapsTableTableManager(
+          $_db,
+          $_db.manufacturingScraps,
+        ).filter(
+          (f) => f.manufacturingOrderId.id.sqlEquals($_itemColumn<int>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _manufacturingScrapsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -77705,6 +78617,31 @@ class $$ManufacturingOrdersTableFilterComposer
                     $removeJoinBuilderFromRootComposer,
               ),
         );
+    return f(composer);
+  }
+
+  Expression<bool> manufacturingScrapsRefs(
+    Expression<bool> Function($$ManufacturingScrapsTableFilterComposer f) f,
+  ) {
+    final $$ManufacturingScrapsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.manufacturingScraps,
+      getReferencedColumn: (t) => t.manufacturingOrderId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturingScrapsTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturingScraps,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
     return f(composer);
   }
 }
@@ -77974,6 +78911,32 @@ class $$ManufacturingOrdersTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> manufacturingScrapsRefs<T extends Object>(
+    Expression<T> Function($$ManufacturingScrapsTableAnnotationComposer a) f,
+  ) {
+    final $$ManufacturingScrapsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.manufacturingScraps,
+          getReferencedColumn: (t) => t.manufacturingOrderId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingScrapsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.manufacturingScraps,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$ManufacturingOrdersTableTableManager
@@ -77993,6 +78956,7 @@ class $$ManufacturingOrdersTableTableManager
             bool bomId,
             bool finishedProductId,
             bool manufacturingCostComponentsRefs,
+            bool manufacturingScrapsRefs,
           })
         > {
   $$ManufacturingOrdersTableTableManager(
@@ -78099,12 +79063,14 @@ class $$ManufacturingOrdersTableTableManager
                 bomId = false,
                 finishedProductId = false,
                 manufacturingCostComponentsRefs = false,
+                manufacturingScrapsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (manufacturingCostComponentsRefs)
                       db.manufacturingCostComponents,
+                    if (manufacturingScrapsRefs) db.manufacturingScraps,
                   ],
                   addJoins:
                       <
@@ -78178,6 +79144,27 @@ class $$ManufacturingOrdersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (manufacturingScrapsRefs)
+                        await $_getPrefetchedData<
+                          ManufacturingOrder,
+                          $ManufacturingOrdersTable,
+                          ManufacturingScrap
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ManufacturingOrdersTableReferences
+                              ._manufacturingScrapsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ManufacturingOrdersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).manufacturingScrapsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.manufacturingOrderId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -78202,6 +79189,7 @@ typedef $$ManufacturingOrdersTableProcessedTableManager =
         bool bomId,
         bool finishedProductId,
         bool manufacturingCostComponentsRefs,
+        bool manufacturingScrapsRefs,
       })
     >;
 typedef $$ManufacturingCostComponentsTableCreateCompanionBuilder =
@@ -78631,6 +79619,640 @@ typedef $$ManufacturingCostComponentsTableProcessedTableManager =
       ManufacturingCostComponent,
       PrefetchHooks Function({bool manufacturingOrderId})
     >;
+typedef $$ManufacturingScrapsTableCreateCompanionBuilder =
+    ManufacturingScrapsCompanion Function({
+      Value<int> id,
+      required int manufacturingOrderId,
+      required int productId,
+      Value<int?> bomItemId,
+      required double quantity,
+      required String reason,
+      required String responsibleParty,
+      Value<String?> dispositionNote,
+      Value<String?> performedBy,
+      Value<DateTime> createdAt,
+    });
+typedef $$ManufacturingScrapsTableUpdateCompanionBuilder =
+    ManufacturingScrapsCompanion Function({
+      Value<int> id,
+      Value<int> manufacturingOrderId,
+      Value<int> productId,
+      Value<int?> bomItemId,
+      Value<double> quantity,
+      Value<String> reason,
+      Value<String> responsibleParty,
+      Value<String?> dispositionNote,
+      Value<String?> performedBy,
+      Value<DateTime> createdAt,
+    });
+
+final class $$ManufacturingScrapsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $ManufacturingScrapsTable,
+          ManufacturingScrap
+        > {
+  $$ManufacturingScrapsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ManufacturingOrdersTable _manufacturingOrderIdTable(
+    _$AppDatabase db,
+  ) => db.manufacturingOrders.createAlias(
+    $_aliasNameGenerator(
+      db.manufacturingScraps.manufacturingOrderId,
+      db.manufacturingOrders.id,
+    ),
+  );
+
+  $$ManufacturingOrdersTableProcessedTableManager get manufacturingOrderId {
+    final $_column = $_itemColumn<int>('manufacturing_order_id')!;
+
+    final manager = $$ManufacturingOrdersTableTableManager(
+      $_db,
+      $_db.manufacturingOrders,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _manufacturingOrderIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(db.manufacturingScraps.productId, db.products.id),
+      );
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<int>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $BomItemsTable _bomItemIdTable(_$AppDatabase db) =>
+      db.bomItems.createAlias(
+        $_aliasNameGenerator(db.manufacturingScraps.bomItemId, db.bomItems.id),
+      );
+
+  $$BomItemsTableProcessedTableManager? get bomItemId {
+    final $_column = $_itemColumn<int>('bom_item_id');
+    if ($_column == null) return null;
+    final manager = $$BomItemsTableTableManager(
+      $_db,
+      $_db.bomItems,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_bomItemIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ManufacturingScrapsTableFilterComposer
+    extends Composer<_$AppDatabase, $ManufacturingScrapsTable> {
+  $$ManufacturingScrapsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get quantity => $composableBuilder(
+    column: $table.quantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get responsibleParty => $composableBuilder(
+    column: $table.responsibleParty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dispositionNote => $composableBuilder(
+    column: $table.dispositionNote,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get performedBy => $composableBuilder(
+    column: $table.performedBy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ManufacturingOrdersTableFilterComposer get manufacturingOrderId {
+    final $$ManufacturingOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturingOrderId,
+      referencedTable: $db.manufacturingOrders,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturingOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturingOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$BomItemsTableFilterComposer get bomItemId {
+    final $$BomItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.bomItemId,
+      referencedTable: $db.bomItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BomItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.bomItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ManufacturingScrapsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ManufacturingScrapsTable> {
+  $$ManufacturingScrapsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get quantity => $composableBuilder(
+    column: $table.quantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get responsibleParty => $composableBuilder(
+    column: $table.responsibleParty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get dispositionNote => $composableBuilder(
+    column: $table.dispositionNote,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get performedBy => $composableBuilder(
+    column: $table.performedBy,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ManufacturingOrdersTableOrderingComposer get manufacturingOrderId {
+    final $$ManufacturingOrdersTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.manufacturingOrderId,
+          referencedTable: $db.manufacturingOrders,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingOrdersTableOrderingComposer(
+                $db: $db,
+                $table: $db.manufacturingOrders,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$BomItemsTableOrderingComposer get bomItemId {
+    final $$BomItemsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.bomItemId,
+      referencedTable: $db.bomItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BomItemsTableOrderingComposer(
+            $db: $db,
+            $table: $db.bomItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ManufacturingScrapsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ManufacturingScrapsTable> {
+  $$ManufacturingScrapsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<double> get quantity =>
+      $composableBuilder(column: $table.quantity, builder: (column) => column);
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<String> get responsibleParty => $composableBuilder(
+    column: $table.responsibleParty,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get dispositionNote => $composableBuilder(
+    column: $table.dispositionNote,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get performedBy => $composableBuilder(
+    column: $table.performedBy,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ManufacturingOrdersTableAnnotationComposer get manufacturingOrderId {
+    final $$ManufacturingOrdersTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.manufacturingOrderId,
+          referencedTable: $db.manufacturingOrders,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingOrdersTableAnnotationComposer(
+                $db: $db,
+                $table: $db.manufacturingOrders,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$BomItemsTableAnnotationComposer get bomItemId {
+    final $$BomItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.bomItemId,
+      referencedTable: $db.bomItems,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BomItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.bomItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ManufacturingScrapsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ManufacturingScrapsTable,
+          ManufacturingScrap,
+          $$ManufacturingScrapsTableFilterComposer,
+          $$ManufacturingScrapsTableOrderingComposer,
+          $$ManufacturingScrapsTableAnnotationComposer,
+          $$ManufacturingScrapsTableCreateCompanionBuilder,
+          $$ManufacturingScrapsTableUpdateCompanionBuilder,
+          (ManufacturingScrap, $$ManufacturingScrapsTableReferences),
+          ManufacturingScrap,
+          PrefetchHooks Function({
+            bool manufacturingOrderId,
+            bool productId,
+            bool bomItemId,
+          })
+        > {
+  $$ManufacturingScrapsTableTableManager(
+    _$AppDatabase db,
+    $ManufacturingScrapsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ManufacturingScrapsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ManufacturingScrapsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ManufacturingScrapsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> manufacturingOrderId = const Value.absent(),
+                Value<int> productId = const Value.absent(),
+                Value<int?> bomItemId = const Value.absent(),
+                Value<double> quantity = const Value.absent(),
+                Value<String> reason = const Value.absent(),
+                Value<String> responsibleParty = const Value.absent(),
+                Value<String?> dispositionNote = const Value.absent(),
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => ManufacturingScrapsCompanion(
+                id: id,
+                manufacturingOrderId: manufacturingOrderId,
+                productId: productId,
+                bomItemId: bomItemId,
+                quantity: quantity,
+                reason: reason,
+                responsibleParty: responsibleParty,
+                dispositionNote: dispositionNote,
+                performedBy: performedBy,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int manufacturingOrderId,
+                required int productId,
+                Value<int?> bomItemId = const Value.absent(),
+                required double quantity,
+                required String reason,
+                required String responsibleParty,
+                Value<String?> dispositionNote = const Value.absent(),
+                Value<String?> performedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => ManufacturingScrapsCompanion.insert(
+                id: id,
+                manufacturingOrderId: manufacturingOrderId,
+                productId: productId,
+                bomItemId: bomItemId,
+                quantity: quantity,
+                reason: reason,
+                responsibleParty: responsibleParty,
+                dispositionNote: dispositionNote,
+                performedBy: performedBy,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ManufacturingScrapsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                manufacturingOrderId = false,
+                productId = false,
+                bomItemId = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (manufacturingOrderId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.manufacturingOrderId,
+                                    referencedTable:
+                                        $$ManufacturingScrapsTableReferences
+                                            ._manufacturingOrderIdTable(db),
+                                    referencedColumn:
+                                        $$ManufacturingScrapsTableReferences
+                                            ._manufacturingOrderIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (productId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productId,
+                                    referencedTable:
+                                        $$ManufacturingScrapsTableReferences
+                                            ._productIdTable(db),
+                                    referencedColumn:
+                                        $$ManufacturingScrapsTableReferences
+                                            ._productIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (bomItemId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.bomItemId,
+                                    referencedTable:
+                                        $$ManufacturingScrapsTableReferences
+                                            ._bomItemIdTable(db),
+                                    referencedColumn:
+                                        $$ManufacturingScrapsTableReferences
+                                            ._bomItemIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$ManufacturingScrapsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ManufacturingScrapsTable,
+      ManufacturingScrap,
+      $$ManufacturingScrapsTableFilterComposer,
+      $$ManufacturingScrapsTableOrderingComposer,
+      $$ManufacturingScrapsTableAnnotationComposer,
+      $$ManufacturingScrapsTableCreateCompanionBuilder,
+      $$ManufacturingScrapsTableUpdateCompanionBuilder,
+      (ManufacturingScrap, $$ManufacturingScrapsTableReferences),
+      ManufacturingScrap,
+      PrefetchHooks Function({
+        bool manufacturingOrderId,
+        bool productId,
+        bool bomItemId,
+      })
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -78763,4 +80385,6 @@ class $AppDatabaseManager {
         _db,
         _db.manufacturingCostComponents,
       );
+  $$ManufacturingScrapsTableTableManager get manufacturingScraps =>
+      $$ManufacturingScrapsTableTableManager(_db, _db.manufacturingScraps);
 }

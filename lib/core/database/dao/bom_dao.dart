@@ -50,7 +50,10 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
   }
 
   Future<void> deleteBom(int id) async {
-    // Cascade will delete BomItems via FK onDelete cascade
+    // Cascade will delete BomItems via FK onDelete cascade, but a recipe with
+    // manufacturing orders against it must survive so those orders keep their
+    // meaning. See _assertBomIsEditable.
+    await _assertBomIsEditable(id);
     await (delete(billOfMaterials)..where((b) => b.id.equals(id))).go();
   }
 
@@ -78,28 +81,131 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
   // ── Transactional helpers ──
 
   /// Creates a BOM header + all its line items in a single transaction.
+  ///
+  /// Thin wrapper over [insertBomWithItemsChecked] that discards the warnings,
+  /// so the original int-returning surface from 4f7e2a0 is unchanged and every
+  /// caller goes through the same validation.
   Future<int> insertBomWithItems({
+    required BillOfMaterialsCompanion bom,
+    required List<BomItemsCompanion> items,
+  }) async {
+    final result = await insertBomWithItemsChecked(bom: bom, items: items);
+    return result.bomId;
+  }
+
+  /// Creates a BOM header + its line items, validating `product_type` at both
+  /// ends and returning any non-blocking warnings.
+  ///
+  /// [Products.productType] is nullable and NULL means "standard/retail", so a
+  /// product that predates the column cannot be distinguished from a wrongly
+  /// configured one. The rule is therefore asymmetric:
+  ///
+  ///  * NULL            -> warning. The insert goes through. Blocking here would
+  ///                       make every pre-v73 product unusable in a recipe.
+  ///  * correct type    -> silent.
+  ///  * explicitly wrong -> throw, before any write.
+  ///
+  /// OQ6. A BOM produces a `finished_product` and consumes `raw_material`s;
+  /// feeding either end a type that is explicitly the wrong role is a mistake
+  /// worth stopping on.
+  Future<({int bomId, List<String> warnings})> insertBomWithItemsChecked({
     required BillOfMaterialsCompanion bom,
     required List<BomItemsCompanion> items,
   }) {
     return transaction(() async {
+      final warnings = <String>[];
+
+      final finishedId = bom.finishedProductId.value;
+      final finished =
+          await (select(db.products)..where((p) => p.id.equals(finishedId)))
+              .getSingleOrNull();
+      if (finished == null) {
+        throw ArgumentError('Product #$finishedId not found');
+      }
+      switch (finished.productType) {
+        case null:
+          warnings.add(
+            'المنتج "${finished.name}" لسه مالوش نوع محدد — اتأكد إنه '
+            'منتج نهائي مش خام',
+          );
+        case 'finished_product':
+          break;
+        default:
+          throw ArgumentError(
+            'المنتج "${finished.name}" نوعه '
+            '"${finished.productType}" — الوصفة لازم تنتج '
+            'finished_product',
+          );
+      }
+
+      for (final item in items) {
+        final rawId = item.rawMaterialProductId.value;
+        final raw =
+            await (select(db.products)..where((p) => p.id.equals(rawId)))
+                .getSingleOrNull();
+        if (raw == null) {
+          throw ArgumentError('Product #$rawId not found');
+        }
+        switch (raw.productType) {
+          case null:
+            warnings.add(
+              'الخامة "${raw.name}" مالها نوع محدد — اتأكد إنها خام مش '
+              'منتج نهائي',
+            );
+          case 'raw_material':
+            break;
+          case 'finished_product':
+            throw ArgumentError(
+              'الخامة "${raw.name}" منتج نهائي — الوصفة consume خام، مش '
+              'منتج تاني',
+            );
+          default:
+            warnings.add(
+              'الخامة "${raw.name}" نوعها "${raw.productType}" — المفروض '
+              'خام',
+            );
+        }
+      }
+
       final bomId = await into(billOfMaterials).insert(bom);
       for (var i = 0; i < items.length; i++) {
         final c = items[i].copyWith(bomId: Value(bomId), sortOrder: Value(i));
         await into(bomItems).insert(c);
       }
-      return bomId;
+      return (bomId: bomId, warnings: warnings);
     });
+  }
+
+  /// Refuses to touch a recipe that a manufacturing order already points at.
+  ///
+  /// BomDao.replaceBomItems deletes every line and re-inserts, so editing a
+  /// referenced BOM would silently reinterpret that order's historical cost —
+  /// the recorded unit cost would still be there, but its meaning would not.
+  /// That is unrecoverable once real production has run.
+  Future<void> _assertBomIsEditable(int bomId) async {
+    final orders = await (select(db.manufacturingOrders)
+          ..where((o) => o.bomId.equals(bomId)))
+        .get();
+    if (orders.isEmpty) return;
+    throw StateError(
+      'This recipe has ${orders.length} manufacturing order(s) against it and '
+      'cannot be edited or deleted. Create a new recipe instead so the '
+      'existing orders keep their meaning. '
+      'الوصفة دي عليها ${orders.length} أمر تصنيع — اعمل وصفة جديدة.',
+    );
   }
 
   /// Replaces all line items for an existing BOM in a single transaction.
   /// Header can optionally be updated via [bomUpdate].
+  ///
+  /// Refuses when any order references the BOM — see [_assertBomIsEditable].
   Future<void> replaceBomItems({
     required int bomId,
     required List<BomItemsCompanion> items,
     BillOfMaterialsCompanion? bomUpdate,
   }) {
     return transaction(() async {
+      await _assertBomIsEditable(bomId);
       if (bomUpdate != null) {
         await (update(billOfMaterials)..where((b) => b.id.equals(bomId))).write(bomUpdate);
       }
