@@ -237,6 +237,20 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                         context.push('/damaged-items');
                       },
                     ),
+                  // Manufacturing Button — BOM, production orders and scrap.
+                  // Pushed as its own route rather than a tab, so the tab count
+                  // and every index above stay exactly as they are for the
+                  // base and vegetable flavors.
+                  if (AppFeatures.hasManufacturing)
+                    _buildLauncherButton(
+                      context,
+                      'التصنيع',
+                      Icons.precision_manufacturing_outlined,
+                      Colors.deepOrange,
+                      () {
+                        context.push('/manufacturing/orders');
+                      },
+                    ),
                   // Barneka (Returnable Containers) Button — vegetable-market
                   // feature, hidden in the factory (base) flavor.
                   if (AppFeatures.hasEmptyContainerTracking)

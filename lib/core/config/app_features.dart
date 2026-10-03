@@ -27,4 +27,8 @@ class AppFeatures {
 
   /// Suppliers module (الموردين). Available across flavors.
   static bool get hasSuppliersModule => true;
+
+  /// Manufacturing (BOM, production orders, scrap). Hidden in clothing —
+  /// that flavor only needs invoices, purchases and reports.
+  static bool get hasManufacturing => flavor != Flavor.clothing;
 }
