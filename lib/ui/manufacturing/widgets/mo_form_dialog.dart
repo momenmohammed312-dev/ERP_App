@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
@@ -209,6 +210,38 @@ class _MoFormDialogState extends State<MoFormDialog> {
                 if (_loadingBoms)
                   const Center(child: CircularProgressIndicator())
                 else ...[
+                  // With no recipes there is nothing to order against. Say so
+                  // and offer a way out, instead of showing an empty dropdown
+                  // that fails validation with no explanation.
+                  if (_activeBoms.isEmpty)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: const Text(
+                              'لا توجد وصفات. أنشئ وصفة أولاً',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const Gap(8),
+                          FilledButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).pop(true);
+                              context.push('/manufacturing/bom');
+                            },
+                            icon: const Icon(Icons.add),
+                            label: const Text('إنشاء وصفة'),
+                          ),
+                        ],
+                      ),
+                    ),
                   DropdownButtonFormField<int>(
                     initialValue: _selectedBomId,
                     decoration: const InputDecoration(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
@@ -151,6 +152,19 @@ class _MoListScreenState extends State<MoListScreen> {
         title: const Text('أوامر التصنيع'),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadMeta, tooltip: 'تحديث'),
+          // Recipes and reports are siblings of the orders screen, so they need
+          // their own way in — previously only /manufacturing/orders was
+          // reachable from the launcher.
+          IconButton(
+            icon: const Icon(Icons.list_alt_outlined),
+            onPressed: () => context.push('/manufacturing/bom'),
+            tooltip: 'الوصفات (BOM)',
+          ),
+          IconButton(
+            icon: const Icon(Icons.insights_outlined),
+            onPressed: () => context.push('/manufacturing/reports'),
+            tooltip: 'التقارير',
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
