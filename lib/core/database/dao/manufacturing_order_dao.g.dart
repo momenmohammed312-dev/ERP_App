@@ -18,6 +18,10 @@ mixin _$ManufacturingOrderDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.manufacturingCostComponents;
   $InventoryMovementsTable get inventoryMovements =>
       attachedDatabase.inventoryMovements;
+  $CustomerStockBalancesTable get customerStockBalances =>
+      attachedDatabase.customerStockBalances;
+  $CustomerStockMovementsTable get customerStockMovements =>
+      attachedDatabase.customerStockMovements;
   ManufacturingOrderDaoManager get managers =>
       ManufacturingOrderDaoManager(this);
 }
@@ -60,5 +64,15 @@ class ManufacturingOrderDaoManager {
       $$InventoryMovementsTableTableManager(
         _db.attachedDatabase,
         _db.inventoryMovements,
+      );
+  $$CustomerStockBalancesTableTableManager get customerStockBalances =>
+      $$CustomerStockBalancesTableTableManager(
+        _db.attachedDatabase,
+        _db.customerStockBalances,
+      );
+  $$CustomerStockMovementsTableTableManager get customerStockMovements =>
+      $$CustomerStockMovementsTableTableManager(
+        _db.attachedDatabase,
+        _db.customerStockMovements,
       );
 }

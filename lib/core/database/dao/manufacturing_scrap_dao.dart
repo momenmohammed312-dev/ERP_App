@@ -1,13 +1,22 @@
 import 'package:drift/drift.dart';
 
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/tables/customer_material_receipts_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/inventory_movements_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/product_table.dart';
 
 part 'manufacturing_scrap_dao.g.dart';
 
-@DriftAccessor(tables: [ManufacturingScraps, Products])
+@DriftAccessor(tables: [
+  ManufacturingScraps,
+  Products,
+  ManufacturingOrders,
+  InventoryMovements,
+  CustomerStockBalances,
+  CustomerStockMovements,
+])
 class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
     with _$ManufacturingScrapDaoMixin {
   ManufacturingScrapDao(super.db);
@@ -204,4 +213,152 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
 
   Future<int> deleteScrap(int id) =>
       (delete(manufacturingScraps)..where((s) => s.id.equals(id))).go();
+
+  // ── Phase B1: Manufacturing For Others Scrap With Policy ──
+
+  /// Records order scrap for manufacturing-for-others with policy execution.
+  ///
+  /// Policies:
+  /// - 'customer_bears': no compensation, financial action = 'none'.
+  /// - 'factory_pays_piece_value': fault must be factory; compensation = quantity * piece_unit_value; action = 'deducted_from_invoice'.
+  /// - 'factory_bears_labour_only': labour fee is waived; action = 'labour_waived'.
+  /// - 'factory_replaces_piece': factory provides replacement from its inventory;
+  ///   REQUIRES factory product stock >= quantity. If insufficient, throws [StateError]
+  ///   with clear message and leaves zero writes. Action = 'replaced'.
+  ///
+  /// Enforces:
+  /// - faultParty must be 'factory' or 'customer'.
+  /// - All validations run before any write.
+  Future<ManufacturingScrap> recordOrderScrapWithPolicy({
+    required int orderId,
+    required int productId,
+    required double quantity,
+    required String reason,
+    required String responsibleParty,
+    required String faultParty,
+    int? replacementProductId,
+    int? bomItemId,
+    String? dispositionNote,
+    String? performedBy,
+  }) {
+    return transaction(() async {
+      // 1. Basic validation
+      if (quantity <= 0) {
+        throw ArgumentError.value(quantity, 'quantity', 'Scrap quantity must be greater than zero');
+      }
+      if (reason.trim().isEmpty) {
+        throw ArgumentError.value(reason, 'reason', 'A scrap line needs a reason');
+      }
+      if (!ManufacturingScrapReason.isValid(reason)) {
+        throw ArgumentError.value(reason, 'reason', 'Unknown scrap reason');
+      }
+      if (responsibleParty.trim().isEmpty) {
+        throw ArgumentError.value(responsibleParty, 'responsibleParty', 'responsibleParty is required');
+      }
+      if (faultParty != 'factory' && faultParty != 'customer') {
+        throw ArgumentError.value(faultParty, 'faultParty', 'faultParty must be either "factory" or "customer"');
+      }
+
+      final order = await (select(manufacturingOrders)..where((o) => o.id.equals(orderId))).getSingleOrNull();
+      if (order == null) {
+        throw ArgumentError('ManufacturingOrder #$orderId not found');
+      }
+      if (order.status != ManufacturingOrderStatus.completed) {
+        throw StateError('Scrap can only be recorded on a completed order (current: ${order.status})');
+      }
+
+      final product = await (select(products)..where((p) => p.id.equals(productId))).getSingleOrNull();
+      if (product == null) {
+        throw ArgumentError('Product #$productId not found');
+      }
+
+      final policy = order.scrapPolicy ?? 'customer_bears';
+      String compensationAction;
+      double compensationAmount = 0.0;
+
+      // 2. Policy-specific validation and stock checks
+      Product? replacementProduct;
+      if (policy == 'factory_replaces_piece') {
+        final replaceId = replacementProductId ?? productId;
+        replacementProduct = await (select(products)..where((p) => p.id.equals(replaceId))).getSingleOrNull();
+        if (replacementProduct == null) {
+          throw ArgumentError('Replacement product #$replaceId not found');
+        }
+        final availableFactoryStock = replacementProduct.quantity;
+        final requiredInt = quantity.round();
+        if (availableFactoryStock < requiredInt) {
+          throw StateError(
+            'Cannot replace customer scrap with factory stock: required $requiredInt ${replacementProduct.unit ?? ''} of ${replacementProduct.name}, but factory has only $availableFactoryStock on hand',
+          );
+        }
+        compensationAction = 'replaced';
+      } else if (policy == 'factory_pays_piece_value') {
+        if (faultParty == 'factory') {
+          final pieceValue = order.pieceUnitValue ?? 0.0;
+          compensationAmount = double.parse((quantity * pieceValue).toStringAsFixed(2));
+          compensationAction = 'deducted_from_invoice';
+        } else {
+          compensationAmount = 0.0;
+          compensationAction = 'none';
+        }
+      } else if (policy == 'factory_bears_labour_only') {
+        compensationAction = 'labour_waived';
+        compensationAmount = 0.0;
+      } else {
+        // customer_bears
+        compensationAction = 'none';
+        compensationAmount = 0.0;
+      }
+
+      // 3. Stock deduction for replaced policy
+      final now = DateTime.now();
+      if (policy == 'factory_replaces_piece' && replacementProduct != null) {
+        final prev = replacementProduct.quantity;
+        final requiredInt = quantity.round();
+        final next = prev - requiredInt;
+        await (update(products)..where((p) => p.id.equals(replacementProduct!.id))).write(
+          ProductsCompanion(quantity: Value(next), updatedAt: Value(now)),
+        );
+
+        await into(inventoryMovements).insert(
+          InventoryMovementsCompanion.insert(
+            productId: replacementProduct.id,
+            movementType: 'manufacturing_consumption',
+            quantity: -requiredInt,
+            unitCost: replacementProduct.costPrice ?? replacementProduct.price,
+            totalValue: requiredInt * (replacementProduct.costPrice ?? replacementProduct.price),
+            movementDate: now,
+            reference: order.orderNumber,
+            referenceType: 'manufacturing_order',
+            previousQuantity: prev,
+            newQuantity: next,
+            performedBy: Value(performedBy),
+            notes: Value('صرف قطعة بديلة لهالك العميل بأمر ${order.orderNumber}'),
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+      }
+
+      // 4. Insert scrap record with policy results
+      final id = await into(manufacturingScraps).insert(
+        ManufacturingScrapsCompanion.insert(
+          manufacturingOrderId: orderId,
+          productId: productId,
+          bomItemId: Value(bomItemId),
+          quantity: quantity,
+          reason: reason,
+          responsibleParty: responsibleParty,
+          dispositionNote: Value(dispositionNote),
+          faultParty: Value(faultParty),
+          compensationAction: Value(compensationAction),
+          compensationAmount: Value(compensationAmount),
+          performedBy: Value(performedBy),
+          createdAt: Value(now),
+        ),
+      );
+
+      return (select(manufacturingScraps)..where((s) => s.id.equals(id))).getSingle();
+    });
+  }
 }

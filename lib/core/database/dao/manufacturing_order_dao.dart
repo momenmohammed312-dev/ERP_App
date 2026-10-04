@@ -1,6 +1,8 @@
 import 'package:drift/drift.dart';
 
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/tables/customer_material_receipts_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/customer_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/inventory_movements_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_cost_components_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
@@ -16,6 +18,9 @@ part 'manufacturing_order_dao.g.dart';
   ManufacturingCostComponents,
   InventoryMovements,
   Products,
+  CustomerStockBalances,
+  CustomerStockMovements,
+  Customers,
 ])
 class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
     with _$ManufacturingOrderDaoMixin {
@@ -383,6 +388,305 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
       );
     });
   }
+
+  // ── Phase B1: Manufacturing For Others Completion ──
+
+  /// Atomically completes a manufacturing-for-others or mixed manufacturing order.
+  ///
+  /// Enforces:
+  /// 1. order_type must be 'for_others' or 'mixed' (internal orders are strictly rejected).
+  /// 2. customerId must be provided and exist in customers table.
+  /// 3. Validates status (must be planned or in_progress, not completed/cancelled).
+  /// 4. Loads BOM and items.
+  /// 5. Customer-owned lines [customerOwnedProductIds or by default all lines if for_others]
+  ///    validate customer_stock_balances (quantityOnHand - quantityAllocated >= required).
+  /// 6. Factory-owned lines [mixed order factory items] validate Products.quantity >= required.
+  /// 7. If ANY shortage exists, throws [InsufficientStockException] with zero writes.
+  /// 8. Deducts customer custody balances + records customer_stock_movements ('issued_to_order').
+  /// 9. Deducts factory inventory + records inventory_movements ('manufacturing_consumption').
+  /// 10. NEVER increments factory finished-product stock (`Products.quantity` is untouched).
+  /// 11. Updates MO: status = 'completed', producedQuantity = effectiveProduced, completedAt = now.
+  Future<ForOthersCompletionResult> completeForOthersOrder({
+    required int orderId,
+    double? actualProducedQuantity,
+    Set<int>? customerOwnedProductIds,
+    String? performedBy,
+    String? notes,
+  }) {
+    return transaction(() async {
+      // 1. Load & validate MO
+      final mo = await (select(manufacturingOrders)..where((o) => o.id.equals(orderId))).getSingleOrNull();
+      if (mo == null) throw ArgumentError('ManufacturingOrder #$orderId not found');
+      if (mo.status == ManufacturingOrderStatus.completed) {
+        throw StateError('Order is already completed');
+      }
+      if (mo.status == ManufacturingOrderStatus.cancelled) {
+        throw StateError('Cancelled orders cannot be completed');
+      }
+
+      final orderType = mo.orderType ?? 'internal';
+      if (orderType != 'for_others' && orderType != 'mixed' && orderType != 'service_only') {
+        throw ArgumentError('Order #$orderId has orderType "$orderType" — cannot be completed via completeForOthersOrder');
+      }
+
+      final customerId = mo.customerId;
+      if (customerId == null || customerId.trim().isEmpty) {
+        throw ArgumentError('Order #$orderId has no customerId associated');
+      }
+      final customer = await (select(customers)..where((c) => c.id.equals(customerId))).getSingleOrNull();
+      if (customer == null) {
+        throw ArgumentError('Customer #$customerId not found for order #$orderId');
+      }
+
+      // 2. Load BOM
+      final bom = await (select(billOfMaterials)..where((b) => b.id.equals(mo.bomId))).getSingleOrNull();
+      if (bom == null) throw StateError('BOM #${mo.bomId} not found for order #$orderId');
+
+      final effectiveProduced = actualProducedQuantity ?? mo.plannedQuantity;
+      if (effectiveProduced <= 0) throw ArgumentError('Produced quantity must be > 0');
+      final producedInt = effectiveProduced.round();
+      if (producedInt <= 0) throw ArgumentError('Produced quantity rounds to 0 — increase quantity');
+
+      final bomItemsList = await (select(bomItems)
+            ..where((i) => i.bomId.equals(bom.id))
+            ..orderBy([(i) => OrderingTerm.asc(i.sortOrder)]))
+          .get();
+      if (bomItemsList.isEmpty && orderType != 'service_only') {
+        throw StateError('BOM #${bom.id} has no items — cannot produce');
+      }
+
+      final yieldQty = bom.yieldQuantity;
+      if (yieldQty <= 0) throw StateError('BOM yieldQuantity must be > 0');
+      final factor = effectiveProduced / yieldQty;
+
+      // 3. Compute required and validate stock for both customer and factory materials
+      final List<_CustomerConsumptionPlan> customerPlans = [];
+      final List<_ConsumptionPlan> factoryPlans = [];
+      final List<InsufficientStockDetail> shortages = [];
+
+      for (final item in bomItemsList) {
+        final waste = item.wastePercentageOverride ?? bom.wastePercentage;
+        final rawRequired = item.quantityRequired * factor * (1 + waste / 100);
+        final requiredInt = rawRequired.round();
+
+        final product = await (select(products)..where((p) => p.id.equals(item.rawMaterialProductId))).getSingleOrNull();
+        if (product == null) throw StateError('Raw material product #${item.rawMaterialProductId} not found');
+
+        // Determine ownership:
+        // If customerOwnedProductIds is explicitly specified, use it.
+        // Otherwise, in 'for_others' all lines are customer-owned; in 'mixed', if unspecified, first line or customerOwnedProductIds
+        final bool isCustomerOwned;
+        if (customerOwnedProductIds != null) {
+          isCustomerOwned = customerOwnedProductIds.contains(item.rawMaterialProductId);
+        } else if (orderType == 'for_others') {
+          isCustomerOwned = true;
+        } else {
+          // mixed order default when customerOwnedProductIds is null:
+          // check if customer has a custody balance for this product
+          final custBal = await (select(customerStockBalances)
+                ..where((b) => b.customerId.equals(customerId) & b.productId.equals(item.rawMaterialProductId)))
+              .getSingleOrNull();
+          isCustomerOwned = custBal != null;
+        }
+
+        if (isCustomerOwned) {
+          // Customer custody stock validation
+          final custBal = await (select(customerStockBalances)
+                ..where((b) => b.customerId.equals(customerId) & b.productId.equals(item.rawMaterialProductId)))
+              .getSingleOrNull();
+          final available = custBal != null ? (custBal.quantityOnHand - custBal.quantityAllocated).toDouble() : 0.0;
+          if (requiredInt > available) {
+            shortages.add(InsufficientStockDetail(
+              rawMaterialProductId: product.id,
+              productName: '${product.name} (عهدة العميل)',
+              required: requiredInt,
+              available: available.round(),
+              unit: product.unit,
+            ));
+          } else {
+            customerPlans.add(_CustomerConsumptionPlan(
+              bomItem: item,
+              product: product,
+              balanceRow: custBal!,
+              requiredQty: requiredInt.toDouble(),
+            ));
+          }
+        } else {
+          // Factory inventory validation
+          if (requiredInt > product.quantity) {
+            shortages.add(InsufficientStockDetail(
+              rawMaterialProductId: product.id,
+              productName: '${product.name} (مخزن المصنع)',
+              required: requiredInt,
+              available: product.quantity,
+              unit: product.unit,
+            ));
+          } else {
+            final unitCost = product.costPrice ?? product.price;
+            factoryPlans.add(_ConsumptionPlan(
+              bomItem: item,
+              product: product,
+              requiredInt: requiredInt,
+              unitCost: unitCost,
+              lineCost: requiredInt * unitCost,
+            ));
+          }
+        }
+      }
+
+      if (shortages.isNotEmpty) {
+        throw InsufficientStockException(shortages);
+      }
+
+      final now = DateTime.now();
+
+      // 4. Execute customer custody consumption
+      for (final cp in customerPlans) {
+        final newOnHand = cp.balanceRow.quantityOnHand - cp.requiredQty;
+        await (update(customerStockBalances)..where((b) => b.id.equals(cp.balanceRow.id))).write(
+          CustomerStockBalancesCompanion(
+            quantityOnHand: Value(newOnHand),
+            updatedAt: Value(now),
+          ),
+        );
+
+        await into(customerStockMovements).insert(
+          CustomerStockMovementsCompanion.insert(
+            customerId: customerId,
+            productId: cp.product.id,
+            movementType: 'issued_to_order',
+            quantity: -cp.requiredQty,
+            referenceType: 'manufacturing_order',
+            referenceId: mo.orderNumber,
+            notes: Value('صرف للتشغيل بأمر تصنيع ${mo.orderNumber}'),
+            performedBy: Value(performedBy),
+            createdAt: Value(now),
+          ),
+        );
+      }
+
+      // 5. Execute factory inventory consumption (mixed orders)
+      for (final fp in factoryPlans) {
+        final prev = fp.product.quantity;
+        final next = prev - fp.requiredInt;
+        await (update(products)..where((t) => t.id.equals(fp.product.id))).write(
+          ProductsCompanion(quantity: Value(next), updatedAt: Value(now)),
+        );
+        await into(inventoryMovements).insert(
+          InventoryMovementsCompanion.insert(
+            productId: fp.product.id,
+            movementType: 'manufacturing_consumption',
+            quantity: -fp.requiredInt,
+            unitCost: fp.unitCost,
+            totalValue: fp.lineCost,
+            movementDate: now,
+            reference: mo.orderNumber,
+            referenceType: 'manufacturing_order',
+            previousQuantity: prev,
+            newQuantity: next,
+            performedBy: Value(performedBy),
+            notes: Value('استهلاك خامات مصنع لأمر تشغيل للغير ${mo.orderNumber}'),
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+      }
+
+      // 6. Finished Product: NEVER increment factory stock for manufacturing-for-others
+      final finishedProduct = await (select(products)..where((p) => p.id.equals(mo.finishedProductId))).getSingleOrNull();
+      if (finishedProduct == null) throw StateError('Finished product #${mo.finishedProductId} not found');
+
+      // 7. Update MO to completed
+      await (update(manufacturingOrders)..where((o) => o.id.equals(orderId))).write(
+        ManufacturingOrdersCompanion(
+          status: const Value(ManufacturingOrderStatus.completed),
+          producedQuantity: Value(effectiveProduced.toDouble()),
+          completedAt: Value(now),
+          updatedAt: Value(now),
+        ),
+      );
+
+      return ForOthersCompletionResult(
+        orderId: orderId,
+        orderNumber: mo.orderNumber,
+        customerId: customerId,
+        finishedProductId: finishedProduct.id,
+        finishedProductName: finishedProduct.name,
+        plannedQuantity: mo.plannedQuantity,
+        producedQuantity: effectiveProduced.toDouble(),
+        customerConsumptions: customerPlans
+            .map((c) => CustomerConsumptionResult(
+                  productId: c.product.id,
+                  productName: c.product.name,
+                  quantity: c.requiredQty,
+                  unit: c.product.unit,
+                ))
+            .toList(),
+        factoryConsumptions: factoryPlans
+            .map((f) => ConsumptionResult(
+                  rawMaterialProductId: f.product.id,
+                  productName: f.product.name,
+                  required: f.requiredInt,
+                  unitCost: f.unitCost,
+                  lineCost: f.lineCost,
+                  unit: f.product.unit,
+                ))
+            .toList(),
+      );
+    });
+  }
+}
+
+class _CustomerConsumptionPlan {
+  final BomItem bomItem;
+  final Product product;
+  final CustomerStockBalance balanceRow;
+  final double requiredQty;
+
+  _CustomerConsumptionPlan({
+    required this.bomItem,
+    required this.product,
+    required this.balanceRow,
+    required this.requiredQty,
+  });
+}
+
+class ForOthersCompletionResult {
+  final int orderId;
+  final String orderNumber;
+  final String customerId;
+  final int finishedProductId;
+  final String finishedProductName;
+  final double plannedQuantity;
+  final double producedQuantity;
+  final List<CustomerConsumptionResult> customerConsumptions;
+  final List<ConsumptionResult> factoryConsumptions;
+
+  ForOthersCompletionResult({
+    required this.orderId,
+    required this.orderNumber,
+    required this.customerId,
+    required this.finishedProductId,
+    required this.finishedProductName,
+    required this.plannedQuantity,
+    required this.producedQuantity,
+    required this.customerConsumptions,
+    required this.factoryConsumptions,
+  });
+}
+
+class CustomerConsumptionResult {
+  final int productId;
+  final String productName;
+  final double quantity;
+  final String? unit;
+
+  CustomerConsumptionResult({
+    required this.productId,
+    required this.productName,
+    required this.quantity,
+    this.unit,
+  });
 }
 
 class _ConsumptionPlan {
