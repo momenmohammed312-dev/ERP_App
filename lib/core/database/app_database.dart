@@ -75,6 +75,7 @@ import 'package:pos_offline_desktop/core/database/dao/manufacturing_cost_compone
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_scrap_dao.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_material_receipts_table.dart';
+import 'package:pos_offline_desktop/core/database/dao/customer_material_receipt_dao.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_deliveries_table.dart';
 import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
@@ -187,6 +188,7 @@ part 'app_database.g.dart';
     ManufacturingOrderDao,
     ManufacturingCostComponentDao,
     ManufacturingScrapDao,
+    CustomerMaterialReceiptDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
