@@ -6,6 +6,11 @@ part of 'manufacturing_order_dao.dart';
 mixin _$ManufacturingOrderDaoMixin on DatabaseAccessor<AppDatabase> {
   $ProductsTable get products => attachedDatabase.products;
   $BillOfMaterialsTable get billOfMaterials => attachedDatabase.billOfMaterials;
+  $CustomersTable get customers => attachedDatabase.customers;
+  $SuppliersTable get suppliers => attachedDatabase.suppliers;
+  $VegetableShipmentsTable get vegetableShipments =>
+      attachedDatabase.vegetableShipments;
+  $InvoicesTable get invoices => attachedDatabase.invoices;
   $ManufacturingOrdersTable get manufacturingOrders =>
       attachedDatabase.manufacturingOrders;
   $BomItemsTable get bomItems => attachedDatabase.bomItems;
@@ -27,6 +32,17 @@ class ManufacturingOrderDaoManager {
         _db.attachedDatabase,
         _db.billOfMaterials,
       );
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
+  $$SuppliersTableTableManager get suppliers =>
+      $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
+  $$VegetableShipmentsTableTableManager get vegetableShipments =>
+      $$VegetableShipmentsTableTableManager(
+        _db.attachedDatabase,
+        _db.vegetableShipments,
+      );
+  $$InvoicesTableTableManager get invoices =>
+      $$InvoicesTableTableManager(_db.attachedDatabase, _db.invoices);
   $$ManufacturingOrdersTableTableManager get manufacturingOrders =>
       $$ManufacturingOrdersTableTableManager(
         _db.attachedDatabase,

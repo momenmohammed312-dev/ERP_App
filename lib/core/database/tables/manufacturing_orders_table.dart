@@ -1,4 +1,6 @@
 import 'package:drift/drift.dart';
+import 'customer_table.dart';
+import 'invoice_table.dart';
 import 'product_table.dart';
 import 'manufacturing_tables.dart';
 
@@ -40,6 +42,39 @@ class ManufacturingOrders extends Table {
   DateTimeColumn get startedAt => dateTime().nullable()();
   DateTimeColumn get completedAt => dateTime().nullable()();
   DateTimeColumn get cancelledAt => dateTime().nullable()();
+
+  /// ── Phase B1: Manufacturing-for-others additions (v76) ──
+  /// 'internal' | 'for_others' | 'mixed' | 'service_only'
+  TextColumn get orderType =>
+      text().nullable().withDefault(const Constant('internal'))();
+
+  /// Customer who owns the materials / ordered the manufacturing (UUID string)
+  TextColumn get customerId =>
+      text().nullable().references(Customers, #id)();
+
+  /// 'inclusive' (piece includes service) | 'separate' (service fee + materials)
+  TextColumn get pricingMode =>
+      text().nullable().withDefault(const Constant('inclusive'))();
+
+  /// 'customer_bears' | 'factory_pays_piece_value' | 'factory_bears_labour_only' | 'factory_replaces_piece'
+  TextColumn get scrapPolicy =>
+      text().nullable().withDefault(const Constant('customer_bears'))();
+
+  /// Agreed valuation per customer piece (for scrap compensation calculations)
+  RealColumn get pieceUnitValue =>
+      real().nullable().withDefault(const Constant(0.0))();
+
+  /// Service fee per finished unit
+  RealColumn get serviceUnitPrice =>
+      real().nullable().withDefault(const Constant(0.0))();
+
+  /// Link to generated service invoice in invoices table
+  IntColumn get invoiceId =>
+      integer().nullable().references(Invoices, #id)();
+
+  /// 'undelivered' | 'partially_delivered' | 'delivered'
+  TextColumn get deliveryStatus =>
+      text().nullable().withDefault(const Constant('undelivered'))();
 
   TextColumn get cancelReason => text().nullable()();
   TextColumn get notes => text().nullable()();

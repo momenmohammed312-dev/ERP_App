@@ -74,6 +74,8 @@ import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.da
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_cost_component_dao.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_scrap_dao.dart';
+import 'package:pos_offline_desktop/core/database/tables/customer_material_receipts_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_deliveries_table.dart';
 import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
 import 'supplier_ledger_backfill.dart';
@@ -146,6 +148,12 @@ part 'app_database.g.dart';
     ManufacturingOrders,
     ManufacturingCostComponents,
     ManufacturingScraps,
+    CustomerMaterialReceipts,
+    CustomerMaterialReceiptItems,
+    CustomerStockBalances,
+    CustomerStockMovements,
+    ManufacturingDeliveries,
+    ManufacturingDeliveryItems,
   ],
   daos: [
     ProductDao,
@@ -189,7 +197,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 75;
+  int get schemaVersion => 76;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -365,6 +373,13 @@ class AppDatabase extends _$AppDatabase {
       // records what actually happened, so the variance is measurable.
       if (from < 75) {
         await _runV75Migrations(m);
+      }
+
+      // Schema v76 — manufacturing_for_others (customer material receipts,
+      // custody stock balances & movements, deliveries, and order/scrap extensions).
+      // Additive and idempotent. Six new tables, safe nullable/default ALTERs.
+      if (from < 76) {
+        await _runV76Migrations(m);
       }
 
       // 6. Special data fixes
@@ -2754,6 +2769,104 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(
         75,
         'manufacturing_scrap',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// Schema v76 — manufacturing_for_others.
+  ///
+  /// Additive and idempotent:
+  /// 1. Six new tables: customer_material_receipts, customer_material_receipt_items,
+  ///    customer_stock_balances, customer_stock_movements, manufacturing_deliveries,
+  ///    manufacturing_delivery_items.
+  /// 2. Safe ALTER TABLE ADD COLUMN statements on manufacturing_orders and
+  ///    manufacturing_scrap with DEFAULTs so pre-existing rows are preserved.
+  Future<void> _runV76Migrations(Migrator m) async {
+    await _logMigrationStep(76, 'manufacturing_for_others', 'started');
+    try {
+      // 1. Create tables safely
+      try {
+        await m.createTable(customerMaterialReceipts);
+        log('v76: Created customer_material_receipts table');
+      } catch (e) {
+        log('v76: customer_material_receipts likely already exists: $e');
+      }
+      try {
+        await m.createTable(customerMaterialReceiptItems);
+        log('v76: Created customer_material_receipt_items table');
+      } catch (e) {
+        log('v76: customer_material_receipt_items likely already exists: $e');
+      }
+      try {
+        await m.createTable(customerStockBalances);
+        log('v76: Created customer_stock_balances table');
+      } catch (e) {
+        log('v76: customer_stock_balances likely already exists: $e');
+      }
+      try {
+        await m.createTable(customerStockMovements);
+        log('v76: Created customer_stock_movements table');
+      } catch (e) {
+        log('v76: customer_stock_movements likely already exists: $e');
+      }
+      try {
+        await m.createTable(manufacturingDeliveries);
+        log('v76: Created manufacturing_deliveries table');
+      } catch (e) {
+        log('v76: manufacturing_deliveries likely already exists: $e');
+      }
+      try {
+        await m.createTable(manufacturingDeliveryItems);
+        log('v76: Created manufacturing_delivery_items table');
+      } catch (e) {
+        log('v76: manufacturing_delivery_items likely already exists: $e');
+      }
+
+      // 2. Safe additive columns on manufacturing_orders
+      final moAlterations = [
+        "ALTER TABLE manufacturing_orders ADD COLUMN order_type TEXT DEFAULT 'internal'",
+        "ALTER TABLE manufacturing_orders ADD COLUMN customer_id TEXT REFERENCES customers(id)",
+        "ALTER TABLE manufacturing_orders ADD COLUMN pricing_mode TEXT DEFAULT 'inclusive'",
+        "ALTER TABLE manufacturing_orders ADD COLUMN scrap_policy TEXT DEFAULT 'customer_bears'",
+        "ALTER TABLE manufacturing_orders ADD COLUMN piece_unit_value REAL DEFAULT 0.0",
+        "ALTER TABLE manufacturing_orders ADD COLUMN service_unit_price REAL DEFAULT 0.0",
+        "ALTER TABLE manufacturing_orders ADD COLUMN invoice_id INTEGER REFERENCES invoices(id)",
+        "ALTER TABLE manufacturing_orders ADD COLUMN delivery_status TEXT DEFAULT 'undelivered'",
+      ];
+
+      for (final sql in moAlterations) {
+        try {
+          await customStatement(sql);
+          log('v76: Executed $sql');
+        } catch (e) {
+          log('v76: Column alteration skipped (likely exists): $e');
+        }
+      }
+
+      // 3. Safe additive columns on manufacturing_scrap
+      final scrapAlterations = [
+        "ALTER TABLE manufacturing_scrap ADD COLUMN fault_party TEXT DEFAULT 'factory'",
+        "ALTER TABLE manufacturing_scrap ADD COLUMN compensation_action TEXT",
+        "ALTER TABLE manufacturing_scrap ADD COLUMN compensation_amount REAL DEFAULT 0.0",
+      ];
+
+      for (final sql in scrapAlterations) {
+        try {
+          await customStatement(sql);
+          log('v76: Executed $sql');
+        } catch (e) {
+          log('v76: Scrap column alteration skipped (likely exists): $e');
+        }
+      }
+
+      await _logMigrationStep(76, 'manufacturing_for_others', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        76,
+        'manufacturing_for_others',
         'failed',
         error: e.toString(),
       );

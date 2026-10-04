@@ -90,6 +90,18 @@ class ManufacturingScraps extends Table {
   /// Free text, typically an authorisation reference for the write-off.
   TextColumn get dispositionNote => text().nullable()();
 
+  /// ── Phase B1: Manufacturing-for-others additions (v76) ──
+  /// 'factory' | 'customer'
+  TextColumn get faultParty =>
+      text().nullable().withDefault(const Constant('factory'))();
+
+  /// 'deducted_from_invoice' | 'replaced' | 'labour_waived' | 'none'
+  TextColumn get compensationAction => text().nullable()();
+
+  /// Amount to credit customer or financial loss
+  RealColumn get compensationAmount =>
+      real().nullable().withDefault(const Constant(0.0))();
+
   TextColumn get performedBy => text().nullable()();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();

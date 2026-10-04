@@ -257,8 +257,8 @@ void main() {
 
       expect(
         db.schemaVersion,
-        75,
-        reason: 'v73 + v74 + the v75 scrap table',
+        76,
+        reason: 'v73 + v74 + the v75 scrap table + v76 manufacturing-for-others',
       );
     });
 
@@ -323,7 +323,7 @@ void main() {
       addTearDown(second.close);
       await second.customSelect('SELECT 1').get();
 
-      expect(await userVersion(second), 75);
+      expect(await userVersion(second), 76);
       final names = await tableNames(second);
       expect(names, contains('bill_of_materials'));
       expect(names, contains('bom_items'));
