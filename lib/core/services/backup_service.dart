@@ -467,6 +467,13 @@ class BackupService {
       'manufacturing_orders',
       'manufacturing_cost_components',
       'manufacturing_scrap',
+      // ── Manufacturing for Others (Phase B1 - v76) ──
+      'customer_material_receipts',
+      'customer_material_receipt_items',
+      'customer_stock_balances',
+      'customer_stock_movements',
+      'manufacturing_deliveries',
+      'manufacturing_delivery_items',
     ];
 
     for (final tableName in tables) {
@@ -484,7 +491,7 @@ class BackupService {
 
   bool _validateBackupFormat(Map<String, dynamic> backup) {
     return backup.containsKey('version') &&
-        backup.containsKey('timestamp') &&
+        (backup.containsKey('timestamp') || backup.containsKey('created_at')) &&
         backup.containsKey('database') &&
         backup.containsKey('tables');
   }
@@ -564,6 +571,21 @@ class BackupService {
       'manufacturing_orders',
       'manufacturing_cost_components',
       'manufacturing_scrap',
+      // ── Manufacturing for Others (Phase B1 - v76) ──
+      // FK order:
+      // customers and products are restored above;
+      // customer_material_receipts references customers;
+      // customer_material_receipt_items references customer_material_receipts and products;
+      // customer_stock_balances references customers and products;
+      // customer_stock_movements references customers and products;
+      // manufacturing_deliveries references manufacturing_orders and customers;
+      // manufacturing_delivery_items references manufacturing_deliveries and products.
+      'customer_material_receipts',
+      'customer_material_receipt_items',
+      'customer_stock_balances',
+      'customer_stock_movements',
+      'manufacturing_deliveries',
+      'manufacturing_delivery_items',
     ];
 
     await _db.exclusively(() async {
@@ -1013,7 +1035,8 @@ class BackupService {
       await _db.customUpdate('DELETE FROM $tableName');
 
       // Insert new data
-      for (final row in data as List<Map<String, dynamic>>) {
+      for (final rawRow in data) {
+        final row = (rawRow as Map).cast<String, dynamic>();
         final columns = row.keys.join(', ');
         final placeholders = List.filled(row.values.length, '?').join(', ');
         final values = row.values.toList();
@@ -1075,7 +1098,7 @@ class BackupService {
 
     final keyBytes = deriveAesKey(_encryptionKey);
     final key = encrypt_pkg.Key(keyBytes);
-    final iv = encrypt_pkg.IV.fromLength(16);
+    final iv = encrypt_pkg.IV(Uint8List.fromList(encryptedData.sublist(0, 16)));
     final encrypter = encrypt_pkg.Encrypter(
       encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
     );
