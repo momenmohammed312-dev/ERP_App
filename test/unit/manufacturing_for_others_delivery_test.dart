@@ -60,7 +60,7 @@ void main() {
     double? costPrice,
     String? productType,
   }) {
-    return db.into(db.products).insert(
+    return db.productDao.insertProduct(
       ProductsCompanion.insert(
         name: name,
         quantity: qty,
@@ -585,6 +585,81 @@ void main() {
       // Raw materials accounting:
       // Received (100) = Consumed in MO (60) + Rolling Balance (40)
       expect(60.0 + fabricRemaining, 100.0);
+    });
+
+    test('SYNC-1: generateServiceInvoice queues outbox entries, formats invoice number, and matches ledger fields', () async {
+      final (db, deliveryDao, moDao, _, bomDao, cmrDao, _) = await setup();
+      const custId = 'cust-sync-1';
+      await seedCustomer(db, id: custId, name: 'Sync Cust');
+      final rawMatId = await seedProduct(db, name: 'Raw Material');
+      final finishedId = await seedProduct(db, name: 'Finished Product');
+
+      await cmrDao.receiveCustomerMaterial(
+        customerId: custId,
+        items: [ReceiptItemInput(productId: rawMatId, quantityReceived: 50)],
+      );
+
+      final bomId = await seedBom(
+        bomDao,
+        finishedProductId: finishedId,
+        lines: [(productId: rawMatId, quantity: 1.0, wasteOverride: null)],
+      );
+
+      final moId = await seedOrder(
+        moDao,
+        bomId: bomId,
+        finishedProductId: finishedId,
+        plannedQuantity: 15,
+        orderType: 'for_others',
+        customerId: custId,
+        serviceUnitPrice: 20.0,
+      );
+
+      await moDao.completeForOthersOrder(orderId: moId);
+
+      await deliveryDao.createDelivery(
+        orderId: moId,
+        items: [DeliveryItemInput(productId: finishedId, quantity: 15)],
+      );
+
+      final inv = await deliveryDao.generateServiceInvoice(moId);
+
+      // 1. Invoice number format: 6-digit canonical format via formatInvoiceNumber
+      expect(inv.invoiceNumber != null, isTrue);
+      expect(RegExp(r'^\d{6}$').hasMatch(inv.invoiceNumber!), isTrue);
+      expect(inv.invoiceNumber, inv.id.toString().padLeft(6, '0'));
+
+      // 2. Sync outbox: sync_queue must contain insert rows for invoice and invoice_items
+      final syncRows = await (db.select(db.syncQueue)).get();
+      final invoiceSyncRows = syncRows.where((r) => r.tableRef == 'invoices').toList();
+      final itemSyncRows = syncRows.where((r) => r.tableRef == 'invoice_items').toList();
+
+      expect(invoiceSyncRows, hasLength(1));
+      expect(invoiceSyncRows.single.operation, 'insert');
+      expect(invoiceSyncRows.single.recordSyncId, inv.syncId);
+
+      expect(itemSyncRows, hasLength(1));
+      expect(itemSyncRows.single.operation, 'insert');
+
+      // 3. Customer ledger entry fields match standard invoice format
+      final ledgerTx = await (db.select(db.ledgerTransactions)
+            ..where((t) => t.refId.equals(custId) & t.origin.equals('sale')))
+          .getSingle();
+
+      expect(ledgerTx.entityType, 'Customer');
+      expect(ledgerTx.refId, custId);
+      expect(ledgerTx.debit, 300.0); // 15 * 20.0
+      expect(ledgerTx.credit, 0.0);
+      expect(ledgerTx.origin, 'sale');
+      expect(ledgerTx.paymentMethod, 'credit');
+      expect(ledgerTx.receiptNumber, 'INV${inv.id}');
+      expect(ledgerTx.description, 'فاتورة ${inv.invoiceNumber}');
+
+      // 4. MO notes contain MO number and invoice number
+      final updatedMo = await (db.select(db.manufacturingOrders)..where((o) => o.id.equals(moId))).getSingle();
+      expect(updatedMo.invoiceId, inv.id);
+      expect(updatedMo.notes, contains(updatedMo.orderNumber));
+      expect(updatedMo.notes, contains(inv.invoiceNumber!));
     });
   });
 }

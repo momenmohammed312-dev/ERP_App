@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_material_receipts_table.dart';
@@ -10,6 +11,7 @@ import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_ta
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_tables.dart';
 import 'package:pos_offline_desktop/core/database/tables/product_table.dart';
+import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 
 part 'manufacturing_delivery_dao.g.dart';
 
@@ -344,12 +346,10 @@ class ManufacturingDeliveryDao extends DatabaseAccessor<AppDatabase>
           : 0.0;
 
       final now = DateTime.now();
-      final invoiceNumber = 'INV-MFG-${order.orderNumber}';
 
-      // ── Insert Invoice ──
-      final invoiceId = await into(invoices).insert(
-        InvoicesCompanion.insert(
-          invoiceNumber: Value(invoiceNumber),
+      // ── Insert Invoice via db.invoiceDao (generates syncId and enqueues to sync_queue) ──
+      final invoiceId = await db.invoiceDao.insertInvoice(
+        InvoicesCompanion(
           customerId: Value(customerId),
           customerName: Value(customerName),
           paymentMethod: const Value('credit'),
@@ -360,52 +360,65 @@ class ManufacturingDeliveryDao extends DatabaseAccessor<AppDatabase>
           creditAmount: Value(netInvoiceTotal),
           status: const Value('pending'),
           date: Value(now),
-          createdAt: Value(now),
+        ),
+      );
+
+      // Set canonical invoice number via formatInvoiceNumber(invoiceId)
+      final canonicalNumber = formatInvoiceNumber(invoiceId);
+      await (update(invoices)..where((t) => t.id.equals(invoiceId))).write(
+        InvoicesCompanion(
+          invoiceNumber: Value(canonicalNumber),
           updatedAt: Value(now),
         ),
       );
 
-      // ── Insert Invoice Items ──
+      // ── Insert Invoice Items via db.invoiceDao (generates syncId and enqueues to sync_queue) ──
       // 1. Service line
-      await into(invoiceItems).insert(
-        InvoiceItemsCompanion.insert(
-          invoiceId: invoiceId,
-          productId: order.finishedProductId,
+      await db.invoiceDao.insertInvoiceItem(
+        InvoiceItemsCompanion(
+          invoiceId: Value(invoiceId),
+          productId: Value(order.finishedProductId),
           quantity: Value(deliveredQty.round() > 0 ? deliveredQty.round() : 1),
-          price: (deliveredQty > 0)
+          price: Value((deliveredQty > 0)
               ? double.parse((grossServiceTotal / (deliveredQty.round() > 0 ? deliveredQty.round() : 1)).toStringAsFixed(2))
-              : grossServiceTotal,
+              : grossServiceTotal),
           discount: Value(totalCompensation),
-          createdAt: Value(now),
-          updatedAt: Value(now),
         ),
       );
 
       // ── Insert Customer Ledger Transaction ──
-      // Debit customer balance for the net invoice total
+      // Matches exact fields and format used in InvoiceService.createInvoice:
+      // desc: 'فاتورة $actualInvoiceNumber'
+      // origin: 'sale', paymentMethod: paymentMethod, receiptNumber: 'INV$invoiceId'
       if (netInvoiceTotal > 0) {
-        final ledgerTxId = 'LEDGER_MFG_${invoiceId}_${now.millisecondsSinceEpoch}';
-        await into(ledgerTransactions).insert(
+        final rand = Random.secure();
+        final ledgerIdSale = '${now.millisecondsSinceEpoch}_${rand.nextInt(999999)}_sale';
+        await db.ledgerDao.insertTransaction(
           LedgerTransactionsCompanion.insert(
-            id: ledgerTxId,
+            id: ledgerIdSale,
             entityType: 'Customer',
             refId: customerId,
             date: now,
-            description: 'فاتورة تشغيل أمر تصنيع ${order.orderNumber}',
+            description: 'فاتورة $canonicalNumber',
             debit: Value(netInvoiceTotal),
             credit: const Value(0.0),
             origin: 'sale',
             paymentMethod: const Value('credit'),
-            receiptNumber: Value(invoiceNumber),
-            createdAt: Value(now),
+            receiptNumber: Value('INV$invoiceId'),
           ),
         );
       }
 
-      // ── Link Manufacturing Order to Invoice ──
+      // ── Link Manufacturing Order to Invoice & record MO number in notes ──
+      final existingNotes = order.notes;
+      final updatedNotes = (existingNotes != null && existingNotes.isNotEmpty)
+          ? '$existingNotes · تم إصدار فاتورة $canonicalNumber'
+          : 'أمر تصنيع ${order.orderNumber} · فاتورة $canonicalNumber';
+
       await (update(manufacturingOrders)..where((o) => o.id.equals(orderId))).write(
         ManufacturingOrdersCompanion(
           invoiceId: Value(invoiceId),
+          notes: Value(updatedNotes),
           updatedAt: Value(now),
         ),
       );
