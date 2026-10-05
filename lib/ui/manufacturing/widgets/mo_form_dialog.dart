@@ -20,12 +20,20 @@ class _MoFormDialogState extends State<MoFormDialog> {
   final _orderNumberCtrl = TextEditingController();
   final _plannedQtyCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  final _pieceUnitValueCtrl = TextEditingController(text: '0');
+  final _serviceUnitPriceCtrl = TextEditingController(text: '0');
+
+  String _orderType = 'internal';
+  String? _customerId;
+  String _pricingMode = 'inclusive';
+  String _scrapPolicy = 'customer_bears';
 
   int? _selectedBomId;
   BillOfMaterial? _selectedBom;
   Product? _finishedProduct;
   List<BillOfMaterial> _activeBoms = [];
   Map<int, Product> _productMap = {};
+  List<Customer> _customers = [];
   bool _loadingBoms = true;
   bool _isSubmitting = false;
   String? _errorMessage;
@@ -41,10 +49,21 @@ class _MoFormDialogState extends State<MoFormDialog> {
       _notesCtrl.text = o.notes ?? '';
       _selectedBomId = o.bomId;
       _plannedDate = o.plannedDate;
+      _orderType = o.orderType ?? 'internal';
+      _customerId = o.customerId;
+      _pricingMode = o.pricingMode ?? 'inclusive';
+      _scrapPolicy = o.scrapPolicy ?? 'customer_bears';
+      _pieceUnitValueCtrl.text = (o.pieceUnitValue ?? 0.0).toString();
+      _serviceUnitPriceCtrl.text = (o.serviceUnitPrice ?? 0.0).toString();
     } else {
       _orderNumberCtrl.text = 'MO-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
       _plannedQtyCtrl.text = '1';
       _plannedDate = DateTime.now();
+      _orderType = 'internal';
+      _pricingMode = 'inclusive';
+      _scrapPolicy = 'customer_bears';
+      _pieceUnitValueCtrl.text = '0';
+      _serviceUnitPriceCtrl.text = '0';
     }
     _loadBoms();
   }
@@ -53,10 +72,12 @@ class _MoFormDialogState extends State<MoFormDialog> {
     try {
       final boms = await widget.db.bomDao.getActiveBoms();
       final products = await widget.db.productDao.getAllProducts();
+      final customers = await widget.db.customerDao.getAllCustomers();
       final map = {for (var p in products) p.id: p};
       setState(() {
         _activeBoms = boms;
         _productMap = map;
+        _customers = customers;
         _loadingBoms = false;
         if (_selectedBomId != null) {
           final match = boms.where((b) => b.id == _selectedBomId);
@@ -105,6 +126,13 @@ class _MoFormDialogState extends State<MoFormDialog> {
       }
     }
 
+    if (_orderType != 'internal' && (_customerId == null || _customerId!.isEmpty)) {
+      setState(() => _errorMessage = 'يرجى اختيار العميل لأمر تشغيل للغير');
+      return;
+    }
+    final pieceVal = double.tryParse(_pieceUnitValueCtrl.text.trim()) ?? 0.0;
+    final servicePrice = double.tryParse(_serviceUnitPriceCtrl.text.trim()) ?? 0.0;
+
     setState(() {
       _isSubmitting = true;
       _errorMessage = null;
@@ -124,6 +152,12 @@ class _MoFormDialogState extends State<MoFormDialog> {
           finishedProductId: Value(finishedId),
           plannedQuantity: Value(qty),
           plannedDate: Value(_plannedDate),
+          orderType: Value(_orderType),
+          customerId: Value(_orderType == 'internal' ? null : _customerId),
+          pricingMode: Value(_orderType == 'internal' ? null : _pricingMode),
+          scrapPolicy: Value(_orderType == 'internal' ? null : _scrapPolicy),
+          pieceUnitValue: Value(_orderType == 'internal' ? 0.0 : pieceVal),
+          serviceUnitPrice: Value(_orderType == 'internal' ? 0.0 : servicePrice),
           notes: Value(_notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim()),
           status: const Value(ManufacturingOrderStatus.planned),
         );
@@ -139,6 +173,12 @@ class _MoFormDialogState extends State<MoFormDialog> {
           finishedProductId: finishedId,
           plannedQuantity: qty,
           plannedDate: Value(_plannedDate),
+          orderType: Value(_orderType),
+          customerId: Value(_orderType == 'internal' ? null : _customerId),
+          pricingMode: Value(_orderType == 'internal' ? null : _pricingMode),
+          scrapPolicy: Value(_orderType == 'internal' ? null : _scrapPolicy),
+          pieceUnitValue: Value(_orderType == 'internal' ? 0.0 : pieceVal),
+          serviceUnitPrice: Value(_orderType == 'internal' ? 0.0 : servicePrice),
           notes: Value(_notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim()),
           updatedAt: DateTime.now(),
         );
@@ -158,6 +198,8 @@ class _MoFormDialogState extends State<MoFormDialog> {
     _orderNumberCtrl.dispose();
     _plannedQtyCtrl.dispose();
     _notesCtrl.dispose();
+    _pieceUnitValueCtrl.dispose();
+    _serviceUnitPriceCtrl.dispose();
     super.dispose();
   }
 
@@ -285,6 +327,114 @@ class _MoFormDialogState extends State<MoFormDialog> {
                       ),
                     ),
                   if (_finishedProduct != null) const Gap(16),
+                  DropdownButtonFormField<String>(
+                    initialValue: _orderType,
+                    decoration: const InputDecoration(
+                      labelText: 'نوع أمر الإنتاج *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.category_outlined),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'internal', child: Text('تصنيع داخلي (خامات المصنع)')),
+                      DropdownMenuItem(value: 'for_others', child: Text('تشغيل للغير (خامات العميل بالكامل)')),
+                      DropdownMenuItem(value: 'mixed', child: Text('تشغيل مشترك (خامات عميل + خامات مصنع)')),
+                    ],
+                    onChanged: canEdit
+                        ? (v) => setState(() {
+                              _orderType = v ?? 'internal';
+                            })
+                        : null,
+                  ),
+                  const Gap(16),
+                  if (_orderType != 'internal') ...[
+                    DropdownButtonFormField<String>(
+                      initialValue: _customerId,
+                      decoration: const InputDecoration(
+                        labelText: 'العميل (صاحب الخامات) *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                      items: _customers
+                          .map((c) => DropdownMenuItem(
+                                value: c.id,
+                                child: Text('${c.name} ${c.phone != null ? '(${c.phone})' : ''}'),
+                              ))
+                          .toList(),
+                      onChanged: canEdit ? (v) => setState(() => _customerId = v) : null,
+                      validator: (v) => (_orderType != 'internal' && (v == null || v.isEmpty))
+                          ? 'اختر العميل'
+                          : null,
+                    ),
+                    const Gap(16),
+                    DropdownButtonFormField<String>(
+                      initialValue: _pricingMode,
+                      decoration: const InputDecoration(
+                        labelText: 'نظام التسعير *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.request_quote_outlined),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'inclusive', child: Text('شامل (سعر مصنعية للوحدة التامة)')),
+                        DropdownMenuItem(value: 'separate', child: Text('منفصل (أجر تشغيل + تكلفة خامات المصنع)')),
+                      ],
+                      onChanged: canEdit ? (v) => setState(() => _pricingMode = v ?? 'inclusive') : null,
+                    ),
+                    const Gap(16),
+                    TextFormField(
+                      controller: _serviceUnitPriceCtrl,
+                      enabled: canEdit,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'سعر أجر التشغيل للوحدة (ج.م) *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.attach_money),
+                        helperText: 'أجر تصنيع الوحدة الواحدة لصالح العميل',
+                      ),
+                      validator: (v) {
+                        if (_orderType != 'internal') {
+                          final p = double.tryParse(v ?? '');
+                          if (p == null || p < 0) return 'أدخل سعر تشغيل صحيح >= 0';
+                        }
+                        return null;
+                      },
+                    ),
+                    const Gap(16),
+                    DropdownButtonFormField<String>(
+                      initialValue: _scrapPolicy,
+                      decoration: const InputDecoration(
+                        labelText: 'سياسة الهالك المتفق عليها *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.policy_outlined),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'customer_bears', child: Text('العميل يتحمل الهالك (بدون تعويض)')),
+                        DropdownMenuItem(value: 'factory_pays_piece_value', child: Text('المصنع يعوض قيمة القطعة (يخصم من الفاتورة)')),
+                        DropdownMenuItem(value: 'factory_bears_labour_only', child: Text('المصنع يتنازل عن أجر التشغيل فقط')),
+                        DropdownMenuItem(value: 'factory_replaces_piece', child: Text('المصنع يستبدل القطعة التالفة من مخزونه')),
+                      ],
+                      onChanged: canEdit ? (v) => setState(() => _scrapPolicy = v ?? 'customer_bears') : null,
+                    ),
+                    const Gap(16),
+                    TextFormField(
+                      controller: _pieceUnitValueCtrl,
+                      enabled: canEdit,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'القيمة التقديرية للقطعة (للتعويض) ج.م',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.price_check),
+                        helperText: 'تستخدم لحساب قيمة التعويض عند خطأ المصنع',
+                      ),
+                      validator: (v) {
+                        if (_orderType != 'internal' && _scrapPolicy == 'factory_pays_piece_value') {
+                          final val = double.tryParse(v ?? '');
+                          if (val == null || val < 0) return 'أدخل قيمة قطعة صحيحة';
+                        }
+                        return null;
+                      },
+                    ),
+                    const Gap(16),
+                  ],
                   TextFormField(
                     controller: _orderNumberCtrl,
                     enabled: canEdit,

@@ -161,6 +161,11 @@ class _MoListScreenState extends State<MoListScreen> {
             tooltip: 'الوصفات (BOM)',
           ),
           IconButton(
+            icon: const Icon(Icons.inbox_outlined),
+            onPressed: () => context.push('/manufacturing/receipts'),
+            tooltip: 'خامات العملاء (تشغيل للغير)',
+          ),
+          IconButton(
             icon: const Icon(Icons.insights_outlined),
             onPressed: () => context.push('/manufacturing/reports'),
             tooltip: 'التقارير',
