@@ -8,20 +8,17 @@ export default {
     extend: {
       colors: {
         brand: {
-          50: '#eef2ff',
-          100: '#e0e7ff',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          900: '#312e81',
-          950: '#1e1b4b',
+          50: '#eff6ff',
+          100: '#dbeafe',
+          500: '#3b82f6',
+          600: '#1677ff', // Mantis Blue
+          700: '#0958d9',
         },
-        surface: {
-          base: '#0B0F19',
-          card: '#111827',
-          panel: '#1A2234',
-          border: '#1F293D',
-          hover: '#242F46',
+        madar: {
+          gold: '#c9a84c',
+          goldLight: '#e8c97a',
+          navy: '#0f172a',
+          slate: '#1e293b',
         }
       },
       fontFamily: {

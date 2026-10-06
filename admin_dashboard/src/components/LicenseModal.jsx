@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  X, KeyRound, Sparkles, Calendar, Laptop, 
-  Layers, CheckSquare, Square, Shield, Check, Info 
-} from 'lucide-react';
+import { X, KeyRound, Sparkles, Check, Layers } from 'lucide-react';
 import { ERP_MODULES, LICENSE_PLANS } from '../config/modules';
 import { api } from '../services/api';
 
@@ -29,7 +26,6 @@ export default function LicenseModal({ isOpen, onClose, onSave, editingLicense }
         features: editingLicense.features || [],
       });
     } else {
-      // Default new license
       const defaultFeatures = ERP_MODULES.filter(m => m.defaultEnabled).map(m => m.id);
       const defaultExpiry = new Date();
       defaultExpiry.setDate(defaultExpiry.getDate() + 365);
@@ -125,101 +121,98 @@ export default function LicenseModal({ isOpen, onClose, onSave, editingLicense }
   const addonModules = ERP_MODULES.filter(m => m.category === 'addon');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-4xl rounded-3xl bg-[#111827] border border-white/10 shadow-2xl overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto">
+      <div className="relative w-full max-w-4xl rounded-2xl bg-white border border-slate-200 shadow-xl overflow-hidden my-6">
         
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/5 bg-white/[0.02]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/20">
+            <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60">
               <KeyRound className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">
-                {editingLicense ? 'تعديل بيانات وترخيص العميل' : 'إصدار ترخيص جديد لنظام POS'}
+              <h2 className="text-base font-bold text-slate-900">
+                {editingLicense ? 'تعديل ترخيص وموديولات العميل' : 'إصدار ترخيص جديد لنظام مدار ERP'}
               </h2>
-              <p className="text-xs text-gray-400">
-                حدد مدة الترخيص، الوحدات المسموح بها، والأجهزة المصرحة
+              <p className="text-xs text-slate-500 font-medium">
+                تحديد الصلاحيات والموديولات والأجهزة المصرحة للعميل
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        {/* Modal Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
           
-          {/* Section 1: Client & Key */}
+          {/* Client Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 اسم العميل أو اسم المحل / الشركة *
               </label>
               <input
                 type="text"
-                placeholder="مثال: سوبر ماركت الأهرام"
+                placeholder="مثال: سوبرماركت البركة"
                 value={formData.client_name}
                 onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-panel/80 border border-white/10 text-sm text-white focus:outline-none focus:border-indigo-500"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
               />
               {errors.client_name && (
-                <span className="text-[11px] text-rose-400 mt-1 block">{errors.client_name}</span>
+                <span className="text-[11px] text-rose-600 font-semibold mt-1 block">{errors.client_name}</span>
               )}
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5">
-                رقم هاتف العميل (للتواصل والتجديد)
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                رقم هاتف العميل
               </label>
               <input
                 type="text"
                 placeholder="مثال: 01012345678"
                 value={formData.client_phone}
                 onChange={(e) => setFormData({ ...formData, client_phone: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-panel/80 border border-white/10 text-sm text-white focus:outline-none focus:border-indigo-500"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white font-mono"
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 مفتاح الترخيص (License Key) *
               </label>
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="POS-XXXX-XXXX-XXXX"
                   value={formData.license_key}
                   onChange={(e) => setFormData({ ...formData, license_key: e.target.value })}
-                  className="flex-1 font-mono tracking-wider px-4 py-2.5 rounded-xl bg-surface-panel/80 border border-white/10 text-sm text-indigo-300 focus:outline-none focus:border-indigo-500"
+                  className="flex-1 font-mono font-bold tracking-wider px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-blue-700 focus:outline-none focus:border-blue-500 focus:bg-white"
                 />
                 <button
                   type="button"
                   onClick={handleGenerateKey}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-gray-200 transition-colors"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-bold text-slate-700 transition-colors"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>توليد كود تلقائي</span>
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  <span>توليد كود عشوائي</span>
                 </button>
               </div>
               {errors.license_key && (
-                <span className="text-[11px] text-rose-400 mt-1 block">{errors.license_key}</span>
+                <span className="text-[11px] text-rose-600 font-semibold mt-1 block">{errors.license_key}</span>
               )}
             </div>
           </div>
 
-          {/* Section 2: Plan & Expiration */}
-          <div className="rounded-2xl p-4 bg-surface-panel/40 border border-white/5 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">
-                الباقة وصلاحية الترخيص
-              </span>
-            </div>
+          {/* Plan & Expiry */}
+          <div className="rounded-2xl p-4 bg-slate-50/70 border border-slate-200 space-y-3">
+            <span className="text-xs font-bold text-slate-800">
+              باقة الترخيص وفترة الصلاحية
+            </span>
 
             {/* Plan Selector Buttons */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -230,45 +223,45 @@ export default function LicenseModal({ isOpen, onClose, onSave, editingLicense }
                   onClick={() => handlePlanChange(p.id)}
                   className={`p-3 rounded-xl border text-right transition-all ${
                     formData.plan === p.id
-                      ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-lg shadow-indigo-600/10'
-                      : 'bg-white/[0.02] border-white/5 text-gray-400 hover:text-white hover:bg-white/5'
+                      ? 'bg-blue-50 border-blue-600 text-blue-900 shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                   }`}
                 >
-                  <div className="text-xs font-bold mb-1">{p.name}</div>
-                  <div className="text-[10px] text-gray-400">{p.days} يوم</div>
+                  <div className="text-xs font-bold">{p.name}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">{p.days} يوم</div>
                 </button>
               ))}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">تاريخ انتهاء الصلاحية</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">تاريخ الانتهاء</label>
                 <input
                   type="date"
                   value={formData.expires_at}
                   onChange={(e) => setFormData({ ...formData, expires_at: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl bg-surface-panel border border-white/10 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">الحد الأقصى للأجهزة المصرحة</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">الحد الأقصى للأجهزة المصرحة</label>
                 <input
                   type="number"
                   min="1"
                   max="50"
                   value={formData.max_devices}
                   onChange={(e) => setFormData({ ...formData, max_devices: parseInt(e.target.value) || 1 })}
-                  className="w-full px-3.5 py-2 rounded-xl bg-surface-panel border border-white/10 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">حالة الترخيص</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">حالة الترخيص</label>
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl bg-surface-panel border border-white/10 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
                 >
                   <option value="active">نشط (يعمل طبيعي)</option>
                   <option value="suspended">معلق / موقوف مؤقتاً</option>
@@ -277,16 +270,16 @@ export default function LicenseModal({ isOpen, onClose, onSave, editingLicense }
             </div>
           </div>
 
-          {/* Section 3: Modular Feature Gating (الوحدات والميزات) */}
-          <div className="rounded-2xl p-4 bg-surface-panel/40 border border-white/5 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-3">
+          {/* Modular Feature Gating */}
+          <div className="rounded-2xl p-4 bg-slate-50/70 border border-slate-200 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
               <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-indigo-400" />
-                  <span>الوحدات والميزات المسموح بها (Feature Gating)</span>
+                <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-blue-600" />
+                  <span>الموديولات والميزات المسموح بها للعميل (Modular Feature Gating)</span>
                 </h3>
-                <p className="text-[11px] text-gray-400">
-                  الوحدات التي لا يتم تحديدها ستختفي تماماً من قائمة البرنامج عند هذا العميل
+                <p className="text-[11px] text-slate-500">
+                  الموديول الذي لا تختاره سيختفي تماماً وبأمان من قائمة برنامج العميل دون أي خطأ
                 </p>
               </div>
 
@@ -295,21 +288,21 @@ export default function LicenseModal({ isOpen, onClose, onSave, editingLicense }
                 <button
                   type="button"
                   onClick={handleSelectAllModules}
-                  className="px-2.5 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-[11px] border border-indigo-500/20 transition-colors"
+                  className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-colors"
                 >
                   تفعيل الكل
                 </button>
                 <button
                   type="button"
                   onClick={handleSelectCoreModules}
-                  className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 text-[11px] border border-white/10 transition-colors"
+                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 transition-colors"
                 >
                   الأساسي فقط
                 </button>
                 <button
                   type="button"
                   onClick={handleClearModules}
-                  className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 text-[11px] border border-white/10 transition-colors"
+                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-500 text-xs font-semibold border border-slate-200 transition-colors"
                 >
                   إلغاء التحديد
                 </button>
@@ -318,8 +311,8 @@ export default function LicenseModal({ isOpen, onClose, onSave, editingLicense }
 
             {/* Core Modules Grid */}
             <div>
-              <div className="text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wider">
-                الوحدات الأساسية للـ POS:
+              <div className="text-[11px] font-bold text-blue-700 mb-2 uppercase">
+                الوحدات الأساسية:
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
                 {coreModules.map(mod => {
@@ -330,16 +323,16 @@ export default function LicenseModal({ isOpen, onClose, onSave, editingLicense }
                       onClick={() => toggleFeature(mod.id)}
                       className={`cursor-pointer p-3 rounded-xl border transition-all flex items-start gap-2.5 select-none ${
                         isChecked 
-                          ? 'bg-indigo-600/10 border-indigo-500/40 text-white' 
-                          : 'bg-white/[0.01] border-white/5 text-gray-400 hover:border-white/10 hover:bg-white/[0.02]'
+                          ? 'bg-blue-50/70 border-blue-300 text-slate-900' 
+                          : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                       }`}
                     >
-                      <div className={`mt-0.5 rounded-md p-0.5 ${isChecked ? 'bg-indigo-600 text-white' : 'border border-gray-600 text-transparent'}`}>
+                      <div className={`mt-0.5 rounded p-0.5 ${isChecked ? 'bg-blue-600 text-white' : 'border border-slate-300 text-transparent'}`}>
                         <Check className="w-3 h-3" />
                       </div>
                       <div className="flex-1">
-                        <div className="text-xs font-semibold">{mod.name}</div>
-                        <div className="text-[10px] text-gray-400 mt-0.5 leading-snug">{mod.description}</div>
+                        <div className="text-xs font-bold">{mod.name}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">{mod.description}</div>
                       </div>
                     </div>
                   );
@@ -349,8 +342,8 @@ export default function LicenseModal({ isOpen, onClose, onSave, editingLicense }
 
             {/* Addon Modules Grid */}
             <div className="pt-2">
-              <div className="text-[11px] font-bold text-purple-400 mb-2 uppercase tracking-wider">
-                الوحدات الإضافية والمتقدمة (Addons):
+              <div className="text-[11px] font-bold text-purple-700 mb-2 uppercase">
+                الوحدات الإضافية المتقدمة:
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
                 {addonModules.map(mod => {
@@ -361,16 +354,16 @@ export default function LicenseModal({ isOpen, onClose, onSave, editingLicense }
                       onClick={() => toggleFeature(mod.id)}
                       className={`cursor-pointer p-3 rounded-xl border transition-all flex items-start gap-2.5 select-none ${
                         isChecked 
-                          ? 'bg-purple-600/15 border-purple-500/50 text-white' 
-                          : 'bg-white/[0.01] border-white/5 text-gray-400 hover:border-white/10 hover:bg-white/[0.02]'
+                          ? 'bg-purple-50/70 border-purple-300 text-slate-900' 
+                          : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                       }`}
                     >
-                      <div className={`mt-0.5 rounded-md p-0.5 ${isChecked ? 'bg-purple-600 text-white' : 'border border-gray-600 text-transparent'}`}>
+                      <div className={`mt-0.5 rounded p-0.5 ${isChecked ? 'bg-purple-600 text-white' : 'border border-slate-300 text-transparent'}`}>
                         <Check className="w-3 h-3" />
                       </div>
                       <div className="flex-1">
-                        <div className="text-xs font-semibold text-purple-200">{mod.name}</div>
-                        <div className="text-[10px] text-gray-400 mt-0.5 leading-snug">{mod.description}</div>
+                        <div className="text-xs font-bold text-purple-900">{mod.name}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">{mod.description}</div>
                       </div>
                     </div>
                   );
@@ -380,32 +373,32 @@ export default function LicenseModal({ isOpen, onClose, onSave, editingLicense }
 
           </div>
 
-          {/* Internal Notes */}
+          {/* Notes */}
           <div>
-            <label className="block text-xs font-semibold text-gray-300 mb-1.5">
-              ملاحظات داخلية خاصة بالعميل
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              ملاحظات داخلية
             </label>
             <textarea
               rows="2"
-              placeholder="مثال: دفع كاش بالكامل، مطلوب تفعيل التصنيع بعد أسبوعين..."
+              placeholder="مثال: تم الاتفاق على اشتراك سنوي، مفعل له التصنيع..."
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="w-full px-4 py-2 rounded-xl bg-surface-panel/80 border border-white/10 text-xs text-white focus:outline-none focus:border-indigo-500"
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
             />
           </div>
 
-          {/* Modal Footer Actions */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/5">
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-gray-300 transition-colors"
+              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-600 transition-colors"
             >
               إلغاء
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition-all active:scale-[0.98]"
+              className="px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-xs transition-all active:scale-[0.98]"
             >
               {editingLicense ? 'حفظ التعديلات' : 'إصدار الترخيص الآن'}
             </button>

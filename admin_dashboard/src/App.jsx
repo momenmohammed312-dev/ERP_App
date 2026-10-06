@@ -16,7 +16,6 @@ import { api } from './services/api';
 export default function App() {
   const [currentTab, setCurrentTab] = useState('licenses');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [theme, setTheme] = useState(() => localStorage.getItem('pos_admin_theme') || 'dark');
   
   const [licenses, setLicenses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,20 +39,6 @@ export default function App() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Sync theme with HTML root class
-  useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    localStorage.setItem('pos_admin_theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
-  };
-
   const fetchLicenses = async () => {
     setLoading(true);
     try {
@@ -75,7 +60,7 @@ export default function App() {
     try {
       if (editingLicense) {
         await api.updateLicense(editingLicense.id, formData);
-        showToast('تم تحديث بيانات وميزات الترخيص بنجاح');
+        showToast('تم تحديث بيانات وموديولات العميل بنجاح');
       } else {
         await api.createLicense(formData);
         showToast('تم إصدار الترخيص الجديد بنجاح');
@@ -92,7 +77,7 @@ export default function App() {
     const newStatus = license.status === 'active' ? 'suspended' : 'active';
     try {
       await api.updateLicense(license.id, { status: newStatus });
-      showToast(newStatus === 'active' ? 'تم تنشيط الترخيص بنجاح' : 'تم تجميد الترخيص ومصادرة الصلاحيات');
+      showToast(newStatus === 'active' ? 'تم تنشيط الترخيص بنجاح' : 'تم تجميد الترخيص وإيقاف الصلاحيات');
       fetchLicenses();
     } catch (err) {
       showToast('فشل تعديل الحالة: ' + err.message, 'error');
@@ -128,7 +113,7 @@ export default function App() {
   };
 
   const handleUnbindFromView = async (device) => {
-    if (!confirm(`هل تريد فك ارتباط هذا الجهاز؟ سيتم تحرير خانة ترخيص للعميل.`)) return;
+    if (!confirm(`هل تريد فك ارتباط هذا الجهاز؟ سيتمكن العميل من التفعيل على جهاز جديد.`)) return;
     try {
       await api.unbindDevice(device.id);
       showToast('تم إلغاء ربط الجهاز بنجاح');
@@ -141,9 +126,9 @@ export default function App() {
   const totalDevices = licenses.reduce((sum, l) => sum + (l.bound_devices_count || 0), 0);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F19] text-slate-900 dark:text-gray-100 font-arabic flex transition-colors duration-200">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-['Cairo',sans-serif] flex">
       
-      {/* Collapsible Sidebar (Drawer on mobile) */}
+      {/* Collapsible Sidebar */}
       <Sidebar
         currentTab={currentTab}
         setCurrentTab={(tab) => {
@@ -155,13 +140,11 @@ export default function App() {
         }}
         isOpen={isSidebarOpen}
         setIsOpen={setIsSidebarOpen}
-        theme={theme}
-        toggleTheme={toggleTheme}
         licenseCount={licenses.length}
         deviceCount={totalDevices}
       />
 
-      {/* Main Content Area (Offset by Sidebar on lg screens) */}
+      {/* Main Content Area */}
       <div className="flex-1 lg:mr-72 flex flex-col min-h-screen">
         
         {/* Top App Bar Header */}
@@ -177,8 +160,6 @@ export default function App() {
           loading={loading}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
-          theme={theme}
-          toggleTheme={toggleTheme}
         />
 
         {/* Dynamic Views */}
@@ -224,7 +205,6 @@ export default function App() {
           {currentTab === 'modules' && (
             <ModulesCatalogView
               licenses={licenses}
-              onSelectModuleFilter={() => setCurrentTab('licenses')}
             />
           )}
 
@@ -235,8 +215,8 @@ export default function App() {
         </main>
 
         {/* Footer */}
-        <footer className="border-t border-slate-200/80 dark:border-white/5 py-5 text-center text-xs text-slate-500 dark:text-gray-500">
-          <p>لوحة تحكم تراخيص نقاط البيع (POS Cloud Manager) — متوافقة مع Cloudflare Pages & Supabase</p>
+        <footer className="border-t border-slate-200/80 bg-white py-5 text-center text-xs text-slate-500">
+          <p>مِدار ERP — منظومة التراخيص السحابية وإدارة الموديولات © 2026</p>
         </footer>
 
       </div>

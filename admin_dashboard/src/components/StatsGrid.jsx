@@ -1,13 +1,10 @@
 import React from 'react';
-import { 
-  ShieldCheck, Laptop, Clock, AlertTriangle, 
-  TrendingUp, CheckCircle2, ShieldAlert, Cpu 
-} from 'lucide-react';
+import { ShieldCheck, CheckCircle2, AlertTriangle, Laptop } from 'lucide-react';
 
 export default function StatsGrid({ licenses }) {
   const total = licenses.length;
-  const active = licenses.filter(l => l.status === 'active' && new Date(l.expires_at) > new Date()).length;
-  const suspendedOrExpired = licenses.filter(l => l.status === 'suspended' || new Date(l.expires_at) <= new Date()).length;
+  const active = licenses.filter(l => l.status === 'active' && (!l.expires_at || new Date(l.expires_at) > new Date())).length;
+  const suspendedOrExpired = licenses.filter(l => l.status === 'suspended' || (l.expires_at && new Date(l.expires_at) <= new Date())).length;
   const totalBoundDevices = licenses.reduce((sum, l) => sum + (l.bound_devices_count || 0), 0);
 
   const activeRate = total > 0 ? Math.round((active / total) * 100) : 100;
@@ -17,33 +14,33 @@ export default function StatsGrid({ licenses }) {
       title: 'إجمالي التراخيص المسجلة',
       value: total,
       trend: '+100% قاعدة العملاء',
-      trendType: 'positive',
+      trendClass: 'bg-blue-50 text-blue-700 border-blue-200',
       icon: ShieldCheck,
-      color: 'indigo',
+      iconClass: 'bg-blue-50 text-blue-600',
     },
     {
-      title: 'التراخيص النشطة حالياً',
+      title: 'التراخيص النشطة',
       value: active,
-      trend: `${activeRate}% نسبة التراخيص الفعالة`,
-      trendType: 'positive',
+      trend: `${activeRate}% نسبة الفعالية`,
+      trendClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
       icon: CheckCircle2,
-      color: 'emerald',
+      iconClass: 'bg-emerald-50 text-emerald-600',
     },
     {
       title: 'تراخيص معلقة أو منتهية',
       value: suspendedOrExpired,
-      trend: suspendedOrExpired > 0 ? `${suspendedOrExpired} بحاجة لمتابعة` : 'لا توجد متأخرات',
-      trendType: suspendedOrExpired > 0 ? 'warning' : 'positive',
+      trend: suspendedOrExpired > 0 ? `${suspendedOrExpired} بحاجة لتجديد` : 'لا توجد متأخرات',
+      trendClass: suspendedOrExpired > 0 ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-50 text-slate-600 border-slate-200',
       icon: AlertTriangle,
-      color: 'amber',
+      iconClass: suspendedOrExpired > 0 ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-slate-500',
     },
     {
       title: 'الأجهزة المرتبطة والنقاط',
       value: totalBoundDevices,
-      trend: 'أجهزة ويندوز وأندرويد',
-      trendType: 'neutral',
+      trend: 'بصمة عتاد GUID موثقة',
+      trendClass: 'bg-slate-50 text-slate-700 border-slate-200',
       icon: Laptop,
-      color: 'blue',
+      iconClass: 'bg-slate-50 text-slate-600',
     },
   ];
 
@@ -55,29 +52,23 @@ export default function StatsGrid({ licenses }) {
         return (
           <div
             key={idx}
-            className="p-5 rounded-2xl bg-white dark:bg-[#111827] border border-slate-200/80 dark:border-white/5 shadow-sm hover:shadow-md transition-all group"
+            className="p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:border-slate-300 transition-all"
           >
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-slate-500 dark:text-gray-400">
+              <span className="text-xs font-bold text-slate-500">
                 {item.title}
               </span>
-              <div className="p-2 rounded-xl bg-slate-50 dark:bg-white/5 text-slate-700 dark:text-gray-300 group-hover:scale-105 transition-transform">
+              <div className={`p-2 rounded-xl border border-slate-100 ${item.iconClass}`}>
                 <Icon className="w-4 h-4" />
               </div>
             </div>
 
             <div className="flex items-baseline justify-between">
-              <div className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-mono">
+              <div className="text-3xl font-extrabold tracking-tight text-slate-900 font-mono">
                 {item.value}
               </div>
 
-              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
-                item.trendType === 'positive'
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20'
-                  : item.trendType === 'warning'
-                  ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
-                  : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-white/5 dark:text-gray-400 dark:border-white/10'
-              }`}>
+              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${item.trendClass}`}>
                 {item.trend}
               </span>
             </div>
