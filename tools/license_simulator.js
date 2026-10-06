@@ -230,6 +230,72 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // React Admin Dashboard REST APIs
+  if (req.url === '/admin/licenses' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    const enriched = db.licenses.map(lic => ({
+      ...lic,
+      client_name: lic.customer_name || lic.client_name,
+      client_phone: lic.phone || lic.client_phone,
+      bound_devices_count: db.devices.filter(d => d.license_id === lic.id && d.status === 'active').length
+    }));
+    return res.end(JSON.stringify({ licenses: enriched, devices: db.devices }));
+  }
+
+  if (req.url === '/admin/licenses' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      const data = JSON.parse(body);
+      const randomKey = 'POS-' + crypto.randomBytes(2).toString('hex').toUpperCase() + '-' + crypto.randomBytes(2).toString('hex').toUpperCase() + '-' + crypto.randomBytes(2).toString('hex').toUpperCase();
+      const newLic = {
+        id: String(Date.now()),
+        license_key: data.license_key || randomKey,
+        customer_name: data.client_name || data.customer_name || 'عميل جديد',
+        client_name: data.client_name || data.customer_name || 'عميل جديد',
+        phone: data.client_phone || data.phone || '',
+        client_phone: data.client_phone || data.phone || '',
+        plan: data.plan || 'yearly',
+        features: Array.isArray(data.features) ? data.features : ['pos', 'cash_sales', 'inventory', 'reports'],
+        max_devices: parseInt(data.max_devices) || 1,
+        expires_at: data.expires_at || null,
+        status: data.status || 'active',
+        notes: data.notes || '',
+        created_at: new Date().toISOString()
+      };
+      db.licenses.unshift(newLic);
+      saveDb();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(newLic));
+    });
+    return;
+  }
+
+  if (req.url.startsWith('/admin/licenses/') && req.method === 'PATCH') {
+    const id = req.url.split('/admin/licenses/')[1].split('?')[0];
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      const updates = JSON.parse(body);
+      const lic = db.licenses.find(l => l.id === id);
+      if (lic) {
+        if (updates.features) lic.features = updates.features;
+        if (updates.status) lic.status = updates.status;
+        if (updates.client_name) { lic.client_name = updates.client_name; lic.customer_name = updates.client_name; }
+        if (updates.client_phone) { lic.client_phone = updates.client_phone; lic.phone = updates.client_phone; }
+        if (updates.expires_at !== undefined) lic.expires_at = updates.expires_at;
+        if (updates.max_devices !== undefined) lic.max_devices = updates.max_devices;
+        if (updates.notes !== undefined) lic.notes = updates.notes;
+        saveDb();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(lic));
+      }
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'License not found' }));
+    });
+    return;
+  }
+
   // Dashboard REST APIs
   if (req.url === '/api/licenses' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -304,8 +370,32 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify({ success: true }));
   }
 
-  // Mini Web Dashboard
-  if (req.url === '/' && req.method === 'GET') {
+  // Serve React Admin Dashboard static assets if built
+  const DIST_DIR = path.join(__dirname, '..', 'admin_dashboard', 'dist');
+  if (req.url.startsWith('/assets/')) {
+    const filePath = path.join(DIST_DIR, req.url);
+    if (fs.existsSync(filePath)) {
+      const ext = path.extname(filePath);
+      const mimeTypes = {
+        '.js': 'application/javascript',
+        '.css': 'text/css',
+        '.svg': 'image/svg+xml',
+        '.png': 'image/png',
+        '.woff2': 'font/woff2'
+      };
+      res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+      return fs.createReadStream(filePath).pipe(res);
+    }
+  }
+
+  // Serve React Admin Dashboard at / or /app
+  if ((req.url === '/' || req.url === '/app') && fs.existsSync(path.join(DIST_DIR, 'index.html'))) {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return fs.createReadStream(path.join(DIST_DIR, 'index.html')).pipe(res);
+  }
+
+  // Classic Mini Web Dashboard (available at /legacy)
+  if ((req.url === '/legacy' || req.url === '/') && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(`
 <!DOCTYPE html>
