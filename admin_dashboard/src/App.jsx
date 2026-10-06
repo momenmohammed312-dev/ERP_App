@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import StatsGrid from './components/StatsGrid';
 import LicenseTable from './components/LicenseTable';
+import OverviewView from './components/OverviewView';
+import ConnectedDevicesView from './components/ConnectedDevicesView';
+import ModulesCatalogView from './components/ModulesCatalogView';
+import AuditLogsView from './components/AuditLogsView';
 import LicenseModal from './components/LicenseModal';
 import DevicesModal from './components/DevicesModal';
 import ConfigModal from './components/ConfigModal';
@@ -9,9 +14,14 @@ import Toast from './components/Toast';
 import { api } from './services/api';
 
 export default function App() {
+  const [currentTab, setCurrentTab] = useState('licenses');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem('pos_admin_theme') || 'dark');
+  
   const [licenses, setLicenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState(() => api.loadConfig());
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Modals state
   const [isLicenseModalOpen, setIsLicenseModalOpen] = useState(false);
@@ -28,6 +38,20 @@ export default function App() {
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  // Sync theme with HTML root class
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('pos_admin_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   };
 
   const fetchLicenses = async () => {
@@ -103,18 +127,46 @@ export default function App() {
     showToast(`تم نسخ المفتاح للحافظة: ${key}`);
   };
 
-  return (
-    <div className="min-h-screen bg-[#0B0F19] text-gray-100 flex flex-col justify-between selection:bg-indigo-500/30">
-      
-      {/* Background radial gradient glow */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/10 rounded-full blur-[128px]"></div>
-        <div className="absolute top-1/3 -right-40 w-96 h-96 bg-purple-600/10 rounded-full blur-[128px]"></div>
-      </div>
+  const handleUnbindFromView = async (device) => {
+    if (!confirm(`هل تريد فك ارتباط هذا الجهاز؟ سيتم تحرير خانة ترخيص للعميل.`)) return;
+    try {
+      await api.unbindDevice(device.id);
+      showToast('تم إلغاء ربط الجهاز بنجاح');
+      fetchLicenses();
+    } catch (e) {
+      showToast('فشل إلغاء الربط: ' + e.message, 'error');
+    }
+  };
 
-      <div className="relative z-10 flex-1">
-        {/* Navbar */}
+  const totalDevices = licenses.reduce((sum, l) => sum + (l.bound_devices_count || 0), 0);
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F19] text-slate-900 dark:text-gray-100 font-arabic flex transition-colors duration-200">
+      
+      {/* Collapsible Sidebar (Drawer on mobile) */}
+      <Sidebar
+        currentTab={currentTab}
+        setCurrentTab={(tab) => {
+          if (tab === 'settings') {
+            setIsConfigModalOpen(true);
+          } else {
+            setCurrentTab(tab);
+          }
+        }}
+        isOpen={isSidebarOpen}
+        setIsOpen={setIsSidebarOpen}
+        theme={theme}
+        toggleTheme={toggleTheme}
+        licenseCount={licenses.length}
+        deviceCount={totalDevices}
+      />
+
+      {/* Main Content Area (Offset by Sidebar on lg screens) */}
+      <div className="flex-1 lg:mr-72 flex flex-col min-h-screen">
+        
+        {/* Top App Bar Header */}
         <Header
+          onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
           config={config}
           onOpenConfig={() => setIsConfigModalOpen(true)}
           onOpenCreate={() => {
@@ -123,31 +175,71 @@ export default function App() {
           }}
           onRefresh={fetchLicenses}
           loading={loading}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          theme={theme}
+          toggleTheme={toggleTheme}
         />
 
-        {/* Main Content Area */}
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Dynamic Views */}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
           
-          {/* Stats Metrics */}
-          <StatsGrid licenses={licenses} />
+          {currentTab === 'licenses' && (
+            <div className="space-y-6">
+              <StatsGrid licenses={licenses} />
+              <LicenseTable
+                licenses={licenses}
+                onEdit={handleOpenEdit}
+                onManageDevices={handleOpenDevices}
+                onToggleStatus={handleToggleStatus}
+                onDelete={handleDelete}
+                onCopyKey={handleCopyKey}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+              />
+            </div>
+          )}
 
-          {/* Licenses Table */}
-          <LicenseTable
-            licenses={licenses}
-            onEdit={handleOpenEdit}
-            onManageDevices={handleOpenDevices}
-            onToggleStatus={handleToggleStatus}
-            onDelete={handleDelete}
-            onCopyKey={handleCopyKey}
-          />
+          {currentTab === 'overview' && (
+            <div className="space-y-6">
+              <StatsGrid licenses={licenses} />
+              <OverviewView
+                licenses={licenses}
+                onOpenCreate={() => {
+                  setEditingLicense(null);
+                  setIsLicenseModalOpen(true);
+                }}
+                onGoToLicenses={() => setCurrentTab('licenses')}
+              />
+            </div>
+          )}
+
+          {currentTab === 'devices' && (
+            <ConnectedDevicesView
+              licenses={licenses}
+              onUnbindDevice={handleUnbindFromView}
+            />
+          )}
+
+          {currentTab === 'modules' && (
+            <ModulesCatalogView
+              licenses={licenses}
+              onSelectModuleFilter={() => setCurrentTab('licenses')}
+            />
+          )}
+
+          {currentTab === 'audit' && (
+            <AuditLogsView licenses={licenses} />
+          )}
 
         </main>
-      </div>
 
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-white/5 py-6 text-center text-xs text-gray-500">
-        <p>نظام إدارة تراخيص وتفعيل نقاط البيع سحابياً © 2026 — جاهز للنشر على Cloudflare Pages & Supabase</p>
-      </footer>
+        {/* Footer */}
+        <footer className="border-t border-slate-200/80 dark:border-white/5 py-5 text-center text-xs text-slate-500 dark:text-gray-500">
+          <p>لوحة تحكم تراخيص نقاط البيع (POS Cloud Manager) — متوافقة مع Cloudflare Pages & Supabase</p>
+        </footer>
+
+      </div>
 
       {/* Modals */}
       <LicenseModal
