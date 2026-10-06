@@ -637,4 +637,144 @@ void main() {
       throwsA(isA<ArgumentError>().having((e) => e.message, 'message', contains('cannot be completed via completeForOthersOrder'))),
     );
   });
+
+  test('MOC-BUG-1: screenshot reproduction - fabric required 3 available 0 (or less), color required > 0 with NO balance row at all throws InsufficientStockException with readable per-material message', () async {
+    final (db, moDao, _, bomDao, receiptDao) = await setup();
+    await seedCustomer(db, id: 'cust-1', name: 'Al-Madar');
+    final fabricId = await seedProduct(db, name: 'قماش ميلتون', qty: 0);
+    final colorId = await seedProduct(db, name: 'لون طباعة أسود', qty: 0);
+    final hoodieId = await seedProduct(db, name: 'هودي مطبوع', qty: 0);
+
+    // Customer delivered fabric (e.g. 183 in custody as in screenshot)
+    await receiptDao.receiveCustomerMaterial(
+      customerId: 'cust-1',
+      items: [
+        ReceiptItemInput(productId: fabricId, quantityReceived: 183.0),
+      ],
+    );
+    // Customer delivered NO colorId at all -> customerStockBalances has NO row for colorId!
+
+    // BOM: yieldQuantity=100. Fabric requires 2 per yield (planned 150 -> 3 required), color requires 5 per yield (planned 150 -> 8 required).
+    final bomId = await seedBom(
+      bomDao,
+      finishedProductId: hoodieId,
+      yieldQuantity: 100.0,
+      lines: [
+        (productId: fabricId, quantity: 2.0, wasteOverride: null),
+        (productId: colorId, quantity: 5.0, wasteOverride: null),
+      ],
+    );
+
+    final orderId = await seedOrder(
+      moDao,
+      bomId: bomId,
+      finishedProductId: hoodieId,
+      plannedQuantity: 150.0,
+      customerId: 'cust-1',
+      scrapPolicy: 'factory_pays_piece_value',
+    );
+
+    // Color is missing from custody (custBal is null, available is 0, required is 8).
+    // Fabric has 183 (sufficient).
+    // Completing must NOT throw Null check operator, but InsufficientStockException with readable per-material message.
+    try {
+      await moDao.completeForOthersOrder(orderId: orderId);
+      fail('Expected InsufficientStockException but completed without error');
+    } on InsufficientStockException catch (e) {
+      expect(e.shortages.length, 1);
+      final s = e.shortages.first;
+      expect(s.rawMaterialProductId, colorId);
+      expect(s.productName, contains('لون طباعة أسود'));
+      expect(s.required, 8);
+      expect(s.available, 0);
+      expect(s.shortage, 8);
+      expect(e.toString(), contains('لون طباعة أسود (عهدة العميل): مطلوب 8'));
+    }
+  });
+
+  test('MOC-BUG-2: BOM line with required quantity = 0 and NO balance row is skipped without error when other items are sufficient', () async {
+    final (db, moDao, _, bomDao, receiptDao) = await setup();
+    await seedCustomer(db, id: 'cust-1', name: 'Al-Madar');
+    final fabricId = await seedProduct(db, name: 'قماش ميلتون', qty: 0);
+    final colorId = await seedProduct(db, name: 'لون اختياري', qty: 0);
+    final hoodieId = await seedProduct(db, name: 'هودي مطبوع', qty: 0);
+
+    // Customer delivered sufficient fabric (183)
+    await receiptDao.receiveCustomerMaterial(
+      customerId: 'cust-1',
+      items: [
+        ReceiptItemInput(productId: fabricId, quantityReceived: 183.0),
+      ],
+    );
+    // Customer delivered NO colorId -> no custody row
+
+    // BOM: Fabric requires 2 (150*2/100 = 3), color requires 0.0
+    final bomId = await seedBom(
+      bomDao,
+      finishedProductId: hoodieId,
+      yieldQuantity: 100.0,
+      lines: [
+        (productId: fabricId, quantity: 2.0, wasteOverride: null),
+        (productId: colorId, quantity: 0.0, wasteOverride: null),
+      ],
+    );
+
+    final orderId = await seedOrder(
+      moDao,
+      bomId: bomId,
+      finishedProductId: hoodieId,
+      plannedQuantity: 150.0,
+      customerId: 'cust-1',
+      scrapPolicy: 'factory_pays_piece_value',
+    );
+
+    // Required quantity for color is 0, so it must be SKIPPED, custBal! must NOT be invoked,
+    // and completion succeeds cleanly!
+    final result = await moDao.completeForOthersOrder(orderId: orderId);
+    expect(result.producedQuantity, 150.0);
+
+    // Fabric was consumed: 183 - 3 = 180
+    final fabricBal = await receiptDao.getCustomerAvailableQuantity(customerId: 'cust-1', productId: fabricId);
+    expect(fabricBal, 180.0);
+  });
+
+  test('MOC-BUG-3: readable shortages message when multiple custody materials are missing or short', () async {
+    final (db, moDao, _, bomDao, _) = await setup();
+    await seedCustomer(db, id: 'cust-1', name: 'Al-Madar');
+    final fabricId = await seedProduct(db, name: 'قماش ميلتون', qty: 0);
+    final zipperId = await seedProduct(db, name: 'سوستة', qty: 0);
+    final hoodieId = await seedProduct(db, name: 'هودي مطبوع', qty: 0);
+
+    // BOM: Fabric requires 3, zipper requires 150
+    final bomId = await seedBom(
+      bomDao,
+      finishedProductId: hoodieId,
+      yieldQuantity: 100.0,
+      lines: [
+        (productId: fabricId, quantity: 2.0, wasteOverride: null),
+        (productId: zipperId, quantity: 100.0, wasteOverride: null),
+      ],
+    );
+
+    final orderId = await seedOrder(
+      moDao,
+      bomId: bomId,
+      finishedProductId: hoodieId,
+      plannedQuantity: 150.0,
+      customerId: 'cust-1',
+      scrapPolicy: 'factory_pays_piece_value',
+    );
+
+    // Neither fabric nor zipper in custody
+    try {
+      await moDao.completeForOthersOrder(orderId: orderId);
+      fail('Expected InsufficientStockException');
+    } on InsufficientStockException catch (e) {
+      expect(e.shortages.length, 2);
+      final msg = e.toString();
+      expect(msg, contains('قماش ميلتون (عهدة العميل): مطلوب 3'));
+      expect(msg, contains('سوستة (عهدة العميل): مطلوب 150'));
+    }
+  });
 }
+

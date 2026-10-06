@@ -469,6 +469,9 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         final rawRequired = item.quantityRequired * factor * (1 + waste / 100);
         final requiredInt = rawRequired.round();
 
+        // Zero-required lines are skipped entirely (no consumption, no custody validation needed)
+        if (requiredInt <= 0) continue;
+
         final product = await (select(products)..where((p) => p.id.equals(item.rawMaterialProductId))).getSingleOrNull();
         if (product == null) throw StateError('Raw material product #${item.rawMaterialProductId} not found');
 
@@ -495,7 +498,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
                 ..where((b) => b.customerId.equals(customerId) & b.productId.equals(item.rawMaterialProductId)))
               .getSingleOrNull();
           final available = custBal != null ? (custBal.quantityOnHand - custBal.quantityAllocated).toDouble() : 0.0;
-          if (requiredInt > available) {
+          if (requiredInt > available || custBal == null) {
             shortages.add(InsufficientStockDetail(
               rawMaterialProductId: product.id,
               productName: '${product.name} (عهدة العميل)',
@@ -507,7 +510,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
             customerPlans.add(_CustomerConsumptionPlan(
               bomItem: item,
               product: product,
-              balanceRow: custBal!,
+              balanceRow: custBal,
               requiredQty: requiredInt.toDouble(),
             ));
           }
