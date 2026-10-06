@@ -1,8 +1,26 @@
+import 'package:flutter/foundation.dart';
+
 class LicenseConfig {
   static const String secretKey = String.fromEnvironment(
     'LICENSE_SECRET_KEY',
     defaultValue: 'CHANGE_ME',
   );
+
+  /// RSA PUBLIC key (PEM) used to verify the license leases signed by the
+  /// server. Inject with: --dart-define=LICENSE_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
+  /// Literal "\n" sequences are converted to real newlines.
+  static const String _publicKeyRaw = String.fromEnvironment(
+    'LICENSE_PUBLIC_KEY',
+    defaultValue: '',
+  );
+  /// Test seam (null in production).
+  @visibleForTesting
+  static String? publicKeyOverride;
+
+  static String get publicKey => publicKeyOverride ?? normalizePem(_publicKeyRaw);
+
+  /// Converts literal \n sequences (as passed through --dart-define) to real newlines.
+  static String normalizePem(String raw) => raw.replaceAll(r'\n', '\n');
 
   /// Throws if the release build still has the insecure default key.
   static void assertSecretKeyConfigured() {
@@ -45,7 +63,7 @@ class LicenseConfig {
   // License duration in days
   static const int defaultLicenseDays = 365;
 
-  // Available features
+  // Available features / modules that can be granted per license
   static const List<String> availableFeatures = [
     'cash_sales', // Cash sales only
     'credit_sales', // Credit sales for customers
@@ -57,9 +75,12 @@ class LicenseConfig {
     'advanced_reports', // Advanced Reports & Analytics
     'backup', // Backup & Restore
     'auto_backup', // Automatic backup
-    'staff_management', // Staff management (Enterprise only)
+    'staff_management', // Staff management (Employees)
     'attendance', // Attendance system
     'payroll', // Payroll and salaries
+    'custody', // Financial custody / العهد المالية
+    'damaged_goods', // Damaged goods / الهوالك والتوالف
+    'manufacturing', // Manufacturing, BOM, Work Orders / التصنيع
     'admin_dashboard', // Admin dashboard web
     'api_access', // API for integration
   ];

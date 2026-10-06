@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/config/license_config.dart';
 import 'package:pos_offline_desktop/services/license_manager.dart';
-import 'package:pos_offline_desktop/services/firebase_license_service.dart';
+import 'package:pos_offline_desktop/services/online_license_service.dart';
 import 'package:pos_offline_desktop/widgets/brand/madar_logo.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -127,7 +127,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 300));
     final currentLicense = await licenseManager.getCurrentLicense();
     if (currentLicense != null) {
-      final fbService = FirebaseLicenseService();
+      final fbService = OnlineLicenseService();
       final fbResult = await fbService.performCheckinIfNeeded(
         currentLicense.licenseKey,
       );

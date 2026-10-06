@@ -214,28 +214,66 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                   ),
                   // Custody Button — العهد المالية
                   if (AppFeatures.hasCustodyModule)
-                    _buildLauncherButton(
-                      context,
-                      'العهد المالية',
-                      Icons.account_balance_wallet_outlined,
-                      Colors.teal.shade700,
-                      () {
-                        int index = 3;
-                        if (AppFeatures.hasSuppliersModule) index++;
-                        if (AppFeatures.hasStaffModule) index++;
-                        _tabController.animateTo(index);
-                      },
+                    FeatureGuard(
+                      featureName: 'custody',
+                      lockedWidget: _buildLauncherButton(
+                        context,
+                        'العهد المالية (مغلق)',
+                        Icons.account_balance_wallet_outlined,
+                        Colors.grey,
+                        () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'موديول العهد المالية غير مفعّل في ترخيصك. تواصل مع الإدارة لتفعيله.',
+                              ),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                        },
+                      ),
+                      child: _buildLauncherButton(
+                        context,
+                        'العهد المالية',
+                        Icons.account_balance_wallet_outlined,
+                        Colors.teal.shade700,
+                        () {
+                          int index = 3;
+                          if (AppFeatures.hasSuppliersModule) index++;
+                          if (AppFeatures.hasStaffModule) index++;
+                          _tabController.animateTo(index);
+                        },
+                      ),
                     ),
-                  // Damaged Items Button — hidden without the module.
+                  // Damaged Items Button — الهوالك والتوالف
                   if (AppFeatures.hasDamagedModule)
-                    _buildLauncherButton(
-                      context,
-                      'الهالك',
-                      Icons.delete_sweep,
-                      Colors.redAccent,
-                      () {
-                        context.push('/damaged-items');
-                      },
+                    FeatureGuard(
+                      featureName: 'damaged_goods',
+                      lockedWidget: _buildLauncherButton(
+                        context,
+                        'الهالك (مغلق)',
+                        Icons.delete_sweep,
+                        Colors.grey,
+                        () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'موديول الهوالك والتوالف غير مفعّل في ترخيصك. تواصل مع الإدارة لتفعيله.',
+                              ),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                        },
+                      ),
+                      child: _buildLauncherButton(
+                        context,
+                        'الهالك',
+                        Icons.delete_sweep,
+                        Colors.redAccent,
+                        () {
+                          context.push('/damaged-items');
+                        },
+                      ),
                     ),
                   // Barneka (Returnable Containers) Button — vegetable-market
                   // feature, hidden in the factory (base) flavor.
@@ -313,7 +351,10 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
         ),
       // Custody
       if (AppFeatures.hasCustodyModule)
-        CustodyPage(db: widget.db),
+        FeatureGuard(
+          featureName: 'custody',
+          child: CustodyPage(db: widget.db),
+        ),
       // Cash
       const CashierPage(),
       // Reports

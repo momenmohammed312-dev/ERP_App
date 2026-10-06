@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 import '../config/license_config.dart';
@@ -27,6 +28,10 @@ class SecureLicenseStorage {
       _appDir = Directory.systemTemp;
     }
   }
+
+  /// Test seam: point the storage at a temp folder (no path_provider needed).
+  @visibleForTesting
+  static void useDirectory(Directory dir) => _appDir = dir;
 
   static File get _file => File('${_appDir!.path}/$_fileName');
   static File get _backupFile => File('${_appDir!.path}/$_backupFileName');

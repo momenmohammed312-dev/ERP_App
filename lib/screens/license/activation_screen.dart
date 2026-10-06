@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/license_manager.dart';
-import '../../services/firebase_license_service.dart';
-import '../../config/license_config.dart';
+import '../../services/online_license_service.dart';
 
 class ActivationScreen extends StatefulWidget {
   const ActivationScreen({super.key});
@@ -54,7 +53,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
     });
 
     try {
-      final fbService = FirebaseLicenseService();
+      final fbService = OnlineLicenseService();
       final result = await fbService.activateLicense(key);
 
       if (result.isAllowed) {
@@ -71,41 +70,6 @@ class _ActivationScreenState extends State<ActivationScreen> {
       } else {
         setState(() {
           _errorMessage = result.message;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'خطأ غير متوقع: $e';
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _activateTrial() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-      _successMessage = null;
-    });
-
-    try {
-      final result = await _licenseManager.activateTrial();
-
-      if (result.isValid) {
-        setState(() {
-          _successMessage = 'تم تفعيل النسخة التجريبية بنجاح! 🎉';
-          _isLoading = false;
-        });
-
-        await Future.delayed(const Duration(seconds: 2));
-
-        if (mounted) {
-          context.go('/activation-success');
-        }
-      } else {
-        setState(() {
-          _errorMessage = result.errorMessage ?? 'فشل تفعيل النسخة التجريبية';
           _isLoading = false;
         });
       }
@@ -252,28 +216,6 @@ class _ActivationScreenState extends State<ActivationScreen> {
                         ),
                 ),
               ),
-              if (!LicenseConfig.isFreeVersion) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 44,
-                  child: OutlinedButton.icon(
-                    onPressed: _isLoading ? null : _activateTrial,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.orange.shade700,
-                      side: BorderSide(color: Colors.orange.shade300),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    icon: const Icon(Icons.card_giftcard, size: 20),
-                    label: const Text(
-                      'تجربة مجانية لمدة 7 أيام',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
