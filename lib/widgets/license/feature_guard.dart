@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../config/license_config.dart';
-import '../../services/license_manager.dart';
+import '../../core/provider/license_provider.dart';
 
 /// Wraps widgets or pages that require specific licensed modules.
 ///
 /// If [hideWhenLocked] is true, the widget disappears completely when the feature is disabled.
 /// Otherwise, it shows [lockedWidget] or a friendly upgrade card.
-class FeatureGuard extends StatelessWidget {
+class FeatureGuard extends ConsumerWidget {
   final String featureName;
   final Widget child;
   final Widget? lockedWidget;
@@ -38,7 +39,7 @@ class FeatureGuard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // 1. Free version flavor/build — always unlocked
     if (LicenseConfig.isFreeVersion) {
       return child;
@@ -55,26 +56,17 @@ class FeatureGuard extends StatelessWidget {
       return child;
     }
 
-    // 3. Dynamic check against the server-granted lease features
-    return FutureBuilder<bool>(
-      future: LicenseManager().isFeatureEnabled(featureName),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          // Avoid visual layout flashes while reading local secure storage
-          return const SizedBox.shrink();
-        }
+    // 3. Dynamic check against the server-granted lease features via Riverpod
+    final isEnabled = ref.watch(isFeatureEnabledProvider(featureName));
+    if (isEnabled) {
+      return child;
+    }
 
-        if (snapshot.hasData && snapshot.data == true) {
-          return child;
-        }
+    if (hideWhenLocked) {
+      return const SizedBox.shrink();
+    }
 
-        if (hideWhenLocked) {
-          return const SizedBox.shrink();
-        }
-
-        return lockedWidget ?? _buildLockedWidget(context);
-      },
-    );
+    return lockedWidget ?? _buildLockedWidget(context);
   }
 
   Widget _buildLockedWidget(BuildContext context) {

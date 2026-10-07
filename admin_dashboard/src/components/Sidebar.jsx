@@ -73,11 +73,11 @@ export default function Sidebar({
           <div className="h-20 px-6 flex items-center justify-between border-b border-slate-100">
             <div className="flex items-center gap-3">
               {/* Madar Official Logo */}
-              <div className="w-11 h-11 rounded-xl bg-slate-50 border border-slate-200/80 p-1.5 flex items-center justify-center shadow-xs">
+              <div className="w-11 h-11 rounded-xl overflow-hidden shadow-xs shrink-0 border border-slate-200/80">
                 <img 
                   src="/madar_logo.png" 
                   alt="شعار مدار ERP" 
-                  className="w-full h-full object-contain"
+                  className="w-full h-full object-cover"
                   onError={(e) => {
                     e.target.style.display = 'none';
                   }}

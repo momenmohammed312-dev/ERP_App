@@ -595,6 +595,9 @@ class LicenseManager {
     final now = DateTime.now();
     final elapsed = now.difference(current.lastCheckTime).inMilliseconds;
 
+    // Only write to disk if at least 1 minute elapsed to avoid thrashing I/O on every feature check
+    if (elapsed < 60000) return;
+
     // Only add if elapsed is reasonable (not negative, not more than 24h)
     final adjustedElapsed = (elapsed > 0 && elapsed < 86400000)
         ? current.sessionElapsedMs + elapsed

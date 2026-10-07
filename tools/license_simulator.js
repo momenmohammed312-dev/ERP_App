@@ -82,6 +82,42 @@ let db = {
       expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
       status: 'active',
       created_at: new Date().toISOString()
+    },
+    {
+      id: '3',
+      license_key: 'POS-NUR2-8921-X4K9',
+      customer_name: 'شركة النور للمقاولات والتجارة',
+      phone: '01222222222',
+      plan: 'professional',
+      features: ['pos', 'cash_sales', 'inventory', 'customers', 'reports', 'manufacturing', 'staff_management', 'custody', 'damaged_goods'],
+      max_devices: 2,
+      expires_at: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
+      status: 'active',
+      created_at: new Date().toISOString()
+    },
+    {
+      id: '4',
+      license_key: 'POS-FTH7-1049-M9P2',
+      customer_name: 'مؤسسة الفتح لقطع الغيار',
+      phone: '01333333333',
+      plan: 'standard',
+      features: ['pos', 'cash_sales', 'inventory', 'customers', 'reports'],
+      max_devices: 1,
+      expires_at: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
+      status: 'active',
+      created_at: new Date().toISOString()
+    },
+    {
+      id: '5',
+      license_key: 'POS-BRK9-5501-Q8Z1',
+      customer_name: 'سلسلة أسواق البركة',
+      phone: '01444444444',
+      plan: 'custom',
+      features: ['pos', 'cash_sales', 'inventory', 'customers', 'reports', 'custody'],
+      max_devices: 3,
+      expires_at: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
+      status: 'suspended',
+      created_at: new Date().toISOString()
     }
   ],
   devices: [],
@@ -372,8 +408,9 @@ const server = http.createServer((req, res) => {
 
   // Serve React Admin Dashboard static files and SPA fallback
   const DIST_DIR = path.join(__dirname, '..', 'admin_dashboard', 'dist');
-  const safePath = path.normalize(req.url.split('?')[0]);
-  const requestedFile = path.join(DIST_DIR, safePath === '/' ? 'index.html' : safePath);
+  const urlPath = req.url.split('?')[0];
+  const isRoot = urlPath === '/' || urlPath === '';
+  const requestedFile = isRoot ? path.join(DIST_DIR, 'index.html') : path.join(DIST_DIR, path.normalize(urlPath).replace(/^[/\\]+/, ''));
 
   if (fs.existsSync(requestedFile) && fs.statSync(requestedFile).isFile()) {
     const ext = path.extname(requestedFile).toLowerCase();
@@ -390,14 +427,16 @@ const server = http.createServer((req, res) => {
       '.woff2': 'font/woff2'
     };
     res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+    if (req.method === 'HEAD') return res.end();
     return fs.createReadStream(requestedFile).pipe(res);
   }
 
   // SPA fallback for non-API HTML requests
   const isApi = req.url.startsWith('/admin/') || req.url.startsWith('/api/') || req.url.startsWith('/license_api');
-  if (req.method === 'GET' && !isApi) {
+  if ((req.method === 'GET' || req.method === 'HEAD') && !isApi) {
     if (fs.existsSync(path.join(DIST_DIR, 'index.html'))) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      if (req.method === 'HEAD') return res.end();
       return fs.createReadStream(path.join(DIST_DIR, 'index.html')).pipe(res);
     } else {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });

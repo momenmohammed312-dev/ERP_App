@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مدار ERP — لوحة إدارة التراخيص والموديولات السحابية</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            mantis: {
+              DEFAULT: '#1677FF',
+              hover: '#0958D9',
+              light: '#E6F4FF',
+              50: '#F0F7FF',
+              100: '#E6F4FF',
+              600: '#1677FF',
+              700: '#0958D9'
+            },
+            madar: {
+              navy: '#0F172A',
+              gold: '#C9A84C',
+              goldLight: '#FDFBF4'
+            }
+          },
+          fontFamily: {
+            sans: ['Cairo', 'Tajawal', 'system-ui', 'sans-serif'],
+            display: ['Tajawal', 'Cairo', 'system-ui', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Cairo', 'Tajawal', system-ui, -apple-system, sans-serif;
+      background-color: #F8FAFC;
+      color: #0F172A;
+    }
+    .mantis-card {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 14px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.02);
+    }
+    .mantis-table th {
+      background-color: #F8FAFC;
+      color: #475569;
+      font-weight: 700;
+      font-size: 0.78rem;
+      padding: 14px 16px;
+      border-bottom: 1px solid #E2E8F0;
+    }
+    .mantis-table td {
+      padding: 14px 16px;
+      border-bottom: 1px solid #F1F5F9;
+      font-size: 0.84rem;
+    }
+    .mantis-table tr:hover td {
+      background-color: #F8FAFC;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased text-slate-800 selection:bg-blue-100 selection:text-blue-900">
+
+  <!-- Main Container -->
+  <div class="flex min-h-screen">
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-68 bg-white border-l border-slate-200 flex flex-col justify-between p-4 z-40 fixed md:static inset-y-0 right-0 transform translate-x-full md:translate-x-0 transition-transform duration-200 ease-in-out shadow-sm md:shadow-none">
+      <div class="space-y-6">
+        
+        <!-- Official Squircle Golden Meem Brand Header -->
+        <div class="flex items-center gap-3 px-2 py-2 border-b border-slate-100 pb-4">
+          <div class="w-12 h-12 rounded-2xl overflow-hidden shadow-xs shrink-0 border border-slate-200/80 bg-slate-900 flex items-center justify-center">
+            <img src="madar_logo.png" alt="مدار ERP" class="w-full h-full object-cover" onerror="this.onerror=null; this.parentElement.innerHTML='<span class=\'text-amber-400 font-bold text-xl\'>مـ</span>'">
+          </div>
+          <div class="min-w-0">
+            <div class="font-extrabold text-base text-slate-900 leading-tight tracking-tight flex items-center gap-1.5">
+              <span>مِدار</span>
+              <span class="text-xs px-1.5 py-0.5 rounded bg-mantis-light text-mantis font-bold border border-blue-100">ERP</span>
+            </div>
+            <div class="text-[11px] text-slate-400 font-medium truncate mt-0.5">منظومة التراخيص السحابية</div>
+          </div>
+        </div>
+
+        <!-- Navigation Menu -->
+        <nav class="space-y-1">
+          <button onclick="setTab('licenses')" id="btn-tab-licenses" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold bg-mantis-light text-mantis border border-blue-100 transition-all">
+            <span class="flex items-center gap-2.5">
+              <svg class="w-4 h-4 text-mantis" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+              <span>التراخيص والعملاء</span>
+            </span>
+            <span id="badge-total-lic" class="bg-blue-200/60 text-mantis text-[11px] font-bold px-2 py-0.5 rounded-full">3</span>
+          </button>
+
+          <button onclick="setTab('overview')" id="btn-tab-overview" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all">
+            <span class="flex items-center gap-2.5">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+              <span>المؤشرات والرسوم البيانية</span>
+            </span>
+            <span class="bg-blue-50 text-mantis text-[10px] font-bold px-1.5 py-0.2 rounded border border-blue-100">Mantis Charts</span>
+          </button>
+
+          <button onclick="setTab('devices')" id="btn-tab-devices" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all">
+            <span class="flex items-center gap-2.5">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+              <span>الأجهزة المعتمدة</span>
+            </span>
+            <span id="badge-total-dev" class="bg-slate-100 text-slate-600 text-[11px] font-semibold px-2 py-0.5 rounded-full">4</span>
+          </button>
+
+          <button onclick="setTab('modules')" id="btn-tab-modules" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all">
+            <span class="flex items-center gap-2.5">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+              <span>كتالوج الموديولات (14 ميزة)</span>
+            </span>
+          </button>
+
+          <button onclick="setTab('audit')" id="btn-tab-audit" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all">
+            <span class="flex items-center gap-2.5">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <span>سجل العمليات والتدقيق</span>
+            </span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Footer Info -->
+      <div class="pt-4 border-t border-slate-100 space-y-2">
+        <button onclick="openConfigModal()" class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 border border-slate-200">
+          <span class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            <span>إعدادات السيرفر</span>
+          </span>
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        </button>
+
+        <div class="px-2 py-1.5 text-[10px] text-slate-400 text-center">
+          مدار ERP • Mantis Enterprise #1677FF
+        </div>
+      </div>
+    </aside>
+
+    <!-- Overlay for mobile drawer -->
+    <div id="drawer-overlay" onclick="toggleMobileSidebar()" class="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-30 hidden md:hidden"></div>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col min-w-0">
+
+      <!-- Header App Bar -->
+      <header class="bg-white border-b border-slate-200 px-6 py-3.5 sticky top-0 z-20 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <button onclick="toggleMobileSidebar()" class="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+          </button>
+          <div>
+            <h1 class="text-base sm:text-lg font-bold text-slate-900">إدارة التراخيص والموديولات</h1>
+            <p class="text-xs text-slate-500 hidden sm:block">تحكم كامل ومباشر في صلاحيات النسخ وأجهزة العملاء السحابية</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <!-- Backend Connection Pill -->
+          <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span class="text-slate-600 font-semibold">المحاكي المحلي (Port 8000)</span>
+          </div>
+
+          <!-- Add License CTA (Mantis Blue) -->
+          <button onclick="openCreateModal()" class="flex items-center gap-2 bg-mantis hover:bg-mantis-hover text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            <span>إصدار ترخيص جديد</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Page Content -->
+      <div class="p-6 space-y-6 flex-1 max-w-7xl w-full mx-auto">
+
+        <!-- 4 Stat Analytical Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          <div class="mantis-card p-4 flex items-center justify-between">
+            <div>
+              <div class="text-xs font-semibold text-slate-500">إجمالي التراخيص</div>
+              <div id="stat-total" class="text-2xl font-black text-slate-900 mt-1 font-mono">3</div>
+              <div class="text-[11px] text-emerald-600 font-bold mt-1 flex items-center gap-1">
+                <span>↑ 100%</span>
+                <span class="text-slate-400 font-normal">منذ الإطلاق</span>
+              </div>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-blue-50 text-mantis flex items-center justify-center border border-blue-100">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+            </div>
+          </div>
+
+          <div class="mantis-card p-4 flex items-center justify-between">
+            <div>
+              <div class="text-xs font-semibold text-slate-500">التراخيص النشطة</div>
+              <div id="stat-active" class="text-2xl font-black text-emerald-600 mt-1 font-mono">2</div>
+              <div class="text-[11px] text-emerald-600 font-bold mt-1 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                <span>جاهزة للعمل الفوري</span>
+              </div>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+          </div>
+
+          <div class="mantis-card p-4 flex items-center justify-between">
+            <div>
+              <div class="text-xs font-semibold text-slate-500">تراخيص موقوفة / منتهية</div>
+              <div id="stat-suspended" class="text-2xl font-black text-rose-600 mt-1 font-mono">1</div>
+              <div class="text-[11px] text-slate-400 mt-1">يتطلب تجديد أو تفعيل</div>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+          </div>
+
+          <div class="mantis-card p-4 flex items-center justify-between">
+            <div>
+              <div class="text-xs font-semibold text-slate-500">الأجهزة المرتبطة</div>
+              <div id="stat-devices" class="text-2xl font-black text-slate-900 mt-1 font-mono">4</div>
+              <div class="text-[11px] text-blue-600 font-bold mt-1">عبر كافة العملاء</div>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- TAB 1: LICENSES & CLIENTS -->
+        <section id="section-licenses" class="space-y-4">
+          <!-- Filters & Actions Bar -->
+          <div class="mantis-card p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div class="relative flex-1 max-w-sm">
+              <input type="text" id="searchInput" oninput="filterLicenses()" placeholder="بحث باسم العميل أو مفتاح الترخيص..." class="w-full pl-3 pr-9 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-mantis focus:ring-1 focus:ring-mantis bg-slate-50/50">
+              <svg class="w-4 h-4 text-slate-400 absolute right-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <select id="statusFilter" onchange="filterLicenses()" class="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-700 focus:outline-none focus:border-mantis">
+                <option value="all">كافة الحالات</option>
+                <option value="active">نشط فقط (Active)</option>
+                <option value="suspended">موقوف فقط (Suspended)</option>
+              </select>
+
+              <select id="moduleFilter" onchange="filterLicenses()" class="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-700 focus:outline-none focus:border-mantis">
+                <option value="all">كافة الموديولات</option>
+                <option value="manufacturing">⚙️ موديول التصنيع</option>
+                <option value="staff_management">👔 موديول الموظفين</option>
+                <option value="custody_management">💼 موديول العهد</option>
+                <option value="multi_warehouse">🏬 الفروع والمخازن</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Licenses Table -->
+          <div class="mantis-card overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-right mantis-table">
+                <thead>
+                  <tr>
+                    <th>العميل / المؤسسة</th>
+                    <th>مفتاح الترخيص</th>
+                    <th>الباقة والتاريخ</th>
+                    <th>الحالة</th>
+                    <th>الموديولات المفعلة (انقر لتفعيل/إلغاء)</th>
+                    <th>الأجهزة</th>
+                    <th class="text-center">إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody id="licensesTableBody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 2: OVERVIEW ANALYTICS (Mantis Dashboard Charts) -->
+        <section id="section-overview" class="hidden space-y-6">
+          
+          <!-- ROW 1: DUAL MANTIS ANALYTICAL CHARTS (Bar Chart + Spline Area Curve) -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- 1. Mantis Monthly Bar Chart -->
+            <div class="mantis-card p-5 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                      <span>حركة إصدار التراخيص (Monthly Overview)</span>
+                      <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">Mantis Bar</span>
+                    </h3>
+                    <p class="text-[11px] text-slate-500 mt-0.5">معدل التراخيص الجديدة شهرياً</p>
+                  </div>
+
+                  <!-- Week / Month toggle -->
+                  <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold border border-slate-200/80">
+                    <button onclick="toggleChartMode('month')" id="btn-chart-month" class="px-2.5 py-1 rounded-lg bg-white text-blue-600 shadow-xs border border-slate-200/60">شهري</button>
+                    <button onclick="toggleChartMode('week')" id="btn-chart-week" class="px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900">أسبوعي</button>
+                  </div>
+                </div>
+
+                <div class="flex items-baseline gap-2 mb-3">
+                  <span id="chart-kpi-val" class="text-2xl font-black text-slate-900 font-mono">38 ترخيص</span>
+                  <span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">↑ +32.5% نمو</span>
+                </div>
+
+                <!-- Animated SVG Bar Chart Container -->
+                <div class="relative h-44 flex items-end justify-between gap-2 pt-6 pb-2" id="barChartContainer">
+                  <!-- Populated by JS -->
+                </div>
+              </div>
+
+              <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-[#1677FF]"></span> التراخيص النشطة</span>
+                <span>تحديث فوري</span>
+              </div>
+            </div>
+
+            <!-- 2. Mantis Spline Area Curve -->
+            <div class="mantis-card p-5 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                      <span>منحنى نمو الأجهزة والاتصال (Growth Trend)</span>
+                      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    </h3>
+                    <p class="text-[11px] text-slate-500 mt-0.5">تطور ربط الأجهزة بالخادم</p>
+                  </div>
+                  <span class="text-xs font-bold text-blue-600 font-mono bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">52 جهاز</span>
+                </div>
+
+                <!-- Spline Area SVG -->
+                <div class="relative h-44 w-full">
+                  <svg viewBox="0 0 500 180" class="w-full h-full overflow-visible" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#1677FF" stopOpacity="0.25" />
+                        <stop offset="100%" stopColor="#1677FF" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+                    <!-- Guideline -->
+                    <line x1="0" y1="45" x2="500" y2="45" stroke="#F1F5F9" stroke-dasharray="4 4" />
+                    <line x1="0" y1="90" x2="500" y2="90" stroke="#F1F5F9" stroke-dasharray="4 4" />
+                    <line x1="0" y1="135" x2="500" y2="135" stroke="#F1F5F9" stroke-dasharray="4 4" />
+                    
+                    <!-- Area Fill -->
+                    <path d="M 20 140 C 90 120, 160 90, 230 70 C 300 50, 370 35, 480 20 L 480 180 L 20 180 Z" fill="url(#curveGradient)" />
+                    <!-- Curve Line -->
+                    <path d="M 20 140 C 90 120, 160 90, 230 70 C 300 50, 370 35, 480 20" fill="none" stroke="#1677FF" stroke-width="3" stroke-linecap="round" />
+                    
+                    <!-- Points -->
+                    <circle cx="20" cy="140" r="4" fill="#FFFFFF" stroke="#1677FF" stroke-width="2.5" />
+                    <circle cx="120" cy="110" r="4" fill="#FFFFFF" stroke="#1677FF" stroke-width="2.5" />
+                    <circle cx="230" cy="70" r="4" fill="#FFFFFF" stroke="#1677FF" stroke-width="2.5" />
+                    <circle cx="350" cy="40" r="4" fill="#FFFFFF" stroke="#1677FF" stroke-width="2.5" />
+                    <circle cx="480" cy="20" r="5" fill="#1677FF" stroke="#FFFFFF" stroke-width="2.5" />
+                  </svg>
+                </div>
+                
+                <div class="flex justify-between text-[10px] text-slate-400 mt-2 font-medium px-2">
+                  <span>أسبوع 1</span>
+                  <span>أسبوع 2</span>
+                  <span>أسبوع 4</span>
+                  <span>أسبوع 6</span>
+                  <span>أسبوع 8 (اليوم)</span>
+                </div>
+              </div>
+
+              <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                <span>متوسط الأجهزة لكل عميل: <strong>1.4 جهاز</strong></span>
+                <span class="text-blue-600 font-bold">نشاط ممتاز</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ROW 2: TRI-COLUMN BREAKDOWN (Plans Donut + Modules Adoption + Live Stream) -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            
+            <!-- Col 1: Plans Donut Chart -->
+            <div class="mantis-card p-5 flex flex-col justify-between">
+              <div>
+                <h3 class="font-bold text-sm text-slate-900 mb-3">توزيع باقات التراخيص (Plans)</h3>
+                
+                <div class="flex items-center justify-center gap-6 py-2">
+                  <div class="relative w-32 h-32 flex items-center justify-center shrink-0">
+                    <svg width="120" height="120" class="transform -rotate-90">
+                      <circle cx="60" cy="60" r="45" fill="transparent" stroke="#F1F5F9" stroke-width="16" />
+                      <!-- Yearly (50%) -->
+                      <circle cx="60" cy="60" r="45" fill="transparent" stroke="#1677FF" stroke-width="16" stroke-dasharray="141 283" stroke-dashoffset="0" />
+                      <!-- Lifetime (25%) -->
+                      <circle cx="60" cy="60" r="45" fill="transparent" stroke="#10B981" stroke-width="16" stroke-dasharray="71 283" stroke-dashoffset="-141" />
+                      <!-- Monthly (25%) -->
+                      <circle cx="60" cy="60" r="45" fill="transparent" stroke="#F59E0B" stroke-width="16" stroke-dasharray="71 283" stroke-dashoffset="-212" />
+                    </svg>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+                      <span class="text-lg font-black font-mono text-slate-900">38</span>
+                      <span class="text-[9px] text-slate-400">ترخيص</span>
+                    </div>
+                  </div>
+
+                  <div class="space-y-2 text-xs flex-1">
+                    <div class="flex items-center justify-between">
+                      <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#1677FF]"></span> سنوي</span>
+                      <span class="font-bold font-mono">50%</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#10B981]"></span> مدى الحياة</span>
+                      <span class="font-bold font-mono">25%</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#F59E0B]"></span> شهري</span>
+                      <span class="font-bold font-mono">25%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-3 border-t border-slate-100 text-[11px] text-slate-400 text-center">
+                الباقة السنوية هي الأكثر طلباً
+              </div>
+            </div>
+
+            <!-- Col 2: Top Modules Adoption -->
+            <div class="mantis-card p-5 flex flex-col justify-between">
+              <div>
+                <h3 class="font-bold text-sm text-slate-900 mb-3">نسب تفعيل الموديولات الإضافية</h3>
+                <div class="space-y-2.5" id="moduleAdoptionContainer">
+                  <!-- Dynamically generated -->
+                </div>
+              </div>
+
+              <div class="pt-3 border-t border-slate-100 text-[11px] text-slate-500 flex justify-between">
+                <span>نظام Modular Gating</span>
+                <span class="text-emerald-600 font-bold">تزامن فوري</span>
+              </div>
+            </div>
+
+            <!-- Col 3: Live Stream Activities -->
+            <div class="mantis-card p-5 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-3">
+                  <h3 class="font-bold text-sm text-slate-900">سجل العمليات الأخير (Activity)</h3>
+                  <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                </div>
+
+                <div class="space-y-2.5" id="liveActivityContainer">
+                  <!-- Dynamically populated -->
+                </div>
+              </div>
+
+              <div class="pt-3 border-t border-slate-100 text-[11px] text-center text-blue-600 font-bold cursor-pointer hover:underline" onclick="setTab('audit')">
+                عرض كامل السجل الإداري ←
+              </div>
+            </div>
+
+          </div>
+
+        </section>
+
+        <!-- TAB 3: CONNECTED DEVICES -->
+        <section id="section-devices" class="hidden space-y-4">
+          <div class="mantis-card overflow-hidden">
+            <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 class="font-bold text-sm text-slate-900">سجل الأجهزة المعتمدة والمرتبطة</h3>
+                <p class="text-xs text-slate-400 mt-0.5">يمكنك فك ارتباط أي جهاز لتمكين العميل من ربط جهاز جديد</p>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-right mantis-table">
+                <thead>
+                  <tr>
+                    <th>العميل التابع له</th>
+                    <th>معرّف الجهاز (Hardware GUID)</th>
+                    <th>اسم الجهاز والنظام</th>
+                    <th>آخر ظهور سحابي</th>
+                    <th class="text-center">إجراء</th>
+                  </tr>
+                </thead>
+                <tbody id="devicesTableBody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 4: MODULES CATALOG -->
+        <section id="section-modules" class="hidden space-y-4">
+          <div class="mantis-card p-5">
+            <div class="mb-4">
+              <h3 class="font-bold text-base text-slate-900">كتالوج موديولات مدار ERP (14 موديول متوافق)</h3>
+              <p class="text-xs text-slate-500 mt-1">المنظومة مصممة بنظام Gating يعتمد على التراخيص السحابية، تفتح وتغلق بضغطة زر لكل عميل.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="catalogGrid">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 5: AUDIT LOGS -->
+        <section id="section-audit" class="hidden space-y-4">
+          <div class="mantis-card p-5">
+            <h3 class="font-bold text-sm text-slate-900 mb-3">سجل العمليات الإدارية والأمان</h3>
+            <div class="space-y-3" id="auditLogsContainer">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL: CREATE LICENSE -->
+  <div id="createModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl border border-slate-200 max-w-lg w-full shadow-xl overflow-hidden animate-in fade-in zoom-in-95">
+      <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+        <h3 class="font-bold text-base text-slate-900">إصدار ترخيص تجاري جديد</h3>
+        <button onclick="closeCreateModal()" class="text-slate-400 hover:text-slate-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">اسم العميل / المؤسسة التجارية *</label>
+          <input type="text" id="mClientName" placeholder="مثال: شركة الصفا لتجارة التجزئة" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-mantis focus:ring-1 focus:ring-mantis">
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-xs font-semibold text-slate-700">مفتاح الترخيص السحابي *</label>
+            <button onclick="generateRandomKey()" class="text-[11px] text-mantis hover:underline font-semibold flex items-center gap-1">
+              <span>توليد عشوائي</span>
+            </button>
+          </div>
+          <input type="text" id="mKey" class="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-200 focus:outline-none focus:border-mantis bg-slate-50/50">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">نوع الباقة</label>
+            <select id="mPlan" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-mantis bg-white">
+              <option value="custom">باقة مخصصة (Custom Modules)</option>
+              <option value="standard">باقة أساسية (Standard)</option>
+              <option value="professional">باقة متقدمة (Professional)</option>
+              <option value="enterprise">باقة شاملة (Enterprise)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">الحد الأقصى للأجهزة</label>
+            <input type="number" id="mMaxDevices" value="1" min="1" max="50" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-mantis">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-2">تحديد الموديولات المسموح بتشغيلها:</label>
+          
+          <div class="space-y-2 border border-slate-200 rounded-xl p-3 bg-slate-50/50">
+            <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">الموديولات الأساسية (افتراضية دائمة)</div>
+            <div class="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-3">
+              <label class="flex items-center gap-2"><input type="checkbox" checked disabled class="rounded text-mantis"> 🛒 الفواتير والمبيعات</label>
+              <label class="flex items-center gap-2"><input type="checkbox" checked disabled class="rounded text-mantis"> 📦 الأصناف والمخزون</label>
+              <label class="flex items-center gap-2"><input type="checkbox" checked disabled class="rounded text-mantis"> 👥 دليل العملاء والموردين</label>
+              <label class="flex items-center gap-2"><input type="checkbox" checked disabled class="rounded text-mantis"> 📊 التقارير المحاسبية</label>
+            </div>
+
+            <div class="text-[11px] font-bold text-mantis uppercase tracking-wider mb-1 border-t border-slate-200 pt-2">الموديولات المتقدمة القابلة للتفعيل / الإلغاء</div>
+            <div class="grid grid-cols-2 gap-2 text-xs text-slate-700">
+              <label class="flex items-center gap-2 font-medium cursor-pointer"><input type="checkbox" id="m_manufacturing" class="rounded text-mantis"> ⚙️ موديول التصنيع</label>
+              <label class="flex items-center gap-2 font-medium cursor-pointer"><input type="checkbox" id="m_staff" class="rounded text-mantis"> 👔 موديول الموظفين والرواتب</label>
+              <label class="flex items-center gap-2 font-medium cursor-pointer"><input type="checkbox" id="m_custody" class="rounded text-mantis"> 💼 موديول العهد المالية</label>
+              <label class="flex items-center gap-2 font-medium cursor-pointer"><input type="checkbox" id="m_expenses" checked class="rounded text-mantis"> 💸 المصروفات والخزينة</label>
+              <label class="flex items-center gap-2 font-medium cursor-pointer"><input type="checkbox" id="m_multi_warehouse" class="rounded text-mantis"> 🏬 الفروع وتعدد المخازن</label>
+              <label class="flex items-center gap-2 font-medium cursor-pointer"><input type="checkbox" id="m_advanced_reports" class="rounded text-mantis"> 📈 التقارير المتقدمة</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+        <button onclick="closeCreateModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors">إلغاء</button>
+        <button onclick="saveNewLicense()" class="px-4 py-2 text-xs font-bold bg-mantis hover:bg-mantis-hover text-white rounded-xl transition-colors">حفظ وإصدار الترخيص</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast" class="fixed bottom-5 left-5 bg-slate-900 text-white text-xs px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 z-50 transform translate-y-20 opacity-0 transition-all duration-300">
+    <span id="toast-icon">✓</span>
+    <span id="toast-msg">تمت العملية بنجاح</span>
+  </div>
+
+  <!-- JAVASCRIPT STATE ENGINE -->
+  <script>
+    // State Store
+    const state = {
+      activeTab: 'licenses',
+      chartMode: 'month',
+      licenses: [
+        {
+          id: 'lic-1',
+          client_name: 'شركة النور للمقاولات والتجارة',
+          license_key: 'POS-NUR2-8921-X4K9',
+          plan_type: 'professional',
+          status: 'active',
+          max_devices: 2,
+          device_count: 2,
+          created_at: '2026-09-01T10:00:00Z',
+          expires_at: '2027-09-01T10:00:00Z',
+          enabled_modules: ['sales', 'inventory', 'customers', 'reports', 'manufacturing', 'expenses', 'staff_management']
+        },
+        {
+          id: 'lic-2',
+          client_name: 'مؤسسة الفتح لقطع الغيار',
+          license_key: 'POS-FTH7-1049-M9P2',
+          plan_type: 'standard',
+          status: 'active',
+          max_devices: 1,
+          device_count: 1,
+          created_at: '2026-09-15T12:00:00Z',
+          expires_at: '2027-09-15T12:00:00Z',
+          enabled_modules: ['sales', 'inventory', 'customers', 'reports', 'expenses']
+        },
+        {
+          id: 'lic-3',
+          client_name: 'سلسلة أسواق البركة',
+          license_key: 'POS-BRK9-5501-Q8Z1',
+          plan_type: 'custom',
+          status: 'suspended',
+          max_devices: 3,
+          device_count: 1,
+          created_at: '2026-08-10T08:00:00Z',
+          expires_at: '2026-10-01T08:00:00Z',
+          enabled_modules: ['sales', 'inventory', 'customers', 'reports', 'custody_management', 'multi_warehouse']
+        }
+      ],
+      devices: [
+        { id: 'dev-1', license_id: 'lic-1', client_name: 'شركة النور للمقاولات والتجارة', device_guid: 'WIN-89412-A9F0', device_name: 'Desktop-Cashier-01 (Win 11)', last_seen_at: '2026-10-06T12:45:00Z' },
+        { id: 'dev-2', license_id: 'lic-1', client_name: 'شركة النور للمقاولات والتجارة', device_guid: 'WIN-89412-B8E1', device_name: 'Laptop-Admin (Win 10)', last_seen_at: '2026-10-06T11:20:00Z' },
+        { id: 'dev-3', license_id: 'lic-2', client_name: 'مؤسسة الفتح لقطع الغيار', device_guid: 'WIN-55102-X9C3', device_name: 'Main-Terminal (Win 11)', last_seen_at: '2026-10-06T13:10:00Z' },
+        { id: 'dev-4', license_id: 'lic-3', client_name: 'سلسلة أسواق البركة', device_guid: 'WIN-12093-K3D8', device_name: 'Branch-POS-01 (Win 10)', last_seen_at: '2026-09-30T17:00:00Z' }
+      ],
+      modulesMeta: {
+        'sales': { name: 'المبيعات', core: true, icon: '🛒' },
+        'inventory': { name: 'المخزون', core: true, icon: '📦' },
+        'customers': { name: 'العملاء', core: true, icon: '👥' },
+        'reports': { name: 'التقارير', core: true, icon: '📊' },
+        'manufacturing': { name: 'التصنيع والتكاليف', core: false, icon: '⚙️', desc: 'إدارة أوامر التشغيل ومعادلات التصنيع وحساب تكلفة المواد الخام' },
+        'staff_management': { name: 'الموظفين والرواتب', core: false, icon: '👔', desc: 'إدارة كادر العمل وسجلات الحضور والغياب والسلف ومسيرات الرواتب' },
+        'custody_management': { name: 'العهد المالية', core: false, icon: '💼', desc: 'صرف وتسوية العهد النقدية للمناديب والموظفين مع ربط القيود' },
+        'expenses': { name: 'المصروفات والخزينة', core: false, icon: '💸', desc: 'تسجيل بنود الصرف وحركة النقدية اليومية وجرد الدرج' },
+        'multi_warehouse': { name: 'الفروع وتعدد المخازن', core: false, icon: '🏬', desc: 'تحويلات بضاعة بين المستودعات ومتابعة أرصدة كل فرع على حدة' },
+        'advanced_reports': { name: 'التقارير المتقدمة والأرباح', core: false, icon: '📈', desc: 'تحليلات هوامش الربحية وتوقعات نفاذ الأصناف وقوائم المركز المالي' },
+        'barcode_designer': { name: 'طباعة الباركود والملصقات', core: false, icon: '🏷️', desc: 'تصميم وطباعة استيكرات الأسعار والباركود لموازين الباركود' },
+        'price_tiers': { name: 'فئات وتعدد الأسعار', core: false, icon: '🏷️', desc: 'تسعير جملة ونصف جملة وقطاعي لكل صنف تلقائياً' },
+        'customer_points': { name: 'نقاط وولاء العملاء', core: false, icon: '⭐', desc: 'برامج الولاء ونقاط المكافآت وخصومات العملاء الدائمين' },
+        'electronic_invoicing': { name: 'الفاتورة الإلكترونية', core: false, icon: '🧾', desc: 'توليد كود QR المتوافق مع متطلبات الهيئة الضريبية ZATCA' }
+      },
+      auditLogs: [
+        { time: 'منذ 10 دقائق', user: 'Admin', event: 'تحديث موديول التصنيع', desc: 'تم تفعيل موديول التصنيع لترخيص شركة النور' },
+        { time: 'منذ ساعة', user: 'System', event: 'تسجيل جهاز جديد', desc: 'تم ربط جهاز Main-Terminal بنجاح' },
+        { time: 'منذ يوم', user: 'Admin', event: 'إيقاف مؤقت للترخيص', desc: 'تم إيقاف ترخيص أسواق البركة لانتهاء المدة' }
+      ],
+      recentActivities: [
+        { title: 'إصدار ترخيص سنوي جديد', client: 'شركة النور للمقاولات', time: 'منذ 10 دقائق', badge: 'جديد', color: 'bg-blue-50 text-blue-700' },
+        { title: 'تفعيل موديول التصنيع ⚙️', client: 'مصنع الأمل للحلويات', time: 'منذ 35 دقيقة', badge: 'موديول', color: 'bg-emerald-50 text-emerald-700' },
+        { title: 'ربط نقطة بيع POS جديدة', client: 'مؤسسة الفتح لقطع الغيار', time: 'منذ ساعتين', badge: 'جهاز', color: 'bg-purple-50 text-purple-700' }
+      ]
+    };
+
+    // Navigation Switcher
+    function setTab(tab) {
+      state.activeTab = tab;
+      const tabs = ['licenses', 'overview', 'devices', 'modules', 'audit'];
+      tabs.forEach(t => {
+        const sec = document.getElementById('section-' + t);
+        const btn = document.getElementById('btn-tab-' + t);
+        if (t === tab) {
+          if (sec) sec.classList.remove('hidden');
+          if (btn) {
+            btn.className = "w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold bg-mantis-light text-mantis border border-blue-100 transition-all";
+            const svg = btn.querySelector('svg');
+            if (svg) svg.classList.add('text-mantis');
+          }
+        } else {
+          if (sec) sec.classList.add('hidden');
+          if (btn) {
+            btn.className = "w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all";
+            const svg = btn.querySelector('svg');
+            if (svg) svg.classList.remove('text-mantis');
+          }
+        }
+      });
+      // Mobile drawer auto-close
+      const sb = document.getElementById('sidebar');
+      const ov = document.getElementById('drawer-overlay');
+      if (!sb.classList.contains('translate-x-full')) {
+        sb.classList.add('translate-x-full');
+        ov.classList.add('hidden');
+      }
+
+      if (tab === 'overview') {
+        renderMantisCharts();
+      }
+    }
+
+    function toggleMobileSidebar() {
+      const sb = document.getElementById('sidebar');
+      const ov = document.getElementById('drawer-overlay');
+      sb.classList.toggle('translate-x-full');
+      ov.classList.toggle('hidden');
+    }
+
+    // Chart Mode Toggle (Month vs Week)
+    function toggleChartMode(mode) {
+      state.chartMode = mode;
+      document.getElementById('btn-chart-month').className = mode === 'month' 
+        ? 'px-2.5 py-1 rounded-lg bg-white text-blue-600 shadow-xs border border-slate-200/60' 
+        : 'px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900';
+      document.getElementById('btn-chart-week').className = mode === 'week' 
+        ? 'px-2.5 py-1 rounded-lg bg-white text-blue-600 shadow-xs border border-slate-200/60' 
+        : 'px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900';
+      document.getElementById('chart-kpi-val').innerText = mode === 'month' ? '38 ترخيص' : '59 عملية';
+      renderMantisCharts();
+    }
+
+    // Render Mantis Bar Chart
+    function renderMantisCharts() {
+      const container = document.getElementById('barChartContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const monthData = [
+        { label: 'يناير', count: 4 }, { label: 'فبراير', count: 7 }, { label: 'مارس', count: 9 },
+        { label: 'أبريل', count: 6 }, { label: 'مايو', count: 12 }, { label: 'يونيو', count: 15 },
+        { label: 'يوليو', count: 18 }, { label: 'أغسطس', count: 22 }, { label: 'سبتمبر', count: 28 },
+        { label: 'أكتوبر', count: 38 }, { label: 'نوفمبر', count: 35 }, { label: 'ديسمبر', count: 38 }
+      ];
+
+      const weekData = [
+        { label: 'السبت', count: 6 }, { label: 'الأحد', count: 10 }, { label: 'الإثنين', count: 8 },
+        { label: 'الثلاثاء', count: 14 }, { label: 'الأربعاء', count: 9 }, { label: 'الخميس', count: 15 },
+        { label: 'الجمعة', count: 5 }
+      ];
+
+      const data = state.chartMode === 'month' ? monthData : weekData;
+      const maxVal = Math.max(...data.map(d => d.count), 1);
+
+      data.forEach(item => {
+        const h = Math.round((item.count / maxVal) * 100);
+        const col = document.createElement('div');
+        col.className = "flex-1 flex flex-col items-center group relative cursor-pointer h-full justify-end";
+        col.innerHTML = `
+          <div class="opacity-0 group-hover:opacity-100 absolute -top-8 z-20 bg-slate-900 text-white text-[10px] font-mono px-2 py-0.5 rounded shadow pointer-events-none transition-opacity">
+            ${item.count} ترخيص
+          </div>
+          <div class="w-full max-w-[24px] bg-slate-100 rounded-t-md overflow-hidden flex items-end justify-center h-full">
+            <div class="w-full rounded-t-md bg-[#1677FF] group-hover:bg-blue-700 transition-all duration-300" style="height: ${h}%"></div>
+          </div>
+          <span class="text-[9px] mt-1.5 text-slate-500 font-medium group-hover:text-blue-600 transition-colors">${item.label}</span>
+        `;
+        container.appendChild(col);
+      });
+
+      // Render Modules Adoption
+      const mac = document.getElementById('moduleAdoptionContainer');
+      if (mac) {
+        mac.innerHTML = [
+          { name: 'التصنيع وتكاليف الإنتاج', count: '14 عميل', pct: 65 },
+          { name: 'إدارة الموظفين والرواتب', count: '18 عميل', pct: 80 },
+          { name: 'العهد المالية', count: '11 عميل', pct: 50 },
+          { name: 'الفروع وتعدد المخازن', count: '9 عملاء', pct: 40 },
+          { name: 'التقارير المتقدمة', count: '16 عميل', pct: 72 }
+        ].map(m => `
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <span class="font-semibold text-slate-700 text-[11px]">${m.name}</span>
+              <span class="text-[10px] font-mono font-bold text-slate-500">${m.pct}% (${m.count})</span>
+            </div>
+            <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+              <div class="bg-[#1677FF] h-1.5 rounded-full" style="width: ${m.pct}%"></div>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // Render Live Activities
+      const lac = document.getElementById('liveActivityContainer');
+      if (lac) {
+        lac.innerHTML = state.recentActivities.map(act => `
+          <div class="flex items-start justify-between p-2 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 text-xs transition-colors">
+            <div>
+              <div class="font-bold text-slate-900 text-[11px]">${act.title}</div>
+              <div class="text-[10px] text-slate-400">${act.client}</div>
+            </div>
+            <div class="text-left">
+              <span class="text-[9px] font-bold px-1.5 py-0.2 rounded ${act.color}">${act.badge}</span>
+              <div class="text-[9px] text-slate-400 mt-0.5">${act.time}</div>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    // Render Licenses Table
+    function renderLicenses(items) {
+      const tbody = document.getElementById('licensesTableBody');
+      tbody.innerHTML = '';
+      const list = items || state.licenses;
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">لا توجد تراخيص مطابقة للبحث</td></tr>';
+        return;
+      }
+
+      list.forEach(lic => {
+        const tr = document.createElement('tr');
+        
+        // Modules Pills (Click to toggle)
+        const optionalKeys = ['manufacturing', 'staff_management', 'custody_management', 'expenses', 'multi_warehouse', 'advanced_reports'];
+        const modulesHtml = optionalKeys.map(mKey => {
+          const isEnabled = (lic.enabled_modules || []).includes(mKey);
+          const meta = state.modulesMeta[mKey] || { name: mKey };
+          const activeClasses = "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100";
+          const inactiveClasses = "bg-slate-50 text-slate-400 border-slate-200 line-through hover:bg-slate-100";
+
+          return `
+            <button onclick="toggleModule('${lic.id}', '${mKey}')" title="${isEnabled ? 'انقر للتعطيل' : 'انقر للتفعيل'}" class="text-[11px] font-medium px-2 py-0.5 rounded border transition-colors ${isEnabled ? activeClasses : inactiveClasses}">
+              ${meta.name}
+            </button>
+          `;
+        }).join('');
+
+        const statusPill = lic.status === 'active' 
+          ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>نشط</span>`
+          : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>موقوف</span>`;
+
+        tr.innerHTML = `
+          <td>
+            <div class="font-bold text-slate-900">${lic.client_name}</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">معرف: ${lic.id}</div>
+          </td>
+          <td>
+            <div class="flex items-center gap-1.5">
+              <span class="font-mono text-xs bg-slate-50 px-2 py-1 rounded border border-slate-200 text-slate-700 font-semibold">${lic.license_key}</span>
+              <button onclick="copyToClipboard('${lic.license_key}')" title="نسخ المفتاح" class="p-1 text-slate-400 hover:text-mantis">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+              </button>
+            </div>
+          </td>
+          <td>
+            <span class="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-mantis border border-blue-100">${lic.plan_type}</span>
+            <div class="text-[11px] text-slate-400 mt-1">حتى ${lic.expires_at.split('T')[0]}</div>
+          </td>
+          <td>${statusPill}</td>
+          <td>
+            <div class="flex flex-wrap gap-1 max-w-sm">
+              ${modulesHtml}
+            </div>
+          </td>
+          <td>
+            <span class="font-semibold text-xs text-slate-700">${lic.device_count}</span>
+            <span class="text-xs text-slate-400"> / ${lic.max_devices}</span>
+          </td>
+          <td class="text-center">
+            <button onclick="toggleLicenseStatus('${lic.id}')" class="text-xs font-semibold px-2.5 py-1 rounded border ${lic.status === 'active' ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'} transition-colors">
+              ${lic.status === 'active' ? 'إيقاف' : 'تفعيل'}
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Live Module Toggle
+    function toggleModule(licId, moduleName) {
+      const lic = state.licenses.find(l => l.id === licId);
+      if (!lic) return;
+      const idx = lic.enabled_modules.indexOf(moduleName);
+      if (idx !== -1) {
+        lic.enabled_modules.splice(idx, 1);
+        showToast(`تم إيقاف موديول (${state.modulesMeta[moduleName].name}) عن ${lic.client_name}`);
+      } else {
+        lic.enabled_modules.push(moduleName);
+        showToast(`تم تفعيل موديول (${state.modulesMeta[moduleName].name}) لـ ${lic.client_name}`);
+      }
+      renderLicenses();
+      updateStats();
+      renderMantisCharts();
+    }
+
+    // Toggle Status
+    function toggleLicenseStatus(licId) {
+      const lic = state.licenses.find(l => l.id === licId);
+      if (!lic) return;
+      lic.status = lic.status === 'active' ? 'suspended' : 'active';
+      showToast(`تم تحديث حالة ترخيص ${lic.client_name} إلى ${lic.status === 'active' ? 'نشط' : 'موقوف'}`);
+      renderLicenses();
+      updateStats();
+    }
+
+    // Filters
+    function filterLicenses() {
+      const q = document.getElementById('searchInput').value.toLowerCase().trim();
+      const statusF = document.getElementById('statusFilter').value;
+      const modF = document.getElementById('moduleFilter').value;
+
+      const filtered = state.licenses.filter(l => {
+        const matchQ = l.client_name.toLowerCase().includes(q) || l.license_key.toLowerCase().includes(q);
+        const matchStatus = statusF === 'all' || l.status === statusF;
+        const matchMod = modF === 'all' || (l.enabled_modules || []).includes(modF);
+        return matchQ && matchStatus && matchMod;
+      });
+
+      renderLicenses(filtered);
+    }
+
+    // Render Connected Devices
+    function renderDevices() {
+      const tbody = document.getElementById('devicesTableBody');
+      tbody.innerHTML = '';
+      if (state.devices.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-6 text-slate-400">لا توجد أجهزة متصلة بعد</td></tr>';
+        return;
+      }
+      state.devices.forEach(dev => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><span class="font-bold text-slate-800">${dev.client_name}</span></td>
+          <td><span class="font-mono text-xs text-slate-600 bg-slate-50 px-2 py-1 rounded border border-slate-200">${dev.device_guid}</span></td>
+          <td><span class="text-xs font-semibold text-slate-700">${dev.device_name}</span></td>
+          <td><span class="text-xs text-slate-400">${new Date(dev.last_seen_at).toLocaleTimeString('ar-EG')}</span></td>
+          <td class="text-center">
+            <button onclick="unbindDevice('${dev.id}')" class="text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 px-2.5 py-1 rounded transition-colors">
+              فك الارتباط (Unbind)
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function unbindDevice(id) {
+      if (confirm('هل أنت متأكد من فك ارتباط هذا الجهاز؟ سيتمكن العميل من ربط جهاز جديد.')) {
+        state.devices = state.devices.filter(d => d.id !== id);
+        showToast('تم فك ارتباط الجهاز بنجاح');
+        renderDevices();
+        updateStats();
+      }
+    }
+
+    // Render Modules Catalog
+    function renderModulesCatalog() {
+      const grid = document.getElementById('catalogGrid');
+      grid.innerHTML = '';
+      Object.keys(state.modulesMeta).forEach(key => {
+        const mod = state.modulesMeta[key];
+        const card = document.createElement('div');
+        card.className = "p-4 rounded-xl border border-slate-200 bg-white hover:border-blue-200 transition-colors flex flex-col justify-between";
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-2xl">${mod.icon}</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${mod.core ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-mantis border border-blue-100'}">
+                ${mod.core ? 'أساسي' : 'إضافي (Modular)'}
+              </span>
+            </div>
+            <h4 class="font-bold text-sm text-slate-900 mb-1">${mod.name}</h4>
+            <p class="text-xs text-slate-500 leading-relaxed">${mod.desc || 'الوظائف المحاسبية الأساسية للنظام'}</p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+            <span>مفتاح الكود: <code>${key}</code></span>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    // Render Audit Logs
+    function renderAuditLogs() {
+      const alc = document.getElementById('auditLogsContainer');
+      alc.innerHTML = state.auditLogs.map(log => `
+        <div class="flex items-start gap-3 p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors">
+          <span class="w-2 h-2 rounded-full bg-mantis mt-1.5"></span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-900">${log.event}</span>
+              <span class="text-[10px] text-slate-400">${log.time}</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">${log.desc}</p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Stats updater
+    function updateStats() {
+      const total = state.licenses.length;
+      const active = state.licenses.filter(l => l.status === 'active').length;
+      const suspended = total - active;
+      const devCount = state.devices.length;
+
+      document.getElementById('stat-total').innerText = total;
+      document.getElementById('stat-active').innerText = active;
+      document.getElementById('stat-suspended').innerText = suspended;
+      document.getElementById('stat-devices').innerText = devCount;
+
+      document.getElementById('badge-total-lic').innerText = total;
+      document.getElementById('badge-total-dev').innerText = devCount;
+    }
+
+    // Create Modal Handlers
+    function generateRandomKey() {
+      const seg = () => Math.random().toString(36).substring(2, 6).toUpperCase();
+      const key = `POS-${seg()}-${seg()}-${seg()}`;
+      document.getElementById('mKey').value = key;
+    }
+
+    function openCreateModal() {
+      document.getElementById('mClientName').value = '';
+      generateRandomKey();
+      document.getElementById('createModal').classList.remove('hidden');
+    }
+
+    function closeCreateModal() {
+      document.getElementById('createModal').classList.add('hidden');
+    }
+
+    function saveNewLicense() {
+      const name = document.getElementById('mClientName').value.trim();
+      const key = document.getElementById('mKey').value.trim();
+      const plan = document.getElementById('mPlan').value;
+      const maxDev = parseInt(document.getElementById('mMaxDevices').value) || 1;
+
+      if (!name || !key) {
+        alert('يرجى ملء اسم العميل ومفتاح الترخيص');
+        return;
+      }
+
+      const enabled = ['sales', 'inventory', 'customers', 'reports'];
+      if (document.getElementById('m_manufacturing').checked) enabled.push('manufacturing');
+      if (document.getElementById('m_staff').checked) enabled.push('staff_management');
+      if (document.getElementById('m_custody').checked) enabled.push('custody_management');
+      if (document.getElementById('m_expenses').checked) enabled.push('expenses');
+      if (document.getElementById('m_multi_warehouse').checked) enabled.push('multi_warehouse');
+      if (document.getElementById('m_advanced_reports').checked) enabled.push('advanced_reports');
+
+      const newLic = {
+        id: 'lic-' + (state.licenses.length + 1),
+        client_name: name,
+        license_key: key,
+        plan_type: plan,
+        status: 'active',
+        max_devices: maxDev,
+        device_count: 0,
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 365*24*3600*1000).toISOString(),
+        enabled_modules: enabled
+      };
+
+      state.licenses.unshift(newLic);
+      closeCreateModal();
+      showToast(`تم إصدار ترخيص جديد لـ ${name}`);
+      renderLicenses();
+      updateStats();
+      renderMantisCharts();
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text);
+      showToast('تم نسخ مفتاح الترخيص للحافظة');
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      const tm = document.getElementById('toast-msg');
+      tm.innerText = msg;
+      t.classList.remove('translate-y-20', 'opacity-0');
+      setTimeout(() => {
+        t.classList.add('translate-y-20', 'opacity-0');
+      }, 3000);
+    }
+
+    function openConfigModal() {
+      alert('إعدادات الاتصال: متصل حالياً بخادم المحاكاة المحلي عبر المنفذ 8000.\nيمكنك تبديل وضع الاتصال إلى Supabase Cloud عبر ملف .env أو واجهة الإعدادات.');
+    }
+
+    // Initialize View
+    window.addEventListener('DOMContentLoaded', () => {
+      renderLicenses();
+      renderDevices();
+      renderModulesCatalog();
+      renderMantisCharts();
+      renderAuditLogs();
+      updateStats();
+    });
+  </script>
+</body>
+</html>

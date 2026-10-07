@@ -111,6 +111,14 @@ class HardwareIdService {
 
   /// Collect hardware components for comparison.
   static Future<HardwareComponents> _collectHardwareComponents() async {
+    if (debugMachineGuid != null) {
+      return HardwareComponents(
+        computerName: 'debug-computer',
+        numberOfCores: 4,
+        deviceId: debugMachineGuid,
+      );
+    }
+
     // Device info signals
     if (!kIsWeb && Platform.isWindows) {
       try {
@@ -178,6 +186,11 @@ class HardwareIdService {
 
   /// Fallback if nothing else works.
   static Future<String> _fallbackHardwareId() async {
+    if (debugMachineGuid != null) {
+      final hash = sha256.convert(utf8.encode('fallback_$debugMachineGuid')).toString();
+      _cachedId = hash;
+      return hash;
+    }
     try {
       final deviceInfo = DeviceInfoPlugin();
       if (Platform.isWindows) {
@@ -212,6 +225,15 @@ class HardwareIdService {
   static String? debugMachineGuid;
   @visibleForTesting
   static String? debugInstallUuid;
+
+  @visibleForTesting
+  static void resetForTesting() {
+    _cachedId = null;
+    _cachedComponents = null;
+    _installUuid = null;
+    debugMachineGuid = null;
+    debugInstallUuid = null;
+  }
 
   static String? _installUuid;
 

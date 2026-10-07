@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../config/license_config.dart';
+import '../core/provider/license_provider.dart';
 import 'license_manager.dart';
 
 class FeatureGateService {
@@ -12,11 +14,15 @@ class FeatureGateService {
   /// Check if current license has access to a specific feature
   Future<bool> hasFeature(String feature) async {
     try {
+      if (LicenseConfig.isFreeVersion) return true;
+      const coreFeatures = ['pos', 'cash_sales', 'inventory', 'reports'];
+      if (coreFeatures.contains(feature)) return true;
+
       final license = await _licenseManager.getCurrentLicense();
       if (license == null || !license.isValid) {
         return false;
       }
-      return license.features.contains(feature);
+      return license.features.contains('*') || license.features.contains(feature);
     } catch (e) {
       return false;
     }
@@ -383,7 +389,7 @@ class UpgradeDialog extends StatelessWidget {
 }
 
 /// Widget to conditionally show UI elements based on feature access
-class ConditionalWidget extends StatelessWidget {
+class ConditionalWidget extends ConsumerWidget {
   final String feature;
   final Widget child;
   final Widget? fallback;
@@ -396,15 +402,11 @@ class ConditionalWidget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: FeatureGateService().hasFeature(feature),
-      builder: (context, snapshot) {
-        if (snapshot.data == true) {
-          return child;
-        }
-        return fallback ?? const SizedBox.shrink();
-      },
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isEnabled = ref.watch(isFeatureEnabledProvider(feature));
+    if (isEnabled) {
+      return child;
+    }
+    return fallback ?? const SizedBox.shrink();
   }
 }

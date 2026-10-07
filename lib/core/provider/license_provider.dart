@@ -29,7 +29,9 @@ final isFeatureEnabledProvider = Provider.family<bool, String>((ref, featureName
   final licenseAsync = ref.watch(currentLicenseProvider);
   return licenseAsync.maybeWhen(
     data: (license) =>
-        license != null && license.isValid && license.features.contains(featureName),
+        license != null &&
+        license.isValid &&
+        (license.features.contains('*') || license.features.contains(featureName)),
     orElse: () => false,
   );
 });
