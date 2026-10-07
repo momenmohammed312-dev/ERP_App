@@ -80,6 +80,12 @@ class ManufacturingOrders extends Table {
   TextColumn get notes => text().nullable()();
   TextColumn get createdBy => text().nullable()();
 
+  /// â”€â”€ Phase B1.5: Job Work (for_others) direct input tracking (v77) â”€â”€
+  IntColumn get inputProductId => integer().nullable().references(Products, #id)();
+  TextColumn get inputColor => text().nullable()();
+  TextColumn get inputSize => text().nullable()();
+  RealColumn get inputQuantity => real().nullable()();
+
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }

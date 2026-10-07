@@ -43873,6 +43873,15 @@ class $BillOfMaterialsTable extends BillOfMaterials
     requiredDuringInsert: false,
     defaultValue: const Constant('Active'),
   );
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+    'type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _notesMeta = const VerificationMeta('notes');
   @override
   late final GeneratedColumn<String> notes = GeneratedColumn<String>(
@@ -43915,6 +43924,7 @@ class $BillOfMaterialsTable extends BillOfMaterials
     yieldQuantity,
     wastePercentage,
     status,
+    type,
     notes,
     createdAt,
     updatedAt,
@@ -43983,6 +43993,12 @@ class $BillOfMaterialsTable extends BillOfMaterials
         status.isAcceptableOrUnknown(data['status']!, _statusMeta),
       );
     }
+    if (data.containsKey('type')) {
+      context.handle(
+        _typeMeta,
+        type.isAcceptableOrUnknown(data['type']!, _typeMeta),
+      );
+    }
     if (data.containsKey('notes')) {
       context.handle(
         _notesMeta,
@@ -44038,6 +44054,10 @@ class $BillOfMaterialsTable extends BillOfMaterials
         DriftSqlType.string,
         data['${effectivePrefix}status'],
       )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      ),
       notes: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
@@ -44079,6 +44099,9 @@ class BillOfMaterial extends DataClass implements Insertable<BillOfMaterial> {
 
   /// 'Active' | 'Inactive' (soft toggle)
   final String status;
+
+  /// e.g. null for standard BOMs, 'system_placeholder' for hidden Job Work orders
+  final String? type;
   final String? notes;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -44090,6 +44113,7 @@ class BillOfMaterial extends DataClass implements Insertable<BillOfMaterial> {
     required this.yieldQuantity,
     required this.wastePercentage,
     required this.status,
+    this.type,
     this.notes,
     required this.createdAt,
     required this.updatedAt,
@@ -44106,6 +44130,9 @@ class BillOfMaterial extends DataClass implements Insertable<BillOfMaterial> {
     map['yield_quantity'] = Variable<double>(yieldQuantity);
     map['waste_percentage'] = Variable<double>(wastePercentage);
     map['status'] = Variable<String>(status);
+    if (!nullToAbsent || type != null) {
+      map['type'] = Variable<String>(type);
+    }
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
@@ -44123,6 +44150,7 @@ class BillOfMaterial extends DataClass implements Insertable<BillOfMaterial> {
       yieldQuantity: Value(yieldQuantity),
       wastePercentage: Value(wastePercentage),
       status: Value(status),
+      type: type == null && nullToAbsent ? const Value.absent() : Value(type),
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
@@ -44144,6 +44172,7 @@ class BillOfMaterial extends DataClass implements Insertable<BillOfMaterial> {
       yieldQuantity: serializer.fromJson<double>(json['yieldQuantity']),
       wastePercentage: serializer.fromJson<double>(json['wastePercentage']),
       status: serializer.fromJson<String>(json['status']),
+      type: serializer.fromJson<String?>(json['type']),
       notes: serializer.fromJson<String?>(json['notes']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -44160,6 +44189,7 @@ class BillOfMaterial extends DataClass implements Insertable<BillOfMaterial> {
       'yieldQuantity': serializer.toJson<double>(yieldQuantity),
       'wastePercentage': serializer.toJson<double>(wastePercentage),
       'status': serializer.toJson<String>(status),
+      'type': serializer.toJson<String?>(type),
       'notes': serializer.toJson<String?>(notes),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -44174,6 +44204,7 @@ class BillOfMaterial extends DataClass implements Insertable<BillOfMaterial> {
     double? yieldQuantity,
     double? wastePercentage,
     String? status,
+    Value<String?> type = const Value.absent(),
     Value<String?> notes = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -44185,6 +44216,7 @@ class BillOfMaterial extends DataClass implements Insertable<BillOfMaterial> {
     yieldQuantity: yieldQuantity ?? this.yieldQuantity,
     wastePercentage: wastePercentage ?? this.wastePercentage,
     status: status ?? this.status,
+    type: type.present ? type.value : this.type,
     notes: notes.present ? notes.value : this.notes,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -44204,6 +44236,7 @@ class BillOfMaterial extends DataClass implements Insertable<BillOfMaterial> {
           ? data.wastePercentage.value
           : this.wastePercentage,
       status: data.status.present ? data.status.value : this.status,
+      type: data.type.present ? data.type.value : this.type,
       notes: data.notes.present ? data.notes.value : this.notes,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -44220,6 +44253,7 @@ class BillOfMaterial extends DataClass implements Insertable<BillOfMaterial> {
           ..write('yieldQuantity: $yieldQuantity, ')
           ..write('wastePercentage: $wastePercentage, ')
           ..write('status: $status, ')
+          ..write('type: $type, ')
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -44236,6 +44270,7 @@ class BillOfMaterial extends DataClass implements Insertable<BillOfMaterial> {
     yieldQuantity,
     wastePercentage,
     status,
+    type,
     notes,
     createdAt,
     updatedAt,
@@ -44251,6 +44286,7 @@ class BillOfMaterial extends DataClass implements Insertable<BillOfMaterial> {
           other.yieldQuantity == this.yieldQuantity &&
           other.wastePercentage == this.wastePercentage &&
           other.status == this.status &&
+          other.type == this.type &&
           other.notes == this.notes &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -44264,6 +44300,7 @@ class BillOfMaterialsCompanion extends UpdateCompanion<BillOfMaterial> {
   final Value<double> yieldQuantity;
   final Value<double> wastePercentage;
   final Value<String> status;
+  final Value<String?> type;
   final Value<String?> notes;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -44275,6 +44312,7 @@ class BillOfMaterialsCompanion extends UpdateCompanion<BillOfMaterial> {
     this.yieldQuantity = const Value.absent(),
     this.wastePercentage = const Value.absent(),
     this.status = const Value.absent(),
+    this.type = const Value.absent(),
     this.notes = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -44287,6 +44325,7 @@ class BillOfMaterialsCompanion extends UpdateCompanion<BillOfMaterial> {
     this.yieldQuantity = const Value.absent(),
     this.wastePercentage = const Value.absent(),
     this.status = const Value.absent(),
+    this.type = const Value.absent(),
     this.notes = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -44300,6 +44339,7 @@ class BillOfMaterialsCompanion extends UpdateCompanion<BillOfMaterial> {
     Expression<double>? yieldQuantity,
     Expression<double>? wastePercentage,
     Expression<String>? status,
+    Expression<String>? type,
     Expression<String>? notes,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -44312,6 +44352,7 @@ class BillOfMaterialsCompanion extends UpdateCompanion<BillOfMaterial> {
       if (yieldQuantity != null) 'yield_quantity': yieldQuantity,
       if (wastePercentage != null) 'waste_percentage': wastePercentage,
       if (status != null) 'status': status,
+      if (type != null) 'type': type,
       if (notes != null) 'notes': notes,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -44326,6 +44367,7 @@ class BillOfMaterialsCompanion extends UpdateCompanion<BillOfMaterial> {
     Value<double>? yieldQuantity,
     Value<double>? wastePercentage,
     Value<String>? status,
+    Value<String?>? type,
     Value<String?>? notes,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -44338,6 +44380,7 @@ class BillOfMaterialsCompanion extends UpdateCompanion<BillOfMaterial> {
       yieldQuantity: yieldQuantity ?? this.yieldQuantity,
       wastePercentage: wastePercentage ?? this.wastePercentage,
       status: status ?? this.status,
+      type: type ?? this.type,
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -44368,6 +44411,9 @@ class BillOfMaterialsCompanion extends UpdateCompanion<BillOfMaterial> {
     if (status.present) {
       map['status'] = Variable<String>(status.value);
     }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
@@ -44390,6 +44436,7 @@ class BillOfMaterialsCompanion extends UpdateCompanion<BillOfMaterial> {
           ..write('yieldQuantity: $yieldQuantity, ')
           ..write('wastePercentage: $wastePercentage, ')
           ..write('status: $status, ')
+          ..write('type: $type, ')
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -45204,6 +45251,53 @@ class $ManufacturingOrdersTable extends ManufacturingOrders
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _inputProductIdMeta = const VerificationMeta(
+    'inputProductId',
+  );
+  @override
+  late final GeneratedColumn<int> inputProductId = GeneratedColumn<int>(
+    'input_product_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _inputColorMeta = const VerificationMeta(
+    'inputColor',
+  );
+  @override
+  late final GeneratedColumn<String> inputColor = GeneratedColumn<String>(
+    'input_color',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _inputSizeMeta = const VerificationMeta(
+    'inputSize',
+  );
+  @override
+  late final GeneratedColumn<String> inputSize = GeneratedColumn<String>(
+    'input_size',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _inputQuantityMeta = const VerificationMeta(
+    'inputQuantity',
+  );
+  @override
+  late final GeneratedColumn<double> inputQuantity = GeneratedColumn<double>(
+    'input_quantity',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -45252,6 +45346,10 @@ class $ManufacturingOrdersTable extends ManufacturingOrders
     cancelReason,
     notes,
     createdBy,
+    inputProductId,
+    inputColor,
+    inputSize,
+    inputQuantity,
     createdAt,
     updatedAt,
   ];
@@ -45443,6 +45541,36 @@ class $ManufacturingOrdersTable extends ManufacturingOrders
         createdBy.isAcceptableOrUnknown(data['created_by']!, _createdByMeta),
       );
     }
+    if (data.containsKey('input_product_id')) {
+      context.handle(
+        _inputProductIdMeta,
+        inputProductId.isAcceptableOrUnknown(
+          data['input_product_id']!,
+          _inputProductIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('input_color')) {
+      context.handle(
+        _inputColorMeta,
+        inputColor.isAcceptableOrUnknown(data['input_color']!, _inputColorMeta),
+      );
+    }
+    if (data.containsKey('input_size')) {
+      context.handle(
+        _inputSizeMeta,
+        inputSize.isAcceptableOrUnknown(data['input_size']!, _inputSizeMeta),
+      );
+    }
+    if (data.containsKey('input_quantity')) {
+      context.handle(
+        _inputQuantityMeta,
+        inputQuantity.isAcceptableOrUnknown(
+          data['input_quantity']!,
+          _inputQuantityMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -45552,6 +45680,22 @@ class $ManufacturingOrdersTable extends ManufacturingOrders
         DriftSqlType.string,
         data['${effectivePrefix}created_by'],
       ),
+      inputProductId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}input_product_id'],
+      ),
+      inputColor: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}input_color'],
+      ),
+      inputSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}input_size'],
+      ),
+      inputQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}input_quantity'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -45622,6 +45766,12 @@ class ManufacturingOrder extends DataClass
   final String? cancelReason;
   final String? notes;
   final String? createdBy;
+
+  /// â”€â”€ Phase B1.5: Job Work (for_others) direct input tracking (v77) â”€â”€
+  final int? inputProductId;
+  final String? inputColor;
+  final String? inputSize;
+  final double? inputQuantity;
   final DateTime createdAt;
   final DateTime updatedAt;
   const ManufacturingOrder({
@@ -45647,6 +45797,10 @@ class ManufacturingOrder extends DataClass
     this.cancelReason,
     this.notes,
     this.createdBy,
+    this.inputProductId,
+    this.inputColor,
+    this.inputSize,
+    this.inputQuantity,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -45704,6 +45858,18 @@ class ManufacturingOrder extends DataClass
     }
     if (!nullToAbsent || createdBy != null) {
       map['created_by'] = Variable<String>(createdBy);
+    }
+    if (!nullToAbsent || inputProductId != null) {
+      map['input_product_id'] = Variable<int>(inputProductId);
+    }
+    if (!nullToAbsent || inputColor != null) {
+      map['input_color'] = Variable<String>(inputColor);
+    }
+    if (!nullToAbsent || inputSize != null) {
+      map['input_size'] = Variable<String>(inputSize);
+    }
+    if (!nullToAbsent || inputQuantity != null) {
+      map['input_quantity'] = Variable<double>(inputQuantity);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -45764,6 +45930,18 @@ class ManufacturingOrder extends DataClass
       createdBy: createdBy == null && nullToAbsent
           ? const Value.absent()
           : Value(createdBy),
+      inputProductId: inputProductId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inputProductId),
+      inputColor: inputColor == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inputColor),
+      inputSize: inputSize == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inputSize),
+      inputQuantity: inputQuantity == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inputQuantity),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -45797,6 +45975,10 @@ class ManufacturingOrder extends DataClass
       cancelReason: serializer.fromJson<String?>(json['cancelReason']),
       notes: serializer.fromJson<String?>(json['notes']),
       createdBy: serializer.fromJson<String?>(json['createdBy']),
+      inputProductId: serializer.fromJson<int?>(json['inputProductId']),
+      inputColor: serializer.fromJson<String?>(json['inputColor']),
+      inputSize: serializer.fromJson<String?>(json['inputSize']),
+      inputQuantity: serializer.fromJson<double?>(json['inputQuantity']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -45827,6 +46009,10 @@ class ManufacturingOrder extends DataClass
       'cancelReason': serializer.toJson<String?>(cancelReason),
       'notes': serializer.toJson<String?>(notes),
       'createdBy': serializer.toJson<String?>(createdBy),
+      'inputProductId': serializer.toJson<int?>(inputProductId),
+      'inputColor': serializer.toJson<String?>(inputColor),
+      'inputSize': serializer.toJson<String?>(inputSize),
+      'inputQuantity': serializer.toJson<double?>(inputQuantity),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -45855,6 +46041,10 @@ class ManufacturingOrder extends DataClass
     Value<String?> cancelReason = const Value.absent(),
     Value<String?> notes = const Value.absent(),
     Value<String?> createdBy = const Value.absent(),
+    Value<int?> inputProductId = const Value.absent(),
+    Value<String?> inputColor = const Value.absent(),
+    Value<String?> inputSize = const Value.absent(),
+    Value<double?> inputQuantity = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => ManufacturingOrder(
@@ -45886,6 +46076,14 @@ class ManufacturingOrder extends DataClass
     cancelReason: cancelReason.present ? cancelReason.value : this.cancelReason,
     notes: notes.present ? notes.value : this.notes,
     createdBy: createdBy.present ? createdBy.value : this.createdBy,
+    inputProductId: inputProductId.present
+        ? inputProductId.value
+        : this.inputProductId,
+    inputColor: inputColor.present ? inputColor.value : this.inputColor,
+    inputSize: inputSize.present ? inputSize.value : this.inputSize,
+    inputQuantity: inputQuantity.present
+        ? inputQuantity.value
+        : this.inputQuantity,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -45941,6 +46139,16 @@ class ManufacturingOrder extends DataClass
           : this.cancelReason,
       notes: data.notes.present ? data.notes.value : this.notes,
       createdBy: data.createdBy.present ? data.createdBy.value : this.createdBy,
+      inputProductId: data.inputProductId.present
+          ? data.inputProductId.value
+          : this.inputProductId,
+      inputColor: data.inputColor.present
+          ? data.inputColor.value
+          : this.inputColor,
+      inputSize: data.inputSize.present ? data.inputSize.value : this.inputSize,
+      inputQuantity: data.inputQuantity.present
+          ? data.inputQuantity.value
+          : this.inputQuantity,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -45971,6 +46179,10 @@ class ManufacturingOrder extends DataClass
           ..write('cancelReason: $cancelReason, ')
           ..write('notes: $notes, ')
           ..write('createdBy: $createdBy, ')
+          ..write('inputProductId: $inputProductId, ')
+          ..write('inputColor: $inputColor, ')
+          ..write('inputSize: $inputSize, ')
+          ..write('inputQuantity: $inputQuantity, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -46001,6 +46213,10 @@ class ManufacturingOrder extends DataClass
     cancelReason,
     notes,
     createdBy,
+    inputProductId,
+    inputColor,
+    inputSize,
+    inputQuantity,
     createdAt,
     updatedAt,
   ]);
@@ -46030,6 +46246,10 @@ class ManufacturingOrder extends DataClass
           other.cancelReason == this.cancelReason &&
           other.notes == this.notes &&
           other.createdBy == this.createdBy &&
+          other.inputProductId == this.inputProductId &&
+          other.inputColor == this.inputColor &&
+          other.inputSize == this.inputSize &&
+          other.inputQuantity == this.inputQuantity &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -46057,6 +46277,10 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
   final Value<String?> cancelReason;
   final Value<String?> notes;
   final Value<String?> createdBy;
+  final Value<int?> inputProductId;
+  final Value<String?> inputColor;
+  final Value<String?> inputSize;
+  final Value<double?> inputQuantity;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const ManufacturingOrdersCompanion({
@@ -46082,6 +46306,10 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
     this.cancelReason = const Value.absent(),
     this.notes = const Value.absent(),
     this.createdBy = const Value.absent(),
+    this.inputProductId = const Value.absent(),
+    this.inputColor = const Value.absent(),
+    this.inputSize = const Value.absent(),
+    this.inputQuantity = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -46108,6 +46336,10 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
     this.cancelReason = const Value.absent(),
     this.notes = const Value.absent(),
     this.createdBy = const Value.absent(),
+    this.inputProductId = const Value.absent(),
+    this.inputColor = const Value.absent(),
+    this.inputSize = const Value.absent(),
+    this.inputQuantity = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   }) : orderNumber = Value(orderNumber),
@@ -46137,6 +46369,10 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
     Expression<String>? cancelReason,
     Expression<String>? notes,
     Expression<String>? createdBy,
+    Expression<int>? inputProductId,
+    Expression<String>? inputColor,
+    Expression<String>? inputSize,
+    Expression<double>? inputQuantity,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -46163,6 +46399,10 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
       if (cancelReason != null) 'cancel_reason': cancelReason,
       if (notes != null) 'notes': notes,
       if (createdBy != null) 'created_by': createdBy,
+      if (inputProductId != null) 'input_product_id': inputProductId,
+      if (inputColor != null) 'input_color': inputColor,
+      if (inputSize != null) 'input_size': inputSize,
+      if (inputQuantity != null) 'input_quantity': inputQuantity,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -46191,6 +46431,10 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
     Value<String?>? cancelReason,
     Value<String?>? notes,
     Value<String?>? createdBy,
+    Value<int?>? inputProductId,
+    Value<String?>? inputColor,
+    Value<String?>? inputSize,
+    Value<double?>? inputQuantity,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -46217,6 +46461,10 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
       cancelReason: cancelReason ?? this.cancelReason,
       notes: notes ?? this.notes,
       createdBy: createdBy ?? this.createdBy,
+      inputProductId: inputProductId ?? this.inputProductId,
+      inputColor: inputColor ?? this.inputColor,
+      inputSize: inputSize ?? this.inputSize,
+      inputQuantity: inputQuantity ?? this.inputQuantity,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -46291,6 +46539,18 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
     if (createdBy.present) {
       map['created_by'] = Variable<String>(createdBy.value);
     }
+    if (inputProductId.present) {
+      map['input_product_id'] = Variable<int>(inputProductId.value);
+    }
+    if (inputColor.present) {
+      map['input_color'] = Variable<String>(inputColor.value);
+    }
+    if (inputSize.present) {
+      map['input_size'] = Variable<String>(inputSize.value);
+    }
+    if (inputQuantity.present) {
+      map['input_quantity'] = Variable<double>(inputQuantity.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -46325,6 +46585,10 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
           ..write('cancelReason: $cancelReason, ')
           ..write('notes: $notes, ')
           ..write('createdBy: $createdBy, ')
+          ..write('inputProductId: $inputProductId, ')
+          ..write('inputColor: $inputColor, ')
+          ..write('inputSize: $inputSize, ')
+          ..write('inputQuantity: $inputQuantity, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -52060,33 +52324,6 @@ final class $$ProductsTableReferences
   }
 
   static MultiTypedResultKey<
-    $ManufacturingOrdersTable,
-    List<ManufacturingOrder>
-  >
-  _manufacturingOrdersRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.manufacturingOrders,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.manufacturingOrders.finishedProductId,
-        ),
-      );
-
-  $$ManufacturingOrdersTableProcessedTableManager get manufacturingOrdersRefs {
-    final manager = $$ManufacturingOrdersTableTableManager(
-      $_db,
-      $_db.manufacturingOrders,
-    ).filter((f) => f.finishedProductId.id.sqlEquals($_itemColumn<int>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(
-      _manufacturingOrdersRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<
     $ManufacturingScrapsTable,
     List<ManufacturingScrap>
   >
@@ -52562,31 +52799,6 @@ class $$ProductsTableFilterComposer
           }) => $$BomItemsTableFilterComposer(
             $db: $db,
             $table: $db.bomItems,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> manufacturingOrdersRefs(
-    Expression<bool> Function($$ManufacturingOrdersTableFilterComposer f) f,
-  ) {
-    final $$ManufacturingOrdersTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.manufacturingOrders,
-      getReferencedColumn: (t) => t.finishedProductId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$ManufacturingOrdersTableFilterComposer(
-            $db: $db,
-            $table: $db.manufacturingOrders,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -53148,32 +53360,6 @@ class $$ProductsTableAnnotationComposer
     return f(composer);
   }
 
-  Expression<T> manufacturingOrdersRefs<T extends Object>(
-    Expression<T> Function($$ManufacturingOrdersTableAnnotationComposer a) f,
-  ) {
-    final $$ManufacturingOrdersTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.manufacturingOrders,
-          getReferencedColumn: (t) => t.finishedProductId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$ManufacturingOrdersTableAnnotationComposer(
-                $db: $db,
-                $table: $db.manufacturingOrders,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
   Expression<T> manufacturingScrapsRefs<T extends Object>(
     Expression<T> Function($$ManufacturingScrapsTableAnnotationComposer a) f,
   ) {
@@ -53335,7 +53521,6 @@ class $$ProductsTableTableManager
             bool customerContainersRefs,
             bool billOfMaterialsRefs,
             bool bomItemsRefs,
-            bool manufacturingOrdersRefs,
             bool manufacturingScrapsRefs,
             bool customerMaterialReceiptItemsRefs,
             bool customerStockBalancesRefs,
@@ -53450,7 +53635,6 @@ class $$ProductsTableTableManager
                 customerContainersRefs = false,
                 billOfMaterialsRefs = false,
                 bomItemsRefs = false,
-                manufacturingOrdersRefs = false,
                 manufacturingScrapsRefs = false,
                 customerMaterialReceiptItemsRefs = false,
                 customerStockBalancesRefs = false,
@@ -53470,7 +53654,6 @@ class $$ProductsTableTableManager
                     if (customerContainersRefs) db.customerContainers,
                     if (billOfMaterialsRefs) db.billOfMaterials,
                     if (bomItemsRefs) db.bomItems,
-                    if (manufacturingOrdersRefs) db.manufacturingOrders,
                     if (manufacturingScrapsRefs) db.manufacturingScraps,
                     if (customerMaterialReceiptItemsRefs)
                       db.customerMaterialReceiptItems,
@@ -53692,27 +53875,6 @@ class $$ProductsTableTableManager
                               ),
                           typedResults: items,
                         ),
-                      if (manufacturingOrdersRefs)
-                        await $_getPrefetchedData<
-                          Product,
-                          $ProductsTable,
-                          ManufacturingOrder
-                        >(
-                          currentTable: table,
-                          referencedTable: $$ProductsTableReferences
-                              ._manufacturingOrdersRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$ProductsTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).manufacturingOrdersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.finishedProductId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
                       if (manufacturingScrapsRefs)
                         await $_getPrefetchedData<
                           Product,
@@ -53849,7 +54011,6 @@ typedef $$ProductsTableProcessedTableManager =
         bool customerContainersRefs,
         bool billOfMaterialsRefs,
         bool bomItemsRefs,
-        bool manufacturingOrdersRefs,
         bool manufacturingScrapsRefs,
         bool customerMaterialReceiptItemsRefs,
         bool customerStockBalancesRefs,
@@ -82510,6 +82671,7 @@ typedef $$BillOfMaterialsTableCreateCompanionBuilder =
       Value<double> yieldQuantity,
       Value<double> wastePercentage,
       Value<String> status,
+      Value<String?> type,
       Value<String?> notes,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -82523,6 +82685,7 @@ typedef $$BillOfMaterialsTableUpdateCompanionBuilder =
       Value<double> yieldQuantity,
       Value<double> wastePercentage,
       Value<String> status,
+      Value<String?> type,
       Value<String?> notes,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -82642,6 +82805,11 @@ class $$BillOfMaterialsTableFilterComposer
 
   ColumnFilters<String> get status => $composableBuilder(
     column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get type => $composableBuilder(
+    column: $table.type,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -82773,6 +82941,11 @@ class $$BillOfMaterialsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get notes => $composableBuilder(
     column: $table.notes,
     builder: (column) => ColumnOrderings(column),
@@ -82842,6 +83015,9 @@ class $$BillOfMaterialsTableAnnotationComposer
 
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
@@ -82968,6 +83144,7 @@ class $$BillOfMaterialsTableTableManager
                 Value<double> yieldQuantity = const Value.absent(),
                 Value<double> wastePercentage = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<String?> type = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -82979,6 +83156,7 @@ class $$BillOfMaterialsTableTableManager
                 yieldQuantity: yieldQuantity,
                 wastePercentage: wastePercentage,
                 status: status,
+                type: type,
                 notes: notes,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -82992,6 +83170,7 @@ class $$BillOfMaterialsTableTableManager
                 Value<double> yieldQuantity = const Value.absent(),
                 Value<double> wastePercentage = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<String?> type = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -83003,6 +83182,7 @@ class $$BillOfMaterialsTableTableManager
                 yieldQuantity: yieldQuantity,
                 wastePercentage: wastePercentage,
                 status: status,
+                type: type,
                 notes: notes,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -83734,6 +83914,10 @@ typedef $$ManufacturingOrdersTableCreateCompanionBuilder =
       Value<String?> cancelReason,
       Value<String?> notes,
       Value<String?> createdBy,
+      Value<int?> inputProductId,
+      Value<String?> inputColor,
+      Value<String?> inputSize,
+      Value<double?> inputQuantity,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -83761,6 +83945,10 @@ typedef $$ManufacturingOrdersTableUpdateCompanionBuilder =
       Value<String?> cancelReason,
       Value<String?> notes,
       Value<String?> createdBy,
+      Value<int?> inputProductId,
+      Value<String?> inputColor,
+      Value<String?> inputSize,
+      Value<double?> inputQuantity,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -83857,6 +84045,28 @@ final class $$ManufacturingOrdersTableReferences
       $_db.invoices,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_invoiceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductsTable _inputProductIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(
+          db.manufacturingOrders.inputProductId,
+          db.products.id,
+        ),
+      );
+
+  $$ProductsTableProcessedTableManager? get inputProductId {
+    final $_column = $_itemColumn<int>('input_product_id');
+    if ($_column == null) return null;
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_inputProductIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -84086,6 +84296,21 @@ class $$ManufacturingOrdersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get inputColor => $composableBuilder(
+    column: $table.inputColor,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get inputSize => $composableBuilder(
+    column: $table.inputSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get inputQuantity => $composableBuilder(
+    column: $table.inputQuantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
@@ -84179,6 +84404,29 @@ class $$ManufacturingOrdersTableFilterComposer
           }) => $$InvoicesTableFilterComposer(
             $db: $db,
             $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableFilterComposer get inputProductId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.inputProductId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -84395,6 +84643,21 @@ class $$ManufacturingOrdersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get inputColor => $composableBuilder(
+    column: $table.inputColor,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get inputSize => $composableBuilder(
+    column: $table.inputSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get inputQuantity => $composableBuilder(
+    column: $table.inputQuantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -84496,6 +84759,29 @@ class $$ManufacturingOrdersTableOrderingComposer
     );
     return composer;
   }
+
+  $$ProductsTableOrderingComposer get inputProductId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.inputProductId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$ManufacturingOrdersTableAnnotationComposer
@@ -84584,6 +84870,19 @@ class $$ManufacturingOrdersTableAnnotationComposer
 
   GeneratedColumn<String> get createdBy =>
       $composableBuilder(column: $table.createdBy, builder: (column) => column);
+
+  GeneratedColumn<String> get inputColor => $composableBuilder(
+    column: $table.inputColor,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get inputSize =>
+      $composableBuilder(column: $table.inputSize, builder: (column) => column);
+
+  GeneratedColumn<double> get inputQuantity => $composableBuilder(
+    column: $table.inputQuantity,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -84674,6 +84973,29 @@ class $$ManufacturingOrdersTableAnnotationComposer
           }) => $$InvoicesTableAnnotationComposer(
             $db: $db,
             $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableAnnotationComposer get inputProductId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.inputProductId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -84811,6 +85133,7 @@ class $$ManufacturingOrdersTableTableManager
             bool finishedProductId,
             bool customerId,
             bool invoiceId,
+            bool inputProductId,
             bool manufacturingCostComponentsRefs,
             bool manufacturingScrapsRefs,
             bool customerMaterialReceiptsRefs,
@@ -84860,6 +85183,10 @@ class $$ManufacturingOrdersTableTableManager
                 Value<String?> cancelReason = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<String?> createdBy = const Value.absent(),
+                Value<int?> inputProductId = const Value.absent(),
+                Value<String?> inputColor = const Value.absent(),
+                Value<String?> inputSize = const Value.absent(),
+                Value<double?> inputQuantity = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => ManufacturingOrdersCompanion(
@@ -84885,6 +85212,10 @@ class $$ManufacturingOrdersTableTableManager
                 cancelReason: cancelReason,
                 notes: notes,
                 createdBy: createdBy,
+                inputProductId: inputProductId,
+                inputColor: inputColor,
+                inputSize: inputSize,
+                inputQuantity: inputQuantity,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -84912,6 +85243,10 @@ class $$ManufacturingOrdersTableTableManager
                 Value<String?> cancelReason = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<String?> createdBy = const Value.absent(),
+                Value<int?> inputProductId = const Value.absent(),
+                Value<String?> inputColor = const Value.absent(),
+                Value<String?> inputSize = const Value.absent(),
+                Value<double?> inputQuantity = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => ManufacturingOrdersCompanion.insert(
@@ -84937,6 +85272,10 @@ class $$ManufacturingOrdersTableTableManager
                 cancelReason: cancelReason,
                 notes: notes,
                 createdBy: createdBy,
+                inputProductId: inputProductId,
+                inputColor: inputColor,
+                inputSize: inputSize,
+                inputQuantity: inputQuantity,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -84954,6 +85293,7 @@ class $$ManufacturingOrdersTableTableManager
                 finishedProductId = false,
                 customerId = false,
                 invoiceId = false,
+                inputProductId = false,
                 manufacturingCostComponentsRefs = false,
                 manufacturingScrapsRefs = false,
                 customerMaterialReceiptsRefs = false,
@@ -85041,6 +85381,21 @@ class $$ManufacturingOrdersTableTableManager
                                     referencedColumn:
                                         $$ManufacturingOrdersTableReferences
                                             ._invoiceIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (inputProductId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.inputProductId,
+                                    referencedTable:
+                                        $$ManufacturingOrdersTableReferences
+                                            ._inputProductIdTable(db),
+                                    referencedColumn:
+                                        $$ManufacturingOrdersTableReferences
+                                            ._inputProductIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -85159,6 +85514,7 @@ typedef $$ManufacturingOrdersTableProcessedTableManager =
         bool finishedProductId,
         bool customerId,
         bool invoiceId,
+        bool inputProductId,
         bool manufacturingCostComponentsRefs,
         bool manufacturingScrapsRefs,
         bool customerMaterialReceiptsRefs,

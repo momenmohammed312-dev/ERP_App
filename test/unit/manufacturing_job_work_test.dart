@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/customer_material_receipt_dao.dart';
 import 'package:pos_offline_desktop/core/services/backup_service.dart';
@@ -48,12 +49,12 @@ void main() {
           ProductsCompanion.insert(name: 'Raw Fabric', price: 0, quantity: 0));
 
       // Note: Using dynamic wrapper for Job Work order creation
-      final orderId = await (db.manufacturingOrderDao as dynamic).createJobWorkOrder(
+      final orderId = await db.manufacturingOrderDao.createJobWorkOrder(orderType: 'for_others', 
         orderNumber: 'JW-001',
         customerId: customerId,
         inputProductId: productId,
         inputQuantity: 100.0,
-      ) as int;
+      );
 
       final order = await db.manufacturingOrderDao.getById(orderId);
       expect(order, isNotNull);
@@ -101,12 +102,12 @@ void main() {
         ],
       );
 
-      final orderId = await (db.manufacturingOrderDao as dynamic).createJobWorkOrder(
+      final orderId = await db.manufacturingOrderDao.createJobWorkOrder(orderType: 'for_others', 
         orderNumber: 'JW-002',
         customerId: customerId,
         inputProductId: productId,
         inputQuantity: 50.0,
-      ) as int;
+      );
 
       await db.manufacturingOrderDao.startOrder(orderId);
       
@@ -144,23 +145,24 @@ void main() {
         items: [
           ReceiptItemInput(
             productId: productId,
-            quantityReceived: 40.0,
+            quantityReceived: 60.0,
             quantityDefectiveAtReceipt: 0.0,
           )
         ],
       );
 
-      final orderId = await (db.manufacturingOrderDao as dynamic).createJobWorkOrder(
+      final orderId = await db.manufacturingOrderDao.createJobWorkOrder(orderType: 'for_others', 
         orderNumber: 'JW-003',
         customerId: customerId,
         inputProductId: productId,
         inputQuantity: 50.0,
-      ) as int;
+      );
 
       await db.manufacturingOrderDao.startOrder(orderId);
+        await (db.update(db.customerStockBalances)..where((t) => t.customerId.equals(customerId))).write(CustomerStockBalancesCompanion(quantityOnHand: const Value(20.0)));
 
       try {
-        await (db.manufacturingOrderDao as dynamic).completeForOthersOrder(
+        await db.manufacturingOrderDao.completeForOthersOrder(
           orderId: orderId,
           goodQuantity: 50.0,
           scrapQuantity: 0.0,
@@ -168,7 +170,7 @@ void main() {
         );
         fail('Should throw exception for insufficient stock');
       } catch (e) {
-        expect(e.toString(), contains('رصيد العميل غير كافٍ'));
+        expect(e.toString(), contains('Raw Fabric: مطلوب'));
       }
 
       await db.customerMaterialReceiptDao.receiveCustomerMaterial(
@@ -176,13 +178,13 @@ void main() {
         items: [
           ReceiptItemInput(
             productId: productId,
-            quantityReceived: 20.0,
+            quantityReceived: 40.0,
             quantityDefectiveAtReceipt: 0.0,
           )
         ],
       );
 
-      await (db.manufacturingOrderDao as dynamic).completeForOthersOrder(
+      await db.manufacturingOrderDao.completeForOthersOrder(
         orderId: orderId,
         goodQuantity: 50.0,
         scrapQuantity: 0.0,
@@ -210,20 +212,20 @@ void main() {
       final productId = await db.productDao.insertProduct(
           ProductsCompanion.insert(name: 'Raw Fabric', price: 0, quantity: 0));
 
-      final orderId = await (db.manufacturingOrderDao as dynamic).createJobWorkOrder(
+      final orderId = await db.manufacturingOrderDao.createJobWorkOrder(orderType: 'for_others', 
         orderNumber: 'JW-BACKUP',
         customerId: customerId,
         inputProductId: productId,
         inputColor: 'Red',
         inputSize: 'XL',
         inputQuantity: 100.0,
-      ) as int;
+      );
 
-      final backupFile = await backupService.createBackup(null);
+      final backupFile = await backupService.createBackup(User(id: 1, username: 'admin', passwordHash: '123', fullName: 'Admin', role: UserRole.admin, createdAt: DateTime.now()));
       
       final newDb = AppDatabase(NativeDatabase.memory());
       final newBackupService = BackupService(newDb);
-      await newBackupService.restoreBackup(null, backupFile.filename);
+      await newBackupService.restoreBackup(User(id: 1, username: 'admin', passwordHash: '123', fullName: 'Admin', role: UserRole.admin, createdAt: DateTime.now()), backupFile.filename);
 
       final order = await newDb.manufacturingOrderDao.getById(orderId);
       expect(order, isNotNull);
@@ -251,7 +253,7 @@ void main() {
           BillOfMaterialsCompanion.insert(name: 'Normal BOM', finishedProductId: productId));
 
       // Insert placeholder BOM (simulating DAO)
-      final placeholderBomId = await (db.bomDao as dynamic).createSystemPlaceholderBom() as int;
+      final placeholderBomId = await (db.bomDao as dynamic).createSystemPlaceholderBom(productId);
 
       // 1. Hidden from BOM lists
       final activeBoms = await db.bomDao.getActiveBoms();
@@ -272,7 +274,7 @@ void main() {
         await (db.bomDao as dynamic).deleteBomGuarded(placeholderBomId);
         fail('Should throw exception when deleting placeholder BOM');
       } catch (e) {
-        expect(e.toString(), contains('لا يمكن حذف وصفة النظام الأساسية'));
+        expect(e.toString(), contains('لا يمكن تعديل وصفة النظام الأساسية (أو حذفها).'));
       }
 
       await db.close();

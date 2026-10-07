@@ -24,6 +24,9 @@ class BillOfMaterials extends Table {
   /// 'Active' | 'Inactive' (soft toggle)
   TextColumn get status => text().withDefault(const Constant('Active'))();
 
+  /// e.g. null for standard BOMs, 'system_placeholder' for hidden Job Work orders
+  TextColumn get type => text().nullable()();
+
   TextColumn get notes => text().nullable()();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();

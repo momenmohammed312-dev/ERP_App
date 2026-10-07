@@ -323,7 +323,7 @@ void main() {
       addTearDown(second.close);
       await second.customSelect('SELECT 1').get();
 
-      expect(await userVersion(second), 76);
+      expect(await userVersion(second), 77);
       final names = await tableNames(second);
       expect(names, contains('bill_of_materials'));
       expect(names, contains('bom_items'));

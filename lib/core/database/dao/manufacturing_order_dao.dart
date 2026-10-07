@@ -78,11 +78,56 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
   // ── Status transitions ──
 
   /// planned -> in_progress
+  Future<int> createJobWorkOrder({
+    required String orderNumber,
+    required String orderType,
+    required String customerId,
+    required int inputProductId,
+    required double inputQuantity,
+    String? inputColor,
+    String? inputSize,
+  }) async {
+    return transaction(() async {
+      final bomId = await db.bomDao.createSystemPlaceholderBom(inputProductId);
+
+      return into(manufacturingOrders).insert(ManufacturingOrdersCompanion.insert(
+        orderNumber: orderNumber,
+        orderType: Value(orderType),
+        bomId: bomId,
+        finishedProductId: inputProductId,
+        plannedQuantity: inputQuantity,
+        customerId: Value(customerId),
+        inputProductId: Value(inputProductId),
+        inputQuantity: Value(inputQuantity),
+        inputColor: Value(inputColor),
+        inputSize: Value(inputSize),
+      ));
+    });
+  }
+
   Future<void> startOrder(int id) async {
     final mo = await getById(id);
     if (mo == null) throw ArgumentError('ManufacturingOrder #$id not found');
     if (mo.status != ManufacturingOrderStatus.planned) {
       throw StateError('Only planned orders can be started (current: ${mo.status})');
+    }
+    if (mo.orderType == 'for_others' && mo.customerId != null && mo.inputProductId != null && mo.inputQuantity != null) {
+      final bal = await (select(customerStockBalances)
+            ..where((t) => t.customerId.equals(mo.customerId!) &
+                t.productId.equals(mo.inputProductId!) &
+                (mo.inputColor == null ? t.color.isNull() : t.color.equals(mo.inputColor!)) &
+                (mo.inputSize == null ? t.size.isNull() : t.size.equals(mo.inputSize!))))
+          .getSingleOrNull();
+
+      if (bal == null || (bal.quantityOnHand - bal.quantityAllocated) < mo.inputQuantity!) {
+        throw StateError('رصيد العميل غير كافٍ');
+      }
+
+      await (update(customerStockBalances)..where((t) => t.id.equals(bal.id))).write(
+        CustomerStockBalancesCompanion(
+          quantityAllocated: Value(bal.quantityAllocated + mo.inputQuantity!),
+        ),
+      );
     }
     await (update(manufacturingOrders)..where((o) => o.id.equals(id))).write(
       ManufacturingOrdersCompanion(
@@ -102,6 +147,22 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
     }
     if (mo.status == ManufacturingOrderStatus.cancelled) {
       throw StateError('Order is already cancelled');
+    }
+    if (mo.orderType == 'for_others' && mo.customerId != null && mo.inputProductId != null && mo.inputQuantity != null && mo.status == ManufacturingOrderStatus.inProgress) {
+      final bal = await (select(customerStockBalances)
+            ..where((t) => t.customerId.equals(mo.customerId!) &
+                t.productId.equals(mo.inputProductId!) &
+                (mo.inputColor == null ? t.color.isNull() : t.color.equals(mo.inputColor!)) &
+                (mo.inputSize == null ? t.size.isNull() : t.size.equals(mo.inputSize!))))
+          .getSingleOrNull();
+      if (bal != null) {
+        final newAlloc = bal.quantityAllocated - mo.inputQuantity!;
+        await (update(customerStockBalances)..where((t) => t.id.equals(bal.id))).write(
+          CustomerStockBalancesCompanion(
+            quantityAllocated: Value(newAlloc < 0 ? 0 : newAlloc),
+          ),
+        );
+      }
     }
     await (update(manufacturingOrders)..where((o) => o.id.equals(id))).write(
       ManufacturingOrdersCompanion(
@@ -412,6 +473,9 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
     Set<int>? customerOwnedProductIds,
     String? performedBy,
     String? notes,
+    double? goodQuantity,
+    double? scrapQuantity,
+    String? completedByUserId,
   }) {
     return transaction(() async {
       // 1. Load & validate MO
@@ -424,8 +488,82 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         throw StateError('Cancelled orders cannot be completed');
       }
 
+      
       final orderType = mo.orderType ?? 'internal';
+      if (orderType == 'for_others' && mo.inputQuantity != null && mo.inputProductId != null) {
+        final effectiveGood = goodQuantity ?? actualProducedQuantity ?? mo.plannedQuantity;
+        final effectiveScrap = scrapQuantity ?? 0.0;
+        final effectiveUser = completedByUserId ?? performedBy ?? 'system';
+
+        final bal = await (select(customerStockBalances)
+              ..where((t) =>
+                  t.customerId.equals(mo.customerId!) &
+                  t.productId.equals(mo.inputProductId!) &
+                  (mo.inputColor == null ? t.color.isNull() : t.color.equals(mo.inputColor!)) &
+                  (mo.inputSize == null ? t.size.isNull() : t.size.equals(mo.inputSize!))))
+            .getSingleOrNull();
+
+        if (bal == null || bal.quantityOnHand < mo.inputQuantity!) {
+          final prod = await (select(products)..where((p) => p.id.equals(mo.inputProductId!))).getSingleOrNull();
+          throw InsufficientStockException([
+            InsufficientStockDetail(
+              rawMaterialProductId: mo.inputProductId!,
+              productName: prod?.name ?? 'Unknown',
+              required: int.parse(mo.inputQuantity!.toStringAsFixed(0)),
+              available: bal != null ? int.parse(bal.quantityOnHand.toStringAsFixed(0)) : 0,
+            )
+          ]);
+        }
+
+        final newOnHand = bal.quantityOnHand - mo.inputQuantity!;
+        final newAlloc = bal.quantityAllocated - mo.inputQuantity!;
+        await (update(customerStockBalances)..where((t) => t.id.equals(bal.id))).write(
+          CustomerStockBalancesCompanion(
+            quantityOnHand: Value(newOnHand),
+            quantityAllocated: Value(newAlloc < 0 ? 0 : newAlloc),
+          ),
+        );
+
+        await into(customerStockMovements).insert(
+          CustomerStockMovementsCompanion.insert(
+            customerId: mo.customerId!,
+            productId: mo.inputProductId!,
+            color: Value(mo.inputColor),
+            size: Value(mo.inputSize),
+            movementType: 'manufacturing_consumption',
+            quantity: -mo.inputQuantity!,
+            referenceType: 'manufacturing_order',
+            referenceId: mo.id.toString(),
+            notes: Value('MO completion: $effectiveGood good, $effectiveScrap scrap'),
+            performedBy: Value(effectiveUser),
+          ),
+        );
+
+        await (update(manufacturingOrders)..where((o) => o.id.equals(orderId))).write(
+          ManufacturingOrdersCompanion(
+            status: const Value(ManufacturingOrderStatus.completed),
+            producedQuantity: Value(effectiveGood),
+            completedAt: Value(DateTime.now()),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+
+        final customer = await (select(customers)..where((c) => c.id.equals(mo.customerId!))).getSingle();
+        final product = await (select(products)..where((p) => p.id.equals(mo.finishedProductId))).getSingle();
+
+        return ForOthersCompletionResult(
+          orderId: mo.id,
+          orderNumber: mo.orderNumber,
+          customerId: customer.id,
+          finishedProductId: product.id,
+          finishedProductName: product.name,
+          producedQuantity: effectiveGood, plannedQuantity: mo.plannedQuantity, customerConsumptions: [], factoryConsumptions: [],
+          
+        );
+      }
+
       if (orderType != 'for_others' && orderType != 'mixed' && orderType != 'service_only') {
+
         throw ArgumentError('Order #$orderId has orderType "$orderType" — cannot be completed via completeForOthersOrder');
       }
 

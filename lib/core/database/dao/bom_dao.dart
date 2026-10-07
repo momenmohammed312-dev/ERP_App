@@ -19,12 +19,12 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
 
   Future<List<BillOfMaterial>> getActiveBoms() =>
       (select(billOfMaterials)
-            ..where((b) => b.status.equals('Active'))
+            ..where((b) => b.status.equals('Active') & (b.type.isNull() | b.type.equals('system_placeholder').not()))
             ..orderBy([(b) => OrderingTerm.desc(b.createdAt)]))
           .get();
 
   Stream<List<BillOfMaterial>> watchActiveBoms() =>
-      (select(billOfMaterials)..where((b) => b.status.equals('Active'))).watch();
+      (select(billOfMaterials)..where((b) => b.status.equals('Active') & (b.type.isNull() | b.type.equals('system_placeholder').not()))).watch();
 
   Future<BillOfMaterial?> getBomById(int id) =>
       (select(billOfMaterials)..where((b) => b.id.equals(id))).getSingleOrNull();
@@ -183,6 +183,11 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
   /// the recorded unit cost would still be there, but its meaning would not.
   /// That is unrecoverable once real production has run.
   Future<void> _assertBomIsEditable(int bomId) async {
+    final bom = await getBomById(bomId);
+    if (bom != null && bom.type == 'system_placeholder') {
+      throw StateError('لا يمكن تعديل وصفة النظام الأساسية (أو حذفها).');
+    }
+
     final orders = await (select(db.manufacturingOrders)
           ..where((o) => o.bomId.equals(bomId)))
         .get();
@@ -241,5 +246,22 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
       total += effective * unitCost;
     }
     return total;
+  }
+
+  Future<int> createSystemPlaceholderBom(int productId) async {
+    return insertBom(BillOfMaterialsCompanion.insert(
+      name: 'System Placeholder',
+      finishedProductId: productId,
+      type: const Value('system_placeholder'),
+    ));
+  }
+
+  Future<void> updateBomGuarded(BillOfMaterialsCompanion c) async {
+    await _assertBomIsEditable(c.id.value);
+    await updateBomCompanion(c);
+  }
+
+  Future<void> deleteBomGuarded(int id) async {
+    await deleteBom(id);
   }
 }

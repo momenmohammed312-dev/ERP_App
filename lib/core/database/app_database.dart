@@ -201,7 +201,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 76;
+  int get schemaVersion => 77;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -384,6 +384,11 @@ class AppDatabase extends _$AppDatabase {
       // Additive and idempotent. Six new tables, safe nullable/default ALTERs.
       if (from < 76) {
         await _runV76Migrations(m);
+      }
+      
+      // Schema v77 — job_work input tracking and placeholder BOM type
+      if (from < 77) {
+        await _runV77Migrations(m);
       }
 
       // 6. Special data fixes
@@ -3333,6 +3338,49 @@ class AppDatabase extends _$AppDatabase {
       log('v53: Backfilled sync_id for $table (${ids.length} rows)');
     } catch (e) {
       log('v53: Backfill $table warning: $e');
+    }
+  }
+  Future<void> _runV77Migrations(Migrator m) async {
+    await _logMigrationStep(77, 'job_work_input_tracking', 'started');
+    try {
+      // Add 'type' to bill_of_materials
+      try {
+        await customStatement(
+          'ALTER TABLE bill_of_materials ADD COLUMN type TEXT',
+        );
+      } catch (_) {}
+
+      // Add input columns to manufacturing_orders
+      try {
+        await customStatement(
+          'ALTER TABLE manufacturing_orders ADD COLUMN input_product_id INTEGER REFERENCES products (id)',
+        );
+      } catch (_) {}
+      try {
+        await customStatement(
+          'ALTER TABLE manufacturing_orders ADD COLUMN input_color TEXT',
+        );
+      } catch (_) {}
+      try {
+        await customStatement(
+          'ALTER TABLE manufacturing_orders ADD COLUMN input_size TEXT',
+        );
+      } catch (_) {}
+      try {
+        await customStatement(
+          'ALTER TABLE manufacturing_orders ADD COLUMN input_quantity REAL',
+        );
+      } catch (_) {}
+
+      await _logMigrationStep(77, 'job_work_input_tracking', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        77,
+        'job_work_input_tracking',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
     }
   }
 }
