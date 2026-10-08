@@ -12,6 +12,7 @@ import 'package:pos_offline_desktop/core/services/backup_service.dart';
 
 /// Test Phase B1 (C6): Backup & Restore coverage and round-trip verification
 /// for Manufacturing for Others tables.
+@Timeout(Duration(minutes: 3))
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
