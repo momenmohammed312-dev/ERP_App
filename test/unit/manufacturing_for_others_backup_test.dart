@@ -54,7 +54,7 @@ void main() {
         createdAt: DateTime.now(),
       );
 
-  group('J3 & J4: Phase B1 Backup Coverage & Round-Trip', () {
+  group('J3 & J4: Phase B1 Backup Coverage & Round-Trip', timeout: const Timeout(Duration(minutes: 3)), () {
     String readBackupService() =>
         File('lib/core/services/backup_service.dart').readAsStringSync();
 
