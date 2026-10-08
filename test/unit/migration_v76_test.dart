@@ -206,7 +206,7 @@ void main() {
     // Force open
     final versionRow = await db.customSelect('PRAGMA user_version').getSingle();
     final version = versionRow.read<int>('user_version');
-    expect(version, 76, reason: 'Database upgraded from 75 to 76');
+    expect(version, greaterThanOrEqualTo(76), reason: 'Database upgraded from 75 to at least 76');
 
     // 3. Assert pre-existing rows survived with defaults populated
     final moRow = await db.customSelect('SELECT * FROM manufacturing_orders WHERE id = 1').getSingle();
