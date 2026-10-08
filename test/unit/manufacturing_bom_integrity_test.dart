@@ -257,7 +257,7 @@ void main() {
 
       expect(
         db.schemaVersion,
-        76,
+        77,
         reason: 'v73 + v74 + the v75 scrap table + v76 manufacturing-for-others',
       );
     });

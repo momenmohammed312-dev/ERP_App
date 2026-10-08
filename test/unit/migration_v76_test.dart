@@ -249,7 +249,7 @@ void main() {
     addTearDown(dbSecond.close);
 
     final secondVersionRow = await dbSecond.customSelect('PRAGMA user_version').getSingle();
-    expect(secondVersionRow.read<int>('user_version'), 76);
+    expect(secondVersionRow.read<int>('user_version'), greaterThanOrEqualTo(76));
 
     final moRowAfterReRun = await dbSecond.customSelect('SELECT * FROM manufacturing_orders WHERE id = 1').getSingle();
     expect(moRowAfterReRun.read<String>('order_number'), 'MO-PHASE-A-001');

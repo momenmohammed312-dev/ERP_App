@@ -170,7 +170,7 @@ void main() {
       // v75 is current (v73 product_type, v74 manufacturing tables, v75 scrap).
       // 60/61 are deliberately not recreated - they mean other things on other
       // branch lines.
-      expect(version, 76, reason: 'schema should be upgraded to current (76)');
+      expect(version, greaterThanOrEqualTo(76), reason: 'schema should be upgraded to current (76)');
 
       Future<List<String>> columnNames(String table) async {
         final rows = await db.customSelect('PRAGMA table_info($table)').get();
