@@ -85,3 +85,8 @@ node_modules/
 
 # Generated test reports (rewritten by test/simple_product_test.dart)
 product_test_results.json
+
+# Temporary scratch files, backups, and screenshots
+*.bak
+chrome_shot*.png
+backups/
