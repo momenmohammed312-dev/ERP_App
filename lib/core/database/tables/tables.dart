@@ -21,6 +21,7 @@ export 'purchase_items_table.dart';
 export 'purchase_orders_tables.dart';
 export 'purchase_returns_tables.dart';
 export 'purchase_table.dart';
+export 'return_refunds_table.dart';
 export 'sales_returns_table.dart';
 export 'sales_table.dart';
 export 'staff_management_tables.dart';

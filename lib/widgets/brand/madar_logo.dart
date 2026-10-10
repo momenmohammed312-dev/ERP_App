@@ -15,8 +15,9 @@ class MadarColors {
   static const Color textLight = Color(0xFFF0F6FC);
 }
 
-/// The official geometric orbit brand mark for MADAR (مِدار).
-/// Communicates interconnected ERP modules revolving around one central core system.
+/// The official MADAR brand mark (مِدار).
+/// Renders the shared logo asset; falls back to the geometric orbit mark if the
+/// asset fails to load.
 class MadarOrbitLogo extends StatelessWidget {
   final double size;
   final bool animateGlow;
@@ -52,13 +53,15 @@ class MadarOrbitLogo extends StatelessWidget {
               ],
             ),
           ),
-          // Official brand icon image with painter fallback
+          // اللوجو الرسمي لـ MADAR — نفس ملف أيقونة التطبيق.
+          // لو الصورة مالقتش، بنرجع للرسم بالكود كـfallback.
           Image.asset(
             'assets/logo/app_logo.png',
             width: size,
             height: size,
             fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => CustomPaint(
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (context, error, stackTrace) => CustomPaint(
               size: Size(size, size),
               painter: _MadarLogoPainter(orbitAngle: orbitAngle),
             ),

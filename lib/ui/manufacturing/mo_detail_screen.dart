@@ -128,7 +128,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم بدء التنفيذ'), backgroundColor: Colors.green));
       _loadData();
     } on InsufficientStockException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: Colors.red));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل: $e'), backgroundColor: Colors.red));
     }
@@ -438,7 +438,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
               } on InsufficientStockException catch (e) {
                 setStateDialog(() {
                   isSubmitting = false;
-                  dialogError = e.message;
+                  dialogError = e.toString();
                 });
               } catch (e) {
                 setStateDialog(() {

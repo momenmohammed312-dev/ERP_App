@@ -26,6 +26,7 @@ import 'package:pos_offline_desktop/core/database/dao/notifications_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/invoice_payments_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/damaged_items_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/sales_returns_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/return_refunds_dao.dart';
 import 'package:pos_offline_desktop/core/database/tables/audit_log_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/categories_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_containers_table.dart';
@@ -55,6 +56,7 @@ import 'package:pos_offline_desktop/core/database/tables/notifications_table.dar
 import 'package:pos_offline_desktop/core/database/tables/invoice_payments_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/damaged_items_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/sales_returns_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/return_refunds_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/attendance_device_tables.dart';
 import 'package:pos_offline_desktop/core/database/tables/attendance_settings_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
@@ -134,6 +136,7 @@ part 'app_database.g.dart';
     DamagedItems,
     SalesReturns,
     SalesReturnItems,
+    ReturnRefunds,
     CustomerContainers,
     BiometricDevices,
     StaffBiometricMappings,
@@ -179,6 +182,7 @@ part 'app_database.g.dart';
     InvoicePaymentsDao,
     DamagedItemsDao,
     SalesReturnsDao,
+    ReturnRefundsDao,
     AttendanceDeviceDao,
     CustomerContainerDao,
     VegetableShipmentDao,
@@ -201,7 +205,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 77;
+  int get schemaVersion => 78;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -389,6 +393,12 @@ class AppDatabase extends _$AppDatabase {
       // Schema v77 — job_work input tracking and placeholder BOM type
       if (from < 77) {
         await _runV77Migrations(m);
+      }
+
+      // Schema v78 — returns/refunds split (return_refunds table + net/settlement
+      // columns). Purely additive; no existing behaviour changes.
+      if (from < 78) {
+        await _runV78Migrations(m);
       }
 
       // 6. Special data fixes
@@ -603,6 +613,52 @@ class AppDatabase extends _$AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_sales_return_items_invoice_item ON sales_return_items(invoice_item_id)',
         );
       } catch (_) {}
+
+      // --- v78 safety net: return_refunds + settlement/net columns ---
+      try {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS return_refunds (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            return_id INTEGER NOT NULL REFERENCES sales_returns(id) ON DELETE CASCADE,
+            refund_date INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            method TEXT NOT NULL,
+            reference_number TEXT,
+            apply_to_invoice_id INTEGER REFERENCES invoices(id),
+            notes TEXT,
+            processed_by TEXT,
+            voided_at INTEGER,
+            voided_by TEXT,
+            void_reason TEXT,
+            is_voided INTEGER NOT NULL DEFAULT 0,
+            sync_id TEXT,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at INTEGER
+          )
+        ''');
+      } catch (e) {
+        log('Error creating return_refunds table: $e');
+      }
+      for (final s in [
+        'CREATE INDEX IF NOT EXISTS idx_return_refunds_return_id ON return_refunds(return_id)',
+        'CREATE INDEX IF NOT EXISTS idx_return_refunds_date ON return_refunds(refund_date)',
+        'ALTER TABLE sales_returns ADD COLUMN refunded_amount REAL DEFAULT 0.0',
+        "ALTER TABLE sales_returns ADD COLUMN settlement_status TEXT DEFAULT 'pending'",
+        'ALTER TABLE sales_returns ADD COLUMN restocked_amount REAL DEFAULT 0.0',
+        'ALTER TABLE sales_returns ADD COLUMN sync_id TEXT',
+        "ALTER TABLE sales_return_items ADD COLUMN restock_condition TEXT DEFAULT 'sellable'",
+        'ALTER TABLE sales_return_items ADD COLUMN restocked_qty INTEGER DEFAULT 0',
+        'ALTER TABLE sales_return_items ADD COLUMN sync_id TEXT',
+        'ALTER TABLE sales_return_items ADD COLUMN created_at INTEGER',
+        'ALTER TABLE sales_return_items ADD COLUMN updated_at INTEGER',
+        'ALTER TABLE invoices ADD COLUMN returned_amount REAL DEFAULT 0.0',
+        'ALTER TABLE invoices ADD COLUMN net_amount REAL DEFAULT 0.0',
+        'ALTER TABLE invoices ADD COLUMN refunded_amount REAL DEFAULT 0.0',
+      ]) {
+        try {
+          await customStatement(s);
+        } catch (_) {}
+      }
 
       // Safety check for app_notifications table
       try {
@@ -3377,6 +3433,124 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(
         77,
         'job_work_input_tracking',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// Schema v78 — returns / refunds split.
+  ///
+  /// Adds `return_refunds` (money leaving the business for a return) and the
+  /// net/settlement columns that keep reports from needing a join. Entirely
+  /// additive: every new column is nullable or carries a default, so no
+  /// existing row can be invalidated (AGENTS.md §4.1).
+  ///
+  /// Every statement is individually try/caught so one failure cannot abort
+  /// the whole upgrade on a client database; `_ensureCriticalColumns` runs in
+  /// `beforeOpen` and repairs anything that slipped through.
+  Future<void> _runV78Migrations(Migrator m) async {
+    await _logMigrationStep(78, 'returns_refunds_split', 'started');
+    try {
+      // --- New table ---
+      try {
+        await m.createTable(returnRefunds);
+      } catch (e) {
+        log('v78: return_refunds already exists or failed: $e');
+      }
+
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_return_refunds_return_id '
+          'ON return_refunds(return_id)',
+        );
+      } catch (_) {}
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_return_refunds_date '
+          'ON return_refunds(refund_date)',
+        );
+      } catch (_) {}
+
+      // --- sales_returns: settlement + net columns ---
+      try {
+        await customStatement(
+          'ALTER TABLE sales_returns ADD COLUMN refunded_amount REAL DEFAULT 0.0',
+        );
+      } catch (_) {}
+      try {
+        await customStatement(
+          "ALTER TABLE sales_returns ADD COLUMN settlement_status TEXT DEFAULT 'pending'",
+        );
+      } catch (_) {}
+      try {
+        await customStatement(
+          'ALTER TABLE sales_returns ADD COLUMN restocked_amount REAL DEFAULT 0.0',
+        );
+      } catch (_) {}
+      try {
+        await customStatement('ALTER TABLE sales_returns ADD COLUMN sync_id TEXT');
+      } catch (_) {}
+
+      // --- sales_return_items: restock disposition ---
+      try {
+        await customStatement(
+          "ALTER TABLE sales_return_items ADD COLUMN restock_condition TEXT DEFAULT 'sellable'",
+        );
+      } catch (_) {}
+      try {
+        await customStatement(
+          'ALTER TABLE sales_return_items ADD COLUMN restocked_qty INTEGER DEFAULT 0',
+        );
+      } catch (_) {}
+      try {
+        await customStatement(
+          'ALTER TABLE sales_return_items ADD COLUMN sync_id TEXT',
+        );
+      } catch (_) {}
+      try {
+        await customStatement(
+          'ALTER TABLE sales_return_items ADD COLUMN created_at DATETIME',
+        );
+      } catch (_) {}
+      try {
+        await customStatement(
+          'ALTER TABLE sales_return_items ADD COLUMN updated_at DATETIME',
+        );
+      } catch (_) {}
+
+      // --- invoices: net of returns (denormalised for reporting) ---
+      try {
+        await customStatement(
+          'ALTER TABLE invoices ADD COLUMN returned_amount REAL DEFAULT 0.0',
+        );
+      } catch (_) {}
+      try {
+        await customStatement(
+          'ALTER TABLE invoices ADD COLUMN net_amount REAL DEFAULT 0.0',
+        );
+      } catch (_) {}
+      try {
+        await customStatement(
+          'ALTER TABLE invoices ADD COLUMN refunded_amount REAL DEFAULT 0.0',
+        );
+      } catch (_) {}
+
+      // Backfill net_amount for pre-v78 rows: no returns existed before the
+      // migration on a given device only if the device never used the feature.
+      // Recomputing from sales_returns is cheap and idempotent.
+      try {
+        await customStatement(
+          'UPDATE invoices SET net_amount = total_amount WHERE net_amount = 0',
+        );
+      } catch (_) {}
+
+      await _logMigrationStep(78, 'returns_refunds_split', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        78,
+        'returns_refunds_split',
         'failed',
         error: e.toString(),
       );

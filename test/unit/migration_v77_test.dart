@@ -71,7 +71,11 @@ void main() {
 
     final versionRow = await db.customSelect('PRAGMA user_version').getSingle();
     final version = versionRow.read<int>('user_version');
-    expect(version, 77, reason: 'Database upgraded from 76 to 77');
+    expect(
+      version,
+      db.schemaVersion,
+      reason: 'Database upgraded from 76 to the current schema version',
+    );
 
     // 4. Assert pre-existing rows survived and new columns are null
     final moRow = await db.customSelect('SELECT * FROM manufacturing_orders WHERE id = $orderId').getSingle();
@@ -96,6 +100,6 @@ void main() {
     addTearDown(dbSecond.close);
 
     final secondVersionRow = await dbSecond.customSelect('PRAGMA user_version').getSingle();
-    expect(secondVersionRow.read<int>('user_version'), 77);
+    expect(secondVersionRow.read<int>('user_version'), dbSecond.schemaVersion);
   });
 }

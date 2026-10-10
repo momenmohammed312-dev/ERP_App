@@ -251,13 +251,15 @@ void main() {
   // ── I: the migration ladder ────────────────────────────────────────────
 
   group('I — migration ladder v73 / v74 / v75', () {
-    test('I1 the schema contract is 75 once scrap exists', () async {
+    test('I1 the schema contract is at least 75 once scrap exists', () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
 
+      // نتحقق من الحد الأدنى مش الرقم المطلق، عشان أي ميجريشن بعد كده
+      // (v76/v77/v78) مايكسرش الاختبار ده.
       expect(
         db.schemaVersion,
-        77,
+        greaterThanOrEqualTo(75),
         reason: 'v73 + v74 + the v75 scrap table + v76 manufacturing-for-others',
       );
     });
@@ -323,12 +325,20 @@ void main() {
       addTearDown(second.close);
       await second.customSelect('SELECT 1').get();
 
-      expect(await userVersion(second), 77);
+      // نقارن بـ schemaVersion بدل رقم ثابت، عشان أي ميجريشن بعد v78
+      // (أو قبله) ما يكسرش الاختبار ده.
+      final probe = AppDatabase(NativeDatabase.memory());
+      addTearDown(probe.close);
+      expect(await userVersion(second), probe.schemaVersion);
       final names = await tableNames(second);
       expect(names, contains('bill_of_materials'));
       expect(names, contains('bom_items'));
       expect(names, contains('manufacturing_orders'));
       expect(names, contains('manufacturing_cost_components'));
+
+      // v78 غير إضضافي، فلازم ينطبق عليه نفس الكلام: إعادة تشغيل كل
+      // الميجريشنات فوق قاعدة عندها الجداول كلها ماينفعش throws.
+      expect(names, contains('return_refunds'));
     });
   });
 

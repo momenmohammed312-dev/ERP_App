@@ -4025,6 +4025,42 @@ class $InvoicesTable extends Invoices with TableInfo<$InvoicesTable, Invoice> {
       'REFERENCES vegetable_shipments (id)',
     ),
   );
+  static const VerificationMeta _returnedAmountMeta = const VerificationMeta(
+    'returnedAmount',
+  );
+  @override
+  late final GeneratedColumn<double> returnedAmount = GeneratedColumn<double>(
+    'returned_amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _netAmountMeta = const VerificationMeta(
+    'netAmount',
+  );
+  @override
+  late final GeneratedColumn<double> netAmount = GeneratedColumn<double>(
+    'net_amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _refundedAmountMeta = const VerificationMeta(
+    'refundedAmount',
+  );
+  @override
+  late final GeneratedColumn<double> refundedAmount = GeneratedColumn<double>(
+    'refunded_amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _syncIdMeta = const VerificationMeta('syncId');
   @override
   late final GeneratedColumn<String> syncId = GeneratedColumn<String>(
@@ -4076,6 +4112,9 @@ class $InvoicesTable extends Invoices with TableInfo<$InvoicesTable, Invoice> {
     cardAmount,
     creditAmount,
     shipmentId,
+    returnedAmount,
+    netAmount,
+    refundedAmount,
     syncId,
     createdAt,
     updatedAt,
@@ -4218,6 +4257,30 @@ class $InvoicesTable extends Invoices with TableInfo<$InvoicesTable, Invoice> {
         shipmentId.isAcceptableOrUnknown(data['shipment_id']!, _shipmentIdMeta),
       );
     }
+    if (data.containsKey('returned_amount')) {
+      context.handle(
+        _returnedAmountMeta,
+        returnedAmount.isAcceptableOrUnknown(
+          data['returned_amount']!,
+          _returnedAmountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('net_amount')) {
+      context.handle(
+        _netAmountMeta,
+        netAmount.isAcceptableOrUnknown(data['net_amount']!, _netAmountMeta),
+      );
+    }
+    if (data.containsKey('refunded_amount')) {
+      context.handle(
+        _refundedAmountMeta,
+        refundedAmount.isAcceptableOrUnknown(
+          data['refunded_amount']!,
+          _refundedAmountMeta,
+        ),
+      );
+    }
     if (data.containsKey('sync_id')) {
       context.handle(
         _syncIdMeta,
@@ -4317,6 +4380,18 @@ class $InvoicesTable extends Invoices with TableInfo<$InvoicesTable, Invoice> {
         DriftSqlType.int,
         data['${effectivePrefix}shipment_id'],
       ),
+      returnedAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}returned_amount'],
+      )!,
+      netAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}net_amount'],
+      )!,
+      refundedAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}refunded_amount'],
+      )!,
       syncId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}sync_id'],
@@ -4360,6 +4435,15 @@ class Invoice extends DataClass implements Insertable<Invoice> {
   /// Primary shipment when the whole invoice draws from one shipment (optional).
   final int? shipmentId;
 
+  /// إجمالي قيمة المرتجعات المسجلة على الفاتورة دي.
+  final double returnedAmount;
+
+  /// totalAmount − returnedAmount (لا يقل عن صفر).
+  final double netAmount;
+
+  /// إجمالي اللي اتسترد منه فلوساً (مش رصيد).
+  final double refundedAmount;
+
   /// Sync identity used only for multi-device sync (local int `id` stays for FKs).
   final String? syncId;
   final DateTime? createdAt;
@@ -4383,6 +4467,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
     required this.cardAmount,
     required this.creditAmount,
     this.shipmentId,
+    required this.returnedAmount,
+    required this.netAmount,
+    required this.refundedAmount,
     this.syncId,
     this.createdAt,
     this.updatedAt,
@@ -4428,6 +4515,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
     if (!nullToAbsent || shipmentId != null) {
       map['shipment_id'] = Variable<int>(shipmentId);
     }
+    map['returned_amount'] = Variable<double>(returnedAmount);
+    map['net_amount'] = Variable<double>(netAmount);
+    map['refunded_amount'] = Variable<double>(refundedAmount);
     if (!nullToAbsent || syncId != null) {
       map['sync_id'] = Variable<String>(syncId);
     }
@@ -4480,6 +4570,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
       shipmentId: shipmentId == null && nullToAbsent
           ? const Value.absent()
           : Value(shipmentId),
+      returnedAmount: Value(returnedAmount),
+      netAmount: Value(netAmount),
+      refundedAmount: Value(refundedAmount),
       syncId: syncId == null && nullToAbsent
           ? const Value.absent()
           : Value(syncId),
@@ -4516,6 +4609,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
       cardAmount: serializer.fromJson<double>(json['cardAmount']),
       creditAmount: serializer.fromJson<double>(json['creditAmount']),
       shipmentId: serializer.fromJson<int?>(json['shipmentId']),
+      returnedAmount: serializer.fromJson<double>(json['returnedAmount']),
+      netAmount: serializer.fromJson<double>(json['netAmount']),
+      refundedAmount: serializer.fromJson<double>(json['refundedAmount']),
       syncId: serializer.fromJson<String?>(json['syncId']),
       createdAt: serializer.fromJson<DateTime?>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
@@ -4543,6 +4639,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
       'cardAmount': serializer.toJson<double>(cardAmount),
       'creditAmount': serializer.toJson<double>(creditAmount),
       'shipmentId': serializer.toJson<int?>(shipmentId),
+      'returnedAmount': serializer.toJson<double>(returnedAmount),
+      'netAmount': serializer.toJson<double>(netAmount),
+      'refundedAmount': serializer.toJson<double>(refundedAmount),
       'syncId': serializer.toJson<String?>(syncId),
       'createdAt': serializer.toJson<DateTime?>(createdAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
@@ -4568,6 +4667,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
     double? cardAmount,
     double? creditAmount,
     Value<int?> shipmentId = const Value.absent(),
+    double? returnedAmount,
+    double? netAmount,
+    double? refundedAmount,
     Value<String?> syncId = const Value.absent(),
     Value<DateTime?> createdAt = const Value.absent(),
     Value<DateTime?> updatedAt = const Value.absent(),
@@ -4598,6 +4700,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
     cardAmount: cardAmount ?? this.cardAmount,
     creditAmount: creditAmount ?? this.creditAmount,
     shipmentId: shipmentId.present ? shipmentId.value : this.shipmentId,
+    returnedAmount: returnedAmount ?? this.returnedAmount,
+    netAmount: netAmount ?? this.netAmount,
+    refundedAmount: refundedAmount ?? this.refundedAmount,
     syncId: syncId.present ? syncId.value : this.syncId,
     createdAt: createdAt.present ? createdAt.value : this.createdAt,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
@@ -4648,6 +4753,13 @@ class Invoice extends DataClass implements Insertable<Invoice> {
       shipmentId: data.shipmentId.present
           ? data.shipmentId.value
           : this.shipmentId,
+      returnedAmount: data.returnedAmount.present
+          ? data.returnedAmount.value
+          : this.returnedAmount,
+      netAmount: data.netAmount.present ? data.netAmount.value : this.netAmount,
+      refundedAmount: data.refundedAmount.present
+          ? data.refundedAmount.value
+          : this.refundedAmount,
       syncId: data.syncId.present ? data.syncId.value : this.syncId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -4675,6 +4787,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
           ..write('cardAmount: $cardAmount, ')
           ..write('creditAmount: $creditAmount, ')
           ..write('shipmentId: $shipmentId, ')
+          ..write('returnedAmount: $returnedAmount, ')
+          ..write('netAmount: $netAmount, ')
+          ..write('refundedAmount: $refundedAmount, ')
           ..write('syncId: $syncId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -4702,6 +4817,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
     cardAmount,
     creditAmount,
     shipmentId,
+    returnedAmount,
+    netAmount,
+    refundedAmount,
     syncId,
     createdAt,
     updatedAt,
@@ -4728,6 +4846,9 @@ class Invoice extends DataClass implements Insertable<Invoice> {
           other.cardAmount == this.cardAmount &&
           other.creditAmount == this.creditAmount &&
           other.shipmentId == this.shipmentId &&
+          other.returnedAmount == this.returnedAmount &&
+          other.netAmount == this.netAmount &&
+          other.refundedAmount == this.refundedAmount &&
           other.syncId == this.syncId &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -4752,6 +4873,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
   final Value<double> cardAmount;
   final Value<double> creditAmount;
   final Value<int?> shipmentId;
+  final Value<double> returnedAmount;
+  final Value<double> netAmount;
+  final Value<double> refundedAmount;
   final Value<String?> syncId;
   final Value<DateTime?> createdAt;
   final Value<DateTime?> updatedAt;
@@ -4774,6 +4898,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
     this.cardAmount = const Value.absent(),
     this.creditAmount = const Value.absent(),
     this.shipmentId = const Value.absent(),
+    this.returnedAmount = const Value.absent(),
+    this.netAmount = const Value.absent(),
+    this.refundedAmount = const Value.absent(),
     this.syncId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -4797,6 +4924,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
     this.cardAmount = const Value.absent(),
     this.creditAmount = const Value.absent(),
     this.shipmentId = const Value.absent(),
+    this.returnedAmount = const Value.absent(),
+    this.netAmount = const Value.absent(),
+    this.refundedAmount = const Value.absent(),
     this.syncId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -4820,6 +4950,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
     Expression<double>? cardAmount,
     Expression<double>? creditAmount,
     Expression<int>? shipmentId,
+    Expression<double>? returnedAmount,
+    Expression<double>? netAmount,
+    Expression<double>? refundedAmount,
     Expression<String>? syncId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -4843,6 +4976,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
       if (cardAmount != null) 'card_amount': cardAmount,
       if (creditAmount != null) 'credit_amount': creditAmount,
       if (shipmentId != null) 'shipment_id': shipmentId,
+      if (returnedAmount != null) 'returned_amount': returnedAmount,
+      if (netAmount != null) 'net_amount': netAmount,
+      if (refundedAmount != null) 'refunded_amount': refundedAmount,
       if (syncId != null) 'sync_id': syncId,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -4868,6 +5004,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
     Value<double>? cardAmount,
     Value<double>? creditAmount,
     Value<int?>? shipmentId,
+    Value<double>? returnedAmount,
+    Value<double>? netAmount,
+    Value<double>? refundedAmount,
     Value<String?>? syncId,
     Value<DateTime?>? createdAt,
     Value<DateTime?>? updatedAt,
@@ -4891,6 +5030,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
       cardAmount: cardAmount ?? this.cardAmount,
       creditAmount: creditAmount ?? this.creditAmount,
       shipmentId: shipmentId ?? this.shipmentId,
+      returnedAmount: returnedAmount ?? this.returnedAmount,
+      netAmount: netAmount ?? this.netAmount,
+      refundedAmount: refundedAmount ?? this.refundedAmount,
       syncId: syncId ?? this.syncId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -4954,6 +5096,15 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
     if (shipmentId.present) {
       map['shipment_id'] = Variable<int>(shipmentId.value);
     }
+    if (returnedAmount.present) {
+      map['returned_amount'] = Variable<double>(returnedAmount.value);
+    }
+    if (netAmount.present) {
+      map['net_amount'] = Variable<double>(netAmount.value);
+    }
+    if (refundedAmount.present) {
+      map['refunded_amount'] = Variable<double>(refundedAmount.value);
+    }
     if (syncId.present) {
       map['sync_id'] = Variable<String>(syncId.value);
     }
@@ -4987,6 +5138,9 @@ class InvoicesCompanion extends UpdateCompanion<Invoice> {
           ..write('cardAmount: $cardAmount, ')
           ..write('creditAmount: $creditAmount, ')
           ..write('shipmentId: $shipmentId, ')
+          ..write('returnedAmount: $returnedAmount, ')
+          ..write('netAmount: $netAmount, ')
+          ..write('refundedAmount: $refundedAmount, ')
           ..write('syncId: $syncId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -35895,6 +36049,51 @@ class $SalesReturnsTable extends SalesReturns
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _refundedAmountMeta = const VerificationMeta(
+    'refundedAmount',
+  );
+  @override
+  late final GeneratedColumn<double> refundedAmount = GeneratedColumn<double>(
+    'refunded_amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _settlementStatusMeta = const VerificationMeta(
+    'settlementStatus',
+  );
+  @override
+  late final GeneratedColumn<String> settlementStatus = GeneratedColumn<String>(
+    'settlement_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('pending'),
+  );
+  static const VerificationMeta _restockedAmountMeta = const VerificationMeta(
+    'restockedAmount',
+  );
+  @override
+  late final GeneratedColumn<double> restockedAmount = GeneratedColumn<double>(
+    'restocked_amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _syncIdMeta = const VerificationMeta('syncId');
+  @override
+  late final GeneratedColumn<String> syncId = GeneratedColumn<String>(
+    'sync_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -35909,6 +36108,10 @@ class $SalesReturnsTable extends SalesReturns
     status,
     processedBy,
     createdAt,
+    refundedAmount,
+    settlementStatus,
+    restockedAmount,
+    syncId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -36021,6 +36224,39 @@ class $SalesReturnsTable extends SalesReturns
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('refunded_amount')) {
+      context.handle(
+        _refundedAmountMeta,
+        refundedAmount.isAcceptableOrUnknown(
+          data['refunded_amount']!,
+          _refundedAmountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('settlement_status')) {
+      context.handle(
+        _settlementStatusMeta,
+        settlementStatus.isAcceptableOrUnknown(
+          data['settlement_status']!,
+          _settlementStatusMeta,
+        ),
+      );
+    }
+    if (data.containsKey('restocked_amount')) {
+      context.handle(
+        _restockedAmountMeta,
+        restockedAmount.isAcceptableOrUnknown(
+          data['restocked_amount']!,
+          _restockedAmountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_id')) {
+      context.handle(
+        _syncIdMeta,
+        syncId.isAcceptableOrUnknown(data['sync_id']!, _syncIdMeta),
+      );
+    }
     return context;
   }
 
@@ -36078,6 +36314,22 @@ class $SalesReturnsTable extends SalesReturns
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      refundedAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}refunded_amount'],
+      )!,
+      settlementStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}settlement_status'],
+      )!,
+      restockedAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}restocked_amount'],
+      )!,
+      syncId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_id'],
+      ),
     );
   }
 
@@ -36100,6 +36352,17 @@ class SalesReturn extends DataClass implements Insertable<SalesReturn> {
   final String status;
   final String? processedBy;
   final DateTime createdAt;
+
+  /// كام فلوس اتسترد فعلاً (مجموع return_refunds السارية). فارق عن totalAmount
+  /// لأن العميل ممكن ياخد المرتجع رصيد بدل فلوس.
+  final double refundedAmount;
+
+  /// 'pending' | 'partially_refunded' | 'refunded' | 'credited'
+  final String settlementStatus;
+
+  /// كام رجع للمخزون فعلاً — التالف لا يرجع (restockCondition).
+  final double restockedAmount;
+  final String? syncId;
   const SalesReturn({
     required this.id,
     required this.returnNumber,
@@ -36113,6 +36376,10 @@ class SalesReturn extends DataClass implements Insertable<SalesReturn> {
     required this.status,
     this.processedBy,
     required this.createdAt,
+    required this.refundedAmount,
+    required this.settlementStatus,
+    required this.restockedAmount,
+    this.syncId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -36135,6 +36402,12 @@ class SalesReturn extends DataClass implements Insertable<SalesReturn> {
       map['processed_by'] = Variable<String>(processedBy);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['refunded_amount'] = Variable<double>(refundedAmount);
+    map['settlement_status'] = Variable<String>(settlementStatus);
+    map['restocked_amount'] = Variable<double>(restockedAmount);
+    if (!nullToAbsent || syncId != null) {
+      map['sync_id'] = Variable<String>(syncId);
+    }
     return map;
   }
 
@@ -36158,6 +36431,12 @@ class SalesReturn extends DataClass implements Insertable<SalesReturn> {
           ? const Value.absent()
           : Value(processedBy),
       createdAt: Value(createdAt),
+      refundedAmount: Value(refundedAmount),
+      settlementStatus: Value(settlementStatus),
+      restockedAmount: Value(restockedAmount),
+      syncId: syncId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncId),
     );
   }
 
@@ -36179,6 +36458,10 @@ class SalesReturn extends DataClass implements Insertable<SalesReturn> {
       status: serializer.fromJson<String>(json['status']),
       processedBy: serializer.fromJson<String?>(json['processedBy']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      refundedAmount: serializer.fromJson<double>(json['refundedAmount']),
+      settlementStatus: serializer.fromJson<String>(json['settlementStatus']),
+      restockedAmount: serializer.fromJson<double>(json['restockedAmount']),
+      syncId: serializer.fromJson<String?>(json['syncId']),
     );
   }
   @override
@@ -36197,6 +36480,10 @@ class SalesReturn extends DataClass implements Insertable<SalesReturn> {
       'status': serializer.toJson<String>(status),
       'processedBy': serializer.toJson<String?>(processedBy),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'refundedAmount': serializer.toJson<double>(refundedAmount),
+      'settlementStatus': serializer.toJson<String>(settlementStatus),
+      'restockedAmount': serializer.toJson<double>(restockedAmount),
+      'syncId': serializer.toJson<String?>(syncId),
     };
   }
 
@@ -36213,6 +36500,10 @@ class SalesReturn extends DataClass implements Insertable<SalesReturn> {
     String? status,
     Value<String?> processedBy = const Value.absent(),
     DateTime? createdAt,
+    double? refundedAmount,
+    String? settlementStatus,
+    double? restockedAmount,
+    Value<String?> syncId = const Value.absent(),
   }) => SalesReturn(
     id: id ?? this.id,
     returnNumber: returnNumber ?? this.returnNumber,
@@ -36226,6 +36517,10 @@ class SalesReturn extends DataClass implements Insertable<SalesReturn> {
     status: status ?? this.status,
     processedBy: processedBy.present ? processedBy.value : this.processedBy,
     createdAt: createdAt ?? this.createdAt,
+    refundedAmount: refundedAmount ?? this.refundedAmount,
+    settlementStatus: settlementStatus ?? this.settlementStatus,
+    restockedAmount: restockedAmount ?? this.restockedAmount,
+    syncId: syncId.present ? syncId.value : this.syncId,
   );
   SalesReturn copyWithCompanion(SalesReturnsCompanion data) {
     return SalesReturn(
@@ -36257,6 +36552,16 @@ class SalesReturn extends DataClass implements Insertable<SalesReturn> {
           ? data.processedBy.value
           : this.processedBy,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      refundedAmount: data.refundedAmount.present
+          ? data.refundedAmount.value
+          : this.refundedAmount,
+      settlementStatus: data.settlementStatus.present
+          ? data.settlementStatus.value
+          : this.settlementStatus,
+      restockedAmount: data.restockedAmount.present
+          ? data.restockedAmount.value
+          : this.restockedAmount,
+      syncId: data.syncId.present ? data.syncId.value : this.syncId,
     );
   }
 
@@ -36274,7 +36579,11 @@ class SalesReturn extends DataClass implements Insertable<SalesReturn> {
           ..write('notes: $notes, ')
           ..write('status: $status, ')
           ..write('processedBy: $processedBy, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('refundedAmount: $refundedAmount, ')
+          ..write('settlementStatus: $settlementStatus, ')
+          ..write('restockedAmount: $restockedAmount, ')
+          ..write('syncId: $syncId')
           ..write(')'))
         .toString();
   }
@@ -36293,6 +36602,10 @@ class SalesReturn extends DataClass implements Insertable<SalesReturn> {
     status,
     processedBy,
     createdAt,
+    refundedAmount,
+    settlementStatus,
+    restockedAmount,
+    syncId,
   );
   @override
   bool operator ==(Object other) =>
@@ -36309,7 +36622,11 @@ class SalesReturn extends DataClass implements Insertable<SalesReturn> {
           other.notes == this.notes &&
           other.status == this.status &&
           other.processedBy == this.processedBy &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.refundedAmount == this.refundedAmount &&
+          other.settlementStatus == this.settlementStatus &&
+          other.restockedAmount == this.restockedAmount &&
+          other.syncId == this.syncId);
 }
 
 class SalesReturnsCompanion extends UpdateCompanion<SalesReturn> {
@@ -36325,6 +36642,10 @@ class SalesReturnsCompanion extends UpdateCompanion<SalesReturn> {
   final Value<String> status;
   final Value<String?> processedBy;
   final Value<DateTime> createdAt;
+  final Value<double> refundedAmount;
+  final Value<String> settlementStatus;
+  final Value<double> restockedAmount;
+  final Value<String?> syncId;
   const SalesReturnsCompanion({
     this.id = const Value.absent(),
     this.returnNumber = const Value.absent(),
@@ -36338,6 +36659,10 @@ class SalesReturnsCompanion extends UpdateCompanion<SalesReturn> {
     this.status = const Value.absent(),
     this.processedBy = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.refundedAmount = const Value.absent(),
+    this.settlementStatus = const Value.absent(),
+    this.restockedAmount = const Value.absent(),
+    this.syncId = const Value.absent(),
   });
   SalesReturnsCompanion.insert({
     this.id = const Value.absent(),
@@ -36352,6 +36677,10 @@ class SalesReturnsCompanion extends UpdateCompanion<SalesReturn> {
     this.status = const Value.absent(),
     this.processedBy = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.refundedAmount = const Value.absent(),
+    this.settlementStatus = const Value.absent(),
+    this.restockedAmount = const Value.absent(),
+    this.syncId = const Value.absent(),
   }) : returnNumber = Value(returnNumber),
        originalInvoiceId = Value(originalInvoiceId),
        customerName = Value(customerName),
@@ -36371,6 +36700,10 @@ class SalesReturnsCompanion extends UpdateCompanion<SalesReturn> {
     Expression<String>? status,
     Expression<String>? processedBy,
     Expression<DateTime>? createdAt,
+    Expression<double>? refundedAmount,
+    Expression<String>? settlementStatus,
+    Expression<double>? restockedAmount,
+    Expression<String>? syncId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -36385,6 +36718,10 @@ class SalesReturnsCompanion extends UpdateCompanion<SalesReturn> {
       if (status != null) 'status': status,
       if (processedBy != null) 'processed_by': processedBy,
       if (createdAt != null) 'created_at': createdAt,
+      if (refundedAmount != null) 'refunded_amount': refundedAmount,
+      if (settlementStatus != null) 'settlement_status': settlementStatus,
+      if (restockedAmount != null) 'restocked_amount': restockedAmount,
+      if (syncId != null) 'sync_id': syncId,
     });
   }
 
@@ -36401,6 +36738,10 @@ class SalesReturnsCompanion extends UpdateCompanion<SalesReturn> {
     Value<String>? status,
     Value<String?>? processedBy,
     Value<DateTime>? createdAt,
+    Value<double>? refundedAmount,
+    Value<String>? settlementStatus,
+    Value<double>? restockedAmount,
+    Value<String?>? syncId,
   }) {
     return SalesReturnsCompanion(
       id: id ?? this.id,
@@ -36415,6 +36756,10 @@ class SalesReturnsCompanion extends UpdateCompanion<SalesReturn> {
       status: status ?? this.status,
       processedBy: processedBy ?? this.processedBy,
       createdAt: createdAt ?? this.createdAt,
+      refundedAmount: refundedAmount ?? this.refundedAmount,
+      settlementStatus: settlementStatus ?? this.settlementStatus,
+      restockedAmount: restockedAmount ?? this.restockedAmount,
+      syncId: syncId ?? this.syncId,
     );
   }
 
@@ -36457,6 +36802,18 @@ class SalesReturnsCompanion extends UpdateCompanion<SalesReturn> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (refundedAmount.present) {
+      map['refunded_amount'] = Variable<double>(refundedAmount.value);
+    }
+    if (settlementStatus.present) {
+      map['settlement_status'] = Variable<String>(settlementStatus.value);
+    }
+    if (restockedAmount.present) {
+      map['restocked_amount'] = Variable<double>(restockedAmount.value);
+    }
+    if (syncId.present) {
+      map['sync_id'] = Variable<String>(syncId.value);
+    }
     return map;
   }
 
@@ -36474,7 +36831,11 @@ class SalesReturnsCompanion extends UpdateCompanion<SalesReturn> {
           ..write('notes: $notes, ')
           ..write('status: $status, ')
           ..write('processedBy: $processedBy, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('refundedAmount: $refundedAmount, ')
+          ..write('settlementStatus: $settlementStatus, ')
+          ..write('restockedAmount: $restockedAmount, ')
+          ..write('syncId: $syncId')
           ..write(')'))
         .toString();
   }
@@ -36635,6 +36996,61 @@ class $SalesReturnItemsTable extends SalesReturnItems
     requiredDuringInsert: false,
     defaultValue: const Constant('customer_request'),
   );
+  static const VerificationMeta _restockConditionMeta = const VerificationMeta(
+    'restockCondition',
+  );
+  @override
+  late final GeneratedColumn<String> restockCondition = GeneratedColumn<String>(
+    'restock_condition',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('sellable'),
+  );
+  static const VerificationMeta _restockedQtyMeta = const VerificationMeta(
+    'restockedQty',
+  );
+  @override
+  late final GeneratedColumn<int> restockedQty = GeneratedColumn<int>(
+    'restocked_qty',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _syncIdMeta = const VerificationMeta('syncId');
+  @override
+  late final GeneratedColumn<String> syncId = GeneratedColumn<String>(
+    'sync_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -36649,6 +37065,11 @@ class $SalesReturnItemsTable extends SalesReturnItems
     commission,
     shipmentId,
     returnReason,
+    restockCondition,
+    restockedQty,
+    syncId,
+    createdAt,
+    updatedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -36752,6 +37173,42 @@ class $SalesReturnItemsTable extends SalesReturnItems
         ),
       );
     }
+    if (data.containsKey('restock_condition')) {
+      context.handle(
+        _restockConditionMeta,
+        restockCondition.isAcceptableOrUnknown(
+          data['restock_condition']!,
+          _restockConditionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('restocked_qty')) {
+      context.handle(
+        _restockedQtyMeta,
+        restockedQty.isAcceptableOrUnknown(
+          data['restocked_qty']!,
+          _restockedQtyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_id')) {
+      context.handle(
+        _syncIdMeta,
+        syncId.isAcceptableOrUnknown(data['sync_id']!, _syncIdMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
     return context;
   }
 
@@ -36809,6 +37266,26 @@ class $SalesReturnItemsTable extends SalesReturnItems
         DriftSqlType.string,
         data['${effectivePrefix}return_reason'],
       )!,
+      restockCondition: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}restock_condition'],
+      )!,
+      restockedQty: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}restocked_qty'],
+      )!,
+      syncId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
     );
   }
 
@@ -36831,6 +37308,16 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
   final double commission;
   final int? shipmentId;
   final String returnReason;
+
+  /// حالة الصنف المرتجع: 'sellable' (يعود للمخزون) | 'damaged' (تالف،
+  /// بيروح جدول التالف مش المخزون) | 'supplier' (هيتبعت للمورد).
+  final String restockCondition;
+
+  /// الكمية اللي رجعت للمخزون فعلياً — أقل من [quantity] لو الصنف تالف.
+  final int restockedQty;
+  final String? syncId;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
   const SalesReturnItem({
     required this.id,
     required this.returnId,
@@ -36844,6 +37331,11 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
     required this.commission,
     this.shipmentId,
     required this.returnReason,
+    required this.restockCondition,
+    required this.restockedQty,
+    this.syncId,
+    this.createdAt,
+    this.updatedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -36864,6 +37356,17 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
       map['shipment_id'] = Variable<int>(shipmentId);
     }
     map['return_reason'] = Variable<String>(returnReason);
+    map['restock_condition'] = Variable<String>(restockCondition);
+    map['restocked_qty'] = Variable<int>(restockedQty);
+    if (!nullToAbsent || syncId != null) {
+      map['sync_id'] = Variable<String>(syncId);
+    }
+    if (!nullToAbsent || createdAt != null) {
+      map['created_at'] = Variable<DateTime>(createdAt);
+    }
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
     return map;
   }
 
@@ -36885,6 +37388,17 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
           ? const Value.absent()
           : Value(shipmentId),
       returnReason: Value(returnReason),
+      restockCondition: Value(restockCondition),
+      restockedQty: Value(restockedQty),
+      syncId: syncId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncId),
+      createdAt: createdAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(createdAt),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
     );
   }
 
@@ -36906,6 +37420,11 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
       commission: serializer.fromJson<double>(json['commission']),
       shipmentId: serializer.fromJson<int?>(json['shipmentId']),
       returnReason: serializer.fromJson<String>(json['returnReason']),
+      restockCondition: serializer.fromJson<String>(json['restockCondition']),
+      restockedQty: serializer.fromJson<int>(json['restockedQty']),
+      syncId: serializer.fromJson<String?>(json['syncId']),
+      createdAt: serializer.fromJson<DateTime?>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
     );
   }
   @override
@@ -36924,6 +37443,11 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
       'commission': serializer.toJson<double>(commission),
       'shipmentId': serializer.toJson<int?>(shipmentId),
       'returnReason': serializer.toJson<String>(returnReason),
+      'restockCondition': serializer.toJson<String>(restockCondition),
+      'restockedQty': serializer.toJson<int>(restockedQty),
+      'syncId': serializer.toJson<String?>(syncId),
+      'createdAt': serializer.toJson<DateTime?>(createdAt),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
     };
   }
 
@@ -36940,6 +37464,11 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
     double? commission,
     Value<int?> shipmentId = const Value.absent(),
     String? returnReason,
+    String? restockCondition,
+    int? restockedQty,
+    Value<String?> syncId = const Value.absent(),
+    Value<DateTime?> createdAt = const Value.absent(),
+    Value<DateTime?> updatedAt = const Value.absent(),
   }) => SalesReturnItem(
     id: id ?? this.id,
     returnId: returnId ?? this.returnId,
@@ -36955,6 +37484,11 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
     commission: commission ?? this.commission,
     shipmentId: shipmentId.present ? shipmentId.value : this.shipmentId,
     returnReason: returnReason ?? this.returnReason,
+    restockCondition: restockCondition ?? this.restockCondition,
+    restockedQty: restockedQty ?? this.restockedQty,
+    syncId: syncId.present ? syncId.value : this.syncId,
+    createdAt: createdAt.present ? createdAt.value : this.createdAt,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
   );
   SalesReturnItem copyWithCompanion(SalesReturnItemsCompanion data) {
     return SalesReturnItem(
@@ -36982,6 +37516,15 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
       returnReason: data.returnReason.present
           ? data.returnReason.value
           : this.returnReason,
+      restockCondition: data.restockCondition.present
+          ? data.restockCondition.value
+          : this.restockCondition,
+      restockedQty: data.restockedQty.present
+          ? data.restockedQty.value
+          : this.restockedQty,
+      syncId: data.syncId.present ? data.syncId.value : this.syncId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
 
@@ -36999,7 +37542,12 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
           ..write('discount: $discount, ')
           ..write('commission: $commission, ')
           ..write('shipmentId: $shipmentId, ')
-          ..write('returnReason: $returnReason')
+          ..write('returnReason: $returnReason, ')
+          ..write('restockCondition: $restockCondition, ')
+          ..write('restockedQty: $restockedQty, ')
+          ..write('syncId: $syncId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -37018,6 +37566,11 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
     commission,
     shipmentId,
     returnReason,
+    restockCondition,
+    restockedQty,
+    syncId,
+    createdAt,
+    updatedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -37034,7 +37587,12 @@ class SalesReturnItem extends DataClass implements Insertable<SalesReturnItem> {
           other.discount == this.discount &&
           other.commission == this.commission &&
           other.shipmentId == this.shipmentId &&
-          other.returnReason == this.returnReason);
+          other.returnReason == this.returnReason &&
+          other.restockCondition == this.restockCondition &&
+          other.restockedQty == this.restockedQty &&
+          other.syncId == this.syncId &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
 }
 
 class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
@@ -37050,6 +37608,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
   final Value<double> commission;
   final Value<int?> shipmentId;
   final Value<String> returnReason;
+  final Value<String> restockCondition;
+  final Value<int> restockedQty;
+  final Value<String?> syncId;
+  final Value<DateTime?> createdAt;
+  final Value<DateTime?> updatedAt;
   const SalesReturnItemsCompanion({
     this.id = const Value.absent(),
     this.returnId = const Value.absent(),
@@ -37063,6 +37626,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
     this.commission = const Value.absent(),
     this.shipmentId = const Value.absent(),
     this.returnReason = const Value.absent(),
+    this.restockCondition = const Value.absent(),
+    this.restockedQty = const Value.absent(),
+    this.syncId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
   });
   SalesReturnItemsCompanion.insert({
     this.id = const Value.absent(),
@@ -37077,6 +37645,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
     this.commission = const Value.absent(),
     this.shipmentId = const Value.absent(),
     this.returnReason = const Value.absent(),
+    this.restockCondition = const Value.absent(),
+    this.restockedQty = const Value.absent(),
+    this.syncId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
   }) : returnId = Value(returnId),
        productId = Value(productId),
        productName = Value(productName),
@@ -37096,6 +37669,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
     Expression<double>? commission,
     Expression<int>? shipmentId,
     Expression<String>? returnReason,
+    Expression<String>? restockCondition,
+    Expression<int>? restockedQty,
+    Expression<String>? syncId,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -37110,6 +37688,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
       if (commission != null) 'commission': commission,
       if (shipmentId != null) 'shipment_id': shipmentId,
       if (returnReason != null) 'return_reason': returnReason,
+      if (restockCondition != null) 'restock_condition': restockCondition,
+      if (restockedQty != null) 'restocked_qty': restockedQty,
+      if (syncId != null) 'sync_id': syncId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
 
@@ -37126,6 +37709,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
     Value<double>? commission,
     Value<int?>? shipmentId,
     Value<String>? returnReason,
+    Value<String>? restockCondition,
+    Value<int>? restockedQty,
+    Value<String?>? syncId,
+    Value<DateTime?>? createdAt,
+    Value<DateTime?>? updatedAt,
   }) {
     return SalesReturnItemsCompanion(
       id: id ?? this.id,
@@ -37140,6 +37728,11 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
       commission: commission ?? this.commission,
       shipmentId: shipmentId ?? this.shipmentId,
       returnReason: returnReason ?? this.returnReason,
+      restockCondition: restockCondition ?? this.restockCondition,
+      restockedQty: restockedQty ?? this.restockedQty,
+      syncId: syncId ?? this.syncId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -37182,6 +37775,21 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
     if (returnReason.present) {
       map['return_reason'] = Variable<String>(returnReason.value);
     }
+    if (restockCondition.present) {
+      map['restock_condition'] = Variable<String>(restockCondition.value);
+    }
+    if (restockedQty.present) {
+      map['restocked_qty'] = Variable<int>(restockedQty.value);
+    }
+    if (syncId.present) {
+      map['sync_id'] = Variable<String>(syncId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
     return map;
   }
 
@@ -37199,7 +37807,941 @@ class SalesReturnItemsCompanion extends UpdateCompanion<SalesReturnItem> {
           ..write('discount: $discount, ')
           ..write('commission: $commission, ')
           ..write('shipmentId: $shipmentId, ')
-          ..write('returnReason: $returnReason')
+          ..write('returnReason: $returnReason, ')
+          ..write('restockCondition: $restockCondition, ')
+          ..write('restockedQty: $restockedQty, ')
+          ..write('syncId: $syncId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ReturnRefundsTable extends ReturnRefunds
+    with TableInfo<$ReturnRefundsTable, ReturnRefund> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ReturnRefundsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _returnIdMeta = const VerificationMeta(
+    'returnId',
+  );
+  @override
+  late final GeneratedColumn<int> returnId = GeneratedColumn<int>(
+    'return_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES sales_returns (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _refundDateMeta = const VerificationMeta(
+    'refundDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> refundDate = GeneratedColumn<DateTime>(
+    'refund_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<double> amount = GeneratedColumn<double>(
+    'amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _methodMeta = const VerificationMeta('method');
+  @override
+  late final GeneratedColumn<String> method = GeneratedColumn<String>(
+    'method',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _referenceNumberMeta = const VerificationMeta(
+    'referenceNumber',
+  );
+  @override
+  late final GeneratedColumn<String> referenceNumber = GeneratedColumn<String>(
+    'reference_number',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _applyToInvoiceIdMeta = const VerificationMeta(
+    'applyToInvoiceId',
+  );
+  @override
+  late final GeneratedColumn<int> applyToInvoiceId = GeneratedColumn<int>(
+    'apply_to_invoice_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES invoices (id)',
+    ),
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _processedByMeta = const VerificationMeta(
+    'processedBy',
+  );
+  @override
+  late final GeneratedColumn<String> processedBy = GeneratedColumn<String>(
+    'processed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _voidedAtMeta = const VerificationMeta(
+    'voidedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> voidedAt = GeneratedColumn<DateTime>(
+    'voided_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _voidedByMeta = const VerificationMeta(
+    'voidedBy',
+  );
+  @override
+  late final GeneratedColumn<String> voidedBy = GeneratedColumn<String>(
+    'voided_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _voidReasonMeta = const VerificationMeta(
+    'voidReason',
+  );
+  @override
+  late final GeneratedColumn<String> voidReason = GeneratedColumn<String>(
+    'void_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isVoidedMeta = const VerificationMeta(
+    'isVoided',
+  );
+  @override
+  late final GeneratedColumn<bool> isVoided = GeneratedColumn<bool>(
+    'is_voided',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_voided" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _syncIdMeta = const VerificationMeta('syncId');
+  @override
+  late final GeneratedColumn<String> syncId = GeneratedColumn<String>(
+    'sync_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    returnId,
+    refundDate,
+    amount,
+    method,
+    referenceNumber,
+    applyToInvoiceId,
+    notes,
+    processedBy,
+    voidedAt,
+    voidedBy,
+    voidReason,
+    isVoided,
+    syncId,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'return_refunds';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ReturnRefund> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('return_id')) {
+      context.handle(
+        _returnIdMeta,
+        returnId.isAcceptableOrUnknown(data['return_id']!, _returnIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_returnIdMeta);
+    }
+    if (data.containsKey('refund_date')) {
+      context.handle(
+        _refundDateMeta,
+        refundDate.isAcceptableOrUnknown(data['refund_date']!, _refundDateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_refundDateMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(
+        _amountMeta,
+        amount.isAcceptableOrUnknown(data['amount']!, _amountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('method')) {
+      context.handle(
+        _methodMeta,
+        method.isAcceptableOrUnknown(data['method']!, _methodMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_methodMeta);
+    }
+    if (data.containsKey('reference_number')) {
+      context.handle(
+        _referenceNumberMeta,
+        referenceNumber.isAcceptableOrUnknown(
+          data['reference_number']!,
+          _referenceNumberMeta,
+        ),
+      );
+    }
+    if (data.containsKey('apply_to_invoice_id')) {
+      context.handle(
+        _applyToInvoiceIdMeta,
+        applyToInvoiceId.isAcceptableOrUnknown(
+          data['apply_to_invoice_id']!,
+          _applyToInvoiceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('processed_by')) {
+      context.handle(
+        _processedByMeta,
+        processedBy.isAcceptableOrUnknown(
+          data['processed_by']!,
+          _processedByMeta,
+        ),
+      );
+    }
+    if (data.containsKey('voided_at')) {
+      context.handle(
+        _voidedAtMeta,
+        voidedAt.isAcceptableOrUnknown(data['voided_at']!, _voidedAtMeta),
+      );
+    }
+    if (data.containsKey('voided_by')) {
+      context.handle(
+        _voidedByMeta,
+        voidedBy.isAcceptableOrUnknown(data['voided_by']!, _voidedByMeta),
+      );
+    }
+    if (data.containsKey('void_reason')) {
+      context.handle(
+        _voidReasonMeta,
+        voidReason.isAcceptableOrUnknown(data['void_reason']!, _voidReasonMeta),
+      );
+    }
+    if (data.containsKey('is_voided')) {
+      context.handle(
+        _isVoidedMeta,
+        isVoided.isAcceptableOrUnknown(data['is_voided']!, _isVoidedMeta),
+      );
+    }
+    if (data.containsKey('sync_id')) {
+      context.handle(
+        _syncIdMeta,
+        syncId.isAcceptableOrUnknown(data['sync_id']!, _syncIdMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ReturnRefund map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ReturnRefund(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      returnId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}return_id'],
+      )!,
+      refundDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}refund_date'],
+      )!,
+      amount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}amount'],
+      )!,
+      method: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}method'],
+      )!,
+      referenceNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reference_number'],
+      ),
+      applyToInvoiceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}apply_to_invoice_id'],
+      ),
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      processedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}processed_by'],
+      ),
+      voidedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}voided_at'],
+      ),
+      voidedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}voided_by'],
+      ),
+      voidReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}void_reason'],
+      ),
+      isVoided: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_voided'],
+      )!,
+      syncId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
+    );
+  }
+
+  @override
+  $ReturnRefundsTable createAlias(String alias) {
+    return $ReturnRefundsTable(attachedDatabase, alias);
+  }
+}
+
+class ReturnRefund extends DataClass implements Insertable<ReturnRefund> {
+  final int id;
+  final int returnId;
+  final DateTime refundDate;
+
+  /// قيمة الدفعة المستردة.
+  final double amount;
+
+  /// 'cash' | 'credit_balance' | 'original' | 'store_credit'
+  final String method;
+
+  /// رقم العملية المرجعي (كارت/بنك/تحويل) — مهم للمطابقة البنكية.
+  final String? referenceNumber;
+
+  /// لو الرصيد اتحمّل على فاتورة معينة بدل ما يفضل رصيد مفتوح.
+  final int? applyToInvoiceId;
+  final String? notes;
+
+  /// اسم المستخدم اللي نفّذ الاسترداد — لازم يتسجل دايماً (audit).
+  final String? processedBy;
+
+  /// إلغاء الاسترداد (soft) — السجل يفضل موجود للأرشيف بس بيبقى صفري الأثر.
+  final DateTime? voidedAt;
+  final String? voidedBy;
+  final String? voidReason;
+
+  ///Soft delete guard — كل الاستعلامات لازم تفلتر عليها.
+  final bool isVoided;
+  final String? syncId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  const ReturnRefund({
+    required this.id,
+    required this.returnId,
+    required this.refundDate,
+    required this.amount,
+    required this.method,
+    this.referenceNumber,
+    this.applyToInvoiceId,
+    this.notes,
+    this.processedBy,
+    this.voidedAt,
+    this.voidedBy,
+    this.voidReason,
+    required this.isVoided,
+    this.syncId,
+    required this.createdAt,
+    this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['return_id'] = Variable<int>(returnId);
+    map['refund_date'] = Variable<DateTime>(refundDate);
+    map['amount'] = Variable<double>(amount);
+    map['method'] = Variable<String>(method);
+    if (!nullToAbsent || referenceNumber != null) {
+      map['reference_number'] = Variable<String>(referenceNumber);
+    }
+    if (!nullToAbsent || applyToInvoiceId != null) {
+      map['apply_to_invoice_id'] = Variable<int>(applyToInvoiceId);
+    }
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    if (!nullToAbsent || processedBy != null) {
+      map['processed_by'] = Variable<String>(processedBy);
+    }
+    if (!nullToAbsent || voidedAt != null) {
+      map['voided_at'] = Variable<DateTime>(voidedAt);
+    }
+    if (!nullToAbsent || voidedBy != null) {
+      map['voided_by'] = Variable<String>(voidedBy);
+    }
+    if (!nullToAbsent || voidReason != null) {
+      map['void_reason'] = Variable<String>(voidReason);
+    }
+    map['is_voided'] = Variable<bool>(isVoided);
+    if (!nullToAbsent || syncId != null) {
+      map['sync_id'] = Variable<String>(syncId);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
+    return map;
+  }
+
+  ReturnRefundsCompanion toCompanion(bool nullToAbsent) {
+    return ReturnRefundsCompanion(
+      id: Value(id),
+      returnId: Value(returnId),
+      refundDate: Value(refundDate),
+      amount: Value(amount),
+      method: Value(method),
+      referenceNumber: referenceNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(referenceNumber),
+      applyToInvoiceId: applyToInvoiceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(applyToInvoiceId),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      processedBy: processedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(processedBy),
+      voidedAt: voidedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(voidedAt),
+      voidedBy: voidedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(voidedBy),
+      voidReason: voidReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(voidReason),
+      isVoided: Value(isVoided),
+      syncId: syncId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncId),
+      createdAt: Value(createdAt),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
+    );
+  }
+
+  factory ReturnRefund.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ReturnRefund(
+      id: serializer.fromJson<int>(json['id']),
+      returnId: serializer.fromJson<int>(json['returnId']),
+      refundDate: serializer.fromJson<DateTime>(json['refundDate']),
+      amount: serializer.fromJson<double>(json['amount']),
+      method: serializer.fromJson<String>(json['method']),
+      referenceNumber: serializer.fromJson<String?>(json['referenceNumber']),
+      applyToInvoiceId: serializer.fromJson<int?>(json['applyToInvoiceId']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      processedBy: serializer.fromJson<String?>(json['processedBy']),
+      voidedAt: serializer.fromJson<DateTime?>(json['voidedAt']),
+      voidedBy: serializer.fromJson<String?>(json['voidedBy']),
+      voidReason: serializer.fromJson<String?>(json['voidReason']),
+      isVoided: serializer.fromJson<bool>(json['isVoided']),
+      syncId: serializer.fromJson<String?>(json['syncId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'returnId': serializer.toJson<int>(returnId),
+      'refundDate': serializer.toJson<DateTime>(refundDate),
+      'amount': serializer.toJson<double>(amount),
+      'method': serializer.toJson<String>(method),
+      'referenceNumber': serializer.toJson<String?>(referenceNumber),
+      'applyToInvoiceId': serializer.toJson<int?>(applyToInvoiceId),
+      'notes': serializer.toJson<String?>(notes),
+      'processedBy': serializer.toJson<String?>(processedBy),
+      'voidedAt': serializer.toJson<DateTime?>(voidedAt),
+      'voidedBy': serializer.toJson<String?>(voidedBy),
+      'voidReason': serializer.toJson<String?>(voidReason),
+      'isVoided': serializer.toJson<bool>(isVoided),
+      'syncId': serializer.toJson<String?>(syncId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+    };
+  }
+
+  ReturnRefund copyWith({
+    int? id,
+    int? returnId,
+    DateTime? refundDate,
+    double? amount,
+    String? method,
+    Value<String?> referenceNumber = const Value.absent(),
+    Value<int?> applyToInvoiceId = const Value.absent(),
+    Value<String?> notes = const Value.absent(),
+    Value<String?> processedBy = const Value.absent(),
+    Value<DateTime?> voidedAt = const Value.absent(),
+    Value<String?> voidedBy = const Value.absent(),
+    Value<String?> voidReason = const Value.absent(),
+    bool? isVoided,
+    Value<String?> syncId = const Value.absent(),
+    DateTime? createdAt,
+    Value<DateTime?> updatedAt = const Value.absent(),
+  }) => ReturnRefund(
+    id: id ?? this.id,
+    returnId: returnId ?? this.returnId,
+    refundDate: refundDate ?? this.refundDate,
+    amount: amount ?? this.amount,
+    method: method ?? this.method,
+    referenceNumber: referenceNumber.present
+        ? referenceNumber.value
+        : this.referenceNumber,
+    applyToInvoiceId: applyToInvoiceId.present
+        ? applyToInvoiceId.value
+        : this.applyToInvoiceId,
+    notes: notes.present ? notes.value : this.notes,
+    processedBy: processedBy.present ? processedBy.value : this.processedBy,
+    voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
+    voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
+    voidReason: voidReason.present ? voidReason.value : this.voidReason,
+    isVoided: isVoided ?? this.isVoided,
+    syncId: syncId.present ? syncId.value : this.syncId,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+  );
+  ReturnRefund copyWithCompanion(ReturnRefundsCompanion data) {
+    return ReturnRefund(
+      id: data.id.present ? data.id.value : this.id,
+      returnId: data.returnId.present ? data.returnId.value : this.returnId,
+      refundDate: data.refundDate.present
+          ? data.refundDate.value
+          : this.refundDate,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      method: data.method.present ? data.method.value : this.method,
+      referenceNumber: data.referenceNumber.present
+          ? data.referenceNumber.value
+          : this.referenceNumber,
+      applyToInvoiceId: data.applyToInvoiceId.present
+          ? data.applyToInvoiceId.value
+          : this.applyToInvoiceId,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      processedBy: data.processedBy.present
+          ? data.processedBy.value
+          : this.processedBy,
+      voidedAt: data.voidedAt.present ? data.voidedAt.value : this.voidedAt,
+      voidedBy: data.voidedBy.present ? data.voidedBy.value : this.voidedBy,
+      voidReason: data.voidReason.present
+          ? data.voidReason.value
+          : this.voidReason,
+      isVoided: data.isVoided.present ? data.isVoided.value : this.isVoided,
+      syncId: data.syncId.present ? data.syncId.value : this.syncId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReturnRefund(')
+          ..write('id: $id, ')
+          ..write('returnId: $returnId, ')
+          ..write('refundDate: $refundDate, ')
+          ..write('amount: $amount, ')
+          ..write('method: $method, ')
+          ..write('referenceNumber: $referenceNumber, ')
+          ..write('applyToInvoiceId: $applyToInvoiceId, ')
+          ..write('notes: $notes, ')
+          ..write('processedBy: $processedBy, ')
+          ..write('voidedAt: $voidedAt, ')
+          ..write('voidedBy: $voidedBy, ')
+          ..write('voidReason: $voidReason, ')
+          ..write('isVoided: $isVoided, ')
+          ..write('syncId: $syncId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    returnId,
+    refundDate,
+    amount,
+    method,
+    referenceNumber,
+    applyToInvoiceId,
+    notes,
+    processedBy,
+    voidedAt,
+    voidedBy,
+    voidReason,
+    isVoided,
+    syncId,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ReturnRefund &&
+          other.id == this.id &&
+          other.returnId == this.returnId &&
+          other.refundDate == this.refundDate &&
+          other.amount == this.amount &&
+          other.method == this.method &&
+          other.referenceNumber == this.referenceNumber &&
+          other.applyToInvoiceId == this.applyToInvoiceId &&
+          other.notes == this.notes &&
+          other.processedBy == this.processedBy &&
+          other.voidedAt == this.voidedAt &&
+          other.voidedBy == this.voidedBy &&
+          other.voidReason == this.voidReason &&
+          other.isVoided == this.isVoided &&
+          other.syncId == this.syncId &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ReturnRefundsCompanion extends UpdateCompanion<ReturnRefund> {
+  final Value<int> id;
+  final Value<int> returnId;
+  final Value<DateTime> refundDate;
+  final Value<double> amount;
+  final Value<String> method;
+  final Value<String?> referenceNumber;
+  final Value<int?> applyToInvoiceId;
+  final Value<String?> notes;
+  final Value<String?> processedBy;
+  final Value<DateTime?> voidedAt;
+  final Value<String?> voidedBy;
+  final Value<String?> voidReason;
+  final Value<bool> isVoided;
+  final Value<String?> syncId;
+  final Value<DateTime> createdAt;
+  final Value<DateTime?> updatedAt;
+  const ReturnRefundsCompanion({
+    this.id = const Value.absent(),
+    this.returnId = const Value.absent(),
+    this.refundDate = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.method = const Value.absent(),
+    this.referenceNumber = const Value.absent(),
+    this.applyToInvoiceId = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.processedBy = const Value.absent(),
+    this.voidedAt = const Value.absent(),
+    this.voidedBy = const Value.absent(),
+    this.voidReason = const Value.absent(),
+    this.isVoided = const Value.absent(),
+    this.syncId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  ReturnRefundsCompanion.insert({
+    this.id = const Value.absent(),
+    required int returnId,
+    required DateTime refundDate,
+    required double amount,
+    required String method,
+    this.referenceNumber = const Value.absent(),
+    this.applyToInvoiceId = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.processedBy = const Value.absent(),
+    this.voidedAt = const Value.absent(),
+    this.voidedBy = const Value.absent(),
+    this.voidReason = const Value.absent(),
+    this.isVoided = const Value.absent(),
+    this.syncId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : returnId = Value(returnId),
+       refundDate = Value(refundDate),
+       amount = Value(amount),
+       method = Value(method);
+  static Insertable<ReturnRefund> custom({
+    Expression<int>? id,
+    Expression<int>? returnId,
+    Expression<DateTime>? refundDate,
+    Expression<double>? amount,
+    Expression<String>? method,
+    Expression<String>? referenceNumber,
+    Expression<int>? applyToInvoiceId,
+    Expression<String>? notes,
+    Expression<String>? processedBy,
+    Expression<DateTime>? voidedAt,
+    Expression<String>? voidedBy,
+    Expression<String>? voidReason,
+    Expression<bool>? isVoided,
+    Expression<String>? syncId,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (returnId != null) 'return_id': returnId,
+      if (refundDate != null) 'refund_date': refundDate,
+      if (amount != null) 'amount': amount,
+      if (method != null) 'method': method,
+      if (referenceNumber != null) 'reference_number': referenceNumber,
+      if (applyToInvoiceId != null) 'apply_to_invoice_id': applyToInvoiceId,
+      if (notes != null) 'notes': notes,
+      if (processedBy != null) 'processed_by': processedBy,
+      if (voidedAt != null) 'voided_at': voidedAt,
+      if (voidedBy != null) 'voided_by': voidedBy,
+      if (voidReason != null) 'void_reason': voidReason,
+      if (isVoided != null) 'is_voided': isVoided,
+      if (syncId != null) 'sync_id': syncId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  ReturnRefundsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? returnId,
+    Value<DateTime>? refundDate,
+    Value<double>? amount,
+    Value<String>? method,
+    Value<String?>? referenceNumber,
+    Value<int?>? applyToInvoiceId,
+    Value<String?>? notes,
+    Value<String?>? processedBy,
+    Value<DateTime?>? voidedAt,
+    Value<String?>? voidedBy,
+    Value<String?>? voidReason,
+    Value<bool>? isVoided,
+    Value<String?>? syncId,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? updatedAt,
+  }) {
+    return ReturnRefundsCompanion(
+      id: id ?? this.id,
+      returnId: returnId ?? this.returnId,
+      refundDate: refundDate ?? this.refundDate,
+      amount: amount ?? this.amount,
+      method: method ?? this.method,
+      referenceNumber: referenceNumber ?? this.referenceNumber,
+      applyToInvoiceId: applyToInvoiceId ?? this.applyToInvoiceId,
+      notes: notes ?? this.notes,
+      processedBy: processedBy ?? this.processedBy,
+      voidedAt: voidedAt ?? this.voidedAt,
+      voidedBy: voidedBy ?? this.voidedBy,
+      voidReason: voidReason ?? this.voidReason,
+      isVoided: isVoided ?? this.isVoided,
+      syncId: syncId ?? this.syncId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (returnId.present) {
+      map['return_id'] = Variable<int>(returnId.value);
+    }
+    if (refundDate.present) {
+      map['refund_date'] = Variable<DateTime>(refundDate.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<double>(amount.value);
+    }
+    if (method.present) {
+      map['method'] = Variable<String>(method.value);
+    }
+    if (referenceNumber.present) {
+      map['reference_number'] = Variable<String>(referenceNumber.value);
+    }
+    if (applyToInvoiceId.present) {
+      map['apply_to_invoice_id'] = Variable<int>(applyToInvoiceId.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (processedBy.present) {
+      map['processed_by'] = Variable<String>(processedBy.value);
+    }
+    if (voidedAt.present) {
+      map['voided_at'] = Variable<DateTime>(voidedAt.value);
+    }
+    if (voidedBy.present) {
+      map['voided_by'] = Variable<String>(voidedBy.value);
+    }
+    if (voidReason.present) {
+      map['void_reason'] = Variable<String>(voidReason.value);
+    }
+    if (isVoided.present) {
+      map['is_voided'] = Variable<bool>(isVoided.value);
+    }
+    if (syncId.present) {
+      map['sync_id'] = Variable<String>(syncId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReturnRefundsCompanion(')
+          ..write('id: $id, ')
+          ..write('returnId: $returnId, ')
+          ..write('refundDate: $refundDate, ')
+          ..write('amount: $amount, ')
+          ..write('method: $method, ')
+          ..write('referenceNumber: $referenceNumber, ')
+          ..write('applyToInvoiceId: $applyToInvoiceId, ')
+          ..write('notes: $notes, ')
+          ..write('processedBy: $processedBy, ')
+          ..write('voidedAt: $voidedAt, ')
+          ..write('voidedBy: $voidedBy, ')
+          ..write('voidReason: $voidReason, ')
+          ..write('isVoided: $isVoided, ')
+          ..write('syncId: $syncId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -51744,6 +53286,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SalesReturnItemsTable salesReturnItems = $SalesReturnItemsTable(
     this,
   );
+  late final $ReturnRefundsTable returnRefunds = $ReturnRefundsTable(this);
   late final $CustomerContainersTable customerContainers =
       $CustomerContainersTable(this);
   late final $BiometricDevicesTable biometricDevices = $BiometricDevicesTable(
@@ -51827,6 +53370,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final SalesReturnsDao salesReturnsDao = SalesReturnsDao(
     this as AppDatabase,
   );
+  late final ReturnRefundsDao returnRefundsDao = ReturnRefundsDao(
+    this as AppDatabase,
+  );
   late final AttendanceDeviceDao attendanceDeviceDao = AttendanceDeviceDao(
     this as AppDatabase,
   );
@@ -51903,6 +53449,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     damagedItems,
     salesReturns,
     salesReturnItems,
+    returnRefunds,
     customerContainers,
     biometricDevices,
     staffBiometricMappings,
@@ -51996,6 +53543,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('sales_return_items', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'sales_returns',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('return_refunds', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -56585,6 +58139,9 @@ typedef $$InvoicesTableCreateCompanionBuilder =
       Value<double> cardAmount,
       Value<double> creditAmount,
       Value<int?> shipmentId,
+      Value<double> returnedAmount,
+      Value<double> netAmount,
+      Value<double> refundedAmount,
       Value<String?> syncId,
       Value<DateTime?> createdAt,
       Value<DateTime?> updatedAt,
@@ -56609,6 +58166,9 @@ typedef $$InvoicesTableUpdateCompanionBuilder =
       Value<double> cardAmount,
       Value<double> creditAmount,
       Value<int?> shipmentId,
+      Value<double> returnedAmount,
+      Value<double> netAmount,
+      Value<double> refundedAmount,
       Value<String?> syncId,
       Value<DateTime?> createdAt,
       Value<DateTime?> updatedAt,
@@ -56736,6 +58296,27 @@ final class $$InvoicesTableReferences
     );
   }
 
+  static MultiTypedResultKey<$ReturnRefundsTable, List<ReturnRefund>>
+  _returnRefundsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.returnRefunds,
+    aliasName: $_aliasNameGenerator(
+      db.invoices.id,
+      db.returnRefunds.applyToInvoiceId,
+    ),
+  );
+
+  $$ReturnRefundsTableProcessedTableManager get returnRefundsRefs {
+    final manager = $$ReturnRefundsTableTableManager(
+      $_db,
+      $_db.returnRefunds,
+    ).filter((f) => f.applyToInvoiceId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_returnRefundsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<
     $ManufacturingOrdersTable,
     List<ManufacturingOrder>
@@ -56855,6 +58436,21 @@ class $$InvoicesTableFilterComposer
 
   ColumnFilters<double> get creditAmount => $composableBuilder(
     column: $table.creditAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get returnedAmount => $composableBuilder(
+    column: $table.returnedAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get netAmount => $composableBuilder(
+    column: $table.netAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get refundedAmount => $composableBuilder(
+    column: $table.refundedAmount,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -57021,6 +58617,31 @@ class $$InvoicesTableFilterComposer
     return f(composer);
   }
 
+  Expression<bool> returnRefundsRefs(
+    Expression<bool> Function($$ReturnRefundsTableFilterComposer f) f,
+  ) {
+    final $$ReturnRefundsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.returnRefunds,
+      getReferencedColumn: (t) => t.applyToInvoiceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ReturnRefundsTableFilterComposer(
+            $db: $db,
+            $table: $db.returnRefunds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<bool> manufacturingOrdersRefs(
     Expression<bool> Function($$ManufacturingOrdersTableFilterComposer f) f,
   ) {
@@ -57138,6 +58759,21 @@ class $$InvoicesTableOrderingComposer
 
   ColumnOrderings<double> get creditAmount => $composableBuilder(
     column: $table.creditAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get returnedAmount => $composableBuilder(
+    column: $table.returnedAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get netAmount => $composableBuilder(
+    column: $table.netAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get refundedAmount => $composableBuilder(
+    column: $table.refundedAmount,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -57261,6 +58897,19 @@ class $$InvoicesTableAnnotationComposer
 
   GeneratedColumn<double> get creditAmount => $composableBuilder(
     column: $table.creditAmount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get returnedAmount => $composableBuilder(
+    column: $table.returnedAmount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get netAmount =>
+      $composableBuilder(column: $table.netAmount, builder: (column) => column);
+
+  GeneratedColumn<double> get refundedAmount => $composableBuilder(
+    column: $table.refundedAmount,
     builder: (column) => column,
   );
 
@@ -57422,6 +59071,31 @@ class $$InvoicesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> returnRefundsRefs<T extends Object>(
+    Expression<T> Function($$ReturnRefundsTableAnnotationComposer a) f,
+  ) {
+    final $$ReturnRefundsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.returnRefunds,
+      getReferencedColumn: (t) => t.applyToInvoiceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ReturnRefundsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.returnRefunds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> manufacturingOrdersRefs<T extends Object>(
     Expression<T> Function($$ManufacturingOrdersTableAnnotationComposer a) f,
   ) {
@@ -57469,6 +59143,7 @@ class $$InvoicesTableTableManager
             bool creditPaymentsRefs,
             bool invoicePaymentsRefs,
             bool salesReturnsRefs,
+            bool returnRefundsRefs,
             bool manufacturingOrdersRefs,
           })
         > {
@@ -57503,6 +59178,9 @@ class $$InvoicesTableTableManager
                 Value<double> cardAmount = const Value.absent(),
                 Value<double> creditAmount = const Value.absent(),
                 Value<int?> shipmentId = const Value.absent(),
+                Value<double> returnedAmount = const Value.absent(),
+                Value<double> netAmount = const Value.absent(),
+                Value<double> refundedAmount = const Value.absent(),
                 Value<String?> syncId = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
@@ -57525,6 +59203,9 @@ class $$InvoicesTableTableManager
                 cardAmount: cardAmount,
                 creditAmount: creditAmount,
                 shipmentId: shipmentId,
+                returnedAmount: returnedAmount,
+                netAmount: netAmount,
+                refundedAmount: refundedAmount,
                 syncId: syncId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -57549,6 +59230,9 @@ class $$InvoicesTableTableManager
                 Value<double> cardAmount = const Value.absent(),
                 Value<double> creditAmount = const Value.absent(),
                 Value<int?> shipmentId = const Value.absent(),
+                Value<double> returnedAmount = const Value.absent(),
+                Value<double> netAmount = const Value.absent(),
+                Value<double> refundedAmount = const Value.absent(),
                 Value<String?> syncId = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
@@ -57571,6 +59255,9 @@ class $$InvoicesTableTableManager
                 cardAmount: cardAmount,
                 creditAmount: creditAmount,
                 shipmentId: shipmentId,
+                returnedAmount: returnedAmount,
+                netAmount: netAmount,
+                refundedAmount: refundedAmount,
                 syncId: syncId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -57591,6 +59278,7 @@ class $$InvoicesTableTableManager
                 creditPaymentsRefs = false,
                 invoicePaymentsRefs = false,
                 salesReturnsRefs = false,
+                returnRefundsRefs = false,
                 manufacturingOrdersRefs = false,
               }) {
                 return PrefetchHooks(
@@ -57601,6 +59289,7 @@ class $$InvoicesTableTableManager
                     if (creditPaymentsRefs) db.creditPayments,
                     if (invoicePaymentsRefs) db.invoicePayments,
                     if (salesReturnsRefs) db.salesReturns,
+                    if (returnRefundsRefs) db.returnRefunds,
                     if (manufacturingOrdersRefs) db.manufacturingOrders,
                   ],
                   addJoins:
@@ -57742,6 +59431,27 @@ class $$InvoicesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (returnRefundsRefs)
+                        await $_getPrefetchedData<
+                          Invoice,
+                          $InvoicesTable,
+                          ReturnRefund
+                        >(
+                          currentTable: table,
+                          referencedTable: $$InvoicesTableReferences
+                              ._returnRefundsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$InvoicesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).returnRefundsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.applyToInvoiceId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (manufacturingOrdersRefs)
                         await $_getPrefetchedData<
                           Invoice,
@@ -57790,6 +59500,7 @@ typedef $$InvoicesTableProcessedTableManager =
         bool creditPaymentsRefs,
         bool invoicePaymentsRefs,
         bool salesReturnsRefs,
+        bool returnRefundsRefs,
         bool manufacturingOrdersRefs,
       })
     >;
@@ -77652,6 +79363,10 @@ typedef $$SalesReturnsTableCreateCompanionBuilder =
       Value<String> status,
       Value<String?> processedBy,
       Value<DateTime> createdAt,
+      Value<double> refundedAmount,
+      Value<String> settlementStatus,
+      Value<double> restockedAmount,
+      Value<String?> syncId,
     });
 typedef $$SalesReturnsTableUpdateCompanionBuilder =
     SalesReturnsCompanion Function({
@@ -77667,6 +79382,10 @@ typedef $$SalesReturnsTableUpdateCompanionBuilder =
       Value<String> status,
       Value<String?> processedBy,
       Value<DateTime> createdAt,
+      Value<double> refundedAmount,
+      Value<String> settlementStatus,
+      Value<double> restockedAmount,
+      Value<String?> syncId,
     });
 
 final class $$SalesReturnsTableReferences
@@ -77710,6 +79429,27 @@ final class $$SalesReturnsTableReferences
     final cache = $_typedResult.readTableOrNull(
       _salesReturnItemsRefsTable($_db),
     );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$ReturnRefundsTable, List<ReturnRefund>>
+  _returnRefundsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.returnRefunds,
+    aliasName: $_aliasNameGenerator(
+      db.salesReturns.id,
+      db.returnRefunds.returnId,
+    ),
+  );
+
+  $$ReturnRefundsTableProcessedTableManager get returnRefundsRefs {
+    final manager = $$ReturnRefundsTableTableManager(
+      $_db,
+      $_db.returnRefunds,
+    ).filter((f) => f.returnId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_returnRefundsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -77780,6 +79520,26 @@ class $$SalesReturnsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<double> get refundedAmount => $composableBuilder(
+    column: $table.refundedAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get settlementStatus => $composableBuilder(
+    column: $table.settlementStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get restockedAmount => $composableBuilder(
+    column: $table.restockedAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$InvoicesTableFilterComposer get originalInvoiceId {
     final $$InvoicesTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -77819,6 +79579,31 @@ class $$SalesReturnsTableFilterComposer
           }) => $$SalesReturnItemsTableFilterComposer(
             $db: $db,
             $table: $db.salesReturnItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> returnRefundsRefs(
+    Expression<bool> Function($$ReturnRefundsTableFilterComposer f) f,
+  ) {
+    final $$ReturnRefundsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.returnRefunds,
+      getReferencedColumn: (t) => t.returnId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ReturnRefundsTableFilterComposer(
+            $db: $db,
+            $table: $db.returnRefunds,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -77890,6 +79675,26 @@ class $$SalesReturnsTableOrderingComposer
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get refundedAmount => $composableBuilder(
+    column: $table.refundedAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get settlementStatus => $composableBuilder(
+    column: $table.settlementStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get restockedAmount => $composableBuilder(
+    column: $table.restockedAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncId => $composableBuilder(
+    column: $table.syncId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -77973,6 +79778,24 @@ class $$SalesReturnsTableAnnotationComposer
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
+  GeneratedColumn<double> get refundedAmount => $composableBuilder(
+    column: $table.refundedAmount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get settlementStatus => $composableBuilder(
+    column: $table.settlementStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get restockedAmount => $composableBuilder(
+    column: $table.restockedAmount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get syncId =>
+      $composableBuilder(column: $table.syncId, builder: (column) => column);
+
   $$InvoicesTableAnnotationComposer get originalInvoiceId {
     final $$InvoicesTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -78020,6 +79843,31 @@ class $$SalesReturnsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> returnRefundsRefs<T extends Object>(
+    Expression<T> Function($$ReturnRefundsTableAnnotationComposer a) f,
+  ) {
+    final $$ReturnRefundsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.returnRefunds,
+      getReferencedColumn: (t) => t.returnId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ReturnRefundsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.returnRefunds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$SalesReturnsTableTableManager
@@ -78038,6 +79886,7 @@ class $$SalesReturnsTableTableManager
           PrefetchHooks Function({
             bool originalInvoiceId,
             bool salesReturnItemsRefs,
+            bool returnRefundsRefs,
           })
         > {
   $$SalesReturnsTableTableManager(_$AppDatabase db, $SalesReturnsTable table)
@@ -78065,6 +79914,10 @@ class $$SalesReturnsTableTableManager
                 Value<String> status = const Value.absent(),
                 Value<String?> processedBy = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<double> refundedAmount = const Value.absent(),
+                Value<String> settlementStatus = const Value.absent(),
+                Value<double> restockedAmount = const Value.absent(),
+                Value<String?> syncId = const Value.absent(),
               }) => SalesReturnsCompanion(
                 id: id,
                 returnNumber: returnNumber,
@@ -78078,6 +79931,10 @@ class $$SalesReturnsTableTableManager
                 status: status,
                 processedBy: processedBy,
                 createdAt: createdAt,
+                refundedAmount: refundedAmount,
+                settlementStatus: settlementStatus,
+                restockedAmount: restockedAmount,
+                syncId: syncId,
               ),
           createCompanionCallback:
               ({
@@ -78093,6 +79950,10 @@ class $$SalesReturnsTableTableManager
                 Value<String> status = const Value.absent(),
                 Value<String?> processedBy = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<double> refundedAmount = const Value.absent(),
+                Value<String> settlementStatus = const Value.absent(),
+                Value<double> restockedAmount = const Value.absent(),
+                Value<String?> syncId = const Value.absent(),
               }) => SalesReturnsCompanion.insert(
                 id: id,
                 returnNumber: returnNumber,
@@ -78106,6 +79967,10 @@ class $$SalesReturnsTableTableManager
                 status: status,
                 processedBy: processedBy,
                 createdAt: createdAt,
+                refundedAmount: refundedAmount,
+                settlementStatus: settlementStatus,
+                restockedAmount: restockedAmount,
+                syncId: syncId,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -78116,11 +79981,16 @@ class $$SalesReturnsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({originalInvoiceId = false, salesReturnItemsRefs = false}) {
+              ({
+                originalInvoiceId = false,
+                salesReturnItemsRefs = false,
+                returnRefundsRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (salesReturnItemsRefs) db.salesReturnItems,
+                    if (returnRefundsRefs) db.returnRefunds,
                   ],
                   addJoins:
                       <
@@ -78179,6 +80049,27 @@ class $$SalesReturnsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (returnRefundsRefs)
+                        await $_getPrefetchedData<
+                          SalesReturn,
+                          $SalesReturnsTable,
+                          ReturnRefund
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SalesReturnsTableReferences
+                              ._returnRefundsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SalesReturnsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).returnRefundsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.returnId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -78202,6 +80093,7 @@ typedef $$SalesReturnsTableProcessedTableManager =
       PrefetchHooks Function({
         bool originalInvoiceId,
         bool salesReturnItemsRefs,
+        bool returnRefundsRefs,
       })
     >;
 typedef $$SalesReturnItemsTableCreateCompanionBuilder =
@@ -78218,6 +80110,11 @@ typedef $$SalesReturnItemsTableCreateCompanionBuilder =
       Value<double> commission,
       Value<int?> shipmentId,
       Value<String> returnReason,
+      Value<String> restockCondition,
+      Value<int> restockedQty,
+      Value<String?> syncId,
+      Value<DateTime?> createdAt,
+      Value<DateTime?> updatedAt,
     });
 typedef $$SalesReturnItemsTableUpdateCompanionBuilder =
     SalesReturnItemsCompanion Function({
@@ -78233,6 +80130,11 @@ typedef $$SalesReturnItemsTableUpdateCompanionBuilder =
       Value<double> commission,
       Value<int?> shipmentId,
       Value<String> returnReason,
+      Value<String> restockCondition,
+      Value<int> restockedQty,
+      Value<String?> syncId,
+      Value<DateTime?> createdAt,
+      Value<DateTime?> updatedAt,
     });
 
 final class $$SalesReturnItemsTableReferences
@@ -78373,6 +80275,31 @@ class $$SalesReturnItemsTableFilterComposer
 
   ColumnFilters<String> get returnReason => $composableBuilder(
     column: $table.returnReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get restockCondition => $composableBuilder(
+    column: $table.restockCondition,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get restockedQty => $composableBuilder(
+    column: $table.restockedQty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -78518,6 +80445,31 @@ class $$SalesReturnItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get restockCondition => $composableBuilder(
+    column: $table.restockCondition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get restockedQty => $composableBuilder(
+    column: $table.restockedQty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$SalesReturnsTableOrderingComposer get returnId {
     final $$SalesReturnsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -78651,6 +80603,25 @@ class $$SalesReturnItemsTableAnnotationComposer
     column: $table.returnReason,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get restockCondition => $composableBuilder(
+    column: $table.restockCondition,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get restockedQty => $composableBuilder(
+    column: $table.restockedQty,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get syncId =>
+      $composableBuilder(column: $table.syncId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
   $$SalesReturnsTableAnnotationComposer get returnId {
     final $$SalesReturnsTableAnnotationComposer composer = $composerBuilder(
@@ -78793,6 +80764,11 @@ class $$SalesReturnItemsTableTableManager
                 Value<double> commission = const Value.absent(),
                 Value<int?> shipmentId = const Value.absent(),
                 Value<String> returnReason = const Value.absent(),
+                Value<String> restockCondition = const Value.absent(),
+                Value<int> restockedQty = const Value.absent(),
+                Value<String?> syncId = const Value.absent(),
+                Value<DateTime?> createdAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
               }) => SalesReturnItemsCompanion(
                 id: id,
                 returnId: returnId,
@@ -78806,6 +80782,11 @@ class $$SalesReturnItemsTableTableManager
                 commission: commission,
                 shipmentId: shipmentId,
                 returnReason: returnReason,
+                restockCondition: restockCondition,
+                restockedQty: restockedQty,
+                syncId: syncId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
               ),
           createCompanionCallback:
               ({
@@ -78821,6 +80802,11 @@ class $$SalesReturnItemsTableTableManager
                 Value<double> commission = const Value.absent(),
                 Value<int?> shipmentId = const Value.absent(),
                 Value<String> returnReason = const Value.absent(),
+                Value<String> restockCondition = const Value.absent(),
+                Value<int> restockedQty = const Value.absent(),
+                Value<String?> syncId = const Value.absent(),
+                Value<DateTime?> createdAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
               }) => SalesReturnItemsCompanion.insert(
                 id: id,
                 returnId: returnId,
@@ -78834,6 +80820,11 @@ class $$SalesReturnItemsTableTableManager
                 commission: commission,
                 shipmentId: shipmentId,
                 returnReason: returnReason,
+                restockCondition: restockCondition,
+                restockedQty: restockedQty,
+                syncId: syncId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -78959,6 +80950,633 @@ typedef $$SalesReturnItemsTableProcessedTableManager =
         bool invoiceItemId,
         bool shipmentId,
       })
+    >;
+typedef $$ReturnRefundsTableCreateCompanionBuilder =
+    ReturnRefundsCompanion Function({
+      Value<int> id,
+      required int returnId,
+      required DateTime refundDate,
+      required double amount,
+      required String method,
+      Value<String?> referenceNumber,
+      Value<int?> applyToInvoiceId,
+      Value<String?> notes,
+      Value<String?> processedBy,
+      Value<DateTime?> voidedAt,
+      Value<String?> voidedBy,
+      Value<String?> voidReason,
+      Value<bool> isVoided,
+      Value<String?> syncId,
+      Value<DateTime> createdAt,
+      Value<DateTime?> updatedAt,
+    });
+typedef $$ReturnRefundsTableUpdateCompanionBuilder =
+    ReturnRefundsCompanion Function({
+      Value<int> id,
+      Value<int> returnId,
+      Value<DateTime> refundDate,
+      Value<double> amount,
+      Value<String> method,
+      Value<String?> referenceNumber,
+      Value<int?> applyToInvoiceId,
+      Value<String?> notes,
+      Value<String?> processedBy,
+      Value<DateTime?> voidedAt,
+      Value<String?> voidedBy,
+      Value<String?> voidReason,
+      Value<bool> isVoided,
+      Value<String?> syncId,
+      Value<DateTime> createdAt,
+      Value<DateTime?> updatedAt,
+    });
+
+final class $$ReturnRefundsTableReferences
+    extends BaseReferences<_$AppDatabase, $ReturnRefundsTable, ReturnRefund> {
+  $$ReturnRefundsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $SalesReturnsTable _returnIdTable(_$AppDatabase db) =>
+      db.salesReturns.createAlias(
+        $_aliasNameGenerator(db.returnRefunds.returnId, db.salesReturns.id),
+      );
+
+  $$SalesReturnsTableProcessedTableManager get returnId {
+    final $_column = $_itemColumn<int>('return_id')!;
+
+    final manager = $$SalesReturnsTableTableManager(
+      $_db,
+      $_db.salesReturns,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_returnIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $InvoicesTable _applyToInvoiceIdTable(_$AppDatabase db) =>
+      db.invoices.createAlias(
+        $_aliasNameGenerator(db.returnRefunds.applyToInvoiceId, db.invoices.id),
+      );
+
+  $$InvoicesTableProcessedTableManager? get applyToInvoiceId {
+    final $_column = $_itemColumn<int>('apply_to_invoice_id');
+    if ($_column == null) return null;
+    final manager = $$InvoicesTableTableManager(
+      $_db,
+      $_db.invoices,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_applyToInvoiceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ReturnRefundsTableFilterComposer
+    extends Composer<_$AppDatabase, $ReturnRefundsTable> {
+  $$ReturnRefundsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get refundDate => $composableBuilder(
+    column: $table.refundDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get method => $composableBuilder(
+    column: $table.method,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get referenceNumber => $composableBuilder(
+    column: $table.referenceNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get processedBy => $composableBuilder(
+    column: $table.processedBy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get voidedAt => $composableBuilder(
+    column: $table.voidedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get voidedBy => $composableBuilder(
+    column: $table.voidedBy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get voidReason => $composableBuilder(
+    column: $table.voidReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isVoided => $composableBuilder(
+    column: $table.isVoided,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$SalesReturnsTableFilterComposer get returnId {
+    final $$SalesReturnsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.returnId,
+      referencedTable: $db.salesReturns,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesReturnsTableFilterComposer(
+            $db: $db,
+            $table: $db.salesReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$InvoicesTableFilterComposer get applyToInvoiceId {
+    final $$InvoicesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.applyToInvoiceId,
+      referencedTable: $db.invoices,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoicesTableFilterComposer(
+            $db: $db,
+            $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ReturnRefundsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ReturnRefundsTable> {
+  $$ReturnRefundsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get refundDate => $composableBuilder(
+    column: $table.refundDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get method => $composableBuilder(
+    column: $table.method,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get referenceNumber => $composableBuilder(
+    column: $table.referenceNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get processedBy => $composableBuilder(
+    column: $table.processedBy,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get voidedAt => $composableBuilder(
+    column: $table.voidedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get voidedBy => $composableBuilder(
+    column: $table.voidedBy,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get voidReason => $composableBuilder(
+    column: $table.voidReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isVoided => $composableBuilder(
+    column: $table.isVoided,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncId => $composableBuilder(
+    column: $table.syncId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$SalesReturnsTableOrderingComposer get returnId {
+    final $$SalesReturnsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.returnId,
+      referencedTable: $db.salesReturns,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesReturnsTableOrderingComposer(
+            $db: $db,
+            $table: $db.salesReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$InvoicesTableOrderingComposer get applyToInvoiceId {
+    final $$InvoicesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.applyToInvoiceId,
+      referencedTable: $db.invoices,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoicesTableOrderingComposer(
+            $db: $db,
+            $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ReturnRefundsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ReturnRefundsTable> {
+  $$ReturnRefundsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get refundDate => $composableBuilder(
+    column: $table.refundDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<String> get method =>
+      $composableBuilder(column: $table.method, builder: (column) => column);
+
+  GeneratedColumn<String> get referenceNumber => $composableBuilder(
+    column: $table.referenceNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<String> get processedBy => $composableBuilder(
+    column: $table.processedBy,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get voidedAt =>
+      $composableBuilder(column: $table.voidedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get voidedBy =>
+      $composableBuilder(column: $table.voidedBy, builder: (column) => column);
+
+  GeneratedColumn<String> get voidReason => $composableBuilder(
+    column: $table.voidReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isVoided =>
+      $composableBuilder(column: $table.isVoided, builder: (column) => column);
+
+  GeneratedColumn<String> get syncId =>
+      $composableBuilder(column: $table.syncId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$SalesReturnsTableAnnotationComposer get returnId {
+    final $$SalesReturnsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.returnId,
+      referencedTable: $db.salesReturns,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesReturnsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.salesReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$InvoicesTableAnnotationComposer get applyToInvoiceId {
+    final $$InvoicesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.applyToInvoiceId,
+      referencedTable: $db.invoices,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoicesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ReturnRefundsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ReturnRefundsTable,
+          ReturnRefund,
+          $$ReturnRefundsTableFilterComposer,
+          $$ReturnRefundsTableOrderingComposer,
+          $$ReturnRefundsTableAnnotationComposer,
+          $$ReturnRefundsTableCreateCompanionBuilder,
+          $$ReturnRefundsTableUpdateCompanionBuilder,
+          (ReturnRefund, $$ReturnRefundsTableReferences),
+          ReturnRefund,
+          PrefetchHooks Function({bool returnId, bool applyToInvoiceId})
+        > {
+  $$ReturnRefundsTableTableManager(_$AppDatabase db, $ReturnRefundsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ReturnRefundsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ReturnRefundsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ReturnRefundsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> returnId = const Value.absent(),
+                Value<DateTime> refundDate = const Value.absent(),
+                Value<double> amount = const Value.absent(),
+                Value<String> method = const Value.absent(),
+                Value<String?> referenceNumber = const Value.absent(),
+                Value<int?> applyToInvoiceId = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<String?> processedBy = const Value.absent(),
+                Value<DateTime?> voidedAt = const Value.absent(),
+                Value<String?> voidedBy = const Value.absent(),
+                Value<String?> voidReason = const Value.absent(),
+                Value<bool> isVoided = const Value.absent(),
+                Value<String?> syncId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+              }) => ReturnRefundsCompanion(
+                id: id,
+                returnId: returnId,
+                refundDate: refundDate,
+                amount: amount,
+                method: method,
+                referenceNumber: referenceNumber,
+                applyToInvoiceId: applyToInvoiceId,
+                notes: notes,
+                processedBy: processedBy,
+                voidedAt: voidedAt,
+                voidedBy: voidedBy,
+                voidReason: voidReason,
+                isVoided: isVoided,
+                syncId: syncId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int returnId,
+                required DateTime refundDate,
+                required double amount,
+                required String method,
+                Value<String?> referenceNumber = const Value.absent(),
+                Value<int?> applyToInvoiceId = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<String?> processedBy = const Value.absent(),
+                Value<DateTime?> voidedAt = const Value.absent(),
+                Value<String?> voidedBy = const Value.absent(),
+                Value<String?> voidReason = const Value.absent(),
+                Value<bool> isVoided = const Value.absent(),
+                Value<String?> syncId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+              }) => ReturnRefundsCompanion.insert(
+                id: id,
+                returnId: returnId,
+                refundDate: refundDate,
+                amount: amount,
+                method: method,
+                referenceNumber: referenceNumber,
+                applyToInvoiceId: applyToInvoiceId,
+                notes: notes,
+                processedBy: processedBy,
+                voidedAt: voidedAt,
+                voidedBy: voidedBy,
+                voidReason: voidReason,
+                isVoided: isVoided,
+                syncId: syncId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ReturnRefundsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({returnId = false, applyToInvoiceId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (returnId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.returnId,
+                                    referencedTable:
+                                        $$ReturnRefundsTableReferences
+                                            ._returnIdTable(db),
+                                    referencedColumn:
+                                        $$ReturnRefundsTableReferences
+                                            ._returnIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (applyToInvoiceId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.applyToInvoiceId,
+                                    referencedTable:
+                                        $$ReturnRefundsTableReferences
+                                            ._applyToInvoiceIdTable(db),
+                                    referencedColumn:
+                                        $$ReturnRefundsTableReferences
+                                            ._applyToInvoiceIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$ReturnRefundsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ReturnRefundsTable,
+      ReturnRefund,
+      $$ReturnRefundsTableFilterComposer,
+      $$ReturnRefundsTableOrderingComposer,
+      $$ReturnRefundsTableAnnotationComposer,
+      $$ReturnRefundsTableCreateCompanionBuilder,
+      $$ReturnRefundsTableUpdateCompanionBuilder,
+      (ReturnRefund, $$ReturnRefundsTableReferences),
+      ReturnRefund,
+      PrefetchHooks Function({bool returnId, bool applyToInvoiceId})
     >;
 typedef $$CustomerContainersTableCreateCompanionBuilder =
     CustomerContainersCompanion Function({
@@ -90167,6 +92785,8 @@ class $AppDatabaseManager {
       $$SalesReturnsTableTableManager(_db, _db.salesReturns);
   $$SalesReturnItemsTableTableManager get salesReturnItems =>
       $$SalesReturnItemsTableTableManager(_db, _db.salesReturnItems);
+  $$ReturnRefundsTableTableManager get returnRefunds =>
+      $$ReturnRefundsTableTableManager(_db, _db.returnRefunds);
   $$CustomerContainersTableTableManager get customerContainers =>
       $$CustomerContainersTableTableManager(_db, _db.customerContainers);
   $$BiometricDevicesTableTableManager get biometricDevices =>

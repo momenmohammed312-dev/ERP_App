@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/services/purchase_print_service_simple.dart';
@@ -9,20 +12,31 @@ import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
 import 'package:pos_offline_desktop/l10n/l10n.dart';
 import 'package:pos_offline_desktop/ui/purchase/widgets/purchase_detail_dialog.dart';
+import 'package:pos_offline_desktop/ui/purchase/widgets/void_purchase_dialog.dart';
+import 'package:pos_offline_desktop/ui/widgets/permission_guarded_action.dart';
 
 /// Purchase invoices list — mirrors `SalesReportTab` card for card:
 /// search, date range, grand total, Excel/PDF/thermal export, per-invoice
 /// print, tap for full detail (عرض/تعديل/استرجاع).
-class PurchasesReportTab extends StatefulWidget {
+class PurchasesReportTab extends StatelessWidget {
   final AppDatabase db;
 
   const PurchasesReportTab({super.key, required this.db});
 
   @override
-  State<PurchasesReportTab> createState() => _PurchasesReportTabState();
+  Widget build(BuildContext context) => _PurchasesReportTab(db: db);
 }
 
-class _PurchasesReportTabState extends State<PurchasesReportTab> {
+class _PurchasesReportTab extends ConsumerStatefulWidget {
+  final AppDatabase db;
+
+  const _PurchasesReportTab({required this.db});
+
+  @override
+  ConsumerState<_PurchasesReportTab> createState() => _PurchasesReportTabState();
+}
+
+class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
   DateTime _startDate = DateTime(
     DateTime.now().year,
     DateTime.now().month,
@@ -302,6 +316,22 @@ class _PurchasesReportTabState extends State<PurchasesReportTab> {
     if (mounted) _loadData();
   }
 
+  /// إلغاء فاتورة المشتريات — نفس الـdialog، والخدمة هي اللي بتعمل العكس
+  /// الكامل جوه transaction واحدة (مخزون + سطور + قيود المورد).
+  Future<void> _voidPurchase(Purchase p) async {
+    if (p.isDeleted) return;
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (_) => VoidPurchaseDialog(
+        db: widget.db,
+        purchaseId: p.id,
+        voidedBy: ref.read<User?>(authProvider)?.username ?? 'unknown',
+        onDone: _loadData,
+      ),
+    );
+    if (done == true && mounted) _loadData();
+  }
+
   @override
   Widget build(BuildContext context) {
     final grandTotal = _filteredPurchases.fold<double>(
@@ -554,6 +584,16 @@ class _PurchasesReportTabState extends State<PurchasesReportTab> {
                                         onPressed: () => _printOne(p),
                                         tooltip: 'طباعة الفاتورة',
                                       ),
+                                      // إلغاء فاتورة المشتريات — soft delete (is_deleted) مع عكس
+                                      // كامل للمخزون والقيود. بيظهر دايماً؛
+                                      // فحص الصلاحية جوّه الديالوج.
+                                      if (!p.isDeleted)
+                                        PermissionGuardedIconButton(
+                                          icon: Icons.delete_outline,
+                                          color: Colors.red,
+                                          tooltip: 'إلغاء الفاتورة',
+                                          onPressed: () => _voidPurchase(p),
+                                        ),
                                     ],
                                   ),
                                 ),

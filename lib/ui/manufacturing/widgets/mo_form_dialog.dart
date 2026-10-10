@@ -524,9 +524,8 @@ class _MoFormDialogState extends State<MoFormDialog> {
                       prefixIcon: Icon(Icons.note_alt_outlined),
                     ),
                   ),
-                ],
-                const Gap(24),
-                Row(
+                  const Gap(24),
+                  Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(onPressed: _isSubmitting ? null : () => Navigator.pop(context), child: const Text('إلغاء')),
