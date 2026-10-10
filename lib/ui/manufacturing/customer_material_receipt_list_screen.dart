@@ -15,6 +15,7 @@ class CustomerMaterialReceiptListScreen extends StatefulWidget {
 class _CustomerMaterialReceiptListScreenState
     extends State<CustomerMaterialReceiptListScreen> {
   Map<String, Customer> _customerMap = {};
+  Map<int, Product> _productMap = {};
   bool _loading = true;
 
   @override
@@ -25,7 +26,7 @@ class _CustomerMaterialReceiptListScreenState
 
   Future<void> _loadCustomers() async {
     try {
-      final customers = await widget.db.customerDao.getAllCustomers();
+      final customers = await widget.db.customerDao.getCustomersForManufacturing();
       setState(() {
         _customerMap = {for (var c in customers) c.id: c};
         _loading = false;
@@ -214,7 +215,7 @@ class _CustomerMaterialReceiptListScreenState
                                               Padding(
                                                 padding:
                                                     const EdgeInsets.all(6),
-                                                child: Text('#${it.productId}'),
+                                                child: Text(_productMap[it.productId]?.name ?? it.productId.toString()),
                                               ),
                                               Padding(
                                                 padding:
@@ -310,7 +311,7 @@ class _CustomerMaterialReceiptDialogState
 
   Future<void> _loadData() async {
     try {
-      final custs = await widget.db.customerDao.getAllCustomers();
+      final custs = await widget.db.customerDao.getCustomersForManufacturing();
       final prods = await widget.db.productDao.getAllProducts();
       setState(() {
         _customers = custs;

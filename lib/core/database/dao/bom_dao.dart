@@ -12,10 +12,10 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
   // ── BillOfMaterials CRUD ──
 
   Future<List<BillOfMaterial>> getAllBoms() =>
-      (select(billOfMaterials)..orderBy([(b) => OrderingTerm.desc(b.createdAt)])).get();
+      (select(billOfMaterials)..where((b) => b.type.isNull() | b.type.equals('system_placeholder').not())..orderBy([(b) => OrderingTerm.desc(b.createdAt)])).get();
 
   Stream<List<BillOfMaterial>> watchAllBoms() =>
-      (select(billOfMaterials)..orderBy([(b) => OrderingTerm.desc(b.createdAt)])).watch();
+        (select(billOfMaterials)..where((b) => b.type.isNull() | b.type.equals('system_placeholder').not())..orderBy([(b) => OrderingTerm.desc(b.createdAt)])).watch();
 
   Future<List<BillOfMaterial>> getActiveBoms() =>
       (select(billOfMaterials)

@@ -33,6 +33,9 @@ class _MoFormDialogState extends State<MoFormDialog> {
   Product? _finishedProduct;
   List<BillOfMaterial> _activeBoms = [];
   Map<int, Product> _productMap = {};
+  List<CustomerStockBalance> _customerBalances = [];
+  CustomerStockBalance? _selectedBalance;
+  Product? _inputProduct;
   List<Customer> _customers = [];
   bool _loadingBoms = true;
   bool _isSubmitting = false;
@@ -52,6 +55,7 @@ class _MoFormDialogState extends State<MoFormDialog> {
       _orderType = o.orderType ?? 'internal';
       _customerId = o.customerId;
       _pricingMode = o.pricingMode ?? 'inclusive';
+      if (_orderType != 'internal') _loadCustomerBalances(_customerId);
       _scrapPolicy = o.scrapPolicy ?? 'customer_bears';
       _pieceUnitValueCtrl.text = (o.pieceUnitValue ?? 0.0).toString();
       _serviceUnitPriceCtrl.text = (o.serviceUnitPrice ?? 0.0).toString();
@@ -72,7 +76,7 @@ class _MoFormDialogState extends State<MoFormDialog> {
     try {
       final boms = await widget.db.bomDao.getActiveBoms();
       final products = await widget.db.productDao.getAllProducts();
-      final customers = await widget.db.customerDao.getAllCustomers();
+      final customers = await widget.db.customerDao.getCustomersForManufacturing();
       final map = {for (var p in products) p.id: p};
       setState(() {
         _activeBoms = boms;
@@ -105,10 +109,30 @@ class _MoFormDialogState extends State<MoFormDialog> {
     }
   }
 
+  Future<void> _loadCustomerBalances(String? customerId) async {
+    if (customerId == null) {
+      setState(() { _customerBalances = []; _selectedBalance = null; });
+      return;
+    }
+    try {
+      final bals = await widget.db.customerMaterialReceiptDao.getAllBalancesForCustomer(customerId);
+      setState(() {
+        _customerBalances = bals;
+        _selectedBalance = null;
+      });
+    } catch (e) {
+      // ignore
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedBomId == null) {
+        if (_orderType == 'internal' && _selectedBomId == null) {
       setState(() => _errorMessage = 'يرجى اختيار الوصفة (BOM)');
+      return;
+    }
+    if (_orderType != 'internal' && _selectedBalance == null) {
+      setState(() => _errorMessage = 'يرجى اختيار الخامة من العهدة');
       return;
     }
     final qty = double.tryParse(_plannedQtyCtrl.text.trim());
@@ -284,90 +308,95 @@ class _MoFormDialogState extends State<MoFormDialog> {
                         ],
                       ),
                     ),
-                  DropdownButtonFormField<int>(
-                    initialValue: _selectedBomId,
-                    decoration: const InputDecoration(
-                      labelText: 'الوصفة (BOM) *',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.receipt_long),
-                    ),
-                    items: _activeBoms
-                        .map((b) {
-                          final product = _productMap[b.finishedProductId];
-                          return DropdownMenuItem(
-                            value: b.id,
-                            child: Text('${b.name} — ${product?.name ?? '#${b.finishedProductId}'} ${b.code != null ? '(${b.code})' : ''}'),
-                          );
-                        })
-                        .toList(),
-                    onChanged: canEdit
-                        ? (v) {
-                            setState(() {
-                              _selectedBomId = v;
-                              final m = _activeBoms.where((bb) => bb.id == v);
-                              _selectedBom = m.isNotEmpty ? m.first : null;
-                              _finishedProduct = _selectedBom != null ? _productMap[_selectedBom!.finishedProductId] : null;
-                            });
-                          }
-                        : null,
-                    validator: (v) => v == null ? 'اختر الوصفة' : null,
-                  ),
-                  const Gap(16),
-                  if (_finishedProduct != null)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.factory, size: 18, color: Colors.green),
-                          const Gap(8),
-                          Text('المنتج النهائي: ${_finishedProduct!.name} — مخزون حالي: ${_finishedProduct!.quantity} ${_finishedProduct!.unit ?? ''}',
-                              style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-                  if (_finishedProduct != null) const Gap(16),
                   DropdownButtonFormField<String>(
-                    initialValue: _orderType,
-                    decoration: const InputDecoration(
-                      labelText: 'نوع أمر الإنتاج *',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.category_outlined),
-                    ),
+                    value: _orderType,
+                    decoration: const InputDecoration(labelText: 'نوع الأمر *', border: OutlineInputBorder()),
                     items: const [
-                      DropdownMenuItem(value: 'internal', child: Text('تصنيع داخلي (خامات المصنع)')),
-                      DropdownMenuItem(value: 'for_others', child: Text('تشغيل للغير (خامات العميل بالكامل)')),
-                      DropdownMenuItem(value: 'mixed', child: Text('تشغيل مشترك (خامات عميل + خامات مصنع)')),
+                      DropdownMenuItem(value: 'internal', child: Text('تصنيع داخلي (مخزون المصنع)')),
+                      DropdownMenuItem(value: 'for_others', child: Text('تشغيل للغير (خامات العميل)')),
                     ],
-                    onChanged: canEdit
-                        ? (v) => setState(() {
-                              _orderType = v ?? 'internal';
-                            })
-                        : null,
+                    onChanged: canEdit ? (v) => setState(() {
+                       _orderType = v ?? 'internal';
+                       _selectedBomId = null;
+                       _selectedBom = null;
+                       _customerId = null;
+                       _customerBalances = [];
+                       _selectedBalance = null;
+                    }) : null,
                   ),
                   const Gap(16),
-                  if (_orderType != 'internal') ...[
-                    DropdownButtonFormField<String>(
-                      initialValue: _customerId,
+                  if (_orderType == 'internal')
+                    DropdownButtonFormField<int>(
+                      value: _selectedBomId,
                       decoration: const InputDecoration(
-                        labelText: 'العميل (صاحب الخامات) *',
+                        labelText: 'الوصفة (BOM) *',
                         border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.person_outline),
                       ),
-                      items: _customers
-                          .map((c) => DropdownMenuItem(
-                                value: c.id,
-                                child: Text('${c.name} ${c.phone != null ? '(${c.phone})' : ''}'),
+                      items: _activeBoms
+                          .map((b) => DropdownMenuItem(
+                                value: b.id,
+                                child: Text('${b.name} (${_productMap[b.finishedProductId]?.name ?? b.finishedProductId})'),
                               ))
                           .toList(),
-                      onChanged: canEdit ? (v) => setState(() => _customerId = v) : null,
-                      validator: (v) => (_orderType != 'internal' && (v == null || v.isEmpty))
-                          ? 'اختر العميل'
+                      onChanged: canEdit
+                          ? (v) {
+                              setState(() {
+                                _selectedBomId = v;
+                                final m = _activeBoms.where((bb) => bb.id == v);
+                                _selectedBom = m.isNotEmpty ? m.first : null;
+                                _finishedProduct = _selectedBom != null ? _productMap[_selectedBom!.finishedProductId] : null;
+                              });
+                            }
                           : null,
+                    )
+                  else ...[
+                    DropdownButtonFormField<String>(
+                      value: _customerId,
+                      decoration: const InputDecoration(labelText: 'العميل *', border: OutlineInputBorder()),
+                      items: _customers.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+                      onChanged: canEdit ? (v) {
+                        setState(() => _customerId = v);
+                        _loadCustomerBalances(v);
+                      } : null,
                     ),
                     const Gap(16),
-                    DropdownButtonFormField<String>(
-                      initialValue: _pricingMode,
+                    DropdownButtonFormField<int>(
+                      value: _selectedBalance?.id,
+                      decoration: const InputDecoration(labelText: 'الخامة من عهدة العميل *', border: OutlineInputBorder()),
+                      items: _customerBalances.map((b) {
+                        final p = _productMap[b.productId];
+                        final avail = b.quantityOnHand - b.quantityAllocated;
+                        final color = b.color != null ? ' - ' + b.color! : '';
+                        final size = b.size != null ? ' - ' + b.size! : '';
+                        return DropdownMenuItem(
+                          value: b.id,
+                          child: Text('${p?.name ?? b.productId}' + color + size + ' (متاح: ${avail})'),
+                        );
+                      }).toList(),
+                      onChanged: canEdit ? (v) {
+                        final match = _customerBalances.firstWhere((b) => b.id == v);
+                        setState(() {
+                          _selectedBalance = match;
+                          _inputProduct = _productMap[match.productId];
+                          _finishedProduct = _inputProduct;
+                          _plannedQtyCtrl.text = (match.quantityOnHand - match.quantityAllocated).toString();
+                        });
+                      } : null,
+                    ),
+                    const Gap(16),
+                    DropdownButtonFormField<int>(
+                      value: _finishedProduct?.id,
+                      decoration: const InputDecoration(labelText: 'المنتج النهائي الموجه للعميل *', border: OutlineInputBorder()),
+                      items: _productMap.values.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))).toList(),
+                      onChanged: canEdit ? (v) {
+                        setState(() => _finishedProduct = _productMap[v]);
+                      } : null,
+                    ),
+                  ],
+                  const Gap(16),
+                  DropdownButtonFormField<String>(
+                    initialValue: _pricingMode,
+
                       decoration: const InputDecoration(
                         labelText: 'نظام التسعير *',
                         border: OutlineInputBorder(),

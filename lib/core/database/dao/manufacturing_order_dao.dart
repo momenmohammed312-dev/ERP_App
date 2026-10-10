@@ -86,6 +86,8 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
     required double inputQuantity,
     String? inputColor,
     String? inputSize,
+    int? finishedProductId,
+    double? plannedQuantity,
   }) async {
     return transaction(() async {
       final bomId = await db.bomDao.createSystemPlaceholderBom(inputProductId);
@@ -94,8 +96,8 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         orderNumber: orderNumber,
         orderType: Value(orderType),
         bomId: bomId,
-        finishedProductId: inputProductId,
-        plannedQuantity: inputQuantity,
+        finishedProductId: finishedProductId ?? inputProductId,
+        plannedQuantity: plannedQuantity ?? inputQuantity,
         customerId: Value(customerId),
         inputProductId: Value(inputProductId),
         inputQuantity: Value(inputQuantity),
