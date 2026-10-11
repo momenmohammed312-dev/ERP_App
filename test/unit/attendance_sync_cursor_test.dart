@@ -105,8 +105,9 @@ void main() {
     });
 
     test('poisoned future cursor resets to a full pull', () async {
-      final real = DateTime(2026, 9, 26, 12);
-      final t1 = DateTime(2026, 9, 22, 8, 5);
+      final today = DateTime.now();
+      final real = DateTime(today.year, today.month, today.day, 12);
+      final t1 = DateTime(today.year, today.month, today.day - 4, 8, 5);
       final (_, deviceDao, svc, fake, deviceId) = await setup(
         events: [punch('77', t1)],
         lastSyncAt: real.add(const Duration(days: 2)),
