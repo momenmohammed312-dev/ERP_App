@@ -78,6 +78,13 @@ class BusinessDateService {
           income += invoice.paidAmount;
         }
       }
+      // المرتجعات اللي اتستردت نقداً بتخرج من الدرج — من غير السطر ده،
+      // يوم الإغلاق بيقول الرصيد صح وانت ناقصك قيمة كل مرتجع نقدي.
+      final cashRefunds = await db.returnRefundsDao.getCashRefundsBetween(
+        session.openedAt,
+        now,
+      );
+      income -= cashRefunds;
       final expenseItems = await db.expenseDao.getExpensesByDateRange(
         session.openedAt,
         now,
@@ -171,6 +178,11 @@ class BusinessDateService {
     for (final e in expenseItems) {
       expenses += e.amount;
     }
+    // نفس منطق closeSession: المرتجع النقدي بخصم من المتوقع.
+    income -= await db.returnRefundsDao.getCashRefundsBetween(
+      session.openedAt,
+      now,
+    );
     return session.openingBalance + income - expenses;
   }
 }

@@ -124,7 +124,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
           SUM(CASE WHEN payment_method != 'cash' THEN total_amount ELSE 0 END) as credit_sales,
           SUM(total_amount) as total_sales
         FROM invoices 
-        WHERE date >= ? AND date <= ? AND status = 'active'
+        WHERE date >= ? AND date <= ? AND status != 'voided'
       ''',
             variables: [
               drift.Variable.withDateTime(startOfDay),
@@ -212,6 +212,10 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
       );
       final expenses = expensesResult.read<double>('total_expenses');
 
+      // استردادات نقدية (مرتجعات) — نقد خرج من الدرج فلازم تخصم.
+      final cashRefunds = await db.returnRefundsDao
+          .getCashRefundsBetween(startOfDay, endOfDay);
+
       // Get opening balance
       final today = await db.dayDao.getTodayDay();
       final openingBalance = today?['opening_balance'] as double?;
@@ -221,6 +225,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
           (openingBalance ?? 0.0) +
           cashSales +
           customerPayments -
+          cashRefunds -
           cashPurchases -
           supplierPayments -
           expenses;
@@ -235,6 +240,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
         'total_purchases': totalPurchases,
         'customer_payments': customerPayments,
         'supplier_payments': supplierPayments,
+        'refunded': cashRefunds,
         'expenses': expenses,
         'expected_balance': expectedBalance,
       };
@@ -250,6 +256,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
         'total_purchases': 0.0,
         'customer_payments': 0.0,
         'supplier_payments': 0.0,
+        'refunded': 0.0,
         'expenses': 0.0,
         'expected_balance': 0.0,
       };
@@ -266,22 +273,28 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
     final startOfDay = DateTime(now.year, now.month, now.day);
     final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
-    final cashSales = await db.invoiceDao.getTotalCashSalesForDate(now);
-    final creditCollections = await db.invoicePaymentsDao
-        .getTotalByMethodAndDateRange('cash', startOfDay, endOfDay);
-    final expenses = await db.expenseDao.getTotalExpensesForDate(now);
-    final supplierOwed = await db.ledgerDao.getSupplierOutstandingBalance();
+    // ['refunded'] استردادات نقدية خرجت من الصندوق (مرتجعات) — تخصم.
+      final cashRefunds = await db.returnRefundsDao
+          .getCashRefundsBetween(startOfDay, endOfDay);
 
-    final expectedNetCash = cashSales + creditCollections - expenses;
+      final cashSales = await db.invoiceDao.getTotalCashSalesForDate(now);
+      final creditCollections = await db.invoicePaymentsDao
+          .getTotalByMethodAndDateRange('cash', startOfDay, endOfDay);
+      final expenses = await db.expenseDao.getTotalExpensesForDate(now);
+      final supplierOwed = await db.ledgerDao.getSupplierOutstandingBalance();
 
-    return {
-      'cash_sales': cashSales,
-      'credit_collections': creditCollections,
-      'expenses': expenses,
-      'expected_net_cash': expectedNetCash,
-      'supplier_owed': supplierOwed,
-    };
-  }
+      final expectedNetCash =
+          cashSales + creditCollections - cashRefunds - expenses;
+
+      return {
+        'cash_sales': cashSales,
+        'credit_collections': creditCollections,
+        'refunded': cashRefunds,
+        'expenses': expenses,
+        'expected_net_cash': expectedNetCash,
+        'supplier_owed': supplierOwed,
+      };
+    }
 
   void _calculateDifference() {
     setState(() {});
