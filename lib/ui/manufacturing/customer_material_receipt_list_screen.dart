@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/customer_material_receipt_dao.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/widgets/searchable_product_picker.dart';
 
 class CustomerMaterialReceiptListScreen extends StatefulWidget {
   final AppDatabase db;
@@ -560,20 +561,12 @@ class _CustomerMaterialReceiptDialogState
           children: [
             Expanded(
               flex: 3,
-              child: DropdownButtonFormField<int>(
-                initialValue: row.selectedProductId,
-                decoration: const InputDecoration(
-                  labelText: 'المنتج / الخامة',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                items: _products
-                    .map((p) => DropdownMenuItem(
-                          value: p.id,
-                          child: Text(p.name),
-                        ))
-                    .toList(),
-                onChanged: (v) => setState(() => row.selectedProductId = v),
+              child: SearchableProductPicker(
+                db: widget.db,
+                label: 'المنتج / الخامة',
+                initialProductId: row.selectedProductId,
+                onChanged: (p) =>
+                    setState(() => row.selectedProductId = p?.id),
               ),
             ),
             const Gap(8),

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/widgets/searchable_product_picker.dart';
 
 class MoFormDialog extends StatefulWidget {
   final AppDatabase db;
@@ -328,6 +329,7 @@ class _MoFormDialogState extends State<MoFormDialog> {
                   if (_orderType == 'internal')
                     DropdownButtonFormField<int>(
                       value: _selectedBomId,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'الوصفة (BOM) *',
                         border: OutlineInputBorder(),
@@ -384,13 +386,13 @@ class _MoFormDialogState extends State<MoFormDialog> {
                       } : null,
                     ),
                     const Gap(16),
-                    DropdownButtonFormField<int>(
-                      value: _finishedProduct?.id,
-                      decoration: const InputDecoration(labelText: 'المنتج النهائي الموجه للعميل *', border: OutlineInputBorder()),
-                      items: _productMap.values.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))).toList(),
-                      onChanged: canEdit ? (v) {
-                        setState(() => _finishedProduct = _productMap[v]);
-                      } : null,
+                    SearchableProductPicker(
+                      db: widget.db,
+                      label: 'المنتج النهائي الموجه للعميل *',
+                      initialProductId: _finishedProduct?.id,
+                      enabled: canEdit,
+                      onChanged: (p) =>
+                          setState(() => _finishedProduct = p),
                     ),
                   ],
                   const Gap(16),

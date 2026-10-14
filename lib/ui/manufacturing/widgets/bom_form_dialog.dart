@@ -317,6 +317,7 @@ class _BomFormDialogState extends State<BomFormDialog> {
                         // Finished product picker
                         DropdownButtonFormField<int>(
                           initialValue: _selectedFinishedProductId,
+                          isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'المنتج النهائي *',
                             border: OutlineInputBorder(),
