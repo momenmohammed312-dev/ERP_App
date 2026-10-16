@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/customer_material_receipt_dao.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/widgets/mo_form_dialog.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/searchable_product_picker.dart';
 
 class CustomerMaterialReceiptListScreen extends StatefulWidget {
@@ -48,6 +49,24 @@ class _CustomerMaterialReceiptListScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('تم تسجيل إذن استلام الخامات بنجاح'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  /// Secondary entry to the for-others flow: opens the same manufacturing
+  /// order form prefilled with this receipt (receipt → recipe → order).
+  Future<void> _openForOthersOrder(int receiptId) async {
+    final res = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => MoFormDialog(db: widget.db, initialReceiptId: receiptId),
+    );
+    if (res == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم إنشاء أمر التشغيل للغير'),
           backgroundColor: Colors.green,
         ),
       );
@@ -263,6 +282,19 @@ class _CustomerMaterialReceiptListScreenState
                                       const Gap(8),
                                       Text('ملاحظات الإذن: ${r.notes}'),
                                     ],
+                                    const Gap(12),
+                                    Align(
+                                      alignment:
+                                          AlignmentDirectional.centerStart,
+                                      child: FilledButton.tonalIcon(
+                                        onPressed: () =>
+                                            _openForOthersOrder(r.id),
+                                        icon: const Icon(Icons
+                                            .precision_manufacturing),
+                                        label: const Text(
+                                            'إنشاء أمر تشغيل للغير'),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               );

@@ -5,12 +5,16 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/widgets/receipt_picker_field.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/searchable_product_picker.dart';
 
 class MoFormDialog extends StatefulWidget {
   final AppDatabase db;
   final ManufacturingOrder? order;
-  const MoFormDialog({super.key, required this.db, this.order});
+
+  /// Secondary entry: prefill the form from a customer material receipt.
+  final int? initialReceiptId;
+  const MoFormDialog({super.key, required this.db, this.order, this.initialReceiptId});
 
   @override
   State<MoFormDialog> createState() => _MoFormDialogState();
@@ -34,9 +38,13 @@ class _MoFormDialogState extends State<MoFormDialog> {
   Product? _finishedProduct;
   List<BillOfMaterial> _activeBoms = [];
   Map<int, Product> _productMap = {};
+  // Receipt → recipe flow (for_others primary entry)
+  CustomerMaterialReceipt? _selectedReceipt;
+  List<BillOfMaterial> _compatibleBoms = [];
+  Map<int, Set<int>> _bomRawProductIds = {};
+  bool _showAllBoms = false;
   List<CustomerStockBalance> _customerBalances = [];
   CustomerStockBalance? _selectedBalance;
-  Product? _inputProduct;
   List<Customer> _customers = [];
   bool _loadingBoms = true;
   bool _isSubmitting = false;
@@ -71,6 +79,11 @@ class _MoFormDialogState extends State<MoFormDialog> {
       _serviceUnitPriceCtrl.text = '0';
     }
     _loadBoms();
+    // Secondary entry: a receipt was chosen first (receipt → recipe flow).
+    if (widget.initialReceiptId != null && widget.order == null) {
+      _orderType = 'for_others';
+      _selectReceiptById(widget.initialReceiptId!);
+    }
   }
 
   Future<void> _loadBoms() async {
@@ -126,9 +139,92 @@ class _MoFormDialogState extends State<MoFormDialog> {
     }
   }
 
+  /// Secondary entry helper: load a receipt by id, then run the same
+  /// receipt → recipe flow as the picker.
+  Future<void> _selectReceiptById(int receiptId) async {
+    try {
+      final receipt = await widget.db.customerMaterialReceiptDao
+          .getReceiptById(receiptId);
+      if (receipt != null && mounted) {
+        await _onReceiptPicked(receipt);
+      }
+    } catch (_) {
+      // leave the form empty on error; user can pick manually
+    }
+  }
+
+  /// Raw-material product ids per BOM, computed lazily for the
+  /// compatible-recipe filter.
+  Future<void> _ensureBomProductMap() async {
+    if (_bomRawProductIds.isNotEmpty || _activeBoms.isEmpty) return;
+    for (final b in _activeBoms) {
+      try {
+        final items = await widget.db.bomDao.getItemsForBom(b.id);
+        _bomRawProductIds[b.id] =
+            items.map((i) => i.rawMaterialProductId).toSet();
+      } catch (_) {
+        // ignore unloadable BOMs for the filter
+      }
+    }
+  }
+
+  /// Receipt picked (primary entry) or prefilled (secondary entry):
+  /// fix the customer, reload custody balances + receipt items, recompute
+  /// compatible recipes, and preselect the matching custody balance.
+  Future<void> _onReceiptPicked(CustomerMaterialReceipt? receipt) async {
+    setState(() {
+      _selectedReceipt = receipt;
+      _compatibleBoms = [];
+      _showAllBoms = false;
+      _selectedBomId = null;
+      _selectedBom = null;
+      _finishedProduct = null;
+      _selectedBalance = null;
+    });
+    if (receipt == null) return;
+    setState(() => _customerId = receipt.customerId);
+    await _loadCustomerBalances(receipt.customerId);
+    try {
+      final items = await widget.db.customerMaterialReceiptDao
+          .getItemsForReceipt(receipt.id);
+      await _ensureBomProductMap();
+      final productIds = items.map((i) => i.productId).toSet();
+      final compat = _activeBoms
+          .where((b) => (_bomRawProductIds[b.id] ?? const <int>{})
+              .any(productIds.contains))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _compatibleBoms = compat;
+        // Preselect the custody balance of the first receipt item.
+        for (final it in items) {
+          final m =
+              _customerBalances.where((b) => b.productId == it.productId);
+          if (m.isNotEmpty) {
+            _selectedBalance = m.first;
+            _plannedQtyCtrl.text =
+                (m.first.quantityOnHand - m.first.quantityAllocated)
+                    .toString();
+            break;
+          }
+        }
+      });
+    } catch (_) {
+      // balances already loaded; recipe filter stays empty
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
         if (_orderType == 'internal' && _selectedBomId == null) {
+      setState(() => _errorMessage = 'يرجى اختيار الوصفة (BOM)');
+      return;
+    }
+    if (_orderType != 'internal' && _selectedReceipt == null) {
+      setState(() => _errorMessage = 'يرجى اختيار إذن الاستلام من العميل');
+      return;
+    }
+    if (_orderType != 'internal' && _selectedBomId == null) {
       setState(() => _errorMessage = 'يرجى اختيار الوصفة (BOM)');
       return;
     }
@@ -171,22 +267,45 @@ class _MoFormDialogState extends State<MoFormDialog> {
       final finishedId = bom.finishedProductId;
 
       if (widget.order == null) {
-        final companion = ManufacturingOrdersCompanion(
-          orderNumber: Value(orderNumber),
-          bomId: Value(_selectedBomId!),
-          finishedProductId: Value(finishedId),
-          plannedQuantity: Value(qty),
-          plannedDate: Value(_plannedDate),
-          orderType: Value(_orderType),
-          customerId: Value(_orderType == 'internal' ? null : _customerId),
-          pricingMode: Value(_orderType == 'internal' ? null : _pricingMode),
-          scrapPolicy: Value(_orderType == 'internal' ? null : _scrapPolicy),
-          pieceUnitValue: Value(_orderType == 'internal' ? 0.0 : pieceVal),
-          serviceUnitPrice: Value(_orderType == 'internal' ? 0.0 : servicePrice),
-          notes: Value(_notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim()),
-          status: const Value(ManufacturingOrderStatus.planned),
-        );
-        await widget.db.manufacturingOrderDao.createOrder(companion);
+        if (_orderType == 'internal') {
+          final companion = ManufacturingOrdersCompanion(
+            orderNumber: Value(orderNumber),
+            bomId: Value(_selectedBomId!),
+            finishedProductId: Value(finishedId),
+            plannedQuantity: Value(qty),
+            plannedDate: Value(_plannedDate),
+            orderType: Value(_orderType),
+            customerId: Value(_orderType == 'internal' ? null : _customerId),
+            pricingMode: Value(_orderType == 'internal' ? null : _pricingMode),
+            scrapPolicy: Value(_orderType == 'internal' ? null : _scrapPolicy),
+            pieceUnitValue: Value(_orderType == 'internal' ? 0.0 : pieceVal),
+            serviceUnitPrice: Value(_orderType == 'internal' ? 0.0 : servicePrice),
+            notes: Value(_notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim()),
+            status: const Value(ManufacturingOrderStatus.planned),
+          );
+          await widget.db.manufacturingOrderDao.createOrder(companion);
+        } else {
+          // Recipe-based for-others order: real BOM + finished product from
+          // the recipe. Direct-input fields stay null so completion goes
+          // through the BOM path (customer custody per BOM line, factory
+          // finished stock never touched).
+          await widget.db.manufacturingOrderDao.createJobWorkOrder(
+            orderNumber: orderNumber,
+            orderType: _orderType,
+            customerId: _customerId!,
+            bomId: _selectedBomId!,
+            finishedProductId: finishedId,
+            plannedQuantity: qty,
+            plannedDate: _plannedDate,
+            pricingMode: _pricingMode,
+            scrapPolicy: _scrapPolicy,
+            pieceUnitValue: pieceVal,
+            serviceUnitPrice: servicePrice,
+            notes: _notesCtrl.text.trim().isEmpty
+                ? null
+                : _notesCtrl.text.trim(),
+          );
+        }
       } else {
         // Update allowed only for planned orders in Phase 3 (no stock effect)
         if (widget.order!.status != ManufacturingOrderStatus.planned) {
@@ -323,6 +442,10 @@ class _MoFormDialogState extends State<MoFormDialog> {
                        _customerId = null;
                        _customerBalances = [];
                        _selectedBalance = null;
+                       _selectedReceipt = null;
+                       _compatibleBoms = [];
+                       _showAllBoms = false;
+                       _finishedProduct = null;
                     }) : null,
                   ),
                   const Gap(16),
@@ -352,11 +475,82 @@ class _MoFormDialogState extends State<MoFormDialog> {
                           : null,
                     )
                   else ...[
+                    // Step 1 — pick the customer receipt first.
+                    ReceiptPickerField(
+                      db: widget.db,
+                      label: 'إذن الاستلام من العميل *',
+                      initialReceiptId: _selectedReceipt?.id,
+                      enabled: canEdit,
+                      validator: (r) =>
+                          r == null ? 'يرجى اختيار إذن الاستلام' : null,
+                      onChanged: (r) => _onReceiptPicked(r),
+                    ),
+                    const Gap(16),
+                    // Step 2 — pick a recipe; compatible BOMs first.
+                    DropdownButtonFormField<int>(
+                      value: _selectedBomId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'الوصفة (BOM) *',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: (_showAllBoms
+                              ? _activeBoms
+                              : _compatibleBoms)
+                          .map((b) => DropdownMenuItem(
+                                value: b.id,
+                                child: Text(
+                                  '${b.name} (${_productMap[b.finishedProductId]?.name ?? b.finishedProductId})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: canEdit
+                          ? (v) {
+                              setState(() {
+                                _selectedBomId = v;
+                                final m =
+                                    _activeBoms.where((bb) => bb.id == v);
+                                _selectedBom =
+                                    m.isNotEmpty ? m.first : null;
+                                _finishedProduct = _selectedBom != null
+                                    ? _productMap[
+                                        _selectedBom!.finishedProductId]
+                                    : null;
+                              });
+                            }
+                          : null,
+                    ),
+                    if (_selectedReceipt != null &&
+                        _compatibleBoms.isEmpty &&
+                        !_showAllBoms)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text(
+                          'لا توجد وصفات متوافقة مع أصناف هذا الإذن — فعّل عرض الكل',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _showAllBoms,
+                          onChanged: canEdit
+                              ? (v) => setState(
+                                  () => _showAllBoms = v ?? false)
+                              : null,
+                        ),
+                        const Text('عرض كل الوصفات',
+                            style: TextStyle(fontSize: 13)),
+                      ],
+                    ),
+                    const Gap(8),
                     DropdownButtonFormField<String>(
                       value: _customerId,
                       decoration: const InputDecoration(labelText: 'العميل *', border: OutlineInputBorder()),
                       items: _customers.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-                      onChanged: canEdit ? (v) {
+                      // The customer is fixed by the chosen receipt.
+                      onChanged: (canEdit && _selectedReceipt == null) ? (v) {
                         setState(() => _customerId = v);
                         _loadCustomerBalances(v);
                       } : null,
@@ -379,8 +573,6 @@ class _MoFormDialogState extends State<MoFormDialog> {
                         final match = _customerBalances.firstWhere((b) => b.id == v);
                         setState(() {
                           _selectedBalance = match;
-                          _inputProduct = _productMap[match.productId];
-                          _finishedProduct = _inputProduct;
                           _plannedQtyCtrl.text = (match.quantityOnHand - match.quantityAllocated).toString();
                         });
                       } : null,
@@ -390,7 +582,8 @@ class _MoFormDialogState extends State<MoFormDialog> {
                       db: widget.db,
                       label: 'المنتج النهائي الموجه للعميل *',
                       initialProductId: _finishedProduct?.id,
-                      enabled: canEdit,
+                      // Fixed by the chosen recipe.
+                      enabled: canEdit && _selectedBomId == null,
                       onChanged: (p) =>
                           setState(() => _finishedProduct = p),
                     ),

@@ -78,27 +78,68 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
   // ── Status transitions ──
 
   /// planned -> in_progress
+  ///
+  /// Backward-compatible extensions (all new parameters are optional):
+  /// - [bomId]: when provided, the order executes this real recipe instead
+  ///   of a system placeholder BOM (receipt → recipe flow).
+  /// - [inputProductId]/[inputQuantity]: optional so recipe-based orders can
+  ///   leave direct-input tracking null and go through the BOM completion
+  ///   path; existing callers pass values exactly as before.
+  /// - Pricing/planning fields are written only when provided, so existing
+  ///   callers keep the previous column defaults.
   Future<int> createJobWorkOrder({
     required String orderNumber,
     required String orderType,
     required String customerId,
-    required int inputProductId,
-    required double inputQuantity,
+    int? inputProductId,
+    double? inputQuantity,
     String? inputColor,
     String? inputSize,
     int? finishedProductId,
     double? plannedQuantity,
+    int? bomId,
+    DateTime? plannedDate,
+    String? pricingMode,
+    String? scrapPolicy,
+    double? pieceUnitValue,
+    double? serviceUnitPrice,
+    String? notes,
   }) async {
+    if (bomId == null && (inputProductId == null || inputQuantity == null)) {
+      throw ArgumentError('bomId or input product + quantity is required');
+    }
+    if (plannedQuantity == null && inputQuantity == null) {
+      throw ArgumentError('planned quantity is required');
+    }
     return transaction(() async {
-      final bomId = await db.bomDao.createSystemPlaceholderBom(inputProductId);
+      final resolvedBomId =
+          bomId ?? await db.bomDao.createSystemPlaceholderBom(inputProductId!);
+      int? resolvedFinished = finishedProductId ?? inputProductId;
+      resolvedFinished ??= (await db.bomDao.getBomById(resolvedBomId))
+          ?.finishedProductId;
+      if (resolvedFinished == null) {
+        throw ArgumentError('finished product cannot be resolved');
+      }
 
       return into(manufacturingOrders).insert(ManufacturingOrdersCompanion.insert(
         orderNumber: orderNumber,
         orderType: Value(orderType),
-        bomId: bomId,
-        finishedProductId: finishedProductId ?? inputProductId,
-        plannedQuantity: plannedQuantity ?? inputQuantity,
+        bomId: resolvedBomId,
+        finishedProductId: resolvedFinished,
+        plannedQuantity: plannedQuantity ?? inputQuantity ?? 0,
+        plannedDate: Value(plannedDate),
         customerId: Value(customerId),
+        pricingMode:
+            pricingMode == null ? const Value.absent() : Value(pricingMode),
+        scrapPolicy:
+            scrapPolicy == null ? const Value.absent() : Value(scrapPolicy),
+        pieceUnitValue: pieceUnitValue == null
+            ? const Value.absent()
+            : Value(pieceUnitValue),
+        serviceUnitPrice: serviceUnitPrice == null
+            ? const Value.absent()
+            : Value(serviceUnitPrice),
+        notes: Value(notes),
         inputProductId: Value(inputProductId),
         inputQuantity: Value(inputQuantity),
         inputColor: Value(inputColor),

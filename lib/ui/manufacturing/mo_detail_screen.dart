@@ -473,20 +473,46 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       onChanged: (_) => setStateDialog(() {}),
                     ),
                     const Gap(12),
-                    // Preview of required vs available
+                    // Preview of required vs available.
+                    // Customer-owned lines are compared against customer
+                    // custody balances — never against factory Products.quantity
+                    // (same ownership rule as completeForOthersOrder).
                     ..._bomItems.map((entry) {
                       final (item, product) = entry;
                       final waste = item.wastePercentageOverride ?? _bom!.wastePercentage;
                       final actualForPreview = double.tryParse(actualQtyCtrl.text) ?? _order!.plannedQuantity;
                       final factor = _bom!.yieldQuantity > 0 ? actualForPreview / _bom!.yieldQuantity : actualForPreview;
                       final required = (item.quantityRequired * factor * (1 + waste / 100)).round();
-                      final short = required > product.quantity;
+                      final isCustomerOwned = _order!.orderType == 'for_others' ||
+                          (_order!.orderType == 'mixed' &&
+                              _customerBalances.any((b) =>
+                                  b.productId == item.rawMaterialProductId));
+                      final int available;
+                      if (isCustomerOwned) {
+                        available = _customerBalances
+                            .where((b) =>
+                                b.productId == item.rawMaterialProductId)
+                            .fold<double>(
+                                0,
+                                (s, b) =>
+                                    s +
+                                    (b.quantityOnHand -
+                                        b.quantityAllocated))
+                            .round();
+                      } else {
+                        available = product.quantity;
+                      }
+                      final short = required > available;
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Row(
                           children: [
-                            Expanded(child: Text(product.name, style: const TextStyle(fontSize: 12))),
-                            Text('$required / ${product.quantity} ${product.unit ?? ''}',
+                            Expanded(child: Text(
+                                isCustomerOwned
+                                    ? '${product.name} (عهدة العميل)'
+                                    : product.name,
+                                style: const TextStyle(fontSize: 12))),
+                            Text('$required / $available ${product.unit ?? ''}',
                                 style: TextStyle(fontSize: 12, color: short ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),
                             if (short) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.warning, size: 14, color: Colors.red)),
                           ],
