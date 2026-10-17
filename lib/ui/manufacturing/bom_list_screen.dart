@@ -52,7 +52,9 @@ class _BomListScreenState extends State<BomListScreen> {
       _loadProducts();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(bom == null ? 'تم إنشاء الوصفة بنجاح' : 'تم تحديث الوصفة بنجاح'),
+          content: Text(
+            bom == null ? 'تم إنشاء الوصفة بنجاح' : 'تم تحديث الوصفة بنجاح',
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -63,7 +65,13 @@ class _BomListScreenState extends State<BomListScreen> {
     await widget.db.bomDao.toggleBomStatus(bom.id);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(bom.status == 'Active' ? 'تم إلغاء تفعيل الوصفة' : 'تم تفعيل الوصفة')),
+        SnackBar(
+          content: Text(
+            bom.status == 'Active'
+                ? 'تم إلغاء تفعيل الوصفة'
+                : 'تم تفعيل الوصفة',
+          ),
+        ),
       );
     }
   }
@@ -73,9 +81,14 @@ class _BomListScreenState extends State<BomListScreen> {
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('حذف الوصفة'),
-        content: Text('هل أنت متأكد من حذف "${bom.name}"؟\nسيتم حذف كل مكوناتها أيضاً.'),
+        content: Text(
+          'هل أنت متأكد من حذف "${bom.name}"؟\nسيتم حذف كل مكوناتها أيضاً.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('إلغاء'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(c, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
@@ -87,7 +100,9 @@ class _BomListScreenState extends State<BomListScreen> {
     if (confirm != true) return;
     await widget.db.bomDao.deleteBom(bom.id);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الوصفة')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم حذف الوصفة')));
     }
   }
 
@@ -98,7 +113,11 @@ class _BomListScreenState extends State<BomListScreen> {
       appBar: AppBar(
         title: const Text('وصفات التصنيع (BOM)'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadProducts, tooltip: 'تحديث'),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadProducts,
+            tooltip: 'تحديث',
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -118,7 +137,9 @@ class _BomListScreenState extends State<BomListScreen> {
                     decoration: InputDecoration(
                       hintText: 'بحث بالاسم أو الكود أو المنتج...',
                       prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear),
@@ -129,7 +150,8 @@ class _BomListScreenState extends State<BomListScreen> {
                             )
                           : null,
                     ),
-                    onChanged: (v) => setState(() => _searchQuery = v.trim().toLowerCase()),
+                    onChanged: (v) =>
+                        setState(() => _searchQuery = v.trim().toLowerCase()),
                   ),
                 ),
                 const Gap(12),
@@ -138,7 +160,10 @@ class _BomListScreenState extends State<BomListScreen> {
                   items: const [
                     DropdownMenuItem(value: 'all', child: Text('الكل')),
                     DropdownMenuItem(value: 'Active', child: Text('مفعلة')),
-                    DropdownMenuItem(value: 'Inactive', child: Text('غير مفعلة')),
+                    DropdownMenuItem(
+                      value: 'Inactive',
+                      child: Text('غير مفعلة'),
+                    ),
                   ],
                   onChanged: (v) => setState(() => _statusFilter = v ?? 'all'),
                 ),
@@ -165,7 +190,9 @@ class _BomListScreenState extends State<BomListScreen> {
                 if (_searchQuery.isNotEmpty) {
                   boms = boms.where((b) {
                     final product = _productMap[b.finishedProductId];
-                    final hay = '${b.name} ${b.code ?? ''} ${product?.name ?? ''}'.toLowerCase();
+                    final hay =
+                        '${b.name} ${b.code ?? ''} ${product?.name ?? ''}'
+                            .toLowerCase();
                     return hay.contains(_searchQuery);
                   }).toList();
                 }
@@ -175,13 +202,19 @@ class _BomListScreenState extends State<BomListScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.factory_outlined, size: 64, color: Colors.grey.shade400),
+                        Icon(
+                          Icons.factory_outlined,
+                          size: 64,
+                          color: Colors.grey.shade400,
+                        ),
                         const Gap(16),
                         Text(
                           _searchQuery.isEmpty && _statusFilter == 'all'
                               ? 'لا توجد وصفات مسجلة بعد'
                               : 'لا توجد نتائج مطابقة',
-                          style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey.shade600),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: Colors.grey.shade600,
+                          ),
                         ),
                         const Gap(16),
                         if (_searchQuery.isEmpty && _statusFilter == 'all')
@@ -196,7 +229,10 @@ class _BomListScreenState extends State<BomListScreen> {
                 }
 
                 return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   itemCount: boms.length,
                   itemBuilder: (context, index) {
                     final bom = boms[index];
@@ -204,7 +240,9 @@ class _BomListScreenState extends State<BomListScreen> {
                     final isActive = bom.status == 'Active';
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       elevation: 2,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(12),
@@ -216,43 +254,65 @@ class _BomListScreenState extends State<BomListScreen> {
                             children: [
                               Row(
                                 children: [
-                                    CircleAvatar(
-                                      backgroundColor:
-                                          isActive ? Colors.green.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.15),
-                                    child: Icon(Icons.receipt_long,
-                                        color: isActive ? Colors.green : Colors.grey),
+                                  CircleAvatar(
+                                    backgroundColor: isActive
+                                        ? Colors.green.withValues(alpha: 0.15)
+                                        : Colors.grey.withValues(alpha: 0.15),
+                                    child: Icon(
+                                      Icons.receipt_long,
+                                      color: isActive
+                                          ? Colors.green
+                                          : Colors.grey,
+                                    ),
                                   ),
                                   const Gap(12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Text(bom.name,
-                                            style: theme.textTheme.titleMedium
-                                                ?.copyWith(fontWeight: FontWeight.bold)),
+                                        Text(
+                                          bom.name,
+                                          style: theme.textTheme.titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                        ),
                                         Text(
                                           'المنتج: ${product?.name ?? '#${bom.finishedProductId}'}'
                                           '${bom.code != null ? ' • ${bom.code}' : ''}',
                                           style: theme.textTheme.bodySmall
-                                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                                              ?.copyWith(
+                                                color: theme
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
                                         ),
                                       ],
                                     ),
                                   ),
                                   Container(
-                                    padding:
-                                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: isActive
                                           ? Colors.green.withValues(alpha: 0.15)
                                           : Colors.grey.withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: isActive ? Colors.green : Colors.grey),
+                                      border: Border.all(
+                                        color: isActive
+                                            ? Colors.green
+                                            : Colors.grey,
+                                      ),
                                     ),
                                     child: Text(
                                       isActive ? 'مفعلة' : 'غير مفعلة',
                                       style: TextStyle(
-                                        color: isActive ? Colors.green.shade800 : Colors.grey.shade700,
+                                        color: isActive
+                                            ? Colors.green.shade800
+                                            : Colors.grey.shade700,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
                                       ),
@@ -262,13 +322,19 @@ class _BomListScreenState extends State<BomListScreen> {
                               ),
                               const Divider(height: 20),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('العائد: ${bom.yieldQuantity} وحدة',
-                                      style: theme.textTheme.bodyMedium),
-                                  Text('هدر: ${bom.wastePercentage}%',
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(color: Colors.orange.shade800)),
+                                  Text(
+                                    'العائد: ${bom.yieldQuantity} وحدة',
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                  Text(
+                                    'هدر: ${bom.wastePercentage}%',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: Colors.orange.shade800,
+                                    ),
+                                  ),
                                 ],
                               ),
                               const Gap(8),
@@ -277,9 +343,15 @@ class _BomListScreenState extends State<BomListScreen> {
                                 children: [
                                   TextButton.icon(
                                     onPressed: () => _toggleStatus(bom),
-                                    icon: Icon(isActive ? Icons.pause_circle : Icons.play_circle,
-                                        size: 18),
-                                    label: Text(isActive ? 'إلغاء تفعيل' : 'تفعيل'),
+                                    icon: Icon(
+                                      isActive
+                                          ? Icons.pause_circle
+                                          : Icons.play_circle,
+                                      size: 18,
+                                    ),
+                                    label: Text(
+                                      isActive ? 'إلغاء تفعيل' : 'تفعيل',
+                                    ),
                                   ),
                                   TextButton.icon(
                                     onPressed: () => _openForm(bom: bom),
@@ -288,9 +360,15 @@ class _BomListScreenState extends State<BomListScreen> {
                                   ),
                                   TextButton.icon(
                                     onPressed: () => _deleteBom(bom),
-                                    icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                                    label:
-                                        const Text('حذف', style: TextStyle(color: Colors.red)),
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      size: 18,
+                                      color: Colors.red,
+                                    ),
+                                    label: const Text(
+                                      'حذف',
+                                      style: TextStyle(color: Colors.red),
+                                    ),
                                   ),
                                 ],
                               ),
