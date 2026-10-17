@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart' show isCustomerOwnedBomLine;
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
+import 'bom_form_dialog.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/receipt_picker_field.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/searchable_product_picker.dart';
 
@@ -232,6 +233,44 @@ class _MoFormDialogState extends State<MoFormDialog> {
     if (bomId == null) return;
     try {
       final items = await widget.db.bomDao.getItemsForBom(bomId);
+      if (!mounted) return;
+      setState(() => _selectedBomLines = items);
+    } catch (_) {
+      if (mounted) setState(() => _selectedBomLines = []);
+    }
+  }
+
+  /// FEAT-005: create a recipe inline without leaving this dialog, then
+  /// refresh the recipe list and select the new recipe (falling back to
+  /// show-all when it is outside the receipt-compatibility filter).
+  Future<void> _createRecipeInline() async {
+    final createdId = await showDialog<int>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => BomFormDialog(db: widget.db),
+    );
+    if (createdId == null || !mounted) return;
+    await _loadBoms();
+    if (!mounted) return;
+    if (_selectedReceipt != null) {
+      setState(() {});
+      await _onReceiptPicked(_selectedReceipt);
+      if (!mounted) return;
+    }
+    final match = _activeBoms.where((b) => b.id == createdId);
+    setState(() {
+      _selectedBomId = createdId;
+      _selectedBom = match.isNotEmpty ? match.first : null;
+      _finishedProduct = _selectedBom != null
+          ? _productMap[_selectedBom!.finishedProductId]
+          : null;
+      if (_selectedBom != null &&
+          !_compatibleBoms.any((b) => b.id == createdId)) {
+        _showAllBoms = true;
+      }
+    });
+    try {
+      final items = await widget.db.bomDao.getItemsForBom(createdId);
       if (!mounted) return;
       setState(() => _selectedBomLines = items);
     } catch (_) {
@@ -641,6 +680,16 @@ class _MoFormDialogState extends State<MoFormDialog> {
                           .toList(),
                       onChanged: canEdit ? _onForOthersBomPicked : null,
                     ),
+                    if (canEdit)
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: TextButton.icon(
+                          onPressed: _createRecipeInline,
+                          icon: const Icon(Icons.playlist_add),
+                          label: const Text(
+                              '\u0648\u0635\u0641\u0629 \u062C\u062F\u064A\u062F\u0629'),
+                        ),
+                      ),
                     if (_selectedReceipt != null &&
                         _compatibleBoms.isEmpty &&
                         !_showAllBoms)

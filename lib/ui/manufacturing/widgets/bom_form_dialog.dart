@@ -156,6 +156,8 @@ class _BomFormDialogState extends State<BomFormDialog> {
     _recalcCost();
   }
 
+  int? createdBomId;
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedFinishedProductId == null) {
@@ -210,7 +212,8 @@ class _BomFormDialogState extends State<BomFormDialog> {
                   notes: Value(r.notes.trim().isEmpty ? null : r.notes.trim()),
                 ))
             .toList();
-        await widget.db.bomDao.insertBomWithItemsChecked(bom: bomCompanion, items: itemCompanions);
+        final created = await widget.db.bomDao.insertBomWithItemsChecked(bom: bomCompanion, items: itemCompanions);
+        createdBomId = created.bomId;
         // Non-blocking product_type warnings (untyped products that predate the
         // column, or a semi-finished input). The insert already succeeded, so
         // surface them after saving rather than blocking the user.
@@ -252,7 +255,7 @@ class _BomFormDialogState extends State<BomFormDialog> {
           bomUpdate: headerUpdate,
         );
       }
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) Navigator.of(context).pop(createdBomId ?? true);
     } catch (e) {
       setState(() {
         _isSubmitting = false;

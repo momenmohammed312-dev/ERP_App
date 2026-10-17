@@ -43,12 +43,12 @@ class _BomListScreenState extends State<BomListScreen> {
   }
 
   Future<void> _openForm({BillOfMaterial? bom}) async {
-    final res = await showDialog<bool>(
+    final res = await showDialog<Object?>(
       context: context,
       barrierDismissible: false,
       builder: (_) => BomFormDialog(db: widget.db, bom: bom),
     );
-    if (res == true && mounted) {
+    if (res != null && mounted) {
       _loadProducts();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
