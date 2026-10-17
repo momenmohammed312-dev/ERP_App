@@ -4,6 +4,7 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart' show isCustomerOwnedBomLine;
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/receipt_picker_field.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/searchable_product_picker.dart';
@@ -43,6 +44,8 @@ class _MoFormDialogState extends State<MoFormDialog> {
   List<BillOfMaterial> _compatibleBoms = [];
   Map<int, Set<int>> _bomRawProductIds = {};
   bool _showAllBoms = false;
+  // Raw BOM lines of the picked recipe (for-others split preview)
+  List<BomItem> _selectedBomLines = [];
   List<CustomerStockBalance> _customerBalances = [];
   CustomerStockBalance? _selectedBalance;
   List<Customer> _customers = [];
@@ -178,6 +181,7 @@ class _MoFormDialogState extends State<MoFormDialog> {
       _showAllBoms = false;
       _selectedBomId = null;
       _selectedBom = null;
+      _selectedBomLines = [];
       _finishedProduct = null;
       _selectedBalance = null;
     });
@@ -212,6 +216,126 @@ class _MoFormDialogState extends State<MoFormDialog> {
     } catch (_) {
       // balances already loaded; recipe filter stays empty
     }
+  }
+
+  /// Receipt-flow recipe pick: keeps the supply-source split preview synced
+  /// with the picked BOM.
+  Future<void> _onForOthersBomPicked(int? bomId) async {
+    setState(() {
+      _selectedBomId = bomId;
+      final m = _activeBoms.where((bb) => bb.id == bomId);
+      _selectedBom = m.isNotEmpty ? m.first : null;
+      _finishedProduct =
+          _selectedBom != null ? _productMap[_selectedBom!.finishedProductId] : null;
+      _selectedBomLines = [];
+    });
+    if (bomId == null) return;
+    try {
+      final items = await widget.db.bomDao.getItemsForBom(bomId);
+      if (!mounted) return;
+      setState(() => _selectedBomLines = items);
+    } catch (_) {
+      if (mounted) setState(() => _selectedBomLines = []);
+    }
+  }
+
+  /// Form-side ownership preview: a line is customer-owned only when this
+  /// customer actually holds custody of that product; otherwise it is a
+  /// factory-supplied line and the order auto-escalates to 'mixed' on save.
+  bool _isCustomerOwnedLine(BomItem line) {
+    return isCustomerOwnedBomLine(
+      orderType: 'mixed',
+      rawMaterialProductId: line.rawMaterialProductId,
+      hasCustodyBalance: _customerBalances
+          .any((b) => b.productId == line.rawMaterialProductId),
+    );
+  }
+
+  bool get _autoMixed =>
+      _orderType == 'for_others' &&
+      _selectedBomLines.isNotEmpty &&
+      _selectedBomLines.any((l) => !_isCustomerOwnedLine(l));
+
+  Widget _buildBomOwnershipSplit() {
+    final theme = Theme.of(context);
+    final planned = double.tryParse(_plannedQtyCtrl.text.trim()) ?? 0;
+    final yieldQty =
+        (_selectedBom!.yieldQuantity > 0) ? _selectedBom!.yieldQuantity : 1.0;
+    final factor = planned / yieldQty;
+    final customerLines = <BomItem>[];
+    final factoryLines = <BomItem>[];
+    for (final l in _selectedBomLines) {
+      (_isCustomerOwnedLine(l) ? customerLines : factoryLines).add(l);
+    }
+    Widget section(IconData icon, String label, Color tint,
+        List<BomItem> lines, bool fromCustody) {
+      final rows = <Widget>[];
+      for (final l in lines) {
+        final p = _productMap[l.rawMaterialProductId];
+        final waste =
+            l.wastePercentageOverride ?? _selectedBom!.wastePercentage;
+        final required = l.quantityRequired * factor * (1 + waste / 100);
+        final int available;
+        if (fromCustody) {
+          available = _customerBalances
+              .where((b) => b.productId == l.rawMaterialProductId)
+              .fold(0,
+                  (s, b) => s + (b.quantityOnHand - b.quantityAllocated).round());
+        } else {
+          available = _productMap[l.rawMaterialProductId]?.quantity ?? 0;
+        }
+        rows.add(const Gap(4));
+        rows.add(Text(
+          '${p?.name ?? '#${l.rawMaterialProductId}'}  \u0627\u0644\u0645\u0637\u0644\u0648\u0628: ${required.round()} \u2014 \u0627\u0644\u0645\u062A\u0627\u062D: $available',
+          style: const TextStyle(fontSize: 12),
+        ));
+      }
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: tint.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(icon, size: 14, color: tint),
+              const Gap(6),
+              Text(label,
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.bold)),
+            ]),
+            ...rows,
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('\u062A\u0648\u0632\u064A\u0639 \u0633\u0637\u0648\u0631 \u0627\u0644\u0648\u0635\u0641\u0629 \u0639\u0644\u0649 \u0645\u0635\u0627\u062F\u0631 \u0627\u0644\u062A\u0648\u0631\u064A\u062F',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(fontWeight: FontWeight.bold)),
+        const Gap(8),
+        section(Icons.person,
+            '\u0633\u0637\u0648\u0631 \u0627\u0644\u0639\u0645\u064A\u0644 \u2014 \u062A\u062E\u0635\u0645 \u0645\u0646 \u0639\u0647\u062F\u062A\u0647',
+            Colors.teal, customerLines, true),
+        if (factoryLines.isNotEmpty) ...[
+          const Gap(8),
+          section(Icons.factory_outlined,
+              '\u0633\u0637\u0648\u0631 \u0627\u0644\u0645\u0635\u0646\u0639 \u2014 \u062A\u062E\u0635\u0645 \u0645\u0646 \u0645\u062E\u0632\u0646 \u0627\u0644\u0645\u0635\u0646\u0639',
+              Colors.blue, factoryLines, false),
+          const Gap(8),
+          Text(
+              '\u0633\u064A\u062D\u0641\u0638 \u0627\u0644\u0623\u0645\u0631 \u0643\u0645\u062E\u062A\u0644\u0637: \u0639\u0647\u062F\u0629 \u0627\u0644\u0639\u0645\u064A\u0644 + \u0645\u062E\u0632\u0646 \u0627\u0644\u0645\u0635\u0646\u0639',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(fontStyle: FontStyle.italic)),
+        ],
+      ],
+    );
   }
 
   Future<void> _submit() async {
@@ -253,6 +377,9 @@ class _MoFormDialogState extends State<MoFormDialog> {
     }
     final pieceVal = double.tryParse(_pieceUnitValueCtrl.text.trim()) ?? 0.0;
     final servicePrice = double.tryParse(_serviceUnitPriceCtrl.text.trim()) ?? 0.0;
+    // Auto-escalate to 'mixed' when the picked recipe includes lines the
+    // customer does not own (factory-supplied materials — see _autoMixed).
+    final saveType = _autoMixed ? 'mixed' : _orderType;
 
     setState(() {
       _isSubmitting = true;
@@ -291,7 +418,7 @@ class _MoFormDialogState extends State<MoFormDialog> {
           // finished stock never touched).
           await widget.db.manufacturingOrderDao.createJobWorkOrder(
             orderNumber: orderNumber,
-            orderType: _orderType,
+            orderType: saveType,
             customerId: _customerId!,
             bomId: _selectedBomId!,
             finishedProductId: finishedId,
@@ -317,7 +444,7 @@ class _MoFormDialogState extends State<MoFormDialog> {
           finishedProductId: finishedId,
           plannedQuantity: qty,
           plannedDate: Value(_plannedDate),
-          orderType: Value(_orderType),
+          orderType: Value(saveType),
           customerId: Value(_orderType == 'internal' ? null : _customerId),
           pricingMode: Value(_orderType == 'internal' ? null : _pricingMode),
           scrapPolicy: Value(_orderType == 'internal' ? null : _scrapPolicy),
@@ -445,6 +572,7 @@ class _MoFormDialogState extends State<MoFormDialog> {
                        _orderType = v ?? 'internal';
                        _selectedBomId = null;
                        _selectedBom = null;
+                       _selectedBomLines = [];
                        _customerId = null;
                        _customerBalances = [];
                        _selectedBalance = null;
@@ -511,21 +639,7 @@ class _MoFormDialogState extends State<MoFormDialog> {
                                 ),
                               ))
                           .toList(),
-                      onChanged: canEdit
-                          ? (v) {
-                              setState(() {
-                                _selectedBomId = v;
-                                final m =
-                                    _activeBoms.where((bb) => bb.id == v);
-                                _selectedBom =
-                                    m.isNotEmpty ? m.first : null;
-                                _finishedProduct = _selectedBom != null
-                                    ? _productMap[
-                                        _selectedBom!.finishedProductId]
-                                    : null;
-                              });
-                            }
-                          : null,
+                      onChanged: canEdit ? _onForOthersBomPicked : null,
                     ),
                     if (_selectedReceipt != null &&
                         _compatibleBoms.isEmpty &&
@@ -550,6 +664,9 @@ class _MoFormDialogState extends State<MoFormDialog> {
                             style: TextStyle(fontSize: 13)),
                       ],
                     ),
+                    const Gap(8),
+                    if (_selectedBom != null && _selectedBomLines.isNotEmpty)
+                      _buildBomOwnershipSplit(),
                     const Gap(8),
                     DropdownButtonFormField<String>(
                       value: _customerId,
