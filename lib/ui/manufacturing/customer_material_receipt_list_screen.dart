@@ -580,6 +580,7 @@ class _CustomerMaterialReceiptDialogState
   }
 
   Widget _buildItemRowWidget(int idx) {
+    final theme = Theme.of(context);
     final row = _itemRows[idx];
     return Card(
       color: theme.colorScheme.surfaceContainerHighest,
