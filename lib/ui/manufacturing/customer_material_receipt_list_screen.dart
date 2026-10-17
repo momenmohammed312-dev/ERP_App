@@ -393,6 +393,15 @@ class _CustomerMaterialReceiptDialogState
       _error = null;
     });
 
+    // BUG-006 guard: validate the product id explicitly (the form
+    // validator already blocks it; this keeps the money path safe).
+    for (final r in _itemRows) {
+      if (r.selectedProductId == null) {
+        setState(() => _error = '\u0627\u062E\u062A\u0631 \u0627\u0644\u0645\u0646\u062A\u062C / \u0627\u0644\u062E\u0627\u0645\u0629 \u0641\u064A \u0643\u0644 \u0633\u0637\u0631');
+        return;
+      }
+    }
+
     try {
       final inputs = _itemRows.map((r) {
         final rec = double.tryParse(r.qtyReceivedCtrl.text.trim()) ?? 0.0;
@@ -599,6 +608,9 @@ class _CustomerMaterialReceiptDialogState
                 db: widget.db,
                 label: 'المنتج / الخامة',
                 initialProductId: row.selectedProductId,
+                // BUG-006: without a validator the form accepted a row with
+                // no product and the submit path crashed on the null id.
+                validator: (v) => v == null ? '\u0627\u062E\u062A\u0631 \u0627\u0644\u0645\u0646\u062A\u062C \u0623\u0648 \u0627\u0644\u062E\u0627\u0645\u0629' : null,
                 onChanged: (p) =>
                     setState(() => row.selectedProductId = p?.id),
               ),
