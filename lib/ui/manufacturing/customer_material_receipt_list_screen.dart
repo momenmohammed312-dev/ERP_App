@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
@@ -28,7 +29,8 @@ class _CustomerMaterialReceiptListScreenState
 
   Future<void> _loadCustomers() async {
     try {
-      final customers = await widget.db.customerDao.getCustomersForManufacturing();
+      final customers = await widget.db.customerDao
+          .getCustomersForManufacturing();
       setState(() {
         _customerMap = {for (var c in customers) c.id: c};
         _loading = false;
@@ -107,13 +109,18 @@ class _CustomerMaterialReceiptListScreenState
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.inventory_2_outlined,
-                            size: 64, color: Colors.grey.shade400),
+                        Icon(
+                          Icons.inventory_2_outlined,
+                          size: 64,
+                          color: Colors.grey.shade400,
+                        ),
                         const Gap(16),
-                        Text('لا توجد أذونات استلام خامات مسجلة',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              color: Colors.grey.shade600,
-                            )),
+                        Text(
+                          'لا توجد أذونات استلام خامات مسجلة',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
                         const Gap(8),
                         FilledButton.icon(
                           onPressed: _openReceiptDialog,
@@ -165,7 +172,8 @@ class _CustomerMaterialReceiptListScreenState
                                 return const Padding(
                                   padding: EdgeInsets.all(16),
                                   child: Center(
-                                      child: CircularProgressIndicator()),
+                                    child: CircularProgressIndicator(),
+                                  ),
                                 );
                               }
                               return Padding(
@@ -173,13 +181,17 @@ class _CustomerMaterialReceiptListScreenState
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('الأصناف المستلمة:',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold)),
+                                    const Text(
+                                      'الأصناف المستلمة:',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                     const Gap(8),
                                     Table(
                                       border: TableBorder.all(
-                                          color: theme.colorScheme.outlineVariant),
+                                        color: theme.colorScheme.outlineVariant,
+                                      ),
                                       columnWidths: const {
                                         0: FlexColumnWidth(3),
                                         1: FlexColumnWidth(2),
@@ -190,43 +202,55 @@ class _CustomerMaterialReceiptListScreenState
                                       children: [
                                         TableRow(
                                           decoration: BoxDecoration(
-                                              color: theme
-                                                  .colorScheme.surfaceContainerHighest),
+                                            color: theme
+                                                .colorScheme
+                                                .surfaceContainerHighest,
+                                          ),
                                           children: const [
                                             Padding(
                                               padding: EdgeInsets.all(6),
-                                              child: Text('المنتج',
-                                                  style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold)),
+                                              child: Text(
+                                                'المنتج',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
                                             ),
                                             Padding(
                                               padding: EdgeInsets.all(6),
-                                              child: Text('المستلم',
-                                                  style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold)),
+                                              child: Text(
+                                                'المستلم',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
                                             ),
                                             Padding(
                                               padding: EdgeInsets.all(6),
-                                              child: Text('معيب/تالف',
-                                                  style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold)),
+                                              child: Text(
+                                                'معيب/تالف',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
                                             ),
                                             Padding(
                                               padding: EdgeInsets.all(6),
-                                              child: Text('المقبول للعهدة',
-                                                  style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold)),
+                                              child: Text(
+                                                'المقبول للعهدة',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
                                             ),
                                             Padding(
                                               padding: EdgeInsets.all(6),
-                                              child: Text('ملاحظات / سبب الرفض',
-                                                  style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold)),
+                                              child: Text(
+                                                'ملاحظات / سبب الرفض',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -234,23 +258,32 @@ class _CustomerMaterialReceiptListScreenState
                                           TableRow(
                                             children: [
                                               Padding(
-                                                padding:
-                                                    const EdgeInsets.all(6),
-                                                child: Text(_productMap[it.productId]?.name ?? it.productId.toString()),
-                                              ),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.all(6),
+                                                padding: const EdgeInsets.all(
+                                                  6,
+                                                ),
                                                 child: Text(
-                                                    '${it.quantityReceived}'),
+                                                  _productMap[it.productId]
+                                                          ?.name ??
+                                                      it.productId.toString(),
+                                                ),
                                               ),
                                               Padding(
-                                                padding:
-                                                    const EdgeInsets.all(6),
+                                                padding: const EdgeInsets.all(
+                                                  6,
+                                                ),
+                                                child: Text(
+                                                  '${it.quantityReceived}',
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.all(
+                                                  6,
+                                                ),
                                                 child: Text(
                                                   '${it.quantityDefectiveAtReceipt}',
                                                   style: TextStyle(
-                                                    color: it.quantityDefectiveAtReceipt >
+                                                    color:
+                                                        it.quantityDefectiveAtReceipt >
                                                             0
                                                         ? Colors.red
                                                         : Colors.black,
@@ -258,21 +291,26 @@ class _CustomerMaterialReceiptListScreenState
                                                 ),
                                               ),
                                               Padding(
-                                                padding:
-                                                    const EdgeInsets.all(6),
+                                                padding: const EdgeInsets.all(
+                                                  6,
+                                                ),
                                                 child: Text(
-                                                    '${it.quantityAccepted}',
-                                                    style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color: Colors.green)),
+                                                  '${it.quantityAccepted}',
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.green,
+                                                  ),
+                                                ),
                                               ),
                                               Padding(
-                                                padding:
-                                                    const EdgeInsets.all(6),
-                                                child: Text(it.rejectionReason ??
-                                                    it.notes ??
-                                                    '-'),
+                                                padding: const EdgeInsets.all(
+                                                  6,
+                                                ),
+                                                child: Text(
+                                                  it.rejectionReason ??
+                                                      it.notes ??
+                                                      '-',
+                                                ),
                                               ),
                                             ],
                                           ),
@@ -290,10 +328,12 @@ class _CustomerMaterialReceiptListScreenState
                                       child: FilledButton.tonalIcon(
                                         onPressed: () =>
                                             _openForOthersOrder(r.id),
-                                        icon: const Icon(Icons
-                                            .precision_manufacturing),
+                                        icon: const Icon(
+                                          Icons.precision_manufacturing,
+                                        ),
                                         label: const Text(
-                                            'إنشاء أمر تشغيل للغير'),
+                                          'إنشاء أمر تشغيل للغير',
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -377,6 +417,99 @@ class _CustomerMaterialReceiptDialogState
     });
   }
 
+  /// FEAT-006: receive material the workshop does not stock. Custody is
+  /// keyed by product, so create the product row on the fly: factory
+  /// quantity stays 0 and consumption happens only in custody flows.
+  Future<void> _createCustodyProduct([_ReceiptItemRow? row]) async {
+    final nameCtrl = TextEditingController();
+    final unitCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    String? localError;
+    final created = await showDialog<int>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('إضافة صنف عهدة (غير مخزني)'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'اسم الصنف',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'أدخل اسم الصنف' : null,
+                ),
+                const Gap(12),
+                TextFormField(
+                  controller: unitCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'الوحدة (اختياري)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                if (localError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      localError!,
+                      style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+                try {
+                  final id = await widget.db.productDao.insertProduct(
+                    ProductsCompanion.insert(
+                      name: nameCtrl.text.trim(),
+                      quantity: 0,
+                      price: 0,
+                      unit: Value(
+                        unitCtrl.text.trim().isEmpty
+                            ? null
+                            : unitCtrl.text.trim(),
+                      ),
+                      productType: const Value('raw_material'),
+                    ),
+                  );
+                  if (ctx.mounted) Navigator.pop(ctx, id);
+                } catch (e) {
+                  setDialogState(() => localError = 'فشل الحفظ: $e');
+                }
+              },
+              child: const Text('إضافة'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (created == null || !mounted) return;
+    final prods = await widget.db.productDao.getAllProducts();
+    if (!mounted) return;
+    setState(() {
+      _products = prods;
+      if (row == null) {
+        _itemRows.add(_ReceiptItemRow(selectedProductId: created));
+      } else {
+        row.selectedProductId = created;
+      }
+    });
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCustomerId == null) {
@@ -397,7 +530,10 @@ class _CustomerMaterialReceiptDialogState
     // validator already blocks it; this keeps the money path safe).
     for (final r in _itemRows) {
       if (r.selectedProductId == null) {
-        setState(() => _error = '\u0627\u062E\u062A\u0631 \u0627\u0644\u0645\u0646\u062A\u062C / \u0627\u0644\u062E\u0627\u0645\u0629 \u0641\u064A \u0643\u0644 \u0633\u0637\u0631');
+        setState(
+          () => _error =
+              '\u0627\u062E\u062A\u0631 \u0627\u0644\u0645\u0646\u062A\u062C / \u0627\u0644\u062E\u0627\u0645\u0629 \u0641\u064A \u0643\u0644 \u0633\u0637\u0631',
+        );
         return;
       }
     }
@@ -413,8 +549,9 @@ class _CustomerMaterialReceiptDialogState
           rejectionReason: r.reasonCtrl.text.trim().isEmpty
               ? null
               : r.reasonCtrl.text.trim(),
-          notes:
-              r.notesCtrl.text.trim().isEmpty ? null : r.notesCtrl.text.trim(),
+          notes: r.notesCtrl.text.trim().isEmpty
+              ? null
+              : r.notesCtrl.text.trim(),
         );
       }).toList();
 
@@ -484,10 +621,12 @@ class _CustomerMaterialReceiptDialogState
                               color: theme.colorScheme.errorContainer,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Text(_error!,
-                                style: TextStyle(
-                                    color:
-                                        theme.colorScheme.onErrorContainer)),
+                            child: Text(
+                              _error!,
+                              style: TextStyle(
+                                color: theme.colorScheme.onErrorContainer,
+                              ),
+                            ),
                           ),
                           const Gap(16),
                         ],
@@ -499,10 +638,12 @@ class _CustomerMaterialReceiptDialogState
                             prefixIcon: Icon(Icons.person),
                           ),
                           items: _customers
-                              .map((c) => DropdownMenuItem(
-                                    value: c.id,
-                                    child: Text('${c.name} (${c.id})'),
-                                  ))
+                              .map(
+                                (c) => DropdownMenuItem(
+                                  value: c.id,
+                                  child: Text('${c.name} (${c.id})'),
+                                ),
+                              )
                               .toList(),
                           onChanged: (v) =>
                               setState(() => _selectedCustomerId = v),
@@ -538,10 +679,27 @@ class _CustomerMaterialReceiptDialogState
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text(
-                              'الأصناف وفحص الاستلام (المعيب لا يدخل العهدة)',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                            Expanded(
+                              child: const Text(
+                                'الأصناف وفحص الاستلام (المعيب لا يدخل العهدة)',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
+                            TextButton.icon(
+                              key: const Key('fe006-add-custody-product'),
+                              onPressed: () => _createCustodyProduct(
+                                _itemRows.isEmpty ||
+                                        _itemRows.first.selectedProductId !=
+                                            null
+                                    ? null
+                                    : _itemRows.first,
+                              ),
+                              icon: const Icon(Icons.new_label),
+                              label: const Text(
+                                '\u0625\u0636\u0627\u0641\u0629 \u0635\u0646\u0641 \u0639\u0647\u062F\u0629',
+                              ),
+                            ),
+                            const Gap(8),
                             FilledButton.tonalIcon(
                               onPressed: _addItemRow,
                               icon: const Icon(Icons.add),
@@ -572,7 +730,8 @@ class _CustomerMaterialReceiptDialogState
                                       width: 18,
                                       height: 18,
                                       child: CircularProgressIndicator(
-                                          strokeWidth: 2),
+                                        strokeWidth: 2,
+                                      ),
                                     )
                                   : const Icon(Icons.check),
                               label: const Text('تسجيل الاستلام'),
@@ -610,9 +769,10 @@ class _CustomerMaterialReceiptDialogState
                 initialProductId: row.selectedProductId,
                 // BUG-006: without a validator the form accepted a row with
                 // no product and the submit path crashed on the null id.
-                validator: (v) => v == null ? '\u0627\u062E\u062A\u0631 \u0627\u0644\u0645\u0646\u062A\u062C \u0623\u0648 \u0627\u0644\u062E\u0627\u0645\u0629' : null,
-                onChanged: (p) =>
-                    setState(() => row.selectedProductId = p?.id),
+                validator: (v) => v == null
+                    ? '\u0627\u062E\u062A\u0631 \u0627\u0644\u0645\u0646\u062A\u062C \u0623\u0648 \u0627\u0644\u062E\u0627\u0645\u0629'
+                    : null,
+                onChanged: (p) => setState(() => row.selectedProductId = p?.id),
               ),
             ),
             const Gap(8),
@@ -620,8 +780,9 @@ class _CustomerMaterialReceiptDialogState
               flex: 2,
               child: TextFormField(
                 controller: row.qtyReceivedCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: const InputDecoration(
                   labelText: 'المستلم كلياً',
                   border: OutlineInputBorder(),
@@ -639,8 +800,9 @@ class _CustomerMaterialReceiptDialogState
               flex: 2,
               child: TextFormField(
                 controller: row.qtyDefectiveCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: const InputDecoration(
                   labelText: 'تالف الفحص',
                   border: OutlineInputBorder(),
@@ -683,10 +845,12 @@ class _CustomerMaterialReceiptDialogState
 
 class _ReceiptItemRow {
   int? selectedProductId;
-  final TextEditingController qtyReceivedCtrl =
-      TextEditingController(text: '100');
-  final TextEditingController qtyDefectiveCtrl =
-      TextEditingController(text: '0');
+  final TextEditingController qtyReceivedCtrl = TextEditingController(
+    text: '100',
+  );
+  final TextEditingController qtyDefectiveCtrl = TextEditingController(
+    text: '0',
+  );
   final TextEditingController reasonCtrl = TextEditingController();
   final TextEditingController notesCtrl = TextEditingController();
 

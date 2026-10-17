@@ -31,8 +31,9 @@ void main() {
       // overflows here; assert only business behavior.
       final originalOnError = FlutterError.onError;
       FlutterError.onError = (details) {
-        if (details.exception.toString().contains('RenderFlex overflowed'))
+        if (details.exception.toString().contains('RenderFlex overflowed')) {
           return;
+        }
         if (originalOnError != null) originalOnError(details);
       };
       addTearDown(() => FlutterError.onError = originalOnError);
