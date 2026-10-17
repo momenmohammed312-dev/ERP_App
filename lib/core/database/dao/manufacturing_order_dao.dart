@@ -11,6 +11,28 @@ import 'package:pos_offline_desktop/core/database/tables/product_table.dart';
 
 part 'manufacturing_order_dao.g.dart';
 
+/// Ownership rule for one BOM line in a for-others/mixed completion.
+///
+/// Single source of truth shared by [ManufacturingOrderDao.completeForOthersOrder]
+/// and the completion preview in the order details screen, so a
+/// customer-owned line is never compared to factory [Products.quantity]:
+/// - explicit [customerOwnedProductIds] set → only listed lines are customer-owned;
+/// - 'for_others' without a set → every line is customer-owned;
+/// - otherwise (mixed / legacy paths) → customer-owned when the customer
+///   holds a custody balance for that product.
+bool isCustomerOwnedBomLine({
+  required String orderType,
+  required int rawMaterialProductId,
+  Set<int>? customerOwnedProductIds,
+  bool hasCustodyBalance = false,
+}) {
+  if (customerOwnedProductIds != null) {
+    return customerOwnedProductIds.contains(rawMaterialProductId);
+  }
+  if (orderType == 'for_others') return true;
+  return hasCustodyBalance;
+}
+
 @DriftAccessor(tables: [
   ManufacturingOrders,
   BillOfMaterials,
@@ -656,22 +678,22 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         final product = await (select(products)..where((p) => p.id.equals(item.rawMaterialProductId))).getSingleOrNull();
         if (product == null) throw StateError('Raw material product #${item.rawMaterialProductId} not found');
 
-        // Determine ownership:
-        // If customerOwnedProductIds is explicitly specified, use it.
-        // Otherwise, in 'for_others' all lines are customer-owned; in 'mixed', if unspecified, first line or customerOwnedProductIds
-        final bool isCustomerOwned;
-        if (customerOwnedProductIds != null) {
-          isCustomerOwned = customerOwnedProductIds.contains(item.rawMaterialProductId);
-        } else if (orderType == 'for_others') {
-          isCustomerOwned = true;
-        } else {
-          // mixed order default when customerOwnedProductIds is null:
-          // check if customer has a custody balance for this product
-          final custBal = await (select(customerStockBalances)
-                ..where((b) => b.customerId.equals(customerId) & b.productId.equals(item.rawMaterialProductId)))
-              .getSingleOrNull();
-          isCustomerOwned = custBal != null;
-        }
+        // Determine ownership via the shared rule (see isCustomerOwnedBomLine).
+        // The balance lookup below runs only when the rule needs it.
+        final custBalForOwnership =
+            (customerOwnedProductIds == null && orderType != 'for_others')
+                ? await (select(customerStockBalances)
+                      ..where((b) =>
+                          b.customerId.equals(customerId) &
+                          b.productId.equals(item.rawMaterialProductId)))
+                    .getSingleOrNull()
+                : null;
+        final bool isCustomerOwned = isCustomerOwnedBomLine(
+          orderType: orderType,
+          rawMaterialProductId: item.rawMaterialProductId,
+          customerOwnedProductIds: customerOwnedProductIds,
+          hasCustodyBalance: custBalForOwnership != null,
+        );
 
         if (isCustomerOwned) {
           // Customer custody stock validation

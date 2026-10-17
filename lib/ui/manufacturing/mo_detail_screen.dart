@@ -483,10 +483,12 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       final actualForPreview = double.tryParse(actualQtyCtrl.text) ?? _order!.plannedQuantity;
                       final factor = _bom!.yieldQuantity > 0 ? actualForPreview / _bom!.yieldQuantity : actualForPreview;
                       final required = (item.quantityRequired * factor * (1 + waste / 100)).round();
-                      final isCustomerOwned = _order!.orderType == 'for_others' ||
-                          (_order!.orderType == 'mixed' &&
-                              _customerBalances.any((b) =>
-                                  b.productId == item.rawMaterialProductId));
+                      final isCustomerOwned = isCustomerOwnedBomLine(
+                        orderType: _order!.orderType ?? 'internal',
+                        rawMaterialProductId: item.rawMaterialProductId,
+                        hasCustodyBalance: _customerBalances.any((b) =>
+                            b.productId == item.rawMaterialProductId),
+                      );
                       final int available;
                       if (isCustomerOwned) {
                         available = _customerBalances
