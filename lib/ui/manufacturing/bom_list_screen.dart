@@ -216,9 +216,9 @@ class _BomListScreenState extends State<BomListScreen> {
                             children: [
                               Row(
                                 children: [
-                                  CircleAvatar(
-                                    backgroundColor:
-                                        isActive ? Colors.green.shade50 : Colors.grey.shade200,
+                                    CircleAvatar(
+                                      backgroundColor:
+                                          isActive ? Colors.green.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.15),
                                     child: Icon(Icons.receipt_long,
                                         color: isActive ? Colors.green : Colors.grey),
                                   ),
@@ -234,7 +234,7 @@ class _BomListScreenState extends State<BomListScreen> {
                                           'المنتج: ${product?.name ?? '#${bom.finishedProductId}'}'
                                           '${bom.code != null ? ' • ${bom.code}' : ''}',
                                           style: theme.textTheme.bodySmall
-                                              ?.copyWith(color: Colors.grey.shade700),
+                                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                                         ),
                                       ],
                                     ),

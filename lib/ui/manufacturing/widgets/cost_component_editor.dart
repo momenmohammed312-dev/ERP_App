@@ -172,12 +172,12 @@ class _CostComponentEditorState extends State<CostComponentEditor> {
     }
     return Container(
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(6)),
       child: Row(
         children: [
-          const Icon(Icons.info_outline, size: 16, color: Colors.grey),
+          Icon(Icons.info_outline, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const Gap(8),
-          Expanded(child: Text(hint, style: TextStyle(fontSize: 12, color: Colors.grey.shade700))),
+          Expanded(child: Text(hint, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant))),
         ],
       ),
     );
@@ -243,9 +243,9 @@ class _CostComponentEditorState extends State<CostComponentEditor> {
             ] else
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: theme.colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
                 child: Text('للقراءة فقط',
-                    style: TextStyle(color: Colors.grey.shade700, fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.bold)),
               ),
           ],
         ),
@@ -261,17 +261,17 @@ class _CostComponentEditorState extends State<CostComponentEditor> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
+                  color: theme.colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
                 ),
                 child: Column(
                   children: [
-                    Icon(Icons.receipt_outlined, color: Colors.grey.shade400, size: 32),
+                    Icon(Icons.receipt_outlined, color: theme.colorScheme.onSurfaceVariant, size: 32),
                     const Gap(8),
-                    Text('لا توجد تكاليف إضافية بعد', style: TextStyle(color: Colors.grey.shade600)),
+                    Text('لا توجد تكاليف إضافية بعد', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
                     if (!_isReadOnly) const Gap(4),
-                    if (!_isReadOnly) Text('أضف عمالة، كهرباء، تعبئة...', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                    if (!_isReadOnly) Text('أضف عمالة، كهرباء، تعبئة...', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
                   ],
                 ),
               );

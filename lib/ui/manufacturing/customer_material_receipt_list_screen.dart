@@ -179,7 +179,7 @@ class _CustomerMaterialReceiptListScreenState
                                     const Gap(8),
                                     Table(
                                       border: TableBorder.all(
-                                          color: Colors.grey.shade300),
+                                          color: theme.colorScheme.outlineVariant),
                                       columnWidths: const {
                                         0: FlexColumnWidth(3),
                                         1: FlexColumnWidth(2),
@@ -190,7 +190,8 @@ class _CustomerMaterialReceiptListScreenState
                                       children: [
                                         TableRow(
                                           decoration: BoxDecoration(
-                                              color: Colors.grey.shade100),
+                                              color: theme
+                                                  .colorScheme.surfaceContainerHighest),
                                           children: const [
                                             Padding(
                                               padding: EdgeInsets.all(6),
@@ -581,10 +582,10 @@ class _CustomerMaterialReceiptDialogState
   Widget _buildItemRowWidget(int idx) {
     final row = _itemRows[idx];
     return Card(
-      color: Colors.grey.shade50,
+      color: theme.colorScheme.surfaceContainerHighest,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: Colors.grey.shade300),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),

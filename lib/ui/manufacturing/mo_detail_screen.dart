@@ -459,7 +459,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       _order!.orderType == 'for_others' || _order!.orderType == 'mixed'
                           ? 'سيتم خصم خامات العميل من رصيد العهدة بالمخزن في معاملة واحدة ذريّة (دون زيادة مخزون المصنع لأن البضاعة ملك العميل وتنتظر التسليم).'
                           : 'سيتم خصم المواد الخام وإضافة المنتج النهائي للمخزون في معاملة واحدة (ذريّة).',
-                      style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
                     ),
                     const Gap(12),
                     TextField(
@@ -573,11 +573,11 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                   _costRow('الإجمالي:', '${result.totalCost.toStringAsFixed(2)} ج.م', isBold: true),
                   _costRow('تكلفة الوحدة:', '${result.unitCost.toStringAsFixed(2)} ج.م / وحدة', isBold: true, color: Theme.of(ctx).colorScheme.primary),
                   const Gap(12),
-                  Text('المخزون: ${result.previousFinishedQuantity} → ${result.nextFinishedQuantity} وحدة', style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+                  Text('المخزون: ${result.previousFinishedQuantity} → ${result.nextFinishedQuantity} وحدة', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                   const Gap(16),
                   Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.shade200)),
+                    decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.withValues(alpha: 0.4))),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -587,15 +587,15 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                               value: updateCost,
                               onChanged: (v) => setStateDialog(() => updateCost = v ?? false),
                             ),
-                            const Expanded(child: Text('تحديث سعر تكلفة المنتج النهائي؟', style: TextStyle(fontWeight: FontWeight.bold))),
+                            Expanded(child: Text('تحديث سعر تكلفة المنتج النهائي؟', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade800))),
                           ],
                         ),
                         Text(
                             'السعر الحالي: ${result.previousCostPrice?.toStringAsFixed(2) ?? 'غير محدد'} ج.م → الجديد: ${result.unitCost.toStringAsFixed(2)} ج.م',
-                            style: TextStyle(fontSize: 12, color: Colors.amber.shade900)),
+                            style: TextStyle(fontSize: 12, color: Colors.amber.shade800)),
                         const Gap(4),
                         Text('اختياري ويحتاج تأكيدك. لن يتم التحديث بدون موافقتك.',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                            style: TextStyle(fontSize: 11, color: Colors.amber.shade700)),
                       ],
                     ),
                   ),
@@ -662,7 +662,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
               const Gap(12),
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
+                decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
                 child: const Text(
                   'تم خصم المواد من عهدة العميل ولم تتم إضافة المنتج النهائي لمخزون المصنع لأن البضاعة ملك للعميل وتنتظر إصدار إذن التسليم.',
                   style: TextStyle(fontSize: 11, color: Colors.blueAccent),
@@ -756,7 +756,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                   const Gap(12),
                   Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(6)),
+                    decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
                     child: Text(dlgError!, style: const TextStyle(color: Colors.red, fontSize: 12)),
                   ),
                 ],
@@ -946,7 +946,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
             if (_deliveries.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(12),
-                child: Text('لم يتم تسجيل أي أذونات تسليم بعد', style: TextStyle(color: Colors.grey.shade600)),
+                child: Text('لم يتم تسجيل أي أذونات تسليم بعد', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               )
             else
               ListView.separated(
@@ -965,7 +965,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                         'التاريخ: ${DateFormat('yyyy/MM/dd HH:mm').format(d.deliveryDate)} | المستلم: ${d.receiverName ?? '—'} | المندوب: ${d.deliveredBy ?? '—'}'),
                     trailing: Chip(
                       label: Text(d.status == 'delivered' ? 'تم التسليم' : d.status),
-                      backgroundColor: Colors.green.shade50,
+                      backgroundColor: Colors.green.withValues(alpha: 0.12),
                       labelStyle: const TextStyle(color: Colors.green, fontSize: 12),
                     ),
                   );
@@ -1028,7 +1028,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const Gap(8),
               Table(
-                border: TableBorder.all(color: Colors.grey.shade300),
+                border: TableBorder.all(color: Theme.of(context).colorScheme.outlineVariant),
                 columnWidths: const {
                   0: FlexColumnWidth(3),
                   1: FlexColumnWidth(2),
@@ -1037,7 +1037,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                 },
                 children: [
                   TableRow(
-                    decoration: BoxDecoration(color: Colors.grey.shade100),
+                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest),
                     children: const [
                       Padding(padding: EdgeInsets.all(6), child: Text('كود الصنف', style: TextStyle(fontWeight: FontWeight.bold))),
                       Padding(padding: EdgeInsets.all(6), child: Text('الرصيد المتاح', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -1069,7 +1069,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+          Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
           Text(value, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: color, fontSize: 13)),
         ],
       ),
@@ -1169,7 +1169,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                               const Gap(4),
                               Text(
                                 '${product?.name ?? '#${mo.finishedProductId}'} • وصفة: ${bom?.name ?? '#${mo.bomId}'}',
-                                style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey.shade700),
+                                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                               ),
                             ],
                           ),
@@ -1210,8 +1210,8 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.shade200)),
-                        child: Text('ملاحظات: ${mo.notes!}', style: TextStyle(color: Colors.amber.shade900)),
+                        decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.withValues(alpha: 0.4))),
+                        child: Text('ملاحظات: ${mo.notes!}', style: TextStyle(color: Colors.amber.shade800)),
                       ),
                     ],
                     const Gap(16),
@@ -1247,7 +1247,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               decoration: BoxDecoration(
-                                color: Colors.teal.shade50,
+                                color: Colors.teal.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(color: Colors.teal),
                               ),
@@ -1312,7 +1312,10 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                           if (rows.isEmpty) {
                             return Text('لا يوجد هالك مسجّل على هذا الأمر',
                                 style: TextStyle(
-                                    color: Colors.grey.shade600, fontSize: 12));
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    fontSize: 12));
                           }
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1368,7 +1371,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                 style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
             const Gap(12),
             if (_bomItems.isEmpty)
-              Card(child: Container(width: double.infinity, padding: const EdgeInsets.all(32), child: Text('لا توجد مكونات لهذه الوصفة', style: TextStyle(color: Colors.grey.shade600), textAlign: TextAlign.center)))
+              Card(child: Container(width: double.infinity, padding: const EdgeInsets.all(32), child: Text('لا توجد مكونات لهذه الوصفة', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant), textAlign: TextAlign.center)))
             else
               Card(
                 clipBehavior: Clip.antiAlias,
@@ -1376,7 +1379,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      color: Colors.grey.shade100,
+                      color: theme.colorScheme.surfaceContainerHighest,
                       child: Row(
                         children: const [
                           Expanded(flex: 3, child: Text('المادة الخام', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
@@ -1407,7 +1410,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                    Text('${item.quantityRequired} ${item.unit ?? product.unit ?? ''} × ${factor.toStringAsFixed(2)} + هدر $waste%', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+                                    Text('${item.quantityRequired} ${item.unit ?? product.unit ?? ''} × ${factor.toStringAsFixed(2)} + هدر $waste%', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
                                   ],
                                 )),
                             Expanded(flex: 2, child: Text('$requiredInt ${product.unit ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold))),
@@ -1442,7 +1445,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600)),
+            Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             Text(value, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
           ],
         ),

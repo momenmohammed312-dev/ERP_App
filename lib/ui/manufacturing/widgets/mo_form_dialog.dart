@@ -388,9 +388,12 @@ class _MoFormDialogState extends State<MoFormDialog> {
                 if (!canEdit)
                   Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.shade200)),
+                    decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.4))),
                     child: Text('هذا الأمر في حالة "${widget.order!.status}" ولا يمكن تعديل بياناته الأساسية في هذه المرحلة.',
-                        style: TextStyle(color: Colors.amber.shade900)),
+                        style: TextStyle(color: Colors.amber.shade800)),
                   ),
                 if (!canEdit) const Gap(16),
                 if (_loadingBoms)
@@ -404,16 +407,19 @@ class _MoFormDialogState extends State<MoFormDialog> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
+                        color: Colors.amber.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.amber.shade200),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         children: [
                           Expanded(
-                            child: const Text(
+                            child: Text(
                               'لا توجد وصفات. أنشئ وصفة أولاً',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color:
+                                      theme.colorScheme.onSurfaceVariant),
                             ),
                           ),
                           const Gap(8),
