@@ -31,6 +31,8 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
   List<CustomerStockBalance> _customerBalances = [];
   // FEAT-008: balance product ids resolved to displayable names
   final Map<int, String> _balanceProductNames = {};
+  // FEAT-009: product ids with movements linked to THIS order
+  Set<int> _orderBalanceIds = {};
   bool _isLoading = true;
   String? _error;
 
@@ -68,6 +70,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       List<CustomerStockMovement> orderMovements = [];
       List<CustomerStockBalance> customerBalances = [];
       Map<int, String> balanceNames = {};
+      Set<int> orderProductIds = {};
 
       if (order.customerId != null && order.customerId!.isNotEmpty) {
         customer = await widget.db.customerDao.getCustomerById(
@@ -80,6 +83,11 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         orderMovements = await (widget.db.select(
           widget.db.customerStockMovements,
         )..where((m) => m.referenceId.equals(order.orderNumber))).get();
+        // FEAT-009: the order-scoped view of custody starts from the
+        // product ids this order actually moved in/out of the customer's
+        // custody (issue, delivery, scrap, defect return)
+        orderProductIds =
+            orderMovements.map((m) => m.productId).toSet();
         customerBalances = await widget.db.customerMaterialReceiptDao
             .getAllBalancesForCustomer(order.customerId!);
         // FEAT-008: resolve material names once so the reconciliation
@@ -101,6 +109,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         _deliveredQty = deliveredQty;
         _orderMovements = orderMovements;
         _customerBalances = customerBalances;
+        _orderBalanceIds = orderProductIds;
         _balanceProductNames
           ..clear()
           ..addAll(balanceNames);
@@ -1342,6 +1351,12 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
   Widget _buildReconciliationCard() {
     final mo = _order!;
     final theme = Theme.of(context);
+    // FEAT-009: prefer the order-scoped balances; only when the order has
+    // not moved anything yet show the full customer custody list
+    final linkedBalances = _customerBalances
+        .where((b) => _orderBalanceIds.contains(b.productId))
+        .toList();
+    final scoped = linkedBalances.isNotEmpty;
 
     double totalConsumed = 0.0;
     for (final m in _orderMovements) {
@@ -1420,9 +1435,14 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
             ),
             if (_customerBalances.isNotEmpty) ...[
               const Gap(16),
-              const Text(
-                'أرصدة عهدة العميل الحالية بالمخزن:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              Text(
+                scoped
+                    ? 'أرصدة عهدة العميل المرتبطة بهذا الأمر:'
+                    : 'أرصدة عهدة العميل الحالية بالمخزن — دي كامل عهدته، لسه مفيش حركة عهدة على الأمر ده:',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
               ),
               const Gap(8),
               Table(
@@ -1473,7 +1493,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       ),
                     ],
                   ),
-                  for (final b in _customerBalances)
+                  for (final b in (scoped ? linkedBalances : _customerBalances))
                     TableRow(
                       children: [
                         Padding(
