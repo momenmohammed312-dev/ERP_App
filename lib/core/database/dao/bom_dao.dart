@@ -12,29 +12,54 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
   // ── BillOfMaterials CRUD ──
 
   Future<List<BillOfMaterial>> getAllBoms() =>
-      (select(billOfMaterials)..where((b) => b.type.isNull() | b.type.equals('system_placeholder').not())..orderBy([(b) => OrderingTerm.desc(b.createdAt)])).get();
+      (select(billOfMaterials)
+            ..where(
+              (b) =>
+                  b.type.isNull() | b.type.equals('system_placeholder').not(),
+            )
+            ..orderBy([(b) => OrderingTerm.desc(b.createdAt)]))
+          .get();
 
   Stream<List<BillOfMaterial>> watchAllBoms() =>
-        (select(billOfMaterials)..where((b) => b.type.isNull() | b.type.equals('system_placeholder').not())..orderBy([(b) => OrderingTerm.desc(b.createdAt)])).watch();
+      (select(billOfMaterials)
+            ..where(
+              (b) =>
+                  b.type.isNull() | b.type.equals('system_placeholder').not(),
+            )
+            ..orderBy([(b) => OrderingTerm.desc(b.createdAt)]))
+          .watch();
 
   Future<List<BillOfMaterial>> getActiveBoms() =>
       (select(billOfMaterials)
-            ..where((b) => b.status.equals('Active') & (b.type.isNull() | b.type.equals('system_placeholder').not()))
+            ..where(
+              (b) =>
+                  b.status.equals('Active') &
+                  (b.type.isNull() | b.type.equals('system_placeholder').not()),
+            )
             ..orderBy([(b) => OrderingTerm.desc(b.createdAt)]))
           .get();
 
   Stream<List<BillOfMaterial>> watchActiveBoms() =>
-      (select(billOfMaterials)..where((b) => b.status.equals('Active') & (b.type.isNull() | b.type.equals('system_placeholder').not()))).watch();
+      (select(billOfMaterials)..where(
+            (b) =>
+                b.status.equals('Active') &
+                (b.type.isNull() | b.type.equals('system_placeholder').not()),
+          ))
+          .watch();
 
-  Future<BillOfMaterial?> getBomById(int id) =>
-      (select(billOfMaterials)..where((b) => b.id.equals(id))).getSingleOrNull();
+  Future<BillOfMaterial?> getBomById(int id) => (select(
+    billOfMaterials,
+  )..where((b) => b.id.equals(id))).getSingleOrNull();
 
-  Future<List<BillOfMaterial>> getBomsForProduct(int productId) =>
-      (select(billOfMaterials)..where((b) => b.finishedProductId.equals(productId))).get();
+  Future<List<BillOfMaterial>> getBomsForProduct(int productId) => (select(
+    billOfMaterials,
+  )..where((b) => b.finishedProductId.equals(productId))).get();
 
-  Future<int> insertBom(BillOfMaterialsCompanion entry) => into(billOfMaterials).insert(entry);
+  Future<int> insertBom(BillOfMaterialsCompanion entry) =>
+      into(billOfMaterials).insert(entry);
 
-  Future<bool> updateBom(BillOfMaterial bom) => update(billOfMaterials).replace(bom);
+  Future<bool> updateBom(BillOfMaterial bom) =>
+      update(billOfMaterials).replace(bom);
 
   Future<int> updateBomCompanion(BillOfMaterialsCompanion c) =>
       (update(billOfMaterials)..where((b) => b.id.equals(c.id.value))).write(c);
@@ -45,7 +70,10 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
     if (bom == null) return;
     final newStatus = bom.status == 'Active' ? 'Inactive' : 'Active';
     await (update(billOfMaterials)..where((b) => b.id.equals(id))).write(
-      BillOfMaterialsCompanion(status: Value(newStatus), updatedAt: Value(DateTime.now())),
+      BillOfMaterialsCompanion(
+        status: Value(newStatus),
+        updatedAt: Value(DateTime.now()),
+      ),
     );
   }
 
@@ -59,21 +87,31 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
 
   // ── BomItems CRUD ──
 
-  Future<List<BomItem>> getItemsForBom(int bomId) => (select(bomItems)
-        ..where((i) => i.bomId.equals(bomId))
-        ..orderBy([(i) => OrderingTerm.asc(i.sortOrder), (i) => OrderingTerm.asc(i.id)]))
-      .get();
+  Future<List<BomItem>> getItemsForBom(int bomId) =>
+      (select(bomItems)
+            ..where((i) => i.bomId.equals(bomId))
+            ..orderBy([
+              (i) => OrderingTerm.asc(i.sortOrder),
+              (i) => OrderingTerm.asc(i.id),
+            ]))
+          .get();
 
-  Stream<List<BomItem>> watchItemsForBom(int bomId) => (select(bomItems)
-        ..where((i) => i.bomId.equals(bomId))
-        ..orderBy([(i) => OrderingTerm.asc(i.sortOrder), (i) => OrderingTerm.asc(i.id)]))
-      .watch();
+  Stream<List<BomItem>> watchItemsForBom(int bomId) =>
+      (select(bomItems)
+            ..where((i) => i.bomId.equals(bomId))
+            ..orderBy([
+              (i) => OrderingTerm.asc(i.sortOrder),
+              (i) => OrderingTerm.asc(i.id),
+            ]))
+          .watch();
 
-  Future<int> insertBomItem(BomItemsCompanion entry) => into(bomItems).insert(entry);
+  Future<int> insertBomItem(BomItemsCompanion entry) =>
+      into(bomItems).insert(entry);
 
   Future<bool> updateBomItem(BomItem item) => update(bomItems).replace(item);
 
-  Future<void> deleteBomItem(int id) => (delete(bomItems)..where((i) => i.id.equals(id))).go();
+  Future<void> deleteBomItem(int id) =>
+      (delete(bomItems)..where((i) => i.id.equals(id))).go();
 
   Future<void> deleteAllItemsForBom(int bomId) =>
       (delete(bomItems)..where((i) => i.bomId.equals(bomId))).go();
@@ -116,9 +154,9 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
       final warnings = <String>[];
 
       final finishedId = bom.finishedProductId.value;
-      final finished =
-          await (select(db.products)..where((p) => p.id.equals(finishedId)))
-              .getSingleOrNull();
+      final finished = await (select(
+        db.products,
+      )..where((p) => p.id.equals(finishedId))).getSingleOrNull();
       if (finished == null) {
         throw ArgumentError('Product #$finishedId not found');
       }
@@ -130,6 +168,14 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
           );
         case 'finished_product':
           break;
+        case 'raw_material':
+          // FEAT-007: custody flows produce the SAME product the
+          // customer lends us (fabric in -> printed fabric out). Accept
+          // the type with a warning instead of blocking.
+          warnings.add(
+            'المنتج "${finished.name}" خام لكنه ناتج الوصفة — '
+            'مقبول لتصنيع للغير، اتأكد من النوع',
+          );
         default:
           throw ArgumentError(
             'المنتج "${finished.name}" نوعه '
@@ -140,9 +186,9 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
 
       for (final item in items) {
         final rawId = item.rawMaterialProductId.value;
-        final raw =
-            await (select(db.products)..where((p) => p.id.equals(rawId)))
-                .getSingleOrNull();
+        final raw = await (select(
+          db.products,
+        )..where((p) => p.id.equals(rawId))).getSingleOrNull();
         if (raw == null) {
           throw ArgumentError('Product #$rawId not found');
         }
@@ -188,9 +234,9 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
       throw StateError('لا يمكن تعديل وصفة النظام الأساسية (أو حذفها).');
     }
 
-    final orders = await (select(db.manufacturingOrders)
-          ..where((o) => o.bomId.equals(bomId)))
-        .get();
+    final orders = await (select(
+      db.manufacturingOrders,
+    )..where((o) => o.bomId.equals(bomId))).get();
     if (orders.isEmpty) return;
     throw StateError(
       'This recipe has ${orders.length} manufacturing order(s) against it and '
@@ -212,7 +258,9 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
     return transaction(() async {
       await _assertBomIsEditable(bomId);
       if (bomUpdate != null) {
-        await (update(billOfMaterials)..where((b) => b.id.equals(bomId))).write(bomUpdate);
+        await (update(
+          billOfMaterials,
+        )..where((b) => b.id.equals(bomId))).write(bomUpdate);
       }
       await (delete(bomItems)..where((i) => i.bomId.equals(bomId))).go();
       for (var i = 0; i < items.length; i++) {
@@ -224,14 +272,23 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
 
   /// Joins BOM items with their raw-material Product rows for display.
   Future<List<(BomItem, Product)>> getItemsWithProducts(int bomId) async {
-    final query = select(bomItems).join([
-      innerJoin(db.products, db.products.id.equalsExp(bomItems.rawMaterialProductId)),
-    ])
-      ..where(bomItems.bomId.equals(bomId))
-      ..orderBy([OrderingTerm.asc(bomItems.sortOrder), OrderingTerm.asc(bomItems.id)]);
+    final query =
+        select(bomItems).join([
+            innerJoin(
+              db.products,
+              db.products.id.equalsExp(bomItems.rawMaterialProductId),
+            ),
+          ])
+          ..where(bomItems.bomId.equals(bomId))
+          ..orderBy([
+            OrderingTerm.asc(bomItems.sortOrder),
+            OrderingTerm.asc(bomItems.id),
+          ]);
 
     final rows = await query.get();
-    return rows.map((row) => (row.readTable(bomItems), row.readTable(db.products))).toList();
+    return rows
+        .map((row) => (row.readTable(bomItems), row.readTable(db.products)))
+        .toList();
   }
 
   /// Simple cost simulation: sum( quantityRequired * current costPrice ) per item.
@@ -241,7 +298,9 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
     double total = 0;
     for (final (item, product) in items) {
       final unitCost = product.costPrice ?? product.price;
-      final waste = item.wastePercentageOverride ?? 0; // header waste not applied here, caller may combine
+      final waste =
+          item.wastePercentageOverride ??
+          0; // header waste not applied here, caller may combine
       final effective = item.quantityRequired * (1 + waste / 100);
       total += effective * unitCost;
     }
@@ -249,11 +308,13 @@ class BomDao extends DatabaseAccessor<AppDatabase> with _$BomDaoMixin {
   }
 
   Future<int> createSystemPlaceholderBom(int productId) async {
-    return insertBom(BillOfMaterialsCompanion.insert(
-      name: 'System Placeholder',
-      finishedProductId: productId,
-      type: const Value('system_placeholder'),
-    ));
+    return insertBom(
+      BillOfMaterialsCompanion.insert(
+        name: 'System Placeholder',
+        finishedProductId: productId,
+        type: const Value('system_placeholder'),
+      ),
+    );
   }
 
   Future<void> updateBomGuarded(BillOfMaterialsCompanion c) async {

@@ -2,12 +2,23 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'searchable_product_picker.dart';
 
 class BomFormDialog extends StatefulWidget {
   final AppDatabase db;
   final BillOfMaterial? bom;
 
-  const BomFormDialog({super.key, required this.db, this.bom});
+  const BomFormDialog({
+    super.key,
+    required this.db,
+    this.bom,
+    // FEAT-007: prefill hints for the inline receipt-first flow
+    this.defaultFinishedProductId,
+    this.defaultYield,
+  });
+
+  final int? defaultFinishedProductId;
+  final String? defaultYield;
 
   @override
   State<BomFormDialog> createState() => _BomFormDialogState();
@@ -44,7 +55,6 @@ class _BomFormDialogState extends State<BomFormDialog> {
   int? _selectedFinishedProductId;
 
   List<Product> _allProducts = [];
-  List<Product> _finishedCandidates = [];
   List<Product> _rawCandidates = [];
   List<_BomItemRow> _items = [];
   bool _loadingProducts = true;
@@ -58,11 +68,15 @@ class _BomFormDialogState extends State<BomFormDialog> {
     super.initState();
     _codeCtrl.text = widget.bom?.code ?? '';
     _nameCtrl.text = widget.bom?.name ?? '';
-    _yieldCtrl.text = (widget.bom?.yieldQuantity ?? 1).toString();
+    _yieldCtrl.text =
+        (widget.bom?.yieldQuantity ??
+                (double.tryParse(widget.defaultYield ?? '') ?? 1))
+            .toString();
     _wasteCtrl.text = (widget.bom?.wastePercentage ?? 0).toString();
     _notesCtrl.text = widget.bom?.notes ?? '';
     _status = widget.bom?.status ?? 'Active';
-    _selectedFinishedProductId = widget.bom?.finishedProductId;
+    _selectedFinishedProductId =
+        widget.bom?.finishedProductId ?? widget.defaultFinishedProductId;
     _loadProducts();
     if (widget.bom != null) {
       _loadBomItems();
@@ -77,10 +91,6 @@ class _BomFormDialogState extends State<BomFormDialog> {
       final products = await widget.db.productDao.getAllProducts();
       setState(() {
         _allProducts = products;
-        // Finished candidates: finished_product + standard (null) + semi_finished
-        _finishedCandidates = products
-            .where((p) => p.status != 'Deleted')
-            .toList();
         // Raw candidates: raw_material + standard + all, so user can pick any
         _rawCandidates = products.where((p) => p.status != 'Deleted').toList();
         _loadingProducts = false;
@@ -367,31 +377,18 @@ class _BomFormDialogState extends State<BomFormDialog> {
                       if (_loadingProducts)
                         const Center(child: CircularProgressIndicator())
                       else ...[
-                        // Finished product picker
-                        DropdownButtonFormField<int>(
-                          initialValue: _selectedFinishedProductId,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'المنتج النهائي *',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.factory),
-                            helperText: 'المنتج الذي ستنتجه هذه الوصفة',
-                          ),
-                          items: _finishedCandidates
-                              .map(
-                                (p) => DropdownMenuItem(
-                                  value: p.id,
-                                  child: Text(
-                                    '${p.name} — ${p.quantity} ${p.unit ?? ''} ${p.productType != null ? '(${p.productType})' : ''}',
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (v) {
-                            setState(() => _selectedFinishedProductId = v);
-                          },
+                        // FEAT-007: searchable instead of the plain
+                        // dropdown so long product lists stay usable
+                        SearchableProductPicker(
+                          db: widget.db,
+                          label: 'المنتج النهائي *',
+                          initialProductId: _selectedFinishedProductId,
+                          helperText: 'المنتج الذي ستنتجه هذه الوصفة',
                           validator: (v) =>
                               v == null ? 'اختر المنتج النهائي' : null,
+                          onChanged: (p) => setState(
+                            () => _selectedFinishedProductId = p?.id,
+                          ),
                         ),
                         const Gap(16),
                         Row(

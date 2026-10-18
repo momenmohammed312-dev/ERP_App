@@ -30,6 +30,10 @@ import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.da
 
 ///        for_others: factory stock untouched.
 
+///  - M4 (FEAT-007): a raw-material custody product is accepted as the
+
+///        BOM finished output (with a warning) in the receipt-first flow.
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -292,6 +296,63 @@ void main() {
         await custodyQty(receiptDao, customerId: 'cust-1', productId: labelsId),
         20.0,
       );
+    },
+  );
+
+  test(
+    'M4: FEAT-007 raw-material custody product is an accepted BOM output',
+    () async {
+      final (db, moDao, bomDao, receiptDao) = await setup();
+      await seedCustomer(db, id: 'cust-1', name: 'Cust Four');
+
+      // The on-the-fly custody product created by the receipt dialog is a
+      // raw_material — the printing flow expects it to also be the output.
+      final fabricId = await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              name: 'Fabric Custody',
+              quantity: 0,
+              price: 100,
+              productType: const Value('raw_material'),
+            ),
+          );
+
+      final (:bomId, :warnings) = await bomDao.insertBomWithItemsChecked(
+        bom: BillOfMaterialsCompanion(
+          finishedProductId: Value(fabricId),
+          name: const Value('fabric in -> fabric out'),
+        ),
+        items: [
+          BomItemsCompanion(
+            rawMaterialProductId: Value(fabricId),
+            quantityRequired: const Value(1.0),
+          ),
+        ],
+      );
+      expect(bomId, greaterThan(0));
+      expect(warnings, isNotEmpty);
+
+      await receiptDao.receiveCustomerMaterial(
+        customerId: 'cust-1',
+        items: [ReceiptItemInput(productId: fabricId, quantityReceived: 25)],
+      );
+      final orderId = await moDao.createJobWorkOrder(
+        orderNumber: 'MO-M4',
+        orderType: 'mixed',
+        customerId: 'cust-1',
+        bomId: bomId,
+        finishedProductId: fabricId,
+        plannedQuantity: 25,
+        pricingMode: 'separate',
+        scrapPolicy: 'customer_bears',
+        pieceUnitValue: 2,
+        serviceUnitPrice: 15,
+      );
+      final order = await moDao.getById(orderId);
+      expect(order, isNotNull);
+      expect(order!.orderType, 'mixed');
+      expect(order.finishedProductId, fabricId);
     },
   );
 }

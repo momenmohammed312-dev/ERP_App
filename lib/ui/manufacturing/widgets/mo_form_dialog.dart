@@ -262,10 +262,28 @@ class _MoFormDialogState extends State<MoFormDialog> {
   /// refresh the recipe list and select the new recipe (falling back to
   /// show-all when it is outside the receipt-compatibility filter).
   Future<void> _createRecipeInline() async {
+    // FEAT-007: in the receipt-first flow the finished output defaults to
+    // the product sitting in the customer's custody, and the yield
+    // defaults to the available (received minus defective) quantity —
+    // what the customer lent us is what we are expected to give back.
+    int? defaultFinishedId;
+    String? defaultYield;
+    if (_selectedReceipt != null && _customerBalances.isNotEmpty) {
+      final bal = _selectedBalance ?? _customerBalances.first;
+      defaultFinishedId = bal.productId;
+      final avail = (bal.quantityOnHand - bal.quantityAllocated).round();
+      if (avail > 0) {
+        defaultYield = avail.toString();
+      }
+    }
     final createdId = await showDialog<int>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => BomFormDialog(db: widget.db),
+      builder: (_) => BomFormDialog(
+        db: widget.db,
+        defaultFinishedProductId: defaultFinishedId,
+        defaultYield: defaultYield,
+      ),
     );
     if (createdId == null || !mounted) {
       return;
