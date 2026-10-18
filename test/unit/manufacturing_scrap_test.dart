@@ -367,32 +367,33 @@ void main() {
       );
     });
 
-    test('C11 an explicitly wrong product_type is rejected with zero writes',
+    test(
+        'C11 a raw_material finished product issues a warning (FEAT-007 custody flow)',
         () async {
       final (bomDao, _, _, _, db) = await setup();
-      // A raw material cannot be the thing a BOM produces.
+      // FEAT-007: custody flow produces raw_material (e.g. fabric in -> printed fabric out)
       final raw = await seedProduct(db,
           name: 'خشب', cost: 10, productType: 'raw_material');
-      final wrongFinished = await seedProduct(db,
-          name: 'منتج نهائي', productType: 'raw_material');
+      final custodyFinished = await seedProduct(db,
+          name: 'قماش مطبوع', productType: 'raw_material');
 
-      await expectLater(
-        bomDao.insertBomWithItemsChecked(
-          bom: BillOfMaterialsCompanion(
-            finishedProductId: Value(wrongFinished),
-            name: const Value('بوم غلط'),
-          ),
-          items: [
-            BomItemsCompanion(
-              rawMaterialProductId: Value(raw),
-              quantityRequired: const Value(4),
-            ),
-          ],
+      final result = await bomDao.insertBomWithItemsChecked(
+        bom: BillOfMaterialsCompanion(
+          finishedProductId: Value(custodyFinished),
+          name: const Value('بوم تشغيل للغير'),
         ),
-        throwsA(anything),
+        items: [
+          BomItemsCompanion(
+            rawMaterialProductId: Value(raw),
+            quantityRequired: const Value(4),
+          ),
+        ],
       );
 
-      expect(await bomDao.getAllBoms(), isEmpty, reason: 'zero writes');
+      expect(result.bomId, greaterThan(0));
+      expect(result.warnings, isNotEmpty);
+      expect(result.warnings.first, contains('مقبول لتصنيع للغير'));
+      expect(await bomDao.getItemsForBom(result.bomId), hasLength(1));
     });
 
     test('C12 correct product_types insert silently with no warnings',
