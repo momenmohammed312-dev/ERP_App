@@ -2,13 +2,17 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart' show PdfPageFormat;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_delivery_dao.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
+import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
+    as ups;
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/cost_component_editor.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/mo_form_dialog.dart';
+import 'package:printing/printing.dart';
 
 class MoDetailScreen extends StatefulWidget {
   final AppDatabase db;
@@ -150,6 +154,136 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         return 'ملغي';
       default:
         return s;
+    }
+  }
+
+  /// FEAT-010: production/consumption documentation card — collects what the
+  /// screen already loaded and renders it through the unified print service.
+  Future<void> _printProductionCard() async {
+    final mo = _order!;
+    final totalConsumed = _orderMovements
+        .where((m) => m.movementType == 'issued_to_order')
+        .fold<double>(0, (s, m) => s + m.quantity.abs());
+    final totalOnHand = _customerBalances.fold<double>(
+      0,
+      (s, b) => s + b.quantityOnHand,
+    );
+
+    String movementTypeAr(String t) {
+      switch (t) {
+        case 'receipt':
+          return 'استلام عهدة';
+        case 'issued_to_order':
+          return 'صرف للأمر';
+        case 'delivered':
+          return 'تسليم للعميل';
+        case 'return_defect':
+          return 'مرتجع تالف';
+        case 'scrapped':
+          return 'هالك';
+        default:
+          return t;
+      }
+    }
+
+    final movementRows = <Map<String, dynamic>>[
+      for (final m in _orderMovements)
+        {
+          'date': DateFormat('yyyy/MM/dd HH:mm').format(m.createdAt),
+          'movementType': movementTypeAr(m.movementType),
+          'productName': _balanceProductNames[m.productId] ?? '#${m.productId}',
+          'quantity': m.quantity.abs(),
+          'reference': m.referenceId,
+        },
+    ];
+    final balanceRows = <Map<String, dynamic>>[
+      for (final b in _customerBalances)
+        {
+          'productName': _balanceProductNames[b.productId] ?? '#${b.productId}',
+          'quantityOnHand': b.quantityOnHand,
+          'quantityAllocated': b.quantityAllocated,
+          'colorSize':
+              '${b.color ?? ''} ${b.size ?? ''}'.trim().isEmpty
+                  ? null
+                  : '${b.color ?? ''} ${b.size ?? ''}'.trim(),
+        },
+    ];
+
+    try {
+      final pdf = await ups.UnifiedPrintService.generateUnifiedDocument(
+        documentType: ups.DocumentType.manufacturingCard,
+        data: <String, dynamic>{
+          'orderNumber': mo.orderNumber,
+          'status': _statusLabel(mo.status),
+          'orderType': mo.orderType == 'for_others'
+              ? 'تصنيع للغير'
+              : mo.orderType,
+          'customerName': _customer?.name ?? '—',
+          'bomName': _bom?.name ?? '—',
+          'finishedProductName': _finishedProduct?.name ?? '—',
+          'createdDate': DateFormat('yyyy/MM/dd').format(mo.createdAt),
+          'startedDate': mo.startedAt == null
+              ? '—'
+              : DateFormat('yyyy/MM/dd').format(mo.startedAt!),
+          'completedDate': mo.completedAt == null
+              ? '—'
+              : DateFormat('yyyy/MM/dd').format(mo.completedAt!),
+          'plannedQuantity': mo.plannedQuantity,
+          'producedQuantity': mo.producedQuantity,
+          'deliveredQuantity': _deliveredQty,
+          'consumedQuantity': totalConsumed,
+          'custodyOnHand': totalOnHand,
+        },
+        additionalData: <String, dynamic>{
+          'movements': movementRows,
+          'balances': balanceRows,
+        },
+      );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogCtx) => Dialog(
+          insetPadding: const EdgeInsets.all(24),
+          child: SizedBox(
+            width: 900,
+            height: 750,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'بطاقة الإنتاج/الصرف — ${mo.orderNumber}',
+                          style: Theme.of(dialogCtx).textTheme.titleMedium,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(dialogCtx),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: PdfPreview(
+                    build: (format) => pdf.save(),
+                    allowPrinting: true,
+                    allowSharing: true,
+                    initialPageFormat: PdfPageFormat.a4,
+                    pdfFileName: 'mo_${mo.orderNumber}.pdf',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('خطأ في إنشاء البطاقة: $e')));
     }
   }
 
@@ -1630,6 +1764,11 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       appBar: AppBar(
         title: Text('أمر ${mo.orderNumber}'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            tooltip: 'بطاقة الإنتاج/الصرف PDF',
+            onPressed: _printProductionCard,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
