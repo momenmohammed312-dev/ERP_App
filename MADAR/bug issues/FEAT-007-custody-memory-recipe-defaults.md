@@ -1,6 +1,6 @@
 # FEAT-007 - Custody Memory: searchable finished picker + recipe defaults (FEAT)
 
-- **Status:** open
+- **Status:** done
 - **Priority:** High
 - **Area:** Manufacturing (BOM, Receipts-first flow) - Sensitive Zone
 - **Worktree:** wt_manufacturing_fixes / feat/manufacturing-fixes

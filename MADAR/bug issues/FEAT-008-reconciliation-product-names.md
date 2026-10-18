@@ -1,6 +1,6 @@
 # FEAT-008 - Show material names in the MO reconciliation card (FEAT)
 
-- **Status:** open
+- **Status:** done
 - **Priority:** Medium
 - **Area:** Manufacturing MO detail screen - Sensitive Zone
 - **Worktree:** wt_manufacturing_fixes / feat/manufacturing-fixes

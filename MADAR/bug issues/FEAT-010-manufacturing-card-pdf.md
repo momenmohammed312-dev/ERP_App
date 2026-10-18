@@ -1,6 +1,6 @@
 # FEAT-010 - Production/consumption card PDF for every MO (FEAT)
 
-- **Status:** open
+- **Status:** done
 - **Priority:** Medium
 - **Area:** Manufacturing + UnifiedPrintService - Sensitive Zone (print/docs only, no money)
 - **Worktree:** wt_manufacturing_fixes / feat/manufacturing-fixes

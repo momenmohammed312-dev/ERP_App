@@ -1,6 +1,6 @@
 # BUG-008 - Custody consumption not recorded for same-product receipt-first flow (BUG)
 
-- **Status:** open (awaiting owner decision on the correct semantics)
+- **Status:** fixed (commit 85068fb - option A implemented + M5 regression test)
 - **Severity:** High (custody accounting - Sensitive Zone)
 - **Area:** Manufacturing completion + custody ledger
 - **Worktree:** wt_manufacturing_fixes / feat/manufacturing-fixes
