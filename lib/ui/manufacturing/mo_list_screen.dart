@@ -21,6 +21,7 @@ class _MoListScreenState extends State<MoListScreen> {
   String _statusFilter = 'all';
   Map<int, Product> _productMap = {};
   Map<int, BillOfMaterial> _bomMap = {};
+  Map<String, Customer> _customerMap = {};
   bool _loadingMeta = true;
 
   @override
@@ -33,9 +34,12 @@ class _MoListScreenState extends State<MoListScreen> {
     try {
       final products = await widget.db.productDao.getAllProducts();
       final boms = await widget.db.bomDao.getAllBoms();
+      final customers =
+          await widget.db.customerDao.getCustomersForManufacturing();
       setState(() {
         _productMap = {for (var p in products) p.id: p};
         _bomMap = {for (var b in boms) b.id: b};
+        _customerMap = {for (var c in customers) c.id: c};
         _loadingMeta = false;
       });
     } catch (_) {
@@ -186,8 +190,8 @@ class _MoListScreenState extends State<MoListScreen> {
                 Expanded(
                   child: TextField(
                     controller: _searchCtrl,
-                    decoration: InputDecoration(
-                      hintText: 'بحث برقم الأمر أو المنتج...',
+                      decoration: InputDecoration(
+                        hintText: 'بحث برقم الأمر أو المنتج أو العميل...',
                       prefixIcon: const Icon(Icons.search),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       suffixIcon: _searchQuery.isNotEmpty
@@ -232,7 +236,12 @@ class _MoListScreenState extends State<MoListScreen> {
                   orders = orders.where((o) {
                     final product = _productMap[o.finishedProductId];
                     final bom = _bomMap[o.bomId];
-                    final hay = '${o.orderNumber} ${product?.name ?? ''} ${bom?.name ?? ''}'.toLowerCase();
+                    final customer = o.customerId != null
+                        ? _customerMap[o.customerId]
+                        : null;
+                    final hay =
+                        '${o.orderNumber} ${product?.name ?? ''} ${bom?.name ?? ''} ${customer?.name ?? ''} ${o.customerId ?? ''} ${customer?.phone ?? ''}'
+                            .toLowerCase();
                     return hay.contains(_searchQuery);
                   }).toList();
                 }

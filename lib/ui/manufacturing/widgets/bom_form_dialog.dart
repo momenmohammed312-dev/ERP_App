@@ -2,12 +2,23 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'searchable_product_picker.dart';
 
 class BomFormDialog extends StatefulWidget {
   final AppDatabase db;
   final BillOfMaterial? bom;
 
-  const BomFormDialog({super.key, required this.db, this.bom});
+  const BomFormDialog({
+    super.key,
+    required this.db,
+    this.bom,
+    // FEAT-007: prefill hints for the inline receipt-first flow
+    this.defaultFinishedProductId,
+    this.defaultYield,
+  });
+
+  final int? defaultFinishedProductId;
+  final String? defaultYield;
 
   @override
   State<BomFormDialog> createState() => _BomFormDialogState();
@@ -44,7 +55,6 @@ class _BomFormDialogState extends State<BomFormDialog> {
   int? _selectedFinishedProductId;
 
   List<Product> _allProducts = [];
-  List<Product> _finishedCandidates = [];
   List<Product> _rawCandidates = [];
   List<_BomItemRow> _items = [];
   bool _loadingProducts = true;
@@ -58,11 +68,15 @@ class _BomFormDialogState extends State<BomFormDialog> {
     super.initState();
     _codeCtrl.text = widget.bom?.code ?? '';
     _nameCtrl.text = widget.bom?.name ?? '';
-    _yieldCtrl.text = (widget.bom?.yieldQuantity ?? 1).toString();
+    _yieldCtrl.text =
+        (widget.bom?.yieldQuantity ??
+                (double.tryParse(widget.defaultYield ?? '') ?? 1))
+            .toString();
     _wasteCtrl.text = (widget.bom?.wastePercentage ?? 0).toString();
     _notesCtrl.text = widget.bom?.notes ?? '';
     _status = widget.bom?.status ?? 'Active';
-    _selectedFinishedProductId = widget.bom?.finishedProductId;
+    _selectedFinishedProductId =
+        widget.bom?.finishedProductId ?? widget.defaultFinishedProductId;
     _loadProducts();
     if (widget.bom != null) {
       _loadBomItems();
@@ -77,8 +91,6 @@ class _BomFormDialogState extends State<BomFormDialog> {
       final products = await widget.db.productDao.getAllProducts();
       setState(() {
         _allProducts = products;
-        // Finished candidates: finished_product + standard (null) + semi_finished
-        _finishedCandidates = products.where((p) => p.status != 'Deleted').toList();
         // Raw candidates: raw_material + standard + all, so user can pick any
         _rawCandidates = products.where((p) => p.status != 'Deleted').toList();
         _loadingProducts = false;
@@ -105,15 +117,19 @@ class _BomFormDialogState extends State<BomFormDialog> {
       }
       setState(() {
         _items = bomItems
-            .map((it) => _BomItemRow(
-                  id: it.id,
-                  rawMaterialProductId: it.rawMaterialProductId,
-                  rawMaterialName: productMap[it.rawMaterialProductId]?.name ?? '#${it.rawMaterialProductId}',
-                  quantityRequired: it.quantityRequired.toString(),
-                  unit: it.unit ?? '',
-                  wasteOverride: it.wastePercentageOverride?.toString() ?? '',
-                  notes: it.notes ?? '',
-                ))
+            .map(
+              (it) => _BomItemRow(
+                id: it.id,
+                rawMaterialProductId: it.rawMaterialProductId,
+                rawMaterialName:
+                    productMap[it.rawMaterialProductId]?.name ??
+                    '#${it.rawMaterialProductId}',
+                quantityRequired: it.quantityRequired.toString(),
+                unit: it.unit ?? '',
+                wasteOverride: it.wastePercentageOverride?.toString() ?? '',
+                notes: it.notes ?? '',
+              ),
+            )
             .toList();
         if (_items.isEmpty) _items = [_BomItemRow()];
         _loadingBomItems = false;
@@ -133,10 +149,15 @@ class _BomFormDialogState extends State<BomFormDialog> {
       if (row.rawMaterialProductId == null) continue;
       final qty = double.tryParse(row.quantityRequired) ?? 0;
       if (qty <= 0) continue;
-      final product = _allProducts.where((p) => p.id == row.rawMaterialProductId).firstOrNull;
+      final product = _allProducts
+          .where((p) => p.id == row.rawMaterialProductId)
+          .firstOrNull;
       if (product == null) continue;
       final unitCost = product.costPrice ?? product.price;
-      final waste = double.tryParse(row.wasteOverride) ?? double.tryParse(_wasteCtrl.text) ?? 0;
+      final waste =
+          double.tryParse(row.wasteOverride) ??
+          double.tryParse(_wasteCtrl.text) ??
+          0;
       final effective = qty * (1 + waste / 100);
       total += effective * unitCost;
     }
@@ -149,12 +170,18 @@ class _BomFormDialogState extends State<BomFormDialog> {
 
   void _removeRow(int index) {
     if (_items.length <= 1) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يجب أن تحتوي الوصفة على مكون واحد على الأقل')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يجب أن تحتوي الوصفة على مكون واحد على الأقل'),
+        ),
+      );
       return;
     }
     setState(() => _items.removeAt(index));
     _recalcCost();
   }
+
+  int? createdBomId;
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -166,7 +193,9 @@ class _BomFormDialogState extends State<BomFormDialog> {
     for (var i = 0; i < _items.length; i++) {
       final r = _items[i];
       if (r.rawMaterialProductId == null) {
-        setState(() => _errorMessage = 'يرجى اختيار المادة الخام في السطر ${i + 1}');
+        setState(
+          () => _errorMessage = 'يرجى اختيار المادة الخام في السطر ${i + 1}',
+        );
         return;
       }
       final q = double.tryParse(r.quantityRequired);
@@ -197,20 +226,31 @@ class _BomFormDialogState extends State<BomFormDialog> {
           yieldQuantity: Value(yieldQty),
           wastePercentage: Value(waste),
           status: Value(_status),
-          notes: Value(_notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim()),
+          notes: Value(
+            _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+          ),
         );
         final itemCompanions = _items
-            .map((r) => BomItemsCompanion(
-                  bomId: const Value.absent(), // filled by DAO
-                  rawMaterialProductId: Value(r.rawMaterialProductId!),
-                  quantityRequired: Value(double.parse(r.quantityRequired)),
-                  unit: Value(r.unit.trim().isEmpty ? null : r.unit.trim()),
-                  wastePercentageOverride: Value(
-                      r.wasteOverride.trim().isEmpty ? null : double.tryParse(r.wasteOverride)),
-                  notes: Value(r.notes.trim().isEmpty ? null : r.notes.trim()),
-                ))
+            .map(
+              (r) => BomItemsCompanion(
+                bomId: const Value.absent(), // filled by DAO
+                rawMaterialProductId: Value(r.rawMaterialProductId!),
+                quantityRequired: Value(double.parse(r.quantityRequired)),
+                unit: Value(r.unit.trim().isEmpty ? null : r.unit.trim()),
+                wastePercentageOverride: Value(
+                  r.wasteOverride.trim().isEmpty
+                      ? null
+                      : double.tryParse(r.wasteOverride),
+                ),
+                notes: Value(r.notes.trim().isEmpty ? null : r.notes.trim()),
+              ),
+            )
             .toList();
-        await widget.db.bomDao.insertBomWithItemsChecked(bom: bomCompanion, items: itemCompanions);
+        final created = await widget.db.bomDao.insertBomWithItemsChecked(
+          bom: bomCompanion,
+          items: itemCompanions,
+        );
+        createdBomId = created.bomId;
         // Non-blocking product_type warnings (untyped products that predate the
         // column, or a semi-finished input). The insert already succeeded, so
         // surface them after saving rather than blocking the user.
@@ -232,19 +272,26 @@ class _BomFormDialogState extends State<BomFormDialog> {
           yieldQuantity: Value(yieldQty),
           wastePercentage: Value(waste),
           status: Value(_status),
-          notes: Value(_notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim()),
+          notes: Value(
+            _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+          ),
           updatedAt: Value(DateTime.now()),
         );
         final itemCompanions = _items
-            .map((r) => BomItemsCompanion(
-                  bomId: Value(widget.bom!.id),
-                  rawMaterialProductId: Value(r.rawMaterialProductId!),
-                  quantityRequired: Value(double.parse(r.quantityRequired)),
-                  unit: Value(r.unit.trim().isEmpty ? null : r.unit.trim()),
-                  wastePercentageOverride: Value(
-                      r.wasteOverride.trim().isEmpty ? null : double.tryParse(r.wasteOverride)),
-                  notes: Value(r.notes.trim().isEmpty ? null : r.notes.trim()),
-                ))
+            .map(
+              (r) => BomItemsCompanion(
+                bomId: Value(widget.bom!.id),
+                rawMaterialProductId: Value(r.rawMaterialProductId!),
+                quantityRequired: Value(double.parse(r.quantityRequired)),
+                unit: Value(r.unit.trim().isEmpty ? null : r.unit.trim()),
+                wastePercentageOverride: Value(
+                  r.wasteOverride.trim().isEmpty
+                      ? null
+                      : double.tryParse(r.wasteOverride),
+                ),
+                notes: Value(r.notes.trim().isEmpty ? null : r.notes.trim()),
+              ),
+            )
             .toList();
         await widget.db.bomDao.replaceBomItems(
           bomId: widget.bom!.id,
@@ -252,7 +299,7 @@ class _BomFormDialogState extends State<BomFormDialog> {
           bomUpdate: headerUpdate,
         );
       }
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) Navigator.of(context).pop(createdBomId ?? true);
     } catch (e) {
       setState(() {
         _isSubmitting = false;
@@ -286,12 +333,23 @@ class _BomFormDialogState extends State<BomFormDialog> {
           children: [
             Row(
               children: [
-                Icon(isEdit ? Icons.edit : Icons.add, color: theme.colorScheme.primary, size: 28),
+                Icon(
+                  isEdit ? Icons.edit : Icons.add,
+                  color: theme.colorScheme.primary,
+                  size: 28,
+                ),
                 const Gap(12),
-                Text(isEdit ? 'تعديل الوصفة' : 'وصفة تصنيع جديدة',
-                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  isEdit ? 'تعديل الوصفة' : 'وصفة تصنيع جديدة',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const Spacer(),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ],
             ),
             const Divider(height: 24),
@@ -299,8 +357,13 @@ class _BomFormDialogState extends State<BomFormDialog> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                    color: theme.colorScheme.errorContainer, borderRadius: BorderRadius.circular(8)),
-                child: Text(_errorMessage!, style: TextStyle(color: theme.colorScheme.onErrorContainer)),
+                  color: theme.colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _errorMessage!,
+                  style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                ),
               ),
               const Gap(16),
             ],
@@ -314,26 +377,18 @@ class _BomFormDialogState extends State<BomFormDialog> {
                       if (_loadingProducts)
                         const Center(child: CircularProgressIndicator())
                       else ...[
-                        // Finished product picker
-                        DropdownButtonFormField<int>(
-                          initialValue: _selectedFinishedProductId,
-                          decoration: const InputDecoration(
-                            labelText: 'المنتج النهائي *',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.factory),
-                            helperText: 'المنتج الذي ستنتجه هذه الوصفة',
+                        // FEAT-007: searchable instead of the plain
+                        // dropdown so long product lists stay usable
+                        SearchableProductPicker(
+                          db: widget.db,
+                          label: 'المنتج النهائي *',
+                          initialProductId: _selectedFinishedProductId,
+                          helperText: 'المنتج الذي ستنتجه هذه الوصفة',
+                          validator: (v) =>
+                              v == null ? 'اختر المنتج النهائي' : null,
+                          onChanged: (p) => setState(
+                            () => _selectedFinishedProductId = p?.id,
                           ),
-                          items: _finishedCandidates
-                              .map((p) => DropdownMenuItem(
-                                    value: p.id,
-                                    child: Text(
-                                        '${p.name} — ${p.quantity} ${p.unit ?? ''} ${p.productType != null ? '(${p.productType})' : ''}'),
-                                  ))
-                              .toList(),
-                          onChanged: (v) {
-                            setState(() => _selectedFinishedProductId = v);
-                          },
-                          validator: (v) => v == null ? 'اختر المنتج النهائي' : null,
                         ),
                         const Gap(16),
                         Row(
@@ -358,8 +413,9 @@ class _BomFormDialogState extends State<BomFormDialog> {
                                   border: OutlineInputBorder(),
                                   prefixIcon: Icon(Icons.receipt_long),
                                 ),
-                                validator: (v) =>
-                                    v == null || v.trim().isEmpty ? 'الاسم مطلوب' : null,
+                                validator: (v) => v == null || v.trim().isEmpty
+                                    ? 'الاسم مطلوب'
+                                    : null,
                               ),
                             ),
                           ],
@@ -370,7 +426,10 @@ class _BomFormDialogState extends State<BomFormDialog> {
                             Expanded(
                               child: TextFormField(
                                 controller: _yieldCtrl,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                 decoration: const InputDecoration(
                                   labelText: 'العائد (Yield) *',
                                   border: OutlineInputBorder(),
@@ -379,7 +438,8 @@ class _BomFormDialogState extends State<BomFormDialog> {
                                 ),
                                 validator: (v) {
                                   final n = double.tryParse(v ?? '');
-                                  if (n == null || n <= 0) return 'أدخل عائد صحيح > 0';
+                                  if (n == null || n <= 0)
+                                    return 'أدخل عائد صحيح > 0';
                                   return null;
                                 },
                                 onChanged: (_) => _recalcCost(),
@@ -389,7 +449,10 @@ class _BomFormDialogState extends State<BomFormDialog> {
                             Expanded(
                               child: TextFormField(
                                 controller: _wasteCtrl,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                 decoration: const InputDecoration(
                                   labelText: 'نسبة الهدر العامة %',
                                   border: OutlineInputBorder(),
@@ -408,10 +471,17 @@ class _BomFormDialogState extends State<BomFormDialog> {
                                   border: OutlineInputBorder(),
                                 ),
                                 items: const [
-                                  DropdownMenuItem(value: 'Active', child: Text('مفعلة')),
-                                  DropdownMenuItem(value: 'Inactive', child: Text('غير مفعلة')),
+                                  DropdownMenuItem(
+                                    value: 'Active',
+                                    child: Text('مفعلة'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'Inactive',
+                                    child: Text('غير مفعلة'),
+                                  ),
                                 ],
-                                onChanged: (v) => setState(() => _status = v ?? 'Active'),
+                                onChanged: (v) =>
+                                    setState(() => _status = v ?? 'Active'),
                               ),
                             ),
                           ],
@@ -430,7 +500,12 @@ class _BomFormDialogState extends State<BomFormDialog> {
                       const Gap(20),
                       Row(
                         children: [
-                          Text('مكونات الوصفة', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                          Text(
+                            'مكونات الوصفة',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                           const Spacer(),
                           FilledButton.icon(
                             onPressed: _addRow,
@@ -441,31 +516,84 @@ class _BomFormDialogState extends State<BomFormDialog> {
                       ),
                       const Gap(8),
                       if (_loadingBomItems)
-                        const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: CircularProgressIndicator(),
+                          ),
+                        )
                       else
                         Container(
                           decoration: BoxDecoration(
-                            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3)),
+                            border: Border.all(
+                              color: theme.dividerColor.withValues(alpha: 0.3),
+                            ),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Column(
                             children: [
                               // Header — theme-aware, not white-on-white
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.surfaceContainerHighest,
-                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                                  color:
+                                      theme.colorScheme.surfaceContainerHighest,
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(8),
+                                  ),
                                 ),
                                 child: Row(
                                   children: [
-                                    Expanded(flex: 3, child: Text('المادة الخام *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: theme.colorScheme.onSurface))),
+                                    Expanded(
+                                      flex: 3,
+                                      child: Text(
+                                        'المادة الخام *',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: theme.colorScheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
                                     const Gap(6),
-                                    Expanded(flex: 2, child: Text('الكمية *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: theme.colorScheme.onSurface))),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        'الكمية *',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: theme.colorScheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
                                     const Gap(6),
-                                    Expanded(flex: 1, child: Text('الوحدة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: theme.colorScheme.onSurface))),
+                                    Expanded(
+                                      flex: 1,
+                                      child: Text(
+                                        'الوحدة',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: theme.colorScheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
                                     const Gap(6),
-                                    Expanded(flex: 1, child: Text('هدر %', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: theme.colorScheme.onSurface))),
+                                    Expanded(
+                                      flex: 1,
+                                      child: Text(
+                                        'هدر %',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: theme.colorScheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
                                     const SizedBox(width: 40),
                                   ],
                                 ),
@@ -474,54 +602,93 @@ class _BomFormDialogState extends State<BomFormDialog> {
                                 final idx = entry.key;
                                 final row = entry.value;
                                 // Per-row label + cost hint
-                                final productForRow = row.rawMaterialProductId != null
-                                    ? _allProducts.where((p) => p.id == row.rawMaterialProductId).firstOrNull
+                                final productForRow =
+                                    row.rawMaterialProductId != null
+                                    ? _allProducts
+                                          .where(
+                                            (p) =>
+                                                p.id ==
+                                                row.rawMaterialProductId,
+                                          )
+                                          .firstOrNull
                                     : null;
                                 final lineCost = (() {
-                                  final q = double.tryParse(row.quantityRequired) ?? 0;
-                                  if (q <= 0 || productForRow == null) return null;
-                                  final waste = double.tryParse(row.wasteOverride) ?? double.tryParse(_wasteCtrl.text) ?? 0;
+                                  final q =
+                                      double.tryParse(row.quantityRequired) ??
+                                      0;
+                                  if (q <= 0 || productForRow == null)
+                                    return null;
+                                  final waste =
+                                      double.tryParse(row.wasteOverride) ??
+                                      double.tryParse(_wasteCtrl.text) ??
+                                      0;
                                   final eff = q * (1 + waste / 100);
-                                  return eff * (productForRow.costPrice ?? productForRow.price);
+                                  return eff *
+                                      (productForRow.costPrice ??
+                                          productForRow.price);
                                 })();
                                 return Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 8,
+                                  ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Expanded(
                                             flex: 3,
                                             child: DropdownButtonFormField<int>(
-                                              initialValue: row.rawMaterialProductId,
+                                              initialValue:
+                                                  row.rawMaterialProductId,
                                               isExpanded: true,
                                               decoration: InputDecoration(
                                                 labelText: 'المادة الخام *',
                                                 hintText: 'اختر مادة',
-                                                border: const OutlineInputBorder(),
-                                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                                                border:
+                                                    const OutlineInputBorder(),
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 12,
+                                                    ),
                                                 filled: true,
-                                                fillColor: theme.colorScheme.surface,
+                                                fillColor:
+                                                    theme.colorScheme.surface,
                                               ),
                                               items: _rawCandidates
-                                                  .map((p) => DropdownMenuItem(
-                                                        value: p.id,
-                                                        child: Text(
-                                                          '${p.name} (${p.quantity} ${p.unit ?? ''})',
-                                                          overflow: TextOverflow.ellipsis,
-                                                          style: const TextStyle(fontSize: 12),
+                                                  .map(
+                                                    (p) => DropdownMenuItem(
+                                                      value: p.id,
+                                                      child: Text(
+                                                        '${p.name} (${p.quantity} ${p.unit ?? ''})',
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: const TextStyle(
+                                                          fontSize: 12,
                                                         ),
-                                                      ))
+                                                      ),
+                                                    ),
+                                                  )
                                                   .toList(),
                                               onChanged: (v) {
                                                 setState(() {
                                                   row.rawMaterialProductId = v;
-                                                  final m = _allProducts.where((pp) => pp.id == v);
-                                                  row.rawMaterialName = m.isNotEmpty ? m.first.name : null;
-                                                  if (m.isNotEmpty && (row.unit.isEmpty)) {
-                                                    row.unit = m.first.unit ?? '';
+                                                  final m = _allProducts.where(
+                                                    (pp) => pp.id == v,
+                                                  );
+                                                  row.rawMaterialName =
+                                                      m.isNotEmpty
+                                                      ? m.first.name
+                                                      : null;
+                                                  if (m.isNotEmpty &&
+                                                      (row.unit.isEmpty)) {
+                                                    row.unit =
+                                                        m.first.unit ?? '';
                                                   }
                                                 });
                                                 _recalcCost();
@@ -532,15 +699,25 @@ class _BomFormDialogState extends State<BomFormDialog> {
                                           Expanded(
                                             flex: 2,
                                             child: TextFormField(
-                                              initialValue: row.quantityRequired,
-                                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                              initialValue:
+                                                  row.quantityRequired,
+                                              keyboardType:
+                                                  const TextInputType.numberWithOptions(
+                                                    decimal: true,
+                                                  ),
                                               decoration: InputDecoration(
                                                 labelText: 'الكمية *',
                                                 hintText: '0.0',
-                                                border: const OutlineInputBorder(),
-                                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                                                border:
+                                                    const OutlineInputBorder(),
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 12,
+                                                    ),
                                                 filled: true,
-                                                fillColor: theme.colorScheme.surface,
+                                                fillColor:
+                                                    theme.colorScheme.surface,
                                               ),
                                               onChanged: (v) {
                                                 row.quantityRequired = v;
@@ -556,10 +733,16 @@ class _BomFormDialogState extends State<BomFormDialog> {
                                               decoration: InputDecoration(
                                                 labelText: 'الوحدة',
                                                 hintText: 'قطعة',
-                                                border: const OutlineInputBorder(),
-                                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                                                border:
+                                                    const OutlineInputBorder(),
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 12,
+                                                    ),
                                                 filled: true,
-                                                fillColor: theme.colorScheme.surface,
+                                                fillColor:
+                                                    theme.colorScheme.surface,
                                               ),
                                               onChanged: (v) => row.unit = v,
                                             ),
@@ -569,14 +752,23 @@ class _BomFormDialogState extends State<BomFormDialog> {
                                             flex: 1,
                                             child: TextFormField(
                                               initialValue: row.wasteOverride,
-                                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                              keyboardType:
+                                                  const TextInputType.numberWithOptions(
+                                                    decimal: true,
+                                                  ),
                                               decoration: InputDecoration(
                                                 labelText: 'هدر %',
                                                 hintText: '0',
-                                                border: const OutlineInputBorder(),
-                                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                                                border:
+                                                    const OutlineInputBorder(),
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 12,
+                                                    ),
                                                 filled: true,
-                                                fillColor: theme.colorScheme.surface,
+                                                fillColor:
+                                                    theme.colorScheme.surface,
                                               ),
                                               onChanged: (v) {
                                                 row.wasteOverride = v;
@@ -585,7 +777,11 @@ class _BomFormDialogState extends State<BomFormDialog> {
                                             ),
                                           ),
                                           IconButton(
-                                            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                            icon: const Icon(
+                                              Icons.delete,
+                                              color: Colors.red,
+                                              size: 20,
+                                            ),
                                             tooltip: 'حذف السطر',
                                             onPressed: () => _removeRow(idx),
                                           ),
@@ -597,14 +793,22 @@ class _BomFormDialogState extends State<BomFormDialog> {
                                           alignment: Alignment.centerLeft,
                                           child: Text(
                                             'تكلفة السطر: ${lineCost.toStringAsFixed(2)} ج.م',
-                                            style: TextStyle(fontSize: 11, color: theme.colorScheme.primary, fontWeight: FontWeight.w600),
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: theme.colorScheme.primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
                                         ),
-                                      ] else if (row.rawMaterialProductId != null) ...[
+                                      ] else if (row.rawMaterialProductId !=
+                                          null) ...[
                                         const Gap(4),
                                         Text(
                                           'سعر التكلفة غير محدد للخامة — ادخل سعر التكلفة في بطاقة المنتج',
-                                          style: TextStyle(fontSize: 11, color: Colors.orange.shade700),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.orange.shade700,
+                                          ),
                                         ),
                                       ],
                                     ],
@@ -618,28 +822,41 @@ class _BomFormDialogState extends State<BomFormDialog> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          color: theme.colorScheme.primaryContainer.withValues(
+                            alpha: 0.4,
+                          ),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
                           children: [
                             const Icon(Icons.calculate, size: 18),
                             const Gap(8),
-                            Text('التكلفة المادية التقديرية:',
-                                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+                            Text(
+                              'التكلفة المادية التقديرية:',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             const Spacer(),
-                            Text('${_simulatedCost.toStringAsFixed(2)} ج.م',
-                                style: theme.textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                            Text(
+                              '${_simulatedCost.toStringAsFixed(2)} ج.م',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                      if (_selectedFinishedProductId != null && _yieldCtrl.text.isNotEmpty)
+                      if (_selectedFinishedProductId != null &&
+                          _yieldCtrl.text.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: Text(
                             'تكلفة الوحدة ≈ ${(double.tryParse(_yieldCtrl.text) != null && double.parse(_yieldCtrl.text) > 0 ? (_simulatedCost / double.parse(_yieldCtrl.text)).toStringAsFixed(2) : '-')} ج.م / وحدة',
-                            style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade700),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.grey.shade700,
+                            ),
                           ),
                         ),
                     ],
@@ -652,13 +869,20 @@ class _BomFormDialogState extends State<BomFormDialog> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                    onPressed: _isSubmitting ? null : () => Navigator.pop(context),
-                    child: const Text('إلغاء')),
+                  onPressed: _isSubmitting
+                      ? null
+                      : () => Navigator.pop(context),
+                  child: const Text('إلغاء'),
+                ),
                 const Gap(12),
                 ElevatedButton.icon(
                   onPressed: _isSubmitting ? null : _submit,
                   icon: _isSubmitting
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : Icon(isEdit ? Icons.save : Icons.check),
                   label: Text(isEdit ? 'حفظ التعديلات' : 'إنشاء الوصفة'),
                 ),
