@@ -104,27 +104,21 @@ Type: filesandordirs; Name: "{app}"
 // Inno Setup Pascal Script - POS Factory v2.3.0
 // ════════════════════════════════════════════════════════════════════════════
 
-var
-  LicenseDataCleared: Boolean;
-
-procedure ClearOldLicenseData();
-var
-  AppDataPath: String;
-begin
-  AppDataPath := ExpandConstant('{userappdata}\com.example\pos_offline_desktop');
-  if DirExists(AppDataPath) then
-  begin
-    DeleteFile(AppDataPath + '\secure_license.dat');
-    DeleteFile(AppDataPath + '\secure_license.bak');
-    Log('Old license data cleared from: ' + AppDataPath);
-    LicenseDataCleared := True;
-  end
-  else
-  begin
-    Log('No old license data found at: ' + AppDataPath);
-    LicenseDataCleared := False;
-  end;
-end;
+// ════════════════════════════════════════════════════════════════════════════
+// FEAT-013 — license data must survive an application update.
+//
+// The former ClearOldLicenseData() routine deleted secure_license.dat/.bak on
+// every install, which wiped a paying customer's license during a routine
+// update. It is removed entirely.
+//
+// Note: that routine also targeted %APPDATA%\com.example\pos_offline_desktop,
+// while the application writes to %APPDATA%\pos_offline_desktop
+// (see lib/services/secure_license_storage.dart). The path was wrong, so the
+// deletion was a no-op in practice — but it is a live landmine: correcting the
+// path later would start destroying licenses. Removing the code is the fix.
+//
+// Regression guard: test/unit/services/installer_license_persistence_test.dart
+// ════════════════════════════════════════════════════════════════════════════
 
 // Verifies that all required plugin DLLs exist next to the installed exe.
 // Mirrors the list used by the startup self-check in windows/runner/main.cpp.
@@ -174,8 +168,7 @@ var
   ResultCode: Integer;
 begin
   Result := '';
-  LicenseDataCleared := False;
-  
+
   // Check if app is running and try to close it
   if CheckForMutexes('{#MyAppName}') then
   begin
@@ -190,20 +183,15 @@ begin
       Exit;
     end;
   end;
-  
-  // Clear old license data before installation
-  ClearOldLicenseData();
+
+  // FEAT-013: the customer's license file in %APPDATA%\pos_offline_desktop is
+  // intentionally left untouched so an update never costs them their license.
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    if LicenseDataCleared then
-    begin
-      Log('Installation completed. Old license data was cleared.');
-    end;
-
     // Verify all required plugin DLLs were actually installed.
     if not VerifyInstalledFiles then
       MsgBox('تحذير: بعض ملفات البرنامج لم يتم تثبيتها بنجاح.' + #13#10 +

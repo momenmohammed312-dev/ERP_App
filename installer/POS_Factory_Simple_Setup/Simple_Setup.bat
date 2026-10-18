@@ -38,13 +38,14 @@ taskkill /f /im pos_offline_desktop.exe >nul 2>&1
 timeout /t 2 /nobreak >nul
 echo       Done.
 
-echo [3/5] Clearing old license data...
-if exist "%APP_DATA%" (
-    del /q "%APP_DATA%\secure_license.dat" 2>nul
-    del /q "%APP_DATA%\secure_license.bak" 2>nul
-    echo       Old license data cleared.
+echo [3/5] Checking previous license state...
+REM FEAT-013: the old license data is deliberately NOT deleted. An update must
+REM never cost a paying customer their license. See
+REM test/unit/services/installer_license_persistence_test.dart
+if exist "%APP_DATA%\secure_license.dat" (
+    echo       Existing license found - it will be preserved.
 ) else (
-    echo       No old license data found.
+    echo       No license file found.
 )
 
 echo [4/5] Installing application...

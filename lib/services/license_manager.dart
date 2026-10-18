@@ -29,7 +29,6 @@ class License {
   final String contactEmail;
   final String? signature;
   final String? hardwareId;
-  final int gracePeriodDays = 7;
 
   License({
     required this.licenseKey,
@@ -45,11 +44,13 @@ class License {
     this.hardwareId,
   });
 
-  bool get isExpired {
-    final now = DateTime.now();
-    final effectiveExpiry = expiryDate.add(Duration(days: gracePeriodDays));
-    return now.isAfter(effectiveExpiry);
-  }
+  /// Hard expiry — no grace period (owner decision, BUG-007 §5 option أ).
+  ///
+  /// The instant `now` passes [expiryDate] the license is expired. There used
+  /// to be a 7-day grace here while [daysRemaining] counted down to the raw
+  /// expiry date, so the UI showed "0 يوم" and then negative day counts for a
+  /// full week while every paid feature stayed unlocked.
+  bool get isExpired => DateTime.now().isAfter(expiryDate);
 
   bool get isValid => !isExpired && isSignatureValid;
 
@@ -66,9 +67,15 @@ class License {
     return hardwareId == await HardwareIdService.getHardwareId();
   }
 
+  /// Whole days left until [expiryDate]. Never negative: an expired license
+  /// reports 0 so the badge can never render a negative day count.
+  ///
+  /// A value of 0 means "less than 24 hours left OR already expired" — always
+  /// read it together with [isExpired], never on its own.
   int get daysRemaining {
     if (isExpired) return 0;
-    return expiryDate.difference(DateTime.now()).inDays;
+    final remaining = expiryDate.difference(DateTime.now()).inDays;
+    return remaining < 0 ? 0 : remaining;
   }
 
   String get licenseType => type.toString().split('.').last;
@@ -96,11 +103,25 @@ class License {
   };
 
   factory License.fromJson(Map<String, dynamic> json) {
+    // BUG-009: the old `firstWhere` had no `orElse`, so any plan identifier
+    // outside LicenseType threw a StateError and the customer fell through to
+    // "no license". Resolve through LicensePlans instead — it knows the
+    // dashboard/issuer plan names (yearly, lifetime, monthly, custom) and
+    // never throws.
+    final planName = LicensePlans.resolveOrFallback('${json['type']}');
+    if (LicensePlans.isUnknown('${json['type']}')) {
+      AppLogger.w(
+        'Unknown license plan "${json['type']}" — falling back to '
+        '${LicensePlans.fallbackName}',
+      );
+    }
+
     return License(
       licenseKey: json['license_key'],
       deviceFingerprint: json['device'],
       type: LicenseType.values.firstWhere(
-        (e) => e.toString().split('.').last == json['type'],
+        (e) => e.name == planName,
+        orElse: () => LicenseType.standard,
       ),
       issueDate: DateTime.parse(json['issue_date']),
       expiryDate: DateTime.parse(json['expiry']),
@@ -236,8 +257,10 @@ class LicenseManager {
       final license = License(
         licenseKey: licenseKey,
         deviceFingerprint: licenseData['device'],
+        // BUG-009: resolve dashboard/issuer plan names, never throw.
         type: LicenseType.values.firstWhere(
-          (e) => e.toString().split('.').last == licenseData['type'],
+          (e) => e.name == LicensePlans.resolveOrFallback('${licenseData['type']}'),
+          orElse: () => LicenseType.standard,
         ),
         issueDate: DateTime.parse(licenseData['issue_date']),
         expiryDate: expiryDate,
@@ -285,20 +308,142 @@ class LicenseManager {
     await deactivate();
   }
 
-  /// Current app version - when this changes, old license data is cleared
-  /// to give clients a fresh 100-year period after updates.
+  /// Diagnostic only — records which build last touched the license file.
+  ///
+  /// FEAT-013: this used to trigger `SecureLicenseStorage.clear()` on every
+  /// change, wiping a paying customer's license on a routine update. It is now
+  /// stamped in place and never used as a deletion trigger.
   static const String _currentAppVersion = '2.3.0';
+
+  // ════════════════════════════════════════════════════════════════════
+  // LEGACY AES-LICENSE BRIDGE (FEAT-014)
+  // ════════════════════════════════════════════════════════════════════
+
+  /// How long an old pre-RS256 license keeps working after this build is
+  /// installed. Owner-approved, see MADAR/bug issues/FEAT-014.
+  static const Duration legacyGracePeriod = Duration(days: 90);
+
+  /// True once a legacy license has been seen but the grace window has since
+  /// passed. The UI uses this to ask for a signed document instead of showing
+  /// a generic "no license" screen.
+  static bool legacyGraceExpired(SecureLicenseData? data) =>
+      data != null && data.isLegacyLicense && !_legacyStillGraced(data);
+
+  static bool _legacyStillGraced(SecureLicenseData data) {
+    final endsAt = data.legacyGraceEndsAt;
+    if (endsAt == null) return false;
+    return DateTime.now().isBefore(endsAt);
+  }
+
+  /// Reads a pre-RS256 AES license from [data] into a [License].
+  ///
+  /// Returns null when the payload is not in the legacy shape, cannot be
+  /// decrypted with the current secret, or is not a well-formed license — the
+  /// caller then falls through to the normal "no license" path.
+  static License? _readLegacyLicense(SecureLicenseData data) {
+    final payload = data.licenseJson;
+    if (payload == null) return null;
+
+    // A signed lease already in this file is NOT a legacy license.
+    if (payload.containsKey('lease_token')) return null;
+
+    try {
+      // Legacy storage kept the full license string under 'license_key'.
+      final encoded = payload['license_key'];
+      if (encoded is! String || !encoded.contains('.')) return null;
+
+      final parts = encoded.split('.');
+      if (parts.length != 2) return null;
+
+      // Re-check the legacy SHA-256 signature before touching the cipher, so a
+      // tampered blob is rejected without ever reaching the decryptor.
+      if (_instance._generateSignature(parts[0]) != parts[1]) {
+        AppLogger.w('Legacy AES license signature mismatch — rejected');
+        return null;
+      }
+
+      final decoded =
+          jsonDecode(_instance._decrypt(parts[0])) as Map<String, dynamic>;
+
+      final typeName = '${decoded['type']}';
+      if (LicensePlans.isUnknown(typeName)) {
+        AppLogger.w('Unknown plan "$typeName" in legacy license');
+      }
+      final type = LicenseType.values.firstWhere(
+        (t) => t.name == LicensePlans.resolveOrFallback(typeName),
+        orElse: () => LicenseType.standard,
+      );
+
+      return License(
+        licenseKey: encoded,
+        deviceFingerprint: '${decoded['device'] ?? ''}',
+        type: type,
+        issueDate: DateTime.parse('${decoded['issue_date']}'),
+        expiryDate: DateTime.parse('${decoded['expiry']}'),
+        features: List<String>.from(decoded['features'] as List? ?? const []),
+        maxUsers: (decoded['max_users'] as num?)?.toInt() ?? 1,
+        companyName: '${decoded['company_name'] ?? ''}',
+        contactEmail: '${decoded['contact_email'] ?? ''}',
+        hardwareId: data.hardwareId.isEmpty ? null : data.hardwareId,
+      );
+    } catch (e) {
+      AppLogger.w('Legacy AES license could not be read: $e');
+      return null;
+    }
+  }
+
+  /// Mark [data] as holding a legacy license and open the grace window.
+  ///
+  /// The deadline is written ONCE and never extended: if one is already
+  /// recorded we keep it, so reinstalling, updating the app, or repeated
+  /// launches can never restart the window.
+  Future<void> _markLegacy(SecureLicenseData data) async {
+    if (data.legacyGraceEndsAt != null) return;
+
+    final stamped = data.copyWith(
+      isLegacyLicense: true,
+      legacyGraceEndsAt: DateTime.now().add(legacyGracePeriod),
+    );
+    await SecureLicenseStorage.write(stamped);
+    AppLogger.i(
+      'Legacy AES license detected — grace until '
+      '${stamped.legacyGraceEndsAt!.toIso8601String()}',
+    );
+  }
+
+  /// Public helper for the activation screen: "this install carries an old
+  /// license that must be upgraded".
+  static bool get hasLegacyLicense => _legacyLicenseSeen;
+  static bool _legacyLicenseSeen = false;
+
+  // ════════════════════════════════════════════════════════════════════
+  // PAYED LICENSE: STORED LICENSE
+  // ════════════════════════════════════════════════════════════════════
 
   Future<License?> getCurrentLicense() async {
     if (LicenseConfig.isFreeVersion) {
       final data = await SecureLicenseStorage.read();
       final hardwareId = await HardwareIdService.getHardwareId();
 
-      // Clear old license data if app version changed (update detected)
+      // FEAT-013: an app update must NOT wipe the customer's license.
+      //
+      // This used to call SecureLicenseStorage.clear() whenever
+      // `appVersion` differed, which deleted secure_license.dat AND the paid
+      // license stored inside it — so every single update cost the customer
+      // their license. Worse, this branch runs for FREE_VERSION builds, so a
+      // free build could destroy a paid license sitting in the same file.
+      //
+      // The version stamp is kept for diagnostics only: it is refreshed in
+      // place, never used as a deletion trigger. `firstRunDate` is likewise
+      // preserved so the 100-year window cannot be restarted by reinstalling
+      // or updating the app.
       if (data != null && data.appVersion != _currentAppVersion) {
-        AppLogger.i('App updated from ${data.appVersion} to $_currentAppVersion — resetting license');
-        await SecureLicenseStorage.clear();
-        // Fall through to create fresh data below
+        AppLogger.i(
+          'App updated from ${data.appVersion} to $_currentAppVersion — '
+          'stamping version, keeping license and firstRunDate intact',
+        );
+        final stamped = data.copyWith(appVersion: _currentAppVersion);
+        await SecureLicenseStorage.write(stamped);
       }
 
       final freshData = await SecureLicenseStorage.read();
@@ -398,8 +543,40 @@ class LicenseManager {
 
     // Paid license: try secure storage first
     try {
+      // Recomputed on every read so a stale value can never leak across calls.
+      _legacyLicenseSeen = false;
       final secureData = await SecureLicenseStorage.read();
       if (secureData != null && secureData.licenseJson != null) {
+        // FEAT-014 — legacy AES bridge. `License.fromJson` below throws on a
+        // pre-RS256 payload (it has no 'expiry' field), so read the legacy
+        // shape first and keep the customer working during the grace window
+        // instead of dropping them on the activation screen with no warning.
+        if (!secureData.licenseJson!.containsKey('lease_token')) {
+          final legacy = _readLegacyLicense(secureData);
+          if (legacy != null) {
+            _legacyLicenseSeen = true;
+            // Stamp the deadline before deciding, so a legacy license that
+            // has already served out its window is refused on THIS launch
+            // rather than being granted a fresh 90 days.
+            await _markLegacy(secureData);
+            final stamped =
+                (await SecureLicenseStorage.read()) ?? secureData;
+
+            if (_legacyStillGraced(stamped)) {
+              AppLogger.i(
+                'Serving legacy AES license until grace ends — '
+                'expires ${legacy.expiryDate.toIso8601String()}',
+              );
+              return legacy;
+            }
+            AppLogger.w(
+              'Legacy AES license is past its ${legacyGracePeriod.inDays}-day '
+              'grace — a signed license is required',
+            );
+            return null;
+          }
+        }
+
         final license = License.fromJson(secureData.licenseJson!);
 
         // Hardware binding check with grace period

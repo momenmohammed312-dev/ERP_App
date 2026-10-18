@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import '../config/license_config.dart';
 import '../core/utils/logger.dart';
@@ -27,6 +28,10 @@ class SecureLicenseStorage {
       _appDir = Directory.systemTemp;
     }
   }
+
+  /// Test seam: point the storage at a temp folder (no path_provider needed).
+  @visibleForTesting
+  static void useDirectory(Directory dir) => _appDir = dir;
 
   static File get _file => File('${_appDir!.path}/$_fileName');
   static File get _backupFile => File('${_appDir!.path}/$_backupFileName');
@@ -167,6 +172,15 @@ class SecureLicenseData {
   final DateTime? lastMismatchTime;
   final Map<String, dynamic>? lastHardwareComponents; // Stored as JSON for HardwareComponents
 
+  // ── Legacy AES-license bridge (FEAT-014) ────────────────────────────
+  // Set when an old pre-RS256 license was read from this file so it can be
+  // upgraded to a signed document instead of locking the customer out.
+  //
+  // `legacyGraceEndsAt` is written once and never extended, so an app update
+  // cannot restart the grace window.
+  final bool isLegacyLicense;
+  final DateTime? legacyGraceEndsAt;
+
   SecureLicenseData({
     required this.firstRunDate,
     required this.hardwareId,
@@ -178,6 +192,8 @@ class SecureLicenseData {
     this.hardwareMismatchCount = 0,
     this.lastMismatchTime,
     this.lastHardwareComponents,
+    this.isLegacyLicense = false,
+    this.legacyGraceEndsAt,
   });
 
   /// Create a fresh entry for first run.
@@ -198,6 +214,7 @@ class SecureLicenseData {
       appVersion: appVersion,
       hardwareMismatchCount: 0,
       lastHardwareComponents: hardwareComponents,
+      isLegacyLicense: false,
     );
   }
 
@@ -212,6 +229,9 @@ class SecureLicenseData {
     'hardware_mismatch_count': hardwareMismatchCount,
     if (lastMismatchTime != null) 'last_mismatch_time': lastMismatchTime!.toIso8601String(),
     if (lastHardwareComponents != null) 'last_hardware_components': lastHardwareComponents,
+    'is_legacy_license': isLegacyLicense,
+    if (legacyGraceEndsAt != null)
+      'legacy_grace_ends_at': legacyGraceEndsAt!.toIso8601String(),
   };
 
   factory SecureLicenseData.fromJson(Map<String, dynamic> json) {
@@ -228,6 +248,11 @@ class SecureLicenseData {
           ? DateTime.tryParse(json['last_mismatch_time']) 
           : null,
       lastHardwareComponents: json['last_hardware_components'] as Map<String, dynamic>?,
+      // Absent on files written before FEAT-014 — default keeps them readable.
+      isLegacyLicense: json['is_legacy_license'] as bool? ?? false,
+      legacyGraceEndsAt: json['legacy_grace_ends_at'] != null
+          ? DateTime.tryParse(json['legacy_grace_ends_at'])
+          : null,
     );
   }
 
@@ -245,6 +270,8 @@ class SecureLicenseData {
     DateTime? lastMismatchTime,
     Map<String, dynamic>? lastHardwareComponents,
     bool clearMismatch = false,
+    bool? isLegacyLicense,
+    DateTime? legacyGraceEndsAt,
   }) {
     return SecureLicenseData(
       firstRunDate: firstRunDate ?? this.firstRunDate,
@@ -257,6 +284,13 @@ class SecureLicenseData {
       hardwareMismatchCount: clearMismatch ? 0 : (hardwareMismatchCount ?? this.hardwareMismatchCount),
       lastMismatchTime: clearMismatch ? null : (lastMismatchTime ?? this.lastMismatchTime),
       lastHardwareComponents: clearMismatch ? null : (lastHardwareComponents ?? this.lastHardwareComponents),
+      // clearLicense means the legacy license was replaced by a signed one.
+      isLegacyLicense: clearLicense
+          ? false
+          : (isLegacyLicense ?? this.isLegacyLicense),
+      legacyGraceEndsAt: clearLicense
+          ? null
+          : (legacyGraceEndsAt ?? this.legacyGraceEndsAt),
     );
   }
 }

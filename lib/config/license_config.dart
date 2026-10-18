@@ -133,3 +133,71 @@ class LicenseConfig {
   static const String supportEmail = 'support@mo2-systems.com';
   static const String supportPhone = '+20 100 000 0000';
 }
+
+/// Canonical resolution of a `plan` value found in a license payload into a
+/// [LicenseType] name (BUG-009).
+///
+/// License payloads are written by the admin dashboard and by the local
+/// issuer, and their plan identifiers do NOT match `LicenseType`:
+///
+///   * `admin_dashboard/src/config/modules.js` → `trial · monthly · yearly ·
+///     lifetime`
+///   * `tools/simulator_db.json` → `standard · basic · professional · custom`
+///
+/// Resolving those with `LicenseType.values.firstWhere(...)` either THREW
+/// (no `orElse`) or, worse, silently fell back to `basic` via
+/// `orElse: () => LicenseType.basic`. The second case is what produced the
+/// customer-facing bug: a customer on a `yearly` plan got `maxUsers == 1`,
+/// so `UserSessionService.canAddUser()` / `canUserLogin()` blocked every
+/// employee beyond the first.
+///
+/// This class returns the `LicenseType` NAME as a plain String because
+/// `license_config.dart` is imported BY `license_manager.dart` — referencing
+/// `LicenseType` here would create an import cycle.
+class LicensePlans {
+  LicensePlans._();
+
+  /// Plan identifier → `LicenseType.name`.
+  ///
+  /// Duration-style plans are graded by breadth of access, not by price: a
+  /// yearly or lifetime subscription is not a smaller product than monthly.
+  static const Map<String, String> toLicenseTypeName = {
+    // Canonical LicenseType names.
+    'free': 'free',
+    'trial': 'trial',
+    'basic': 'basic',
+    'standard': 'standard',
+    'professional': 'professional',
+    'enterprise': 'enterprise',
+    // Duration-style plans used by the dashboard / local issuer.
+    'monthly': 'standard',
+    'yearly': 'professional',
+    'lifetime': 'professional',
+    'annual': 'professional',
+    // Explicitly custom — treated as the full feature set.
+    'custom': 'professional',
+  };
+
+  /// Used only when a payload carries no usable plan at all.
+  static const String fallbackName = 'standard';
+
+  /// Resolves a plan identifier to a `LicenseType.name`.
+  ///
+  /// Returns null when [plan] is unknown so the caller can log the bad value
+  /// instead of silently downgrading a paying customer.
+  static String? resolve(String? plan) {
+    if (plan == null) return null;
+    final key = plan.trim().toLowerCase();
+    if (key.isEmpty) return null;
+    return toLicenseTypeName[key];
+  }
+
+  /// Like [resolve] but never returns null — unknown plans degrade to
+  /// [fallbackName] so a single bad row cannot lock a customer out.
+  static String resolveOrFallback(String? plan) =>
+      resolve(plan) ?? fallbackName;
+
+  /// True when [plan] is not one of the known identifiers. Used by the issuer
+  /// and the dashboard validation layer to reject typos at issuance time.
+  static bool isUnknown(String? plan) => resolve(plan) == null;
+}
