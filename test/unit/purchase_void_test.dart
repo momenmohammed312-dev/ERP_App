@@ -336,5 +336,58 @@ void main() {
       expect(logs.first.details, contains('manager1'));
       expect(logs.first.details, contains('فاتورة تجريبية'));
     });
+
+    test('FEAT-018: voidPurchase decrements stock, deletes ledger entries, and restores supplier balance', () async {
+      final db = await openDb();
+      await seedSupplier(db, 'S-FEAT018');
+      final productId = await seedProduct(db, 'صنف_مورد', 20);
+
+      // 1. Initial purchase to establish a non-zero supplier balance
+      await seedPurchase(
+        db,
+        supplierId: 'S-FEAT018',
+        number: 'PUR-BASE001',
+        paid: 100.0,
+        lines: [(productId, 2)], // 2 * 100 = 200 total, paid 100 -> remaining debt 100
+      );
+      final initialBalance = await db.ledgerDao.getSupplierBalance('S-FEAT018');
+      expect(initialBalance, 100.0);
+      var p = await db.productDao.getProductById(productId);
+      expect(p!.quantity, 22);
+
+      // 2. Second purchase that will be voided
+      final targetNumber = await seedPurchase(
+        db,
+        supplierId: 'S-FEAT018',
+        number: 'PUR-VOID002',
+        paid: 150.0,
+        lines: [(productId, 5)], // 5 * 100 = 500 total, paid 150 -> debt +350 -> total 450
+      );
+      p = await db.productDao.getProductById(productId);
+      expect(p!.quantity, 27); // 22 + 5
+      expect(await db.ledgerDao.getSupplierBalance('S-FEAT018'), 450.0);
+
+      // 3. Void the second purchase
+      await PurchaseVoidService(db).voidPurchase(
+        purchaseId: targetNumber,
+        reason: 'إلغاء الفاتورة من كشف الحساب والموردين',
+        voidedBy: 'admin',
+      );
+
+      // 4. Stock must return exactly to 22 (the 5 units from voided purchase are removed)
+      p = await db.productDao.getProductById(productId);
+      expect(p!.quantity, 22);
+
+      // 5. Ledger entries for PUR-VOID002 must be deleted
+      expect(await db.ledgerDao.getTransactionById('${targetNumber}_ledger'), isNull);
+      expect(await db.ledgerDao.getTransactionById('${targetNumber}_ledger_pay'), isNull);
+
+      // 6. Base purchase ledger entries must remain intact
+      expect(await db.ledgerDao.getTransactionById('PUR-BASE001_ledger'), isNotNull);
+
+      // 7. Supplier balance must return exactly to initialBalance (100.0)
+      final finalBalance = await db.ledgerDao.getSupplierBalance('S-FEAT018');
+      expect(finalBalance, initialBalance);
+    });
   });
 }

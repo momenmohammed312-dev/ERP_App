@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/services/purchase_print_service_simple.dart';
 import 'package:pos_offline_desktop/core/services/purchase_return_service.dart';
 import 'enhanced_purchase_invoice_page.dart';
+import 'void_purchase_dialog.dart';
 
-/// Supplier purchase detail (عرض/تعديل/استرجاع) — mirrors the customer
+/// Supplier purchase detail (عرض/تعديل/استرجاع/حذف) — mirrors the customer
 /// invoice detail dialog. Loads lines with product names on open.
-class PurchaseDetailDialog extends StatefulWidget {
+class PurchaseDetailDialog extends ConsumerStatefulWidget {
   final AppDatabase db;
   final String purchaseId;
   final VoidCallback? onChanged;
@@ -23,10 +26,11 @@ class PurchaseDetailDialog extends StatefulWidget {
   });
 
   @override
-  State<PurchaseDetailDialog> createState() => _PurchaseDetailDialogState();
+  ConsumerState<PurchaseDetailDialog> createState() =>
+      _PurchaseDetailDialogState();
 }
 
-class _PurchaseDetailDialogState extends State<PurchaseDetailDialog> {
+class _PurchaseDetailDialogState extends ConsumerState<PurchaseDetailDialog> {
   bool _loading = true;
   String? _error;
   Purchase? _purchase;
@@ -116,10 +120,54 @@ class _PurchaseDetailDialogState extends State<PurchaseDetailDialog> {
     }
   }
 
+  Future<void> _voidPurchase() async {
+    final username = ref.read(authProvider)?.username ?? 'admin';
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => VoidPurchaseDialog(
+        db: widget.db,
+        purchaseId: widget.purchaseId,
+        voidedBy: username,
+        onDone: () {
+          widget.onChanged?.call();
+        },
+      ),
+    );
+    if (result == true && mounted) {
+      Navigator.of(context).pop(true);
+      widget.onChanged?.call();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isVoided =
+        _purchase?.isDeleted == true || _purchase?.status == 'Voided';
+
     return AlertDialog(
-      title: const Text('تفاصيل فاتورة المشتريات'),
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('تفاصيل فاتورة المشتريات'),
+          if (isVoided)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.redAccent),
+              ),
+              child: const Text(
+                'ملغاة',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+        ],
+      ),
       content: SizedBox(
         width: 520,
         child: _loading
@@ -205,15 +253,21 @@ class _PurchaseDetailDialogState extends State<PurchaseDetailDialog> {
           label: const Text('عرض'),
         ),
         TextButton.icon(
-          onPressed: _loading || _error != null ? null : _edit,
+          onPressed: _loading || _error != null || isVoided ? null : _edit,
           icon: const Icon(Icons.edit, size: 18),
           label: const Text('تعديل'),
         ),
         TextButton.icon(
-          onPressed: _loading || _error != null ? null : _return,
+          onPressed: _loading || _error != null || isVoided ? null : _return,
           icon: const Icon(Icons.undo, size: 18),
           label: const Text('استرجاع'),
           style: TextButton.styleFrom(foregroundColor: Colors.orange),
+        ),
+        TextButton.icon(
+          onPressed: _loading || _error != null || isVoided ? null : _voidPurchase,
+          icon: const Icon(Icons.delete_outline, size: 18),
+          label: const Text('حذف الفاتورة'),
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
         ),
       ],
     );

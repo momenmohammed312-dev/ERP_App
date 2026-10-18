@@ -1,21 +1,27 @@
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
 import 'package:intl/intl.dart';
+import 'package:pos_offline_desktop/ui/customer/customer_statement_screen.dart';
+import 'package:pos_offline_desktop/ui/invoice/widgets/void_invoice_dialog.dart';
 import 'customer_monthly_report_page.dart';
 
-class CustomerReportTab extends StatefulWidget {
+class CustomerReportTab extends ConsumerStatefulWidget {
   final AppDatabase db;
 
   const CustomerReportTab({super.key, required this.db});
 
   @override
-  State<CustomerReportTab> createState() => _CustomerReportTabState();
+  ConsumerState<CustomerReportTab> createState() => _CustomerReportTabState();
 }
 
-class _CustomerReportTabState extends State<CustomerReportTab> {
+class _CustomerReportTabState extends ConsumerState<CustomerReportTab> {
   List<CustomerWithBalance> _customers = [];
   List<CustomerWithBalance> _filteredCustomers = [];
   bool _isLoading = false;
@@ -103,45 +109,164 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
 
     await showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
+          builder: (dCtx, setDialogState) {
             return AlertDialog(
               title: Text('كشف حساب: ${customer.name}'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    title: const Text('الفترة'),
-                    subtitle: Text(
-                      '${DateFormat('yyyy/MM/dd').format(start)} - ${DateFormat('yyyy/MM/dd').format(end)}',
-                    ),
-                    trailing: const Icon(Icons.calendar_month),
-                    onTap: () async {
-                      final picked = await showDateRangePicker(
-                        context: context,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime.now(),
-                        initialDateRange: DateTimeRange(start: start, end: end),
-                      );
-                      if (picked != null) {
-                        setDialogState(() {
-                          start = picked.start;
-                          end = picked.end;
-                        });
-                      }
-                    },
+              content: SizedBox(
+                width: 500,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        title: const Text('الفترة'),
+                        subtitle: Text(
+                          '${DateFormat('yyyy/MM/dd').format(start)} - ${DateFormat('yyyy/MM/dd').format(end)}',
+                        ),
+                        trailing: const Icon(Icons.calendar_month),
+                        onTap: () async {
+                          final picked = await showDateRangePicker(
+                            context: dialogContext,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now(),
+                            initialDateRange:
+                                DateTimeRange(start: start, end: end),
+                          );
+                          if (picked != null) {
+                            setDialogState(() {
+                              start = picked.start;
+                              end = picked.end;
+                            });
+                          }
+                        },
+                      ),
+                      const Divider(),
+                      const Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          'فواتير العميل (أحدث 10 فواتير):',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const Gap(8),
+                      FutureBuilder<List<Invoice>>(
+                        future: (widget.db.select(widget.db.invoices)
+                              ..where((t) =>
+                                  t.customerId.equals(customer.id) &
+                                  t.status.equals('voided').not())
+                              ..orderBy([(t) => OrderingTerm.desc(t.date)])
+                              ..limit(10))
+                            .get(),
+                        builder: (ctx, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(12),
+                                child: CircularProgressIndicator(),
+                              ),
+                            );
+                          }
+                          final invoices = snapshot.data ?? [];
+                          if (invoices.isEmpty) {
+                            return const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text(
+                                'لا توجد فواتير نشطة للعميل',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            );
+                          }
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: invoices.map((inv) {
+                              return Container(
+                                margin: const EdgeInsets.symmetric(vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withValues(alpha: 0.05),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'فاتورة #${inv.id} (${DateFormat('MM/dd').format(inv.date)})',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${inv.totalAmount.toStringAsFixed(2)} ج.م',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12),
+                                    ),
+                                    const Gap(8),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline,
+                                          color: Colors.redAccent, size: 18),
+                                      tooltip: 'إلغاء الفاتورة',
+                                      onPressed: () async {
+                                        final done = await showDialog<bool>(
+                                          context: dialogContext,
+                                          builder: (voidCtx) =>
+                                              VoidInvoiceDialog(
+                                            db: widget.db,
+                                            invoiceId: inv.id,
+                                            voidedBy: ref
+                                                    .read<User?>(authProvider)
+                                                    ?.username ??
+                                                'admin',
+                                            onDone: () {
+                                              _loadData();
+                                            },
+                                          ),
+                                        );
+                                        if (done == true) {
+                                          if (dialogContext.mounted) {
+                                            Navigator.pop(dialogContext);
+                                          }
+                                          if (mounted) {
+                                            _loadData();
+                                          }
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CustomerStatementScreen(
+                          customer: customer,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('كشف الحساب الكامل'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
                   child: const Text('إلغاء'),
                 ),
                 ElevatedButton.icon(
                   onPressed: () async {
-                    Navigator.pop(context);
+                    Navigator.pop(dialogContext);
                     await _exportStatement(customer, start, end);
                   },
                   icon: const Icon(Icons.print),

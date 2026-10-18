@@ -5,9 +5,11 @@ import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/ui/customer/edit_payment_dialog.dart';
 import 'package:pos_offline_desktop/ui/customer/services/enhanced_customer_statement_generator.dart';
 import 'package:pos_offline_desktop/ui/invoice/edit_invoice_page.dart';
+import 'package:pos_offline_desktop/ui/invoice/widgets/void_invoice_dialog.dart';
 import 'package:pos_offline_desktop/ui/widgets/invoice_items_table.dart';
 
 class CustomerStatementScreen extends ConsumerStatefulWidget {
@@ -763,7 +765,7 @@ class _CustomerStatementScreenState
   }
 }
 
-class _StatementRow extends StatefulWidget {
+class _StatementRow extends ConsumerStatefulWidget {
   final AppDatabase db;
   final _StatementRowData data;
   final Color textColor;
@@ -783,10 +785,10 @@ class _StatementRow extends StatefulWidget {
   });
 
   @override
-  State<_StatementRow> createState() => _StatementRowState();
+  ConsumerState<_StatementRow> createState() => _StatementRowState();
 }
 
-class _StatementRowState extends State<_StatementRow> {
+class _StatementRowState extends ConsumerState<_StatementRow> {
   bool _expanded = false;
   bool _isLoadingDetails = false;
   List<InvoiceItemDisplayModel> _items = [];
@@ -869,6 +871,24 @@ class _StatementRowState extends State<_StatementRow> {
         ),
       ),
     );
+  }
+
+  Future<void> _voidInvoice() async {
+    if (_invoiceId == null) return;
+    final user = ref.read(authProvider);
+    final voidedByUser = user?.username ?? 'admin';
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => VoidInvoiceDialog(
+        db: widget.db,
+        invoiceId: _invoiceId!,
+        voidedBy: voidedByUser,
+        onDone: widget.onChanged,
+      ),
+    );
+    if (done == true) {
+      widget.onChanged();
+    }
   }
 
   void _editPayment() {
@@ -1000,13 +1020,27 @@ class _StatementRowState extends State<_StatementRow> {
       children.add(
         Align(
           alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            onPressed: _editInvoice,
-            icon: const Icon(Icons.edit_note, size: 18),
-            label: const Text('تعديل الفاتورة'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.blue,
-            ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _editInvoice,
+                icon: const Icon(Icons.edit_note, size: 18),
+                label: const Text('تعديل الفاتورة'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.blue,
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _voidInvoice,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('حذف الفاتورة'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.redAccent,
+                ),
+              ),
+            ],
           ),
         ),
       );
