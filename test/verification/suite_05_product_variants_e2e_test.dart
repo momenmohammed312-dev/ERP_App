@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/invoice_service.dart';
+import 'package:pos_offline_desktop/core/services/invoice_void_service.dart';
 import 'package:pos_offline_desktop/core/services/sales_return_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -187,7 +188,7 @@ void main() {
       expect((await db.productDao.getProductById(pid))!.quantity, equals(9));
     });
 
-    test('5. BUG-011: Invoice Void restores variant quantity and auto-syncs parent', () async {
+    test('5. BUG-011: InvoiceVoidService restores variant quantity (even after partial return) and auto-syncs parent', () async {
       final pid = await makeFabricProduct('طقم صيفي');
       final vidGreen = await db.productVariantDao.insertVariant(
         ProductVariantsCompanion.insert(
@@ -216,11 +217,78 @@ void main() {
       expect((await db.productVariantDao.getVariantById(vidGreen))!.quantity, equals(11));
       expect((await db.productDao.getProductById(pid))!.quantity, equals(11));
 
-      // Void the invoice
-      await db.invoiceDao.voidInvoice(saleRes.invoiceId, 'خطأ في البيع', 'tester');
+      // Partial return of 1 unit first (11 -> 12)
+      final lines = await db.invoiceDao.getItemsByInvoiceId(saleRes.invoiceId);
+      await SalesReturnService(db).processPartialReturn(
+        invoiceId: saleRes.invoiceId,
+        itemReturns: {lines.first.id: 1},
+      );
+      expect((await db.productVariantDao.getVariantById(vidGreen))!.quantity, equals(12));
 
-      // Variant restored strictly to 15, Parent restored to 15
+      // Void the invoice via the real production InvoiceVoidService
+      await InvoiceVoidService(db).voidInvoice(
+        invoiceId: saleRes.invoiceId,
+        reason: VoidReasons.inputError,
+        voidedBy: 'tester',
+      );
+
+      // Variant restored strictly to 15 (not 16!), Parent restored to 15
       expect((await db.productVariantDao.getVariantById(vidGreen))!.quantity, equals(15));
+      expect((await db.productDao.getProductById(pid))!.quantity, equals(15));
+    });
+
+    test('6. Editing an invoice with variants reverses old variant stock and applies new variant stock', () async {
+      final pid = await makeFabricProduct('جاكيت شتوي');
+      final vidRed = await db.productVariantDao.insertVariant(
+        ProductVariantsCompanion.insert(
+          productId: pid,
+          name: 'أحمر',
+          quantity: const Value(10),
+        ),
+      );
+      final vidBlue = await db.productVariantDao.insertVariant(
+        ProductVariantsCompanion.insert(
+          productId: pid,
+          name: 'أزرق',
+          quantity: const Value(10),
+        ),
+      );
+      final parentProd = await db.productDao.getProductById(pid);
+      await db.productDao.updateProduct(parentProd!.copyWith(quantity: 20));
+
+      final svc = InvoiceService(db);
+      final saleRes = await svc.createInvoice(
+        customerId: null,
+        customerName: 'عميل نقدي',
+        paymentMethod: 'cash',
+        totalAmount: 300,
+        paidAmount: 300,
+        status: 'paid',
+        items: [
+          InvoiceItemParams(productId: pid, quantity: 3, price: 100, variantId: vidRed),
+        ],
+      );
+
+      expect((await db.productVariantDao.getVariantById(vidRed))!.quantity, equals(7));
+      expect((await db.productVariantDao.getVariantById(vidBlue))!.quantity, equals(10));
+      expect((await db.productDao.getProductById(pid))!.quantity, equals(17));
+
+      // Edit invoice: change from 3 Red to 5 Blue
+      await svc.editInvoice(
+        invoiceId: saleRes.invoiceId,
+        customerId: null,
+        customerName: 'عميل نقدي',
+        paymentMethod: 'cash',
+        totalAmount: 500,
+        paidAmount: 500,
+        status: 'paid',
+        items: [
+          InvoiceItemParams(productId: pid, quantity: 5, price: 100, variantId: vidBlue),
+        ],
+      );
+
+      expect((await db.productVariantDao.getVariantById(vidRed))!.quantity, equals(10));
+      expect((await db.productVariantDao.getVariantById(vidBlue))!.quantity, equals(5));
       expect((await db.productDao.getProductById(pid))!.quantity, equals(15));
     });
   });

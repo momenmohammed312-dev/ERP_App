@@ -249,7 +249,7 @@ class _PurchaseDetailDialogState extends ConsumerState<PurchaseDetailDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('إغلاق'),
         ),
-        if (_purchase != null && _purchase!.status != 'voided')
+        if (_purchase != null && !isVoided)
           TextButton.icon(
             onPressed: () async {
               final newDate = await pickDocumentDate(

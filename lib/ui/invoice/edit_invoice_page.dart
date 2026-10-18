@@ -35,6 +35,7 @@ class _EditLine {
   double commission;
   double? unitCostAtTime;
   int? shipmentId;
+  int? variantId;
 
   _EditLine({
     this.product,
@@ -45,6 +46,7 @@ class _EditLine {
     this.commission = 0,
     this.unitCostAtTime,
     this.shipmentId,
+    this.variantId,
   });
 }
 
@@ -121,6 +123,7 @@ class _EditInvoicePageState extends ConsumerState<EditInvoicePage> {
             commission: item.commission,
             unitCostAtTime: item.unitCostAtTime,
             shipmentId: item.shipmentId,
+            variantId: item.variantId,
           ),
         );
       }
@@ -232,6 +235,7 @@ class _EditInvoicePageState extends ConsumerState<EditInvoicePage> {
             commission: l.commission,
             unitCostAtTime: l.unitCostAtTime,
             shipmentId: l.shipmentId,
+            variantId: l.variantId,
           ),
         )
         .toList();
