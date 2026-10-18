@@ -31,7 +31,7 @@ void main() {
     final closeBracket = source.indexOf('];', openBracket);
     expect(closeBracket, greaterThan(openBracket));
     final body = source.substring(openBracket, closeBracket);
-    return RegExp(r"'([a-z_]+)'")
+    return RegExp(r"'([a-z0-9_]+)'")
         .allMatches(body)
         .map((m) => m.group(1)!)
         .toSet();
@@ -108,10 +108,16 @@ void main() {
       'rewards_penalties',
       'performance_reviews',
       'staff_documents',
+      'cash_custodies',
+      'custody_expenses',
     ]) {
       expect(indexOf(child), greaterThan(staffIdx),
           reason: '$child لازم يكون بعد staff_table');
     }
+
+    final custodyIdx = indexOf('cash_custodies');
+    expect(indexOf('custody_expenses'), greaterThan(custodyIdx),
+        reason: 'custody_expenses لازم يكون بعد cash_custodies');
 
     final devicesIdx = indexOf('biometric_devices');
     for (final child in [
