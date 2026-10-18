@@ -405,6 +405,7 @@ class BackupService {
     // Get data from each table
     final tables = [
       'products',
+      'product_variants',
       'customers',
       'suppliers',
       'categories',
@@ -507,6 +508,7 @@ class BackupService {
       'customers',
       'suppliers',
       'products',
+      'product_variants',
       'days',
       'invoices',
       'invoice_items',

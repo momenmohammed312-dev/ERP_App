@@ -104,7 +104,7 @@ class _OrderLineItemState extends State<OrderLineItem> {
               vertical: 4,
             ),
             title: Text(
-              widget.entry.product?.name ?? 'Unknown Product',
+              widget.entry.displayName,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
             subtitle: Column(

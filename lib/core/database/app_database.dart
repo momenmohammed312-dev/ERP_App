@@ -84,6 +84,8 @@ import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
 import 'supplier_ledger_backfill.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
+import 'package:pos_offline_desktop/core/database/tables/product_variants_table.dart';
+import 'package:pos_offline_desktop/core/database/dao/product_variant_dao.dart';
 // import 'package:pos_offline_desktop/core/database/amount_types_fix.dart';
 
 part 'app_database.g.dart';
@@ -159,6 +161,7 @@ part 'app_database.g.dart';
     CustomerStockMovements,
     ManufacturingDeliveries,
     ManufacturingDeliveryItems,
+    ProductVariants,
   ],
   daos: [
     ProductDao,
@@ -195,6 +198,7 @@ part 'app_database.g.dart';
     ManufacturingScrapDao,
     CustomerMaterialReceiptDao,
     ManufacturingDeliveryDao,
+    ProductVariantDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -205,7 +209,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 78;
+  int get schemaVersion => 79;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -399,6 +403,12 @@ class AppDatabase extends _$AppDatabase {
       // columns). Purely additive; no existing behaviour changes.
       if (from < 78) {
         await _runV78Migrations(m);
+      }
+
+      // Schema v79 — Product Variants (colors/categories with independent stock)
+      // + variant_id on invoice_items and sales_return_items.
+      if (from < 79) {
+        await _runV79Migrations(m);
       }
 
       // 6. Special data fixes
@@ -3551,6 +3561,65 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(
         78,
         'returns_refunds_split',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// Schema v79 — Product Variants (ألوان/فئات المنتج بمخزون مستقل وربط الفواتير والمرتجعات)
+  Future<void> _runV79Migrations(Migrator m) async {
+    await _logMigrationStep(79, 'product_variants_foundation', 'started');
+    try {
+      // 1. إنشاء جدول product_variants
+      try {
+        await m.createTable(productVariants);
+        log('v79: Created product_variants table');
+      } catch (e) {
+        log('v79: product_variants table already exists: $e');
+      }
+
+      try {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_variants_product '
+          'ON product_variants(product_id)',
+        );
+      } catch (_) {}
+
+      // 2. إضافة عمود variant_id لجدول invoice_items بأمان
+      try {
+        final pragmaItems = await customSelect('PRAGMA table_info(invoice_items)').get();
+        final existsInItems = pragmaItems.any((c) => c.data['name'] == 'variant_id');
+        if (!existsInItems) {
+          await customStatement(
+            'ALTER TABLE invoice_items ADD COLUMN variant_id INTEGER REFERENCES product_variants(id)',
+          );
+          log('v79: Added variant_id to invoice_items');
+        }
+      } catch (e) {
+        log('v79: invoice_items variant_id check/add: $e');
+      }
+
+      // 3. إضافة عمود variant_id لجدول sales_return_items بأمان
+      try {
+        final pragmaReturns = await customSelect('PRAGMA table_info(sales_return_items)').get();
+        final existsInReturns = pragmaReturns.any((c) => c.data['name'] == 'variant_id');
+        if (!existsInReturns) {
+          await customStatement(
+            'ALTER TABLE sales_return_items ADD COLUMN variant_id INTEGER REFERENCES product_variants(id)',
+          );
+          log('v79: Added variant_id to sales_return_items');
+        }
+      } catch (e) {
+        log('v79: sales_return_items variant_id check/add: $e');
+      }
+
+      await _logMigrationStep(79, 'product_variants_foundation', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        79,
+        'product_variants_foundation',
         'failed',
         error: e.toString(),
       );

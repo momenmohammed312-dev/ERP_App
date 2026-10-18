@@ -24,6 +24,7 @@ mixin _$ManufacturingDeliveryDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.customerStockBalances;
   $CustomerStockMovementsTable get customerStockMovements =>
       attachedDatabase.customerStockMovements;
+  $ProductVariantsTable get productVariants => attachedDatabase.productVariants;
   $InvoiceItemsTable get invoiceItems => attachedDatabase.invoiceItems;
   $LedgerTransactionsTable get ledgerTransactions =>
       attachedDatabase.ledgerTransactions;
@@ -84,6 +85,11 @@ class ManufacturingDeliveryDaoManager {
       $$CustomerStockMovementsTableTableManager(
         _db.attachedDatabase,
         _db.customerStockMovements,
+      );
+  $$ProductVariantsTableTableManager get productVariants =>
+      $$ProductVariantsTableTableManager(
+        _db.attachedDatabase,
+        _db.productVariants,
       );
   $$InvoiceItemsTableTableManager get invoiceItems =>
       $$InvoiceItemsTableTableManager(_db.attachedDatabase, _db.invoiceItems);

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'invoice_table.dart';
 import 'invoice_items_table.dart';
 import 'product_table.dart';
+import 'product_variants_table.dart';
 import 'vegetable_shipments_table.dart';
 
 /// جدول مرتجعات المبيعات الرئيسي
@@ -48,6 +49,11 @@ class SalesReturnItems extends Table {
     onDelete: KeyAction.cascade,
   )();
   IntColumn get productId => integer().references(Products, #id)();
+
+  /// صنف المنتج (لون/مقاس/فئة) إن وجد.
+  IntColumn get variantId =>
+      integer().nullable().references(ProductVariants, #id)();
+
   TextColumn get productName => text()(); // snapshot of name
   IntColumn get quantity => integer()();
   RealColumn get unitPrice => real()();

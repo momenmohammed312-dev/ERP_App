@@ -293,6 +293,20 @@ class _EnhancedNewInvoicePageState
 
   Future<void> _handleBarcodeScanned(String barcode) async {
     try {
+      // باركود صنف (لون/فئة) أولًا — يفتح اختيار المنتج الأب والصنف محدد مسبقًا.
+      final variant = await widget.db.productVariantDao.getVariantByBarcode(
+        barcode,
+      );
+      if (variant != null) {
+        final parent = await widget.db.productDao.getProductById(
+          variant.productId,
+        );
+        if (parent != null && mounted) {
+          _showProductSelectionModal(parent, initialVariant: variant);
+          return;
+        }
+      }
+
       final product = await widget.db.productDao.getProductByBarcode(barcode);
       if (product != null) {
         _showProductSelectionModal(product);
@@ -400,13 +414,26 @@ class _EnhancedNewInvoicePageState
     setState(() {});
   }
 
-  void _showProductSelectionModal(Product product) {
+  void _showProductSelectionModal(
+    Product product, {
+    ProductVariant? initialVariant,
+  }) {
     showDialog(
       context: context,
       builder: (context) => ProductSelectionModal(
         product: product,
-        onConfirm: (quantity, unit, unitPrice, discount, tax) {
-          _addProductEntry(product, quantity, unit, unitPrice, discount, tax);
+        db: widget.db,
+        initialVariant: initialVariant,
+        onConfirm: (quantity, unit, unitPrice, discount, tax, variant) {
+          _addProductEntry(
+            product,
+            quantity,
+            unit,
+            unitPrice,
+            discount,
+            tax,
+            variant,
+          );
         },
       ),
     );
@@ -419,8 +446,10 @@ class _EnhancedNewInvoicePageState
     double unitPrice,
     double discount,
     double tax,
+    ProductVariant? variant,
   ) {
-    final needsPriceOverride = unitPrice != product.price;
+    final defaultPrice = variant?.price ?? product.price;
+    final needsPriceOverride = unitPrice != defaultPrice;
     if (needsPriceOverride) {
       final currentUser = ref.read(authProvider);
       if (currentUser == null || !currentUser.hasPermission(Permission.editSale)) {
@@ -434,18 +463,19 @@ class _EnhancedNewInvoicePageState
             ),
           );
         }
-        unitPrice = product.price;
+        unitPrice = defaultPrice;
       }
     }
 
     setState(() {
       final entry = ProductEntry(product: product)
+        ..selectedVariant = variant
         ..quantity = quantity
         ..unit = unit
         ..unitPrice = unitPrice
         ..discount = discount
         ..tax = tax
-        ..priceOverride = unitPrice != product.price;
+        ..priceOverride = unitPrice != defaultPrice;
 
       _productEntries.add(entry);
       _calculateTotals();
@@ -915,6 +945,7 @@ class _EnhancedNewInvoicePageState
             discount: subDiscount,
             unitCostAtTime: e.product!.costPrice,
             shipmentId: allocation.shipmentId,
+            variantId: e.selectedVariant?.id,
           ));
 
           if (allocation.quantity > primaryQuantity) {
@@ -935,12 +966,13 @@ class _EnhancedNewInvoicePageState
           ctn: ctn,
           discount: e.discount,
           unitCostAtTime: e.product!.costPrice,
+          variantId: e.selectedVariant?.id,
         ));
       }
     }
 
     final productSummary = _productEntries
-        .map((e) => e.product?.name ?? '')
+        .map((e) => e.displayName)
         .where((n) => n.isNotEmpty)
         .join(', ');
     // Bug 3: no number exists pre-POST; custom wording only for legacy rows
@@ -994,7 +1026,7 @@ class _EnhancedNewInvoicePageState
         .map((e) => ups.InvoiceItem(
               id: e.product!.id,
               invoiceId: invoiceId,
-              description: e.product!.name,
+              description: e.displayName,
               unit: e.unit,
               quantity: e.quantity,
               unitPrice: e.unitPrice,

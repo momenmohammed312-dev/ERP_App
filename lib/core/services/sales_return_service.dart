@@ -170,6 +170,7 @@ class SalesReturnService {
             unitPrice: line.price,
             totalPrice: lineTotal,
             invoiceItemId: Value(line.id),
+            variantId: Value(line.variantId),
             discount: Value(discountPortion),
             commission: Value(commissionPortion),
             shipmentId: Value(line.shipmentId),
@@ -182,8 +183,28 @@ class SalesReturnService {
 
         if (goesToStock) {
           restockedTotal += lineTotal;
-          // مخزون
-          if (product != null) {
+          // مخزون: صنف (BUG-010) أو منتج عادي
+          if (line.variantId != null) {
+            final variant =
+                await _db.productVariantDao.getVariantById(line.variantId!);
+            if (variant != null) {
+              await _db.productVariantDao.updateVariantQuantity(
+                variant.id,
+                variant.quantity + qty,
+              );
+              final total = await _db.productVariantDao
+                  .getTotalQuantityByProduct(line.productId);
+              if (product != null) {
+                await _db.productDao.updateProduct(
+                  product.copyWith(quantity: total),
+                );
+              }
+            } else if (product != null) {
+              await _db.productDao.updateProduct(
+                product.copyWith(quantity: product.quantity + qty),
+              );
+            }
+          } else if (product != null) {
             await _db.productDao.updateProduct(
               product.copyWith(quantity: product.quantity + qty),
             );

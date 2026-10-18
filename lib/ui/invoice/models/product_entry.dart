@@ -4,6 +4,9 @@ import 'package:pos_offline_desktop/core/services/shipment_allocation_service.da
 
 class ProductEntry {
   Product? product;
+  /// صنف المنتج المختار (لون/فئة) — null = المنتج نفسه بلا أصناف.
+  ProductVariant? selectedVariant;
+
   int quantity = 1;
   String unit = 'piece';
   double unitPrice = 0.0;
@@ -20,7 +23,19 @@ class ProductEntry {
   bool overrideMode = false;
   int? overrideShipmentId;
 
-  ProductEntry({this.product});
+  ProductEntry({this.product, this.selectedVariant});
+
+  /// اسم العرض للسطر: "قماش X — أحمر" لو صنف متحدد، وإلا اسم المنتج.
+  String get displayName {
+    final base = product?.name ?? 'Unknown Product';
+    final v = selectedVariant;
+    if (v == null) return base;
+    return '$base — ${v.name}';
+  }
+
+  /// السعر الافتراضي للسطر: سعر الصنف لو متحدد وله سعر، وإلا سعر الأب.
+  double get defaultPrice =>
+      selectedVariant?.price ?? product?.price ?? 0.0;
 
   bool get isBarnikaTracked => product?.barneka ?? false;
 
@@ -36,6 +51,8 @@ class ProductEntry {
     return {
       'productId': product?.id,
       'productName': product?.name,
+      'variantId': selectedVariant?.id,
+      'variantName': selectedVariant?.name,
       'quantity': quantity,
       'unit': unit,
       'unitPrice': unitPrice,

@@ -5,21 +5,29 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 
 class ProductSelectionModal extends StatefulWidget {
   final Product product;
+  final AppDatabase db;
   final bool forPurchase;
+
+  /// صنف محدد مسبقًا (مثلًا من مسح باركود صنف) — null = يختار المستخدم.
+  final ProductVariant? initialVariant;
+
   final Function(
     int quantity,
     String unit,
     double unitPrice,
     double discount,
     double tax,
+    ProductVariant? variant,
   )
   onConfirm;
 
   const ProductSelectionModal({
     super.key,
     required this.product,
+    required this.db,
     required this.onConfirm,
     this.forPurchase = false,
+    this.initialVariant,
   });
 
   @override
@@ -39,6 +47,10 @@ class _ProductSelectionModalState extends State<ProductSelectionModal> {
   double _discount = 0.0;
   double _tax = 0.0;
 
+  // أصناف المنتج (ألوان/فئات) — للبيع فقط، المشتريات تستهدف الأب.
+  List<ProductVariant> _variants = [];
+  ProductVariant? _selectedVariant;
+
   final List<String> _units = [
     'piece',
     'kg',
@@ -57,10 +69,57 @@ class _ProductSelectionModalState extends State<ProductSelectionModal> {
   @override
   void initState() {
     super.initState();
-    _unitPrice = widget.product.price;
+    _selectedVariant = widget.initialVariant;
+    if (widget.forPurchase) {
+      _unitPrice = widget.product.costPrice ?? widget.product.price;
+    } else {
+      _unitPrice = widget.initialVariant?.price ?? widget.product.price;
+    }
     _priceController.text = _unitPrice.toStringAsFixed(2);
     final productUnit = widget.product.unit ?? 'piece';
     _selectedUnit = _units.contains(productUnit) ? productUnit : 'piece';
+    if (!widget.forPurchase) _loadVariants();
+  }
+
+  Future<void> _loadVariants() async {
+    try {
+      final variants = await widget.db.productVariantDao.getVariantsByProduct(
+        widget.product.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _variants = variants;
+        // لو الصنف المبدئي (من الباركود) مش ضمن القائمة لسبب ما — تجاهله.
+        if (_selectedVariant != null &&
+            !_variants.any((v) => v.id == _selectedVariant!.id)) {
+          _selectedVariant = null;
+        }
+        _applyVariantPrice();
+      });
+    } catch (_) {
+      // فشل تحميل الأصناف لا يمنع البيع بالمسار القديم.
+    }
+  }
+
+  /// المخزون المتاح حسب الاختيار الحالي (صنف أو أب).
+  int get _availableStock => _selectedVariant?.quantity ?? widget.product.quantity;
+
+  void _applyVariantPrice() {
+    final defaultPrice = _selectedVariant?.price ?? widget.product.price;
+    _unitPrice = defaultPrice;
+    _priceController.text = defaultPrice.toStringAsFixed(2);
+    // الكمية المدخلة قد تتجاوز مخزون الصنف الجديد — نعيد ضبطها.
+    if (_quantity > _availableStock && _availableStock > 0) {
+      _quantity = _availableStock;
+      _quantityController.text = '$_quantity';
+    }
+  }
+
+  void _onVariantChanged(ProductVariant? v) {
+    setState(() {
+      _selectedVariant = v;
+      _applyVariantPrice();
+    });
   }
 
   @override
@@ -112,7 +171,7 @@ class _ProductSelectionModalState extends State<ProductSelectionModal> {
                           ),
                         ),
                         Text(
-                          'Stock: ${widget.product.quantity} ${widget.product.unit ?? 'pieces'}',
+                          'Stock: $_availableStock ${widget.product.unit ?? 'pieces'}',
                           style: TextStyle(
                             color: Colors.grey.shade600,
                             fontSize: 14,
@@ -124,6 +183,32 @@ class _ProductSelectionModalState extends State<ProductSelectionModal> {
                 ],
               ),
               const Gap(24),
+
+              // اختيار الصنف (لون/فئة) — إجباري لو المنتج له أصناف.
+              if (_variants.isNotEmpty) ...[
+                DropdownButtonFormField<ProductVariant>(
+                  initialValue: _selectedVariant,
+                  decoration: const InputDecoration(
+                    labelText: 'الصنف (اللون/الفئة) *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.palette),
+                  ),
+                  items: _variants.map((v) {
+                    final price = v.price ?? widget.product.price;
+                    return DropdownMenuItem(
+                      value: v,
+                      child: Text(
+                        '${v.name} — متاح: ${v.quantity} — ${price.toStringAsFixed(2)}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }).toList(),
+                  validator: (v) =>
+                      v == null ? 'اختر الصنف (اللون/الفئة) أولًا' : null,
+                  onChanged: _onVariantChanged,
+                ),
+                const Gap(16),
+              ],
 
               // Quantity and Unit
               Row(
@@ -143,8 +228,8 @@ class _ProductSelectionModalState extends State<ProductSelectionModal> {
                         if (qty == null || qty <= 0) {
                           return 'Invalid quantity';
                         }
-                        if (!widget.forPurchase && qty > widget.product.quantity) {
-                          return 'Exceeds available stock';
+                        if (!widget.forPurchase && qty > _availableStock) {
+                          return 'Exceeds available stock ($_availableStock)';
                         }
                         return null;
                       },
@@ -188,7 +273,7 @@ class _ProductSelectionModalState extends State<ProductSelectionModal> {
                   border: const OutlineInputBorder(),
                   prefixIcon: const Icon(Icons.attach_money),
                   suffixText:
-                      'Default: ${widget.product.price.toStringAsFixed(2)}',
+                      'Default: ${(_selectedVariant?.price ?? widget.product.price).toStringAsFixed(2)}',
                   suffixStyle: TextStyle(
                     color: Colors.grey.shade600,
                     fontSize: 12,
@@ -318,6 +403,7 @@ class _ProductSelectionModalState extends State<ProductSelectionModal> {
                             _unitPrice,
                             _discount,
                             _tax,
+                            _selectedVariant,
                           );
                           Navigator.of(context).pop();
                         }

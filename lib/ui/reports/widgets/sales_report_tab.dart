@@ -291,13 +291,27 @@ class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
       final itemsWithProducts = await widget.db.invoiceDao
           .getItemsWithProductsByInvoice(invoice.id);
 
+      final variantMap = <int, String>{};
+      for (final itemWithProduct in itemsWithProducts) {
+        final vId = itemWithProduct.$1.variantId;
+        if (vId != null && !variantMap.containsKey(vId)) {
+          final v = await widget.db.productVariantDao.getVariantById(vId);
+          if (v != null) {
+            variantMap[vId] = v.name;
+          }
+        }
+      }
+
       // Convert to maps for printing
       final itemsMaps = itemsWithProducts.map((itemWithProduct) {
         final item = itemWithProduct.$1;
         final product = itemWithProduct.$2;
+        final baseName = product?.name ?? 'Product ${item.productId}';
+        final vName = item.variantId != null ? variantMap[item.variantId] : null;
+        final fullName = vName != null ? '$baseName — $vName' : baseName;
         return {
-          'productName': product?.name ?? 'Product ${item.productId}',
-          'name': product?.name ?? 'Product ${item.productId}',
+          'productName': fullName,
+          'name': fullName,
           'quantity': item.quantity,
           'price': item.price,
           'total': item.quantity * item.price,
@@ -653,6 +667,7 @@ class _InvoiceExpansionTile extends StatefulWidget {
 class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
   bool _isExpanded = false;
   List<(InvoiceItem, Product?)> _invoiceItems = [];
+  Map<int, String> _variantNames = {};
   bool _isLoadingItems = false;
 
   Future<void> _loadInvoiceItems() async {
@@ -662,8 +677,19 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
         final items = await widget.db.invoiceDao.getItemsWithProductsByInvoice(
           widget.invoice.id,
         );
+        final variantMap = <int, String>{};
+        for (final itemWithProduct in items) {
+          final vId = itemWithProduct.$1.variantId;
+          if (vId != null && !variantMap.containsKey(vId)) {
+            final v = await widget.db.productVariantDao.getVariantById(vId);
+            if (v != null) {
+              variantMap[vId] = v.name;
+            }
+          }
+        }
         setState(() {
           _invoiceItems = items;
+          _variantNames = variantMap;
           _isLoadingItems = false;
         });
       } catch (e) {
@@ -876,7 +902,11 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
                         cells: [
                           DataCell(
                             Text(
-                              product?.name ?? 'منتج ${item.productId}',
+                              () {
+                                final base = product?.name ?? 'منتج ${item.productId}';
+                                final v = item.variantId != null ? _variantNames[item.variantId] : null;
+                                return v != null ? '$base — $v' : base;
+                              }(),
                               style: const TextStyle(color: Colors.white70),
                             ),
                           ),

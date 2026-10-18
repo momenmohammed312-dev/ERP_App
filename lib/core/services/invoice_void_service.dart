@@ -186,13 +186,41 @@ final items = await _db.invoiceDao.getItemsByInvoiceId(invoiceId);
         for (final ri in ritems) {
           final restored = ri.restockedQty;
           if (restored <= 0) continue;
-          final product = await _db.productDao.getProductById(ri.productId);
-          if (product != null) {
-            await _db.productDao.updateProduct(
-              product.copyWith(
-                quantity: (product.quantity - restored).clamp(0, 1 << 30),
-              ),
-            );
+          if (ri.variantId != null) {
+            final variant =
+                await _db.productVariantDao.getVariantById(ri.variantId!);
+            if (variant != null) {
+              await _db.productVariantDao.updateVariantQuantity(
+                variant.id,
+                (variant.quantity - restored).clamp(0, 1 << 30),
+              );
+              final total = await _db.productVariantDao
+                  .getTotalQuantityByProduct(ri.productId);
+              final product = await _db.productDao.getProductById(ri.productId);
+              if (product != null) {
+                await _db.productDao.updateProduct(
+                  product.copyWith(quantity: total),
+                );
+              }
+            } else {
+              final product = await _db.productDao.getProductById(ri.productId);
+              if (product != null) {
+                await _db.productDao.updateProduct(
+                  product.copyWith(
+                    quantity: (product.quantity - restored).clamp(0, 1 << 30),
+                  ),
+                );
+              }
+            }
+          } else {
+            final product = await _db.productDao.getProductById(ri.productId);
+            if (product != null) {
+              await _db.productDao.updateProduct(
+                product.copyWith(
+                  quantity: (product.quantity - restored).clamp(0, 1 << 30),
+                ),
+              );
+            }
           }
           if (ri.shipmentId != null) {
             final shipment =
@@ -217,14 +245,42 @@ final items = await _db.invoiceDao.getItemsByInvoiceId(invoiceId);
         reversedReturns++;
       }
 
-      // ---------- 2) رجوع المخزون ----------
+      // ---------- 2) رجوع المخزون (BUG-011: صنف أو منتج أب) ----------
       for (final item in items) {
-        final product =
-            await _db.productDao.getProductById(item.productId);
-        if (product != null) {
-          await _db.productDao.updateProduct(
-            product.copyWith(quantity: product.quantity + item.quantity),
-          );
+        if (item.variantId != null) {
+          final variant =
+              await _db.productVariantDao.getVariantById(item.variantId!);
+          if (variant != null) {
+            await _db.productVariantDao.updateVariantQuantity(
+              variant.id,
+              variant.quantity + item.quantity,
+            );
+            final total = await _db.productVariantDao
+                .getTotalQuantityByProduct(item.productId);
+            final product =
+                await _db.productDao.getProductById(item.productId);
+            if (product != null) {
+              await _db.productDao.updateProduct(
+                product.copyWith(quantity: total),
+              );
+            }
+          } else {
+            final product =
+                await _db.productDao.getProductById(item.productId);
+            if (product != null) {
+              await _db.productDao.updateProduct(
+                product.copyWith(quantity: product.quantity + item.quantity),
+              );
+            }
+          }
+        } else {
+          final product =
+              await _db.productDao.getProductById(item.productId);
+          if (product != null) {
+            await _db.productDao.updateProduct(
+              product.copyWith(quantity: product.quantity + item.quantity),
+            );
+          }
         }
       }
 
