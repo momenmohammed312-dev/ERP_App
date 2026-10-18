@@ -308,7 +308,9 @@ class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
         final product = itemWithProduct.$2;
         final baseName = product?.name ?? 'Product ${item.productId}';
         final vName = item.variantId != null ? variantMap[item.variantId] : null;
-        final fullName = vName != null ? '$baseName — $vName' : baseName;
+        final fullName = (vName != null && !baseName.endsWith('— $vName'))
+            ? '$baseName — $vName'
+            : baseName;
         return {
           'productName': fullName,
           'name': fullName,
@@ -905,7 +907,7 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
                               () {
                                 final base = product?.name ?? 'منتج ${item.productId}';
                                 final v = item.variantId != null ? _variantNames[item.variantId] : null;
-                                return v != null ? '$base — $v' : base;
+                                return (v != null && !base.endsWith('— $v')) ? '$base — $v' : base;
                               }(),
                               style: const TextStyle(color: Colors.white70),
                             ),

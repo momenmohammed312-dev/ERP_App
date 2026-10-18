@@ -256,7 +256,7 @@ class _InvoicePartialReturnDialogState extends State<InvoicePartialReturnDialog>
               children: [
                 Expanded(
                   child: Text(
-                    l.product?.name ?? 'صنف ${l.invoiceItem.productId}',
+                    l.displayName,
                     style: TextStyle(
                       decoration: isFullyReturned ? TextDecoration.lineThrough : null,
                       color: isFullyReturned ? Colors.grey : null,

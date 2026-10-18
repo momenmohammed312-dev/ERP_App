@@ -427,12 +427,20 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
     int invoiceId,
   ) {
     final productsTable = attachedDatabase.products;
+    final variantsTable = attachedDatabase.productVariants;
     final query = select(invoiceItems).join([
       leftOuterJoin(productsTable, productsTable.id.equalsExp(invoiceItems.productId)),
+      leftOuterJoin(variantsTable, variantsTable.id.equalsExp(invoiceItems.variantId)),
     ])..where(invoiceItems.invoiceId.equals(invoiceId));
 
     return query.map((row) {
-      return (row.readTable(invoiceItems), row.readTableOrNull(productsTable));
+      final item = row.readTable(invoiceItems);
+      final product = row.readTableOrNull(productsTable);
+      final variant = row.readTableOrNull(variantsTable);
+      final effectiveProduct = (product != null && variant != null && variant.name.isNotEmpty)
+          ? product.copyWith(name: '${product.name} — ${variant.name}')
+          : product;
+      return (item, effectiveProduct);
     }).get();
   }
 

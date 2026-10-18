@@ -9,15 +9,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/services/backup_service.dart';
+import 'package:pos_offline_desktop/core/services/custody_service.dart';
 import 'package:pos_offline_desktop/core/services/document_date_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
-  late File clientTestDbFile;
+  late File testDbFile;
   late AppDatabase db;
   late DocumentDateService dateService;
+
+  const testCustomerId = 'CUST-TEST-108';
+  const testSupplierId = 'SUPP-TEST-01';
+  const testPurchaseId = 'PUR-TEST-001';
+  const testPaymentTxId = 'PAY-TEST-001';
+  late int seededInvoiceId;
 
   User adminUser() => User(
         id: 1,
@@ -29,7 +36,8 @@ void main() {
       );
 
   setUpAll(() async {
-    tempDir = await Directory.systemTemp.createTemp('client_verify_');
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    tempDir = await Directory.systemTemp.createTemp('synthetic_verify_');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
@@ -38,18 +46,142 @@ void main() {
       },
     );
 
-    // Ensure pristine copy of client_test.sqlite from client_copy.sqlite
-    final originalCopy = File('C:/Users/Momen/.gemini/antigravity/brain/3ead978d-5788-4619-a7fc-26a583c7442b/scratch/client_copy.sqlite');
-    clientTestDbFile = File('scratch/client_test.sqlite');
-    if (!clientTestDbFile.parent.existsSync()) {
-      clientTestDbFile.parent.createSync(recursive: true);
-    }
-    if (originalCopy.existsSync()) {
-      originalCopy.copySync(clientTestDbFile.path);
-    }
-
-    db = AppDatabase(NativeDatabase(clientTestDbFile));
+    testDbFile = File('${tempDir.path}/synthetic_verify.sqlite');
+    db = AppDatabase(NativeDatabase(testDbFile));
     dateService = DocumentDateService(db);
+
+    // Seed synthetic data (no real customer data per AGENTS.md 7.2.3)
+    await db.into(db.customers).insert(
+          CustomersCompanion.insert(
+            id: testCustomerId,
+            name: 'عميل اختبار قياسي',
+            phone: const Value('01000000000'),
+          ),
+        );
+
+    await db.into(db.suppliers).insert(
+          SuppliersCompanion.insert(
+            id: testSupplierId,
+            name: 'مورد اختبار قياسي',
+            phone: const Value('01100000000'),
+          ),
+        );
+
+    // Earlier customer invoice so chronological re-ordering can be tested
+    final earlierInvId = await db.into(db.invoices).insert(
+          InvoicesCompanion.insert(
+            customerId: const Value(testCustomerId),
+            customerName: const Value('عميل اختبار قياسي'),
+            totalAmount: const Value(2000.0),
+            netAmount: const Value(2000.0),
+            paidAmount: const Value(0.0),
+            paymentMethod: const Value('credit'),
+            date: Value(DateTime(2026, 10, 5, 10, 0)),
+          ),
+        );
+    await db.into(db.ledgerTransactions).insert(
+          LedgerTransactionsCompanion.insert(
+            id: 'TX-EARLIER-$earlierInvId',
+            entityType: 'Customer',
+            refId: testCustomerId,
+            date: DateTime(2026, 10, 5, 10, 0),
+            description: 'فاتورة مبيعات #$earlierInvId',
+            debit: const Value(2000.0),
+            credit: const Value(0.0),
+            origin: 'invoice',
+            receiptNumber: Value('INV$earlierInvId'),
+          ),
+        );
+
+    seededInvoiceId = await db.into(db.invoices).insert(
+          InvoicesCompanion.insert(
+            customerId: const Value(testCustomerId),
+            customerName: const Value('عميل اختبار قياسي'),
+            totalAmount: const Value(3500.0),
+            netAmount: const Value(3500.0),
+            paidAmount: const Value(0.0),
+            paymentMethod: const Value('credit'),
+            date: Value(DateTime(2026, 10, 12, 14, 0)),
+          ),
+        );
+    await db.into(db.ledgerTransactions).insert(
+          LedgerTransactionsCompanion.insert(
+            id: 'TX-INV-$seededInvoiceId',
+            entityType: 'Customer',
+            refId: testCustomerId,
+            date: DateTime(2026, 10, 12, 14, 0),
+            description: 'فاتورة مبيعات #$seededInvoiceId',
+            debit: const Value(3500.0),
+            credit: const Value(0.0),
+            origin: 'invoice',
+            receiptNumber: Value('INV$seededInvoiceId'),
+          ),
+        );
+
+    // Customer payment transaction
+    await db.into(db.ledgerTransactions).insert(
+          LedgerTransactionsCompanion.insert(
+            id: testPaymentTxId,
+            entityType: 'Customer',
+            refId: testCustomerId,
+            date: DateTime(2026, 10, 15, 16, 0),
+            description: 'تحصيل دفعة نقدية',
+            debit: const Value(0.0),
+            credit: const Value(500.0),
+            origin: 'payment',
+            receiptNumber: const Value('REC-001'),
+          ),
+        );
+
+    // Purchase + Supplier Ledger
+    await db.into(db.purchases).insert(
+          PurchasesCompanion.insert(
+            id: testPurchaseId,
+            supplierId: const Value(testSupplierId),
+            invoiceNumber: testPurchaseId,
+            description: 'فاتورة مشتريات تجريبية',
+            totalAmount: 15255.0,
+            paidAmount: const Value(0.0),
+            paymentMethod: const Value('credit'),
+            purchaseDate: DateTime(2026, 10, 10, 11, 0),
+            createdAt: DateTime(2026, 10, 10, 11, 0),
+          ),
+        );
+    await db.into(db.ledgerTransactions).insert(
+          LedgerTransactionsCompanion.insert(
+            id: '${testPurchaseId}_ledger',
+            entityType: 'Supplier',
+            refId: testSupplierId,
+            date: DateTime(2026, 10, 10, 11, 0),
+            description: 'فاتورة مشتريات #$testPurchaseId',
+            debit: const Value(0.0),
+            credit: const Value(15255.0),
+            origin: 'purchase',
+            receiptNumber: const Value(testPurchaseId),
+          ),
+        );
+
+    // Seed 3 synthetic cash custodies via CustodyService
+    final custodyService = CustodyService(db);
+    final c1 = await custodyService.createCustody(
+      staffId: 'ST1',
+      staffName: 'أمين عهدة 1',
+      amount: 10000.0,
+    );
+    await custodyService.cancelCustody(c1);
+
+    final c2 = await custodyService.createCustody(
+      staffId: 'ST2',
+      staffName: 'أمين عهدة 2',
+      amount: 2000.0,
+    );
+    await custodyService.cancelCustody(c2);
+
+    await custodyService.createCustody(
+      staffId: 'ST3',
+      staffName: 'أمين عهدة 3',
+      amount: 300.0,
+    );
   });
 
   tearDownAll(() async {
@@ -61,30 +193,30 @@ void main() {
     } catch (_) {}
   });
 
-  group('Task 2: Verification on scratch/client_test.sqlite', () {
-    test('client_test.sqlite opens with schema v78 and contains expected data', () async {
+  group('Task 2: Verification on synthetic database', () {
+    test('database opens with schema v79 and contains expected seeded data', () async {
       final versionResult = await db.customSelect('PRAGMA user_version').getSingle();
       final version = versionResult.data['user_version'] as int;
-      expect(version, equals(78), reason: 'Client DB schemaVersion must be 78');
+      expect(version, equals(79), reason: 'Current DB schemaVersion must be 79');
 
       final invoicesCount = await db.customSelect('SELECT COUNT(*) AS c FROM invoices').getSingle();
-      expect(invoicesCount.data['c'], greaterThan(100));
+      expect(invoicesCount.data['c'], greaterThanOrEqualTo(2));
 
       final purchasesCount = await db.customSelect('SELECT COUNT(*) AS c FROM purchases').getSingle();
-      expect(purchasesCount.data['c'], greaterThan(20));
+      expect(purchasesCount.data['c'], greaterThanOrEqualTo(1));
     });
 
-    test('updateInvoiceDate on real invoice 108: moves ledger, preserves balance, re-orders statement, and writes audit', () async {
-      const invId = 108;
+    test('updateInvoiceDate: moves ledger, preserves balance, re-orders statement, and writes audit', () async {
+      final invId = seededInvoiceId;
       final invoiceBefore = await db.invoiceDao.getInvoiceById(invId);
       expect(invoiceBefore, isNotNull);
       final customerId = invoiceBefore!.customerId!;
       final oldDate = invoiceBefore.date;
       final origCreatedAt = invoiceBefore.createdAt;
 
-      // 1. Check initial customer running balance
+      // 1. Check initial customer running balance (2000 + 3500 - 500 = 5000)
       final initialBalance = await db.ledgerDao.getCustomerBalance(customerId);
-      expect(initialBalance, equals(581790.0));
+      expect(initialBalance, equals(5000.0));
 
       // 2. Check initial ledger row for this invoice
       final txBefore = await (db.select(db.ledgerTransactions)
@@ -92,7 +224,7 @@ void main() {
         .getSingle();
       expect(txBefore.date.year, equals(2026));
 
-      // 3. Move invoice date to Sept 1st, 2026 (earlier than its previous date and all other invoices for this customer)
+      // 3. Move invoice date to Sept 1st, 2026 (earlier than Oct 5 invoice)
       final newDate = DateTime(2026, 9, 1, 12, 0);
       final updateResult = await dateService.updateInvoiceDate(
         invoiceId: invId,
@@ -125,8 +257,7 @@ void main() {
         ..orderBy([(t) => OrderingTerm(expression: t.date, mode: OrderingMode.asc)]))
         .get();
 
-      // Invoice 108 transaction is now first because newDate is Oct 1, 2026 (earlier than Oct 2, 9, etc.)
-      expect(statement.first.receiptNumber, equals('INV108'));
+      expect(statement.first.receiptNumber, equals('INV$invId'));
 
       // 8. Verify audit log entry
       final audit = await (db.select(db.auditLog)
@@ -138,11 +269,9 @@ void main() {
       expect(newVal['date'], newDate.toIso8601String());
     });
 
-    test('updatePurchaseDate on real purchase PUR-1789557648253: moves ledger, preserves balance, and writes audit', () async {
-      const purchaseId = 'PUR-1789557648253';
-      final pBefore = await (db.select(db.purchases)..where((t) => t.id.equals(purchaseId))).getSingle();
+    test('updatePurchaseDate: moves ledger, preserves balance, and writes audit', () async {
+      final pBefore = await (db.select(db.purchases)..where((t) => t.id.equals(testPurchaseId))).getSingle();
       final supplierId = pBefore.supplierId!;
-      final oldPurchaseDate = pBefore.purchaseDate;
       final origCreatedAt = pBefore.createdAt;
 
       // 1. Check initial supplier balance
@@ -152,7 +281,7 @@ void main() {
       // 2. Move purchase date
       final newPurchaseDate = DateTime(2026, 9, 20, 10, 0);
       final res = await dateService.updatePurchaseDate(
-        purchaseId: purchaseId,
+        purchaseId: testPurchaseId,
         newDate: newPurchaseDate,
         userId: '99',
       );
@@ -160,13 +289,13 @@ void main() {
       expect(res.success, isTrue);
 
       // 3. Verify purchase row
-      final pAfter = await (db.select(db.purchases)..where((t) => t.id.equals(purchaseId))).getSingle();
+      final pAfter = await (db.select(db.purchases)..where((t) => t.id.equals(testPurchaseId))).getSingle();
       expect(pAfter.purchaseDate, equals(newPurchaseDate));
       expect(pAfter.createdAt, equals(origCreatedAt));
 
       // 4. Verify supplier ledger transaction moved
       final suppTx = await (db.select(db.ledgerTransactions)
-        ..where((t) => t.id.equals('${purchaseId}_ledger')))
+        ..where((t) => t.id.equals('${testPurchaseId}_ledger')))
         .getSingle();
       expect(suppTx.date, equals(newPurchaseDate));
 
@@ -176,14 +305,13 @@ void main() {
 
       // 6. Verify audit log
       final audit = await (db.select(db.auditLog)
-        ..where((t) => t.tableNameField.equals('purchases') & t.details.like('%$purchaseId%')))
+        ..where((t) => t.tableNameField.equals('purchases') & t.details.like('%$testPurchaseId%')))
         .getSingle();
       expect(audit.action, 'DATE_CHANGE');
     });
 
-    test('updatePaymentDate on real payment transaction: moves ledger and preserves balance', () async {
-      const txId = '1785871778404_985682_pay';
-      final txBefore = await db.ledgerDao.getTransactionById(txId);
+    test('updatePaymentDate: moves ledger and preserves balance', () async {
+      final txBefore = await db.ledgerDao.getTransactionById(testPaymentTxId);
       expect(txBefore, isNotNull);
       final customerId = txBefore!.refId;
 
@@ -191,14 +319,14 @@ void main() {
 
       final newPayDate = DateTime(2026, 6, 15, 14, 0);
       final res = await dateService.updatePaymentDate(
-        transactionId: txId,
+        transactionId: testPaymentTxId,
         newDate: newPayDate,
         userId: '99',
       );
 
       expect(res.success, isTrue);
 
-      final txAfter = await db.ledgerDao.getTransactionById(txId);
+      final txAfter = await db.ledgerDao.getTransactionById(testPaymentTxId);
       expect(txAfter!.date, equals(newPayDate));
 
       final balanceAfter = await db.ledgerDao.getCustomerBalance(customerId);
@@ -212,10 +340,9 @@ void main() {
   });
 
   group('Task 3: Client Build Verification — cash_custodies in Backup & Restore', () {
-    test('confirms cash_custodies has 3 rows in client DB, included in backup and restored intact', () async {
-      // 1. Confirm 3 rows in client DB
+    test('confirms cash_custodies has 3 rows, included in backup and restored intact', () async {
       final custodiesPre = await db.select(db.cashCustodies).get();
-      expect(custodiesPre.length, equals(3), reason: 'Client DB must contain exactly 3 cash_custodies');
+      expect(custodiesPre.length, equals(3));
 
       expect(custodiesPre[0].custodyNumber, 'CUST-000001');
       expect(custodiesPre[0].amount, 10000.0);
@@ -229,38 +356,32 @@ void main() {
       expect(custodiesPre[2].amount, 300.0);
       expect(custodiesPre[2].status, 'open');
 
-      // 2. Perform full Backup using BackupService
       final backupService = BackupService(db);
       final backupInfo = await backupService.createBackup(
         adminUser(),
-        description: 'Client DB Verification Backup',
+        description: 'Synthetic Verification Backup',
       );
 
       expect(backupInfo.filename, isNotEmpty);
       expect(backupInfo.size, greaterThan(0));
 
-      // 3. Open a clean target database for restore
       final restoreDbFile = File('${tempDir.path}/restore_target.sqlite');
       if (await restoreDbFile.exists()) {
         await restoreDbFile.delete();
       }
       final restoreDb = AppDatabase(NativeDatabase(restoreDbFile));
 
-      // Verify restore target DB starts with 0 custodies
       final custodiesEmpty = await restoreDb.select(restoreDb.cashCustodies).get();
       expect(custodiesEmpty, isEmpty);
 
-      // 4. Restore the backup into restoreDb
       final restoreService = BackupService(restoreDb);
       await restoreService.restoreBackup(adminUser(), backupInfo.filename);
 
-      // 5. Run PRAGMA foreign_key_check to verify relational integrity
       final fkViolations = await restoreDb.customSelect('PRAGMA foreign_key_check').get();
       expect(fkViolations, isEmpty, reason: 'PRAGMA foreign_key_check must report 0 violations');
 
-      // 6. Assert all 3 cash_custodies rows are restored completely and accurately!
       final custodiesPost = await restoreDb.select(restoreDb.cashCustodies).get();
-      expect(custodiesPost.length, equals(3), reason: 'All 3 cash_custodies must be recovered');
+      expect(custodiesPost.length, equals(3));
 
       expect(custodiesPost[0].id, equals(custodiesPre[0].id));
       expect(custodiesPost[0].custodyNumber, equals('CUST-000001'));

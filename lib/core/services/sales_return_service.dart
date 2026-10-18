@@ -7,15 +7,25 @@ import '../services/invoice_number_formatter.dart';
 class ReturnableLine {
   final InvoiceItem invoiceItem;
   final Product? product;
+  final ProductVariant? variant;
   final int alreadyReturned;
   final int available;
 
   ReturnableLine({
     required this.invoiceItem,
     required this.product,
+    this.variant,
     required this.alreadyReturned,
     required this.available,
   });
+
+  String get displayName {
+    final base = product?.name ?? 'صنف ${invoiceItem.productId}';
+    if (variant != null && variant!.name.isNotEmpty) {
+      return '$base — ${variant!.name}';
+    }
+    return base;
+  }
 }
 
 /// خدمة المرتجع الجزئي على مستوى الصنف (مبيعات + مشتريات unified pattern).
@@ -31,9 +41,13 @@ class SalesReturnService {
     for (final item in items) {
       final already = await _getReturnedQtyForItem(item.id);
       final product = await _db.productDao.getProductById(item.productId);
+      final variant = item.variantId != null
+          ? await _db.productVariantDao.getVariantById(item.variantId!)
+          : null;
       result.add(ReturnableLine(
         invoiceItem: item,
         product: product,
+        variant: variant,
         alreadyReturned: already,
         available: (item.quantity - already).clamp(0, 1 << 30),
       ));
