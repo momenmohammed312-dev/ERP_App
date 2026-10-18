@@ -90,8 +90,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         // FEAT-009: the order-scoped view of custody starts from the
         // product ids this order actually moved in/out of the customer's
         // custody (issue, delivery, scrap, defect return)
-        orderProductIds =
-            orderMovements.map((m) => m.productId).toSet();
+        orderProductIds = orderMovements.map((m) => m.productId).toSet();
         customerBalances = await widget.db.customerMaterialReceiptDao
             .getAllBalancesForCustomer(order.customerId!);
         // FEAT-008: resolve material names once so the reconciliation
@@ -161,10 +160,31 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
   /// screen already loaded and renders it through the unified print service.
   Future<void> _printProductionCard() async {
     final mo = _order!;
+    // BUG-008 evidence: issue/defect rows reference the ORDER number while
+    // delivered rows reference each DELIVERY NOTE number, so the ledger for
+    // the card must merge both queries or the card shows an empty ledger.
+    final deliveryNumbers = _deliveries.map((d) => d.deliveryNumber).toList();
+    final deliveredLedger =
+        await (widget.db.select(widget.db.customerStockMovements)..where(
+              (m) => deliveryNumbers.isNotEmpty
+                  ? m.referenceId.isIn(deliveryNumbers)
+                  : m.id.isNull(),
+            ))
+            .get();
+    // BUG-008: scope the card to the order — custody balances shown are the
+    // ones this order actually moved (or the full customer custody when the
+    // order has not moved anything yet).
+    final ledger = [..._orderMovements, ...deliveredLedger];
+    final linkedIds = ledger.map((m) => m.productId).toSet();
+    final scopedBalances = linkedIds.isEmpty
+        ? _customerBalances
+        : _customerBalances
+              .where((b) => linkedIds.contains(b.productId))
+              .toList();
     final totalConsumed = _orderMovements
         .where((m) => m.movementType == 'issued_to_order')
         .fold<double>(0, (s, m) => s + m.quantity.abs());
-    final totalOnHand = _customerBalances.fold<double>(
+    final totalOnHand = scopedBalances.fold<double>(
       0,
       (s, b) => s + b.quantityOnHand,
     );
@@ -187,7 +207,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     }
 
     final movementRows = <Map<String, dynamic>>[
-      for (final m in _orderMovements)
+      for (final m in ledger)
         {
           'date': DateFormat('yyyy/MM/dd HH:mm').format(m.createdAt),
           'movementType': movementTypeAr(m.movementType),
@@ -197,15 +217,14 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         },
     ];
     final balanceRows = <Map<String, dynamic>>[
-      for (final b in _customerBalances)
+      for (final b in scopedBalances)
         {
           'productName': _balanceProductNames[b.productId] ?? '#${b.productId}',
           'quantityOnHand': b.quantityOnHand,
           'quantityAllocated': b.quantityAllocated,
-          'colorSize':
-              '${b.color ?? ''} ${b.size ?? ''}'.trim().isEmpty
-                  ? null
-                  : '${b.color ?? ''} ${b.size ?? ''}'.trim(),
+          'colorSize': '${b.color ?? ''} ${b.size ?? ''}'.trim().isEmpty
+              ? null
+              : '${b.color ?? ''} ${b.size ?? ''}'.trim(),
         },
     ];
 
