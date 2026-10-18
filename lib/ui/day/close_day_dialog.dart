@@ -216,6 +216,21 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
       final cashRefunds = await db.returnRefundsDao
           .getCashRefundsBetween(startOfDay, endOfDay);
 
+      // [MONEY] حركات العُهد النقدية: صرف العهد (debit) يقلل الدرج، والرد (credit) يزيده.
+      final custodyRows = await (db.select(db.ledgerTransactions)
+            ..where((t) =>
+                t.origin.equals('custody') &
+                t.paymentMethod.equals('cash') &
+                t.date.isBetweenValues(startOfDay, endOfDay)))
+          .get();
+      double custodyDisbursed = 0.0;
+      double custodyReturned = 0.0;
+      for (final r in custodyRows) {
+        custodyDisbursed += r.debit;
+        custodyReturned += r.credit;
+      }
+      final netCustody = custodyDisbursed - custodyReturned;
+
       // Get opening balance
       final today = await db.dayDao.getTodayDay();
       final openingBalance = today?['opening_balance'] as double?;
@@ -228,7 +243,8 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
           cashRefunds -
           cashPurchases -
           supplierPayments -
-          expenses;
+          expenses -
+          netCustody;
 
       return {
         'opening_balance': openingBalance,
@@ -283,8 +299,23 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
       final expenses = await db.expenseDao.getTotalExpensesForDate(now);
       final supplierOwed = await db.ledgerDao.getSupplierOutstandingBalance();
 
+      // [MONEY] حركات العُهد النقدية
+      final custodyRows = await (db.select(db.ledgerTransactions)
+            ..where((t) =>
+                t.origin.equals('custody') &
+                t.paymentMethod.equals('cash') &
+                t.date.isBetweenValues(startOfDay, endOfDay)))
+          .get();
+      double custodyDisbursed = 0.0;
+      double custodyReturned = 0.0;
+      for (final r in custodyRows) {
+        custodyDisbursed += r.debit;
+        custodyReturned += r.credit;
+      }
+      final netCustody = custodyDisbursed - custodyReturned;
+
       final expectedNetCash =
-          cashSales + creditCollections - cashRefunds - expenses;
+          cashSales + creditCollections - cashRefunds - expenses - netCustody;
 
       return {
         'cash_sales': cashSales,

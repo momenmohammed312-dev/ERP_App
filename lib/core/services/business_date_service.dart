@@ -94,7 +94,14 @@ class BusinessDateService {
         expenses += e.amount;
       }
 
-      double expectedBalance = session.openingBalance + income - expenses;
+      // [MONEY] حركات العُهد النقدية: الصرف يخرج نقد من الدرج، والتسوية أو الإلغاء ترد المتبقي.
+      final custodyMovements = await _getCustodyCashMovementBetween(
+        session.openedAt,
+        now,
+      );
+
+      double expectedBalance =
+          session.openingBalance + income - expenses - custodyMovements.netOutflow;
       double difference = actualCash - expectedBalance;
 
       // 3. Update Cash Session Record
@@ -183,6 +190,41 @@ class BusinessDateService {
       session.openedAt,
       now,
     );
-    return session.openingBalance + income - expenses;
+    // [MONEY] نفس منطق closeSession: صافي حركات العُهد النقدية (صرف - رد).
+    final custodyMovements = await _getCustodyCashMovementBetween(
+      session.openedAt,
+      now,
+    );
+    return session.openingBalance +
+        income -
+        expenses -
+        custodyMovements.netOutflow;
+  }
+
+  /// [MONEY] صافي خروج النقدية للعهد بين تاريخين (صرف العهد − رد العهد).
+  /// صرف العهدة يخرج نقداً من الدرج (debit)، والتسوية أو الإلغاء يرد المتبقي للدرج (credit).
+  Future<({double disbursed, double returned, double netOutflow})>
+      _getCustodyCashMovementBetween(
+    DateTime from,
+    DateTime to,
+  ) async {
+    final rows = await (db.select(db.ledgerTransactions)
+          ..where((t) =>
+              t.origin.equals('custody') &
+              t.paymentMethod.equals('cash') &
+              t.date.isBetweenValues(from, to)))
+        .get();
+
+    double disbursed = 0.0;
+    double returned = 0.0;
+    for (final row in rows) {
+      disbursed += row.debit;
+      returned += row.credit;
+    }
+    return (
+      disbursed: disbursed,
+      returned: returned,
+      netOutflow: disbursed - returned,
+    );
   }
 }
