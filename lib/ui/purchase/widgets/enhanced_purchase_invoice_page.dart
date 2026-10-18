@@ -251,8 +251,9 @@ class _EnhancedPurchaseInvoicePageState
       context: context,
       builder: (context) => ProductSelectionModal(
         product: product ?? _filteredProducts.first,
+        db: widget.db,
         forPurchase: true,
-        onConfirm: (quantity, unit, unitPrice, discount, tax) {
+        onConfirm: (quantity, unit, unitPrice, discount, tax, [variant]) {
           _addProductToPurchase(
             product ?? _filteredProducts.first,
             quantity,
