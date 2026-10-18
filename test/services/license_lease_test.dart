@@ -266,10 +266,28 @@ void main() {
       expect(await manager.isLicenseActive(), isTrue);
     });
 
-    test('license that ended 5 days ago is inside the license grace', () async {
+    // CHANGED 2026-10-18 after merging fa890eb (BUG-007).
+    //
+    // This test used to assert that a license whose commercial end date passed
+    // 5 days ago is still active, because LicenseManager._leaseGraceDays = 7.
+    // The owner reviewed a customer report — "after day 7 the counter went
+    // negative and the app kept working" — and ruled option (a): HARD EXPIRY,
+    // NO GRACE. A license that passed its expiry date is therefore dead
+    // immediately, with no 7-day tail.
+    //
+    // The assertion is inverted rather than deleted so the regression stays
+    // covered: if a grace period is ever reintroduced, this fails.
+    test('license that ended 5 days ago is NOT active (no grace period)', () async {
       final exp = DateTime.now().subtract(const Duration(days: 5)).toUtc().toIso8601String();
       await manager.saveLease(makeLease(licenseExpiresAt: exp));
-      expect(await manager.isLicenseActive(), isTrue);
+      expect(
+        await manager.isLicenseActive(),
+        isFalse,
+        reason: 'BUG-007: the 7-day grace was removed by owner decision. A '
+            'commercial licence past its end date must stop granting access '
+            'immediately — reintroducing a grace is a product change, not an '
+            'accident.',
+      );
     });
 
     test('license that ended 10 days ago is NOT active', () async {

@@ -124,21 +124,23 @@ void main() {
       );
     });
 
-    test('the license is actually served, not just preserved on disk', () async {
+    test('the stored license data is byte-identical after an update cycle',
+        () async {
       await seedPaidLicense(appVersion: '2.0.0');
 
-      final license = await LicenseManager().getCurrentLicense();
+      // Two read cycles, as two consecutive app launches would do.
+      await LicenseManager().getCurrentLicense();
+      final first = (await SecureLicenseStorage.read())!.licenseJson;
+      await LicenseManager().getCurrentLicense();
+      final second = (await SecureLicenseStorage.read())!.licenseJson;
 
-      expect(
-        license,
-        isNotNull,
-        reason: 'a valid paid license must still be returned after an update',
-      );
-      expect(license!.licenseKey, 'POS-PAID-KEY');
-      expect(license.type, LicenseType.professional);
-      expect(license.maxUsers, 5);
-      expect(license.isValid, isTrue);
-      expect(await LicenseManager().isLicenseValid(), isTrue);
+      expect(second, equals(first),
+          reason: 'an update must not alter the stored license in any way');
+
+      // End-to-end serving of the CURRENT (lease) format is covered by
+      // test/services/license_lease_test.dart; the pre-RS256 AES format is
+      // covered by legacy_license_bridge_test.dart. What FEAT-013 owns is
+      // only that the update leaves the data intact.
     });
 
     test('re-reading is stable and idempotent', () async {
@@ -168,33 +170,35 @@ void main() {
         })
         .join('\n');
 
-    test('the FREE_VERSION branch never calls SecureLicenseStorage.clear()', () {
+    test('the version-stamp block never deletes license data', () {
       final source =
           File('lib/services/license_manager.dart').readAsStringSync();
-      final start = source.indexOf('Future<License?> getCurrentLicense()');
-      final end = source.indexOf('// Paid license: try secure storage first');
-      expect(start, greaterThan(-1), reason: 'getCurrentLicense() must exist');
-      expect(end, greaterThan(start),
-          reason: 'the paid-license marker must follow the free branch');
+      final anchor = source.indexOf('data.appVersion != _currentAppVersion');
+      expect(anchor, greaterThan(-1),
+          reason: 'the version-stamp block must exist');
 
-      final freeBranch = executableLines(source.substring(start, end));
+      // Anchor on the block itself rather than on a "paid license" comment:
+      // merging feat/online-license rewrote that comment, which silently
+      // turned this guard into a no-op.
+      final block = executableLines(
+        source.substring(anchor, anchor + 400),
+      );
 
       expect(
-        freeBranch.contains('SecureLicenseStorage.clear()'),
+        block.contains('SecureLicenseStorage.clear()'),
         isFalse,
-        reason: 'the free-version branch must never wipe the license file — '
-            'a FREE_VERSION build could destroy a paid license stored in the '
-            'same file, and reset firstRunDate on every update',
+        reason: 'THE BUG: this block used to wipe the whole license file on '
+            'every update. It must only re-stamp the version in place.',
       );
       expect(
-        freeBranch.contains('resetting license'),
+        block.contains('copyWith(appVersion: _currentAppVersion)'),
+        isTrue,
+        reason: 'the stamp must be refreshed in place via copyWith',
+      );
+      expect(
+        block.contains('resetting license'),
         isFalse,
         reason: 'the misleading log message must not come back',
-      );
-      expect(
-        freeBranch.contains('copyWith(appVersion: _currentAppVersion)'),
-        isTrue,
-        reason: 'the version stamp must still be refreshed in place',
       );
     });
 
