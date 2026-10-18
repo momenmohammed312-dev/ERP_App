@@ -355,4 +355,91 @@ void main() {
       expect(order.finishedProductId, fabricId);
     },
   );
+
+  test(
+    'M5: FEAT-007 BUG-008 same-product flow auto-issues produced qty from custody',
+    () async {
+      final (db, moDao, bomDao, receiptDao) = await setup();
+      await seedCustomer(db, id: 'cust-1', name: 'Cust Five');
+
+      // Custody product (the fabric the customer lends) — the finished
+      // output is the SAME product row, so no BOM line consumes it.
+      final fabricId = await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              name: 'Fabric Same',
+              quantity: 0,
+              price: 100,
+              productType: const Value('raw_material'),
+            ),
+          );
+      final threadId = await seedProduct(db, name: 'Thread Same', qty: 50);
+
+      final bomId = await bomDao.insertBomWithItems(
+        bom: BillOfMaterialsCompanion(
+          finishedProductId: Value(fabricId),
+          name: const Value('same in/out'),
+          yieldQuantity: const Value(100),
+        ),
+        items: [
+          BomItemsCompanion(
+            rawMaterialProductId: Value(threadId),
+            quantityRequired: const Value(0.15),
+          ),
+        ],
+      );
+
+      // Full loop: receive 100 -> complete 100 -> custody must net 0
+      // and an issued_to_order ledger row must exist.
+      await receiptDao.receiveCustomerMaterial(
+        customerId: 'cust-1',
+        items: [ReceiptItemInput(productId: fabricId, quantityReceived: 100)],
+      );
+
+      final mo1 = await moDao.createJobWorkOrder(
+        orderNumber: 'MO-M5A',
+        orderType: 'mixed',
+        customerId: 'cust-1',
+        bomId: bomId,
+        finishedProductId: fabricId,
+        plannedQuantity: 100,
+        pricingMode: 'separate',
+        scrapPolicy: 'customer_bears',
+        pieceUnitValue: 2,
+        serviceUnitPrice: 15,
+      );
+      await moDao.completeForOthersOrder(orderId: mo1);
+
+      expect(await custodyQty(receiptDao, customerId: 'cust-1', productId: fabricId), 0.0);
+      final issuedRows = await (db.select(
+        db.customerStockMovements,
+      )..where((m) => m.referenceId.equals('MO-M5A'))).get();
+      final issued = issuedRows.where((m) => m.movementType == 'issued_to_order').toList();
+      expect(issued, isNotEmpty);
+      expect(issued.first.quantity, -100.0);
+      expect(issued.first.productId, fabricId);
+
+      // Partial loop: custody 150 but only 100 produced -> issue exactly
+      // the produced quantity, 50 stay in the customer's custody.
+      await receiptDao.receiveCustomerMaterial(
+        customerId: 'cust-1',
+        items: [ReceiptItemInput(productId: fabricId, quantityReceived: 150)],
+      );
+      final mo2 = await moDao.createJobWorkOrder(
+        orderNumber: 'MO-M6',
+        orderType: 'mixed',
+        customerId: 'cust-1',
+        bomId: bomId,
+        finishedProductId: fabricId,
+        plannedQuantity: 100,
+        pricingMode: 'separate',
+        scrapPolicy: 'customer_bears',
+        pieceUnitValue: 2,
+        serviceUnitPrice: 15,
+      );
+      await moDao.completeForOthersOrder(orderId: mo2, actualProducedQuantity: 100);
+      expect(await custodyQty(receiptDao, customerId: 'cust-1', productId: fabricId), 50.0);
+    },
+  );
 }

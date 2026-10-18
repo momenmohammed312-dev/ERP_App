@@ -33,40 +33,48 @@ bool isCustomerOwnedBomLine({
   return hasCustodyBalance;
 }
 
-@DriftAccessor(tables: [
-  ManufacturingOrders,
-  BillOfMaterials,
-  BomItems,
-  ManufacturingCostComponents,
-  InventoryMovements,
-  Products,
-  CustomerStockBalances,
-  CustomerStockMovements,
-  Customers,
-])
+@DriftAccessor(
+  tables: [
+    ManufacturingOrders,
+    BillOfMaterials,
+    BomItems,
+    ManufacturingCostComponents,
+    InventoryMovements,
+    Products,
+    CustomerStockBalances,
+    CustomerStockMovements,
+    Customers,
+  ],
+)
 class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
     with _$ManufacturingOrderDaoMixin {
   ManufacturingOrderDao(super.db);
 
   // ── Reads ──
 
-  Future<List<ManufacturingOrder>> getAll() =>
-      (select(manufacturingOrders)..orderBy([(o) => OrderingTerm.desc(o.createdAt)])).get();
+  Future<List<ManufacturingOrder>> getAll() => (select(
+    manufacturingOrders,
+  )..orderBy([(o) => OrderingTerm.desc(o.createdAt)])).get();
 
-  Stream<List<ManufacturingOrder>> watchAll() =>
-      (select(manufacturingOrders)..orderBy([(o) => OrderingTerm.desc(o.createdAt)])).watch();
+  Stream<List<ManufacturingOrder>> watchAll() => (select(
+    manufacturingOrders,
+  )..orderBy([(o) => OrderingTerm.desc(o.createdAt)])).watch();
 
-  Future<ManufacturingOrder?> getById(int id) =>
-      (select(manufacturingOrders)..where((o) => o.id.equals(id))).getSingleOrNull();
+  Future<ManufacturingOrder?> getById(int id) => (select(
+    manufacturingOrders,
+  )..where((o) => o.id.equals(id))).getSingleOrNull();
 
-  Future<ManufacturingOrder?> getByOrderNumber(String number) =>
-      (select(manufacturingOrders)..where((o) => o.orderNumber.equals(number))).getSingleOrNull();
+  Future<ManufacturingOrder?> getByOrderNumber(String number) => (select(
+    manufacturingOrders,
+  )..where((o) => o.orderNumber.equals(number))).getSingleOrNull();
 
-  Future<List<ManufacturingOrder>> getByStatus(String status) =>
-      (select(manufacturingOrders)..where((o) => o.status.equals(status))).get();
+  Future<List<ManufacturingOrder>> getByStatus(String status) => (select(
+    manufacturingOrders,
+  )..where((o) => o.status.equals(status))).get();
 
-  Stream<List<ManufacturingOrder>> watchByStatus(String status) =>
-      (select(manufacturingOrders)..where((o) => o.status.equals(status))).watch();
+  Stream<List<ManufacturingOrder>> watchByStatus(String status) => (select(
+    manufacturingOrders,
+  )..where((o) => o.status.equals(status))).watch();
 
   Future<List<ManufacturingOrder>> getByBomId(int bomId) =>
       (select(manufacturingOrders)..where((o) => o.bomId.equals(bomId))).get();
@@ -80,14 +88,18 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
     if (!entry.bomId.present || entry.bomId.value == 0) {
       throw ArgumentError('bomId is required');
     }
-    final planned = entry.plannedQuantity.present ? entry.plannedQuantity.value : null;
+    final planned = entry.plannedQuantity.present
+        ? entry.plannedQuantity.value
+        : null;
     if (planned == null || planned <= 0) {
       throw ArgumentError('plannedQuantity must be > 0');
     }
     // Auto-generate orderNumber if not provided
     final companion = entry.orderNumber.present
         ? entry
-        : entry.copyWith(orderNumber: Value('MO-${DateTime.now().millisecondsSinceEpoch}'));
+        : entry.copyWith(
+            orderNumber: Value('MO-${DateTime.now().millisecondsSinceEpoch}'),
+          );
 
     return into(manufacturingOrders).insert(companion);
   }
@@ -137,36 +149,41 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
       final resolvedBomId =
           bomId ?? await db.bomDao.createSystemPlaceholderBom(inputProductId!);
       int? resolvedFinished = finishedProductId ?? inputProductId;
-      resolvedFinished ??= (await db.bomDao.getBomById(resolvedBomId))
-          ?.finishedProductId;
+      resolvedFinished ??= (await db.bomDao.getBomById(
+        resolvedBomId,
+      ))?.finishedProductId;
       if (resolvedFinished == null) {
         throw ArgumentError('finished product cannot be resolved');
       }
 
-      return into(manufacturingOrders).insert(ManufacturingOrdersCompanion.insert(
-        orderNumber: orderNumber,
-        orderType: Value(orderType),
-        bomId: resolvedBomId,
-        finishedProductId: resolvedFinished,
-        plannedQuantity: plannedQuantity ?? inputQuantity ?? 0,
-        plannedDate: Value(plannedDate),
-        customerId: Value(customerId),
-        pricingMode:
-            pricingMode == null ? const Value.absent() : Value(pricingMode),
-        scrapPolicy:
-            scrapPolicy == null ? const Value.absent() : Value(scrapPolicy),
-        pieceUnitValue: pieceUnitValue == null
-            ? const Value.absent()
-            : Value(pieceUnitValue),
-        serviceUnitPrice: serviceUnitPrice == null
-            ? const Value.absent()
-            : Value(serviceUnitPrice),
-        notes: Value(notes),
-        inputProductId: Value(inputProductId),
-        inputQuantity: Value(inputQuantity),
-        inputColor: Value(inputColor),
-        inputSize: Value(inputSize),
-      ));
+      return into(manufacturingOrders).insert(
+        ManufacturingOrdersCompanion.insert(
+          orderNumber: orderNumber,
+          orderType: Value(orderType),
+          bomId: resolvedBomId,
+          finishedProductId: resolvedFinished,
+          plannedQuantity: plannedQuantity ?? inputQuantity ?? 0,
+          plannedDate: Value(plannedDate),
+          customerId: Value(customerId),
+          pricingMode: pricingMode == null
+              ? const Value.absent()
+              : Value(pricingMode),
+          scrapPolicy: scrapPolicy == null
+              ? const Value.absent()
+              : Value(scrapPolicy),
+          pieceUnitValue: pieceUnitValue == null
+              ? const Value.absent()
+              : Value(pieceUnitValue),
+          serviceUnitPrice: serviceUnitPrice == null
+              ? const Value.absent()
+              : Value(serviceUnitPrice),
+          notes: Value(notes),
+          inputProductId: Value(inputProductId),
+          inputQuantity: Value(inputQuantity),
+          inputColor: Value(inputColor),
+          inputSize: Value(inputSize),
+        ),
+      );
     });
   }
 
@@ -174,21 +191,36 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
     final mo = await getById(id);
     if (mo == null) throw ArgumentError('ManufacturingOrder #$id not found');
     if (mo.status != ManufacturingOrderStatus.planned) {
-      throw StateError('Only planned orders can be started (current: ${mo.status})');
+      throw StateError(
+        'Only planned orders can be started (current: ${mo.status})',
+      );
     }
-    if (mo.orderType == 'for_others' && mo.customerId != null && mo.inputProductId != null && mo.inputQuantity != null) {
-      final bal = await (select(customerStockBalances)
-            ..where((t) => t.customerId.equals(mo.customerId!) &
-                t.productId.equals(mo.inputProductId!) &
-                (mo.inputColor == null ? t.color.isNull() : t.color.equals(mo.inputColor!)) &
-                (mo.inputSize == null ? t.size.isNull() : t.size.equals(mo.inputSize!))))
-          .getSingleOrNull();
+    if (mo.orderType == 'for_others' &&
+        mo.customerId != null &&
+        mo.inputProductId != null &&
+        mo.inputQuantity != null) {
+      final bal =
+          await (select(customerStockBalances)..where(
+                (t) =>
+                    t.customerId.equals(mo.customerId!) &
+                    t.productId.equals(mo.inputProductId!) &
+                    (mo.inputColor == null
+                        ? t.color.isNull()
+                        : t.color.equals(mo.inputColor!)) &
+                    (mo.inputSize == null
+                        ? t.size.isNull()
+                        : t.size.equals(mo.inputSize!)),
+              ))
+              .getSingleOrNull();
 
-      if (bal == null || (bal.quantityOnHand - bal.quantityAllocated) < mo.inputQuantity!) {
+      if (bal == null ||
+          (bal.quantityOnHand - bal.quantityAllocated) < mo.inputQuantity!) {
         throw StateError('رصيد العميل غير كافٍ');
       }
 
-      await (update(customerStockBalances)..where((t) => t.id.equals(bal.id))).write(
+      await (update(
+        customerStockBalances,
+      )..where((t) => t.id.equals(bal.id))).write(
         CustomerStockBalancesCompanion(
           quantityAllocated: Value(bal.quantityAllocated + mo.inputQuantity!),
         ),
@@ -213,16 +245,29 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
     if (mo.status == ManufacturingOrderStatus.cancelled) {
       throw StateError('Order is already cancelled');
     }
-    if (mo.orderType == 'for_others' && mo.customerId != null && mo.inputProductId != null && mo.inputQuantity != null && mo.status == ManufacturingOrderStatus.inProgress) {
-      final bal = await (select(customerStockBalances)
-            ..where((t) => t.customerId.equals(mo.customerId!) &
-                t.productId.equals(mo.inputProductId!) &
-                (mo.inputColor == null ? t.color.isNull() : t.color.equals(mo.inputColor!)) &
-                (mo.inputSize == null ? t.size.isNull() : t.size.equals(mo.inputSize!))))
-          .getSingleOrNull();
+    if (mo.orderType == 'for_others' &&
+        mo.customerId != null &&
+        mo.inputProductId != null &&
+        mo.inputQuantity != null &&
+        mo.status == ManufacturingOrderStatus.inProgress) {
+      final bal =
+          await (select(customerStockBalances)..where(
+                (t) =>
+                    t.customerId.equals(mo.customerId!) &
+                    t.productId.equals(mo.inputProductId!) &
+                    (mo.inputColor == null
+                        ? t.color.isNull()
+                        : t.color.equals(mo.inputColor!)) &
+                    (mo.inputSize == null
+                        ? t.size.isNull()
+                        : t.size.equals(mo.inputSize!)),
+              ))
+              .getSingleOrNull();
       if (bal != null) {
         final newAlloc = bal.quantityAllocated - mo.inputQuantity!;
-        await (update(customerStockBalances)..where((t) => t.id.equals(bal.id))).write(
+        await (update(
+          customerStockBalances,
+        )..where((t) => t.id.equals(bal.id))).write(
           CustomerStockBalancesCompanion(
             quantityAllocated: Value(newAlloc < 0 ? 0 : newAlloc),
           ),
@@ -263,20 +308,28 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
   // ── Helpers ──
 
   /// Joins MO with its BOM and finished product for list display.
-  Future<List<(ManufacturingOrder, BillOfMaterial?, Product?)>> getAllWithDetails() async {
+  Future<List<(ManufacturingOrder, BillOfMaterial?, Product?)>>
+  getAllWithDetails() async {
     final query = select(manufacturingOrders).join([
-      leftOuterJoin(db.billOfMaterials, db.billOfMaterials.id.equalsExp(manufacturingOrders.bomId)),
-      leftOuterJoin(db.products, db.products.id.equalsExp(manufacturingOrders.finishedProductId)),
-    ])
-      ..orderBy([OrderingTerm.desc(manufacturingOrders.createdAt)]);
+      leftOuterJoin(
+        db.billOfMaterials,
+        db.billOfMaterials.id.equalsExp(manufacturingOrders.bomId),
+      ),
+      leftOuterJoin(
+        db.products,
+        db.products.id.equalsExp(manufacturingOrders.finishedProductId),
+      ),
+    ])..orderBy([OrderingTerm.desc(manufacturingOrders.createdAt)]);
 
     final rows = await query.get();
     return rows
-        .map((row) => (
-              row.readTable(manufacturingOrders),
-              row.readTableOrNull(db.billOfMaterials),
-              row.readTableOrNull(db.products),
-            ))
+        .map(
+          (row) => (
+            row.readTable(manufacturingOrders),
+            row.readTableOrNull(db.billOfMaterials),
+            row.readTableOrNull(db.products),
+          ),
+        )
         .toList();
   }
 
@@ -315,8 +368,11 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
   }) {
     return transaction(() async {
       // 1. Load & validate MO
-      final mo = await (select(manufacturingOrders)..where((o) => o.id.equals(orderId))).getSingleOrNull();
-      if (mo == null) throw ArgumentError('ManufacturingOrder #$orderId not found');
+      final mo = await (select(
+        manufacturingOrders,
+      )..where((o) => o.id.equals(orderId))).getSingleOrNull();
+      if (mo == null)
+        throw ArgumentError('ManufacturingOrder #$orderId not found');
       if (mo.status == ManufacturingOrderStatus.completed) {
         throw StateError('Order is already completed');
       }
@@ -325,19 +381,29 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
       }
 
       // 2. Load BOM
-      final bom = await (select(db.billOfMaterials)..where((b) => b.id.equals(mo.bomId))).getSingleOrNull();
-      if (bom == null) throw StateError('BOM #${mo.bomId} not found for order #$orderId');
+      final bom = await (select(
+        db.billOfMaterials,
+      )..where((b) => b.id.equals(mo.bomId))).getSingleOrNull();
+      if (bom == null)
+        throw StateError('BOM #${mo.bomId} not found for order #$orderId');
 
       final effectiveProduced = actualProducedQuantity ?? mo.plannedQuantity;
-      if (effectiveProduced <= 0) throw ArgumentError('Produced quantity must be > 0');
-      final producedInt = effectiveProduced.round(); // Option A: round to whole base-unit
-      if (producedInt <= 0) throw ArgumentError('Produced quantity rounds to 0 — increase quantity');
+      if (effectiveProduced <= 0)
+        throw ArgumentError('Produced quantity must be > 0');
+      final producedInt = effectiveProduced
+          .round(); // Option A: round to whole base-unit
+      if (producedInt <= 0)
+        throw ArgumentError(
+          'Produced quantity rounds to 0 — increase quantity',
+        );
 
-      final bomItems = await (select(db.bomItems)
-            ..where((i) => i.bomId.equals(bom.id))
-            ..orderBy([(i) => OrderingTerm.asc(i.sortOrder)]))
-          .get();
-      if (bomItems.isEmpty) throw StateError('BOM #${bom.id} has no items — cannot produce');
+      final bomItems =
+          await (select(db.bomItems)
+                ..where((i) => i.bomId.equals(bom.id))
+                ..orderBy([(i) => OrderingTerm.asc(i.sortOrder)]))
+              .get();
+      if (bomItems.isEmpty)
+        throw StateError('BOM #${bom.id} has no items — cannot produce');
 
       final yieldQty = bom.yieldQuantity;
       if (yieldQty <= 0) throw StateError('BOM yieldQuantity must be > 0');
@@ -352,30 +418,40 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         final waste = item.wastePercentageOverride ?? bom.wastePercentage;
         final rawRequired = item.quantityRequired * factor * (1 + waste / 100);
         final requiredInt = rawRequired.round(); // Option A rounding
-        final product = await (select(db.products)..where((p) => p.id.equals(item.rawMaterialProductId))).getSingleOrNull();
-        if (product == null) throw StateError('Raw material product #${item.rawMaterialProductId} not found');
+        final product =
+            await (select(db.products)
+                  ..where((p) => p.id.equals(item.rawMaterialProductId)))
+                .getSingleOrNull();
+        if (product == null)
+          throw StateError(
+            'Raw material product #${item.rawMaterialProductId} not found',
+          );
 
         if (requiredInt > product.quantity) {
-          shortages.add(InsufficientStockDetail(
-            rawMaterialProductId: product.id,
-            productName: product.name,
-            required: requiredInt,
-            available: product.quantity,
-            unit: product.unit,
-          ));
+          shortages.add(
+            InsufficientStockDetail(
+              rawMaterialProductId: product.id,
+              productName: product.name,
+              required: requiredInt,
+              available: product.quantity,
+              unit: product.unit,
+            ),
+          );
         }
 
         final unitCost = product.costPrice ?? product.price;
         final lineCost = requiredInt * unitCost;
         materialCost += lineCost;
 
-        plan.add(_ConsumptionPlan(
-          bomItem: item,
-          product: product,
-          requiredInt: requiredInt,
-          unitCost: unitCost,
-          lineCost: lineCost,
-        ));
+        plan.add(
+          _ConsumptionPlan(
+            bomItem: item,
+            product: product,
+            requiredInt: requiredInt,
+            unitCost: unitCost,
+            lineCost: lineCost,
+          ),
+        );
       }
 
       if (shortages.isNotEmpty) {
@@ -383,9 +459,9 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
       }
 
       // 4. Load cost components & compute computedAmounts
-      final components = await (select(db.manufacturingCostComponents)
-            ..where((c) => c.manufacturingOrderId.equals(orderId)))
-          .get();
+      final components = await (select(
+        db.manufacturingCostComponents,
+      )..where((c) => c.manufacturingOrderId.equals(orderId))).get();
 
       final List<double> computedAmounts = [];
       double totalComponentsCost = 0;
@@ -402,7 +478,9 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
             computed = comp.value * effectiveProduced;
             break;
           default:
-            throw StateError('Unknown costType ${comp.costType} on component #${comp.id}');
+            throw StateError(
+              'Unknown costType ${comp.costType} on component #${comp.id}',
+            );
         }
         // Round to 2 decimals for financial snapshot
         computed = double.parse(computed.toStringAsFixed(2));
@@ -410,8 +488,12 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         totalComponentsCost += computed;
       }
 
-      final totalCost = double.parse((materialCost + totalComponentsCost).toStringAsFixed(2));
-      final unitCost = effectiveProduced > 0 ? double.parse((totalCost / effectiveProduced).toStringAsFixed(2)) : 0.0;
+      final totalCost = double.parse(
+        (materialCost + totalComponentsCost).toStringAsFixed(2),
+      );
+      final unitCost = effectiveProduced > 0
+          ? double.parse((totalCost / effectiveProduced).toStringAsFixed(2))
+          : 0.0;
 
       final now = DateTime.now();
 
@@ -419,7 +501,9 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
       for (final p in plan) {
         final prev = p.product.quantity;
         final next = prev - p.requiredInt;
-        await (update(db.products)..where((t) => t.id.equals(p.product.id))).write(
+        await (update(
+          db.products,
+        )..where((t) => t.id.equals(p.product.id))).write(
           ProductsCompanion(quantity: Value(next), updatedAt: Value(now)),
         );
         await into(db.inventoryMovements).insert(
@@ -435,7 +519,9 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
             previousQuantity: prev,
             newQuantity: next,
             performedBy: Value(performedBy),
-            notes: Value('استهلاك لتصنيع ${mo.orderNumber} • ${p.product.name}'),
+            notes: Value(
+              'استهلاك لتصنيع ${mo.orderNumber} • ${p.product.name}',
+            ),
             createdAt: now,
             updatedAt: now,
           ),
@@ -443,11 +529,16 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
       }
 
       // 6. Increment finished product + output movement
-      final finishedProduct = await (select(db.products)..where((p) => p.id.equals(mo.finishedProductId))).getSingleOrNull();
-      if (finishedProduct == null) throw StateError('Finished product #${mo.finishedProductId} not found');
+      final finishedProduct = await (select(
+        db.products,
+      )..where((p) => p.id.equals(mo.finishedProductId))).getSingleOrNull();
+      if (finishedProduct == null)
+        throw StateError('Finished product #${mo.finishedProductId} not found');
       final prevFinished = finishedProduct.quantity;
       final nextFinished = prevFinished + producedInt;
-      await (update(db.products)..where((t) => t.id.equals(finishedProduct.id))).write(
+      await (update(
+        db.products,
+      )..where((t) => t.id.equals(finishedProduct.id))).write(
         ProductsCompanion(quantity: Value(nextFinished), updatedAt: Value(now)),
       );
       await into(db.inventoryMovements).insert(
@@ -471,13 +562,19 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
 
       // 7. Freeze computedAmount on cost components
       for (var i = 0; i < components.length; i++) {
-        await (update(db.manufacturingCostComponents)..where((c) => c.id.equals(components[i].id))).write(
-          ManufacturingCostComponentsCompanion(computedAmount: Value(computedAmounts[i])),
+        await (update(
+          db.manufacturingCostComponents,
+        )..where((c) => c.id.equals(components[i].id))).write(
+          ManufacturingCostComponentsCompanion(
+            computedAmount: Value(computedAmounts[i]),
+          ),
         );
       }
 
       // 8. Update MO to completed
-      await (update(manufacturingOrders)..where((o) => o.id.equals(orderId))).write(
+      await (update(
+        manufacturingOrders,
+      )..where((o) => o.id.equals(orderId))).write(
         ManufacturingOrdersCompanion(
           status: const Value(ManufacturingOrderStatus.completed),
           producedQuantity: Value(effectiveProduced.toDouble()),
@@ -499,14 +596,16 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         totalCost: totalCost.toDouble(),
         unitCost: unitCost.toDouble(),
         consumptions: plan
-            .map((p) => ConsumptionResult(
-                  rawMaterialProductId: p.product.id,
-                  productName: p.product.name,
-                  required: p.requiredInt,
-                  unitCost: p.unitCost,
-                  lineCost: p.lineCost,
-                  unit: p.product.unit,
-                ))
+            .map(
+              (p) => ConsumptionResult(
+                rawMaterialProductId: p.product.id,
+                productName: p.product.name,
+                required: p.requiredInt,
+                unitCost: p.unitCost,
+                lineCost: p.lineCost,
+                unit: p.product.unit,
+              ),
+            )
             .toList(),
         previousFinishedQuantity: prevFinished,
         nextFinishedQuantity: nextFinished,
@@ -544,8 +643,11 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
   }) {
     return transaction(() async {
       // 1. Load & validate MO
-      final mo = await (select(manufacturingOrders)..where((o) => o.id.equals(orderId))).getSingleOrNull();
-      if (mo == null) throw ArgumentError('ManufacturingOrder #$orderId not found');
+      final mo = await (select(
+        manufacturingOrders,
+      )..where((o) => o.id.equals(orderId))).getSingleOrNull();
+      if (mo == null)
+        throw ArgumentError('ManufacturingOrder #$orderId not found');
       if (mo.status == ManufacturingOrderStatus.completed) {
         throw StateError('Order is already completed');
       }
@@ -553,36 +655,50 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         throw StateError('Cancelled orders cannot be completed');
       }
 
-      
       final orderType = mo.orderType ?? 'internal';
-      if (orderType == 'for_others' && mo.inputQuantity != null && mo.inputProductId != null) {
-        final effectiveGood = goodQuantity ?? actualProducedQuantity ?? mo.plannedQuantity;
+      if (orderType == 'for_others' &&
+          mo.inputQuantity != null &&
+          mo.inputProductId != null) {
+        final effectiveGood =
+            goodQuantity ?? actualProducedQuantity ?? mo.plannedQuantity;
         final effectiveScrap = scrapQuantity ?? 0.0;
         final effectiveUser = completedByUserId ?? performedBy ?? 'system';
 
-        final bal = await (select(customerStockBalances)
-              ..where((t) =>
-                  t.customerId.equals(mo.customerId!) &
-                  t.productId.equals(mo.inputProductId!) &
-                  (mo.inputColor == null ? t.color.isNull() : t.color.equals(mo.inputColor!)) &
-                  (mo.inputSize == null ? t.size.isNull() : t.size.equals(mo.inputSize!))))
-            .getSingleOrNull();
+        final bal =
+            await (select(customerStockBalances)..where(
+                  (t) =>
+                      t.customerId.equals(mo.customerId!) &
+                      t.productId.equals(mo.inputProductId!) &
+                      (mo.inputColor == null
+                          ? t.color.isNull()
+                          : t.color.equals(mo.inputColor!)) &
+                      (mo.inputSize == null
+                          ? t.size.isNull()
+                          : t.size.equals(mo.inputSize!)),
+                ))
+                .getSingleOrNull();
 
         if (bal == null || bal.quantityOnHand < mo.inputQuantity!) {
-          final prod = await (select(products)..where((p) => p.id.equals(mo.inputProductId!))).getSingleOrNull();
+          final prod = await (select(
+            products,
+          )..where((p) => p.id.equals(mo.inputProductId!))).getSingleOrNull();
           throw InsufficientStockException([
             InsufficientStockDetail(
               rawMaterialProductId: mo.inputProductId!,
               productName: prod?.name ?? 'Unknown',
               required: int.parse(mo.inputQuantity!.toStringAsFixed(0)),
-              available: bal != null ? int.parse(bal.quantityOnHand.toStringAsFixed(0)) : 0,
-            )
+              available: bal != null
+                  ? int.parse(bal.quantityOnHand.toStringAsFixed(0))
+                  : 0,
+            ),
           ]);
         }
 
         final newOnHand = bal.quantityOnHand - mo.inputQuantity!;
         final newAlloc = bal.quantityAllocated - mo.inputQuantity!;
-        await (update(customerStockBalances)..where((t) => t.id.equals(bal.id))).write(
+        await (update(
+          customerStockBalances,
+        )..where((t) => t.id.equals(bal.id))).write(
           CustomerStockBalancesCompanion(
             quantityOnHand: Value(newOnHand),
             quantityAllocated: Value(newAlloc < 0 ? 0 : newAlloc),
@@ -599,12 +715,16 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
             quantity: -mo.inputQuantity!,
             referenceType: 'manufacturing_order',
             referenceId: mo.id.toString(),
-            notes: Value('MO completion: $effectiveGood good, $effectiveScrap scrap'),
+            notes: Value(
+              'MO completion: $effectiveGood good, $effectiveScrap scrap',
+            ),
             performedBy: Value(effectiveUser),
           ),
         );
 
-        await (update(manufacturingOrders)..where((o) => o.id.equals(orderId))).write(
+        await (update(
+          manufacturingOrders,
+        )..where((o) => o.id.equals(orderId))).write(
           ManufacturingOrdersCompanion(
             status: const Value(ManufacturingOrderStatus.completed),
             producedQuantity: Value(effectiveGood),
@@ -613,8 +733,12 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           ),
         );
 
-        final customer = await (select(customers)..where((c) => c.id.equals(mo.customerId!))).getSingle();
-        final product = await (select(products)..where((p) => p.id.equals(mo.finishedProductId))).getSingle();
+        final customer = await (select(
+          customers,
+        )..where((c) => c.id.equals(mo.customerId!))).getSingle();
+        final product = await (select(
+          products,
+        )..where((p) => p.id.equals(mo.finishedProductId))).getSingle();
 
         return ForOthersCompletionResult(
           orderId: mo.id,
@@ -622,38 +746,55 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           customerId: customer.id,
           finishedProductId: product.id,
           finishedProductName: product.name,
-          producedQuantity: effectiveGood, plannedQuantity: mo.plannedQuantity, customerConsumptions: [], factoryConsumptions: [],
-          
+          producedQuantity: effectiveGood,
+          plannedQuantity: mo.plannedQuantity,
+          customerConsumptions: [],
+          factoryConsumptions: [],
         );
       }
 
-      if (orderType != 'for_others' && orderType != 'mixed' && orderType != 'service_only') {
-
-        throw ArgumentError('Order #$orderId has orderType "$orderType" — cannot be completed via completeForOthersOrder');
+      if (orderType != 'for_others' &&
+          orderType != 'mixed' &&
+          orderType != 'service_only') {
+        throw ArgumentError(
+          'Order #$orderId has orderType "$orderType" — cannot be completed via completeForOthersOrder',
+        );
       }
 
       final customerId = mo.customerId;
       if (customerId == null || customerId.trim().isEmpty) {
         throw ArgumentError('Order #$orderId has no customerId associated');
       }
-      final customer = await (select(customers)..where((c) => c.id.equals(customerId))).getSingleOrNull();
+      final customer = await (select(
+        customers,
+      )..where((c) => c.id.equals(customerId))).getSingleOrNull();
       if (customer == null) {
-        throw ArgumentError('Customer #$customerId not found for order #$orderId');
+        throw ArgumentError(
+          'Customer #$customerId not found for order #$orderId',
+        );
       }
 
       // 2. Load BOM
-      final bom = await (select(billOfMaterials)..where((b) => b.id.equals(mo.bomId))).getSingleOrNull();
-      if (bom == null) throw StateError('BOM #${mo.bomId} not found for order #$orderId');
+      final bom = await (select(
+        billOfMaterials,
+      )..where((b) => b.id.equals(mo.bomId))).getSingleOrNull();
+      if (bom == null)
+        throw StateError('BOM #${mo.bomId} not found for order #$orderId');
 
       final effectiveProduced = actualProducedQuantity ?? mo.plannedQuantity;
-      if (effectiveProduced <= 0) throw ArgumentError('Produced quantity must be > 0');
+      if (effectiveProduced <= 0)
+        throw ArgumentError('Produced quantity must be > 0');
       final producedInt = effectiveProduced.round();
-      if (producedInt <= 0) throw ArgumentError('Produced quantity rounds to 0 — increase quantity');
+      if (producedInt <= 0)
+        throw ArgumentError(
+          'Produced quantity rounds to 0 — increase quantity',
+        );
 
-      final bomItemsList = await (select(bomItems)
-            ..where((i) => i.bomId.equals(bom.id))
-            ..orderBy([(i) => OrderingTerm.asc(i.sortOrder)]))
-          .get();
+      final bomItemsList =
+          await (select(bomItems)
+                ..where((i) => i.bomId.equals(bom.id))
+                ..orderBy([(i) => OrderingTerm.asc(i.sortOrder)]))
+              .get();
       if (bomItemsList.isEmpty && orderType != 'service_only') {
         throw StateError('BOM #${bom.id} has no items — cannot produce');
       }
@@ -675,19 +816,26 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         // Zero-required lines are skipped entirely (no consumption, no custody validation needed)
         if (requiredInt <= 0) continue;
 
-        final product = await (select(products)..where((p) => p.id.equals(item.rawMaterialProductId))).getSingleOrNull();
-        if (product == null) throw StateError('Raw material product #${item.rawMaterialProductId} not found');
+        final product =
+            await (select(products)
+                  ..where((p) => p.id.equals(item.rawMaterialProductId)))
+                .getSingleOrNull();
+        if (product == null)
+          throw StateError(
+            'Raw material product #${item.rawMaterialProductId} not found',
+          );
 
         // Determine ownership via the shared rule (see isCustomerOwnedBomLine).
         // The balance lookup below runs only when the rule needs it.
         final custBalForOwnership =
             (customerOwnedProductIds == null && orderType != 'for_others')
-                ? await (select(customerStockBalances)
-                      ..where((b) =>
-                          b.customerId.equals(customerId) &
-                          b.productId.equals(item.rawMaterialProductId)))
-                    .getSingleOrNull()
-                : null;
+            ? await (select(customerStockBalances)..where(
+                    (b) =>
+                        b.customerId.equals(customerId) &
+                        b.productId.equals(item.rawMaterialProductId),
+                  ))
+                  .getSingleOrNull()
+            : null;
         final bool isCustomerOwned = isCustomerOwnedBomLine(
           orderType: orderType,
           rawMaterialProductId: item.rawMaterialProductId,
@@ -697,45 +845,59 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
 
         if (isCustomerOwned) {
           // Customer custody stock validation
-          final custBal = await (select(customerStockBalances)
-                ..where((b) => b.customerId.equals(customerId) & b.productId.equals(item.rawMaterialProductId)))
-              .getSingleOrNull();
-          final available = custBal != null ? (custBal.quantityOnHand - custBal.quantityAllocated).toDouble() : 0.0;
+          final custBal =
+              await (select(customerStockBalances)..where(
+                    (b) =>
+                        b.customerId.equals(customerId) &
+                        b.productId.equals(item.rawMaterialProductId),
+                  ))
+                  .getSingleOrNull();
+          final available = custBal != null
+              ? (custBal.quantityOnHand - custBal.quantityAllocated).toDouble()
+              : 0.0;
           if (requiredInt > available || custBal == null) {
-            shortages.add(InsufficientStockDetail(
-              rawMaterialProductId: product.id,
-              productName: '${product.name} (عهدة العميل)',
-              required: requiredInt,
-              available: available.round(),
-              unit: product.unit,
-            ));
+            shortages.add(
+              InsufficientStockDetail(
+                rawMaterialProductId: product.id,
+                productName: '${product.name} (عهدة العميل)',
+                required: requiredInt,
+                available: available.round(),
+                unit: product.unit,
+              ),
+            );
           } else {
-            customerPlans.add(_CustomerConsumptionPlan(
-              bomItem: item,
-              product: product,
-              balanceRow: custBal,
-              requiredQty: requiredInt.toDouble(),
-            ));
+            customerPlans.add(
+              _CustomerConsumptionPlan(
+                bomItem: item,
+                product: product,
+                balanceRow: custBal,
+                requiredQty: requiredInt.toDouble(),
+              ),
+            );
           }
         } else {
           // Factory inventory validation
           if (requiredInt > product.quantity) {
-            shortages.add(InsufficientStockDetail(
-              rawMaterialProductId: product.id,
-              productName: '${product.name} (مخزن المصنع)',
-              required: requiredInt,
-              available: product.quantity,
-              unit: product.unit,
-            ));
+            shortages.add(
+              InsufficientStockDetail(
+                rawMaterialProductId: product.id,
+                productName: '${product.name} (مخزن المصنع)',
+                required: requiredInt,
+                available: product.quantity,
+                unit: product.unit,
+              ),
+            );
           } else {
             final unitCost = product.costPrice ?? product.price;
-            factoryPlans.add(_ConsumptionPlan(
-              bomItem: item,
-              product: product,
-              requiredInt: requiredInt,
-              unitCost: unitCost,
-              lineCost: requiredInt * unitCost,
-            ));
+            factoryPlans.add(
+              _ConsumptionPlan(
+                bomItem: item,
+                product: product,
+                requiredInt: requiredInt,
+                unitCost: unitCost,
+                lineCost: requiredInt * unitCost,
+              ),
+            );
           }
         }
       }
@@ -749,7 +911,9 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
       // 4. Execute customer custody consumption
       for (final cp in customerPlans) {
         final newOnHand = cp.balanceRow.quantityOnHand - cp.requiredQty;
-        await (update(customerStockBalances)..where((b) => b.id.equals(cp.balanceRow.id))).write(
+        await (update(
+          customerStockBalances,
+        )..where((b) => b.id.equals(cp.balanceRow.id))).write(
           CustomerStockBalancesCompanion(
             quantityOnHand: Value(newOnHand),
             updatedAt: Value(now),
@@ -771,11 +935,62 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         );
       }
 
+      // 4b. BUG-008 (option A): same-product receipt-first flow — the
+      // finished output IS the fabric the customer lends us, but no BOM
+      // line consumes it (print/textile: fabric in -> printed fabric out).
+      // Auto-issue the produced quantity from that custody balance so the
+      // receive -> consume -> deliver loop nets back to reality. Bounded
+      // by what the custody actually holds; skipped when a BOM line
+      // already consumed the finished product through the ordinary path.
+      final bool bomLineCoversFinished = customerPlans.any(
+        (cp) => cp.product.id == mo.finishedProductId,
+      );
+      if (!bomLineCoversFinished &&
+          (orderType == 'for_others' || orderType == 'mixed')) {
+        final finBal =
+            await (select(customerStockBalances)..where(
+                  (b) =>
+                      b.customerId.equals(customerId) &
+                      b.productId.equals(mo.finishedProductId),
+                ))
+                .getSingleOrNull();
+        if (finBal != null && finBal.quantityOnHand > 0) {
+          final issueQty = effectiveProduced <= finBal.quantityOnHand
+              ? effectiveProduced
+              : finBal.quantityOnHand;
+          await (update(
+            customerStockBalances,
+          )..where((b) => b.id.equals(finBal.id))).write(
+            CustomerStockBalancesCompanion(
+              quantityOnHand: Value(finBal.quantityOnHand - issueQty),
+              updatedAt: Value(now),
+            ),
+          );
+          await into(customerStockMovements).insert(
+            CustomerStockMovementsCompanion.insert(
+              customerId: customerId,
+              productId: mo.finishedProductId,
+              movementType: 'issued_to_order',
+              quantity: -issueQty,
+              referenceType: 'manufacturing_order',
+              referenceId: mo.orderNumber,
+              notes: Value(
+                'صرف خامة العهدة (الناتج بنفس الخامة) لأمر تصنيع ${mo.orderNumber}',
+              ),
+              performedBy: Value(performedBy),
+              createdAt: Value(now),
+            ),
+          );
+        }
+      }
+
       // 5. Execute factory inventory consumption (mixed orders)
       for (final fp in factoryPlans) {
         final prev = fp.product.quantity;
         final next = prev - fp.requiredInt;
-        await (update(products)..where((t) => t.id.equals(fp.product.id))).write(
+        await (update(
+          products,
+        )..where((t) => t.id.equals(fp.product.id))).write(
           ProductsCompanion(quantity: Value(next), updatedAt: Value(now)),
         );
         await into(inventoryMovements).insert(
@@ -791,7 +1006,9 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
             previousQuantity: prev,
             newQuantity: next,
             performedBy: Value(performedBy),
-            notes: Value('استهلاك خامات مصنع لأمر تشغيل للغير ${mo.orderNumber}'),
+            notes: Value(
+              'استهلاك خامات مصنع لأمر تشغيل للغير ${mo.orderNumber}',
+            ),
             createdAt: now,
             updatedAt: now,
           ),
@@ -799,11 +1016,16 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
       }
 
       // 6. Finished Product: NEVER increment factory stock for manufacturing-for-others
-      final finishedProduct = await (select(products)..where((p) => p.id.equals(mo.finishedProductId))).getSingleOrNull();
-      if (finishedProduct == null) throw StateError('Finished product #${mo.finishedProductId} not found');
+      final finishedProduct = await (select(
+        products,
+      )..where((p) => p.id.equals(mo.finishedProductId))).getSingleOrNull();
+      if (finishedProduct == null)
+        throw StateError('Finished product #${mo.finishedProductId} not found');
 
       // 7. Update MO to completed
-      await (update(manufacturingOrders)..where((o) => o.id.equals(orderId))).write(
+      await (update(
+        manufacturingOrders,
+      )..where((o) => o.id.equals(orderId))).write(
         ManufacturingOrdersCompanion(
           status: const Value(ManufacturingOrderStatus.completed),
           producedQuantity: Value(effectiveProduced.toDouble()),
@@ -821,22 +1043,26 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         plannedQuantity: mo.plannedQuantity,
         producedQuantity: effectiveProduced.toDouble(),
         customerConsumptions: customerPlans
-            .map((c) => CustomerConsumptionResult(
-                  productId: c.product.id,
-                  productName: c.product.name,
-                  quantity: c.requiredQty,
-                  unit: c.product.unit,
-                ))
+            .map(
+              (c) => CustomerConsumptionResult(
+                productId: c.product.id,
+                productName: c.product.name,
+                quantity: c.requiredQty,
+                unit: c.product.unit,
+              ),
+            )
             .toList(),
         factoryConsumptions: factoryPlans
-            .map((f) => ConsumptionResult(
-                  rawMaterialProductId: f.product.id,
-                  productName: f.product.name,
-                  required: f.requiredInt,
-                  unitCost: f.unitCost,
-                  lineCost: f.lineCost,
-                  unit: f.product.unit,
-                ))
+            .map(
+              (f) => ConsumptionResult(
+                rawMaterialProductId: f.product.id,
+                productName: f.product.name,
+                required: f.requiredInt,
+                unitCost: f.unitCost,
+                lineCost: f.lineCost,
+                unit: f.product.unit,
+              ),
+            )
             .toList(),
       );
     });
@@ -984,8 +1210,12 @@ class InsufficientStockException implements Exception {
   InsufficientStockException(this.shortages);
   @override
   String toString() {
-    final lines = shortages.map((s) => '${s.productName}: مطلوب ${s.required} ${s.unit ?? ''}، متاح ${s.available}، ناقص ${s.shortage}').join('\n');
+    final lines = shortages
+        .map(
+          (s) =>
+              '${s.productName}: مطلوب ${s.required} ${s.unit ?? ''}، متاح ${s.available}، ناقص ${s.shortage}',
+        )
+        .join('\n');
     return 'نقص في المواد الخام:\n$lines';
   }
 }
-
