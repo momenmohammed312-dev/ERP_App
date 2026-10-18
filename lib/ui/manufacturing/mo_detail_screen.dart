@@ -29,6 +29,8 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
   double _deliveredQty = 0.0;
   List<CustomerStockMovement> _orderMovements = [];
   List<CustomerStockBalance> _customerBalances = [];
+  // FEAT-008: balance product ids resolved to displayable names
+  final Map<int, String> _balanceProductNames = {};
   bool _isLoading = true;
   String? _error;
 
@@ -44,7 +46,9 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       _error = null;
     });
     try {
-      final order = await widget.db.manufacturingOrderDao.getById(widget.orderId);
+      final order = await widget.db.manufacturingOrderDao.getById(
+        widget.orderId,
+      );
       if (order == null) {
         setState(() {
           _error = 'أمر التصنيع غير موجود';
@@ -53,7 +57,9 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         return;
       }
       final bom = await widget.db.bomDao.getBomById(order.bomId);
-      final product = await widget.db.productDao.getProductById(order.finishedProductId);
+      final product = await widget.db.productDao.getProductById(
+        order.finishedProductId,
+      );
       final items = await widget.db.bomDao.getItemsWithProducts(order.bomId);
 
       Customer? customer;
@@ -61,15 +67,28 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       double deliveredQty = 0.0;
       List<CustomerStockMovement> orderMovements = [];
       List<CustomerStockBalance> customerBalances = [];
+      Map<int, String> balanceNames = {};
 
       if (order.customerId != null && order.customerId!.isNotEmpty) {
-        customer = await widget.db.customerDao.getCustomerById(order.customerId!);
-        deliveries = await widget.db.manufacturingDeliveryDao.getDeliveriesForOrder(order.id);
-        deliveredQty = await widget.db.manufacturingDeliveryDao.getTotalDeliveredQuantity(order.id);
-        orderMovements = await (widget.db.select(widget.db.customerStockMovements)
-              ..where((m) => m.referenceId.equals(order.orderNumber)))
-            .get();
-        customerBalances = await widget.db.customerMaterialReceiptDao.getAllBalancesForCustomer(order.customerId!);
+        customer = await widget.db.customerDao.getCustomerById(
+          order.customerId!,
+        );
+        deliveries = await widget.db.manufacturingDeliveryDao
+            .getDeliveriesForOrder(order.id);
+        deliveredQty = await widget.db.manufacturingDeliveryDao
+            .getTotalDeliveredQuantity(order.id);
+        orderMovements = await (widget.db.select(
+          widget.db.customerStockMovements,
+        )..where((m) => m.referenceId.equals(order.orderNumber))).get();
+        customerBalances = await widget.db.customerMaterialReceiptDao
+            .getAllBalancesForCustomer(order.customerId!);
+        // FEAT-008: resolve material names once so the reconciliation
+        // table shows what the customer knows, not raw row ids
+        for (final b in customerBalances) {
+          if (balanceNames.containsKey(b.productId)) continue;
+          final p = await widget.db.productDao.getProductById(b.productId);
+          balanceNames[b.productId] = p?.name ?? '#${b.productId}';
+        }
       }
 
       setState(() {
@@ -82,6 +101,9 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         _deliveredQty = deliveredQty;
         _orderMovements = orderMovements;
         _customerBalances = customerBalances;
+        _balanceProductNames
+          ..clear()
+          ..addAll(balanceNames);
         _isLoading = false;
       });
     } catch (e) {
@@ -125,12 +147,24 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
   Future<void> _startOrder() async {
     try {
       await widget.db.manufacturingOrderDao.startOrder(_order!.id);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم بدء التنفيذ'), backgroundColor: Colors.green));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم بدء التنفيذ'),
+            backgroundColor: Colors.green,
+          ),
+        );
       _loadData();
     } on InsufficientStockException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل: $e'), backgroundColor: Colors.red));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل: $e'), backgroundColor: Colors.red),
+        );
     }
   }
 
@@ -143,16 +177,24 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('سيتم إلغاء الأمر بدون أي تأثير على المخزون — لا يتم صرف خامات ولا استلام إنتاج.'),
+            const Text(
+              'سيتم إلغاء الأمر بدون أي تأثير على المخزون — لا يتم صرف خامات ولا استلام إنتاج.',
+            ),
             const Gap(12),
             TextField(
-              decoration: const InputDecoration(labelText: 'سبب الإلغاء', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'سبب الإلغاء',
+                border: OutlineInputBorder(),
+              ),
               onChanged: (v) => reason = v,
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('تراجع')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('تراجع'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(c, true),
@@ -163,21 +205,39 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     );
     if (confirm != true) return;
     try {
-      await widget.db.manufacturingOrderDao.cancelOrder(_order!.id, reason: reason);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إلغاء الأمر')));
+      await widget.db.manufacturingOrderDao.cancelOrder(
+        _order!.id,
+        reason: reason,
+      );
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('تم إلغاء الأمر')));
       _loadData();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل: $e'), backgroundColor: Colors.red));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل: $e'), backgroundColor: Colors.red),
+        );
     }
   }
 
   Future<void> _reopenOrder() async {
     try {
       await widget.db.manufacturingOrderDao.reopenCancelledOrder(_order!.id);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إعادة فتح الأمر'), backgroundColor: Colors.green));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تمت إعادة فتح الأمر'),
+            backgroundColor: Colors.green,
+          ),
+        );
       _loadData();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل: $e'), backgroundColor: Colors.red));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل: $e'), backgroundColor: Colors.red),
+        );
     }
   }
 
@@ -190,7 +250,8 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       for (final p in await widget.db.productDao.searchProducts(''))
         (
           productId: p.id,
-          label: '${p.name}${p.unit == null ? '' : ' (${p.unit})'} — متاح ${p.quantity}',
+          label:
+              '${p.name}${p.unit == null ? '' : ' (${p.unit})'} — متاح ${p.quantity}',
           available: p.quantity.toDouble(),
         ),
     ];
@@ -217,7 +278,10 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                   isExpanded: true,
                   items: [
                     for (final o in options)
-                      DropdownMenuItem(value: o.productId, child: Text(o.label)),
+                      DropdownMenuItem(
+                        value: o.productId,
+                        child: Text(o.label),
+                      ),
                   ],
                   onChanged: (v) => setDlg(() => productId = v ?? productId),
                 ),
@@ -234,17 +298,26 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       ),
                   ],
                   onChanged: (v) => setDlg(
-                      () => reason = v ?? ManufacturingScrapReason.defective),
+                    () => reason = v ?? ManufacturingScrapReason.defective,
+                  ),
                 ),
                 const Gap(12),
                 if (order.orderType != 'internal') ...[
                   DropdownButtonFormField<String>(
                     initialValue: faultParty,
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'الطرف المتسبب في الهالك *'),
+                    decoration: const InputDecoration(
+                      labelText: 'الطرف المتسبب في الهالك *',
+                    ),
                     items: const [
-                      DropdownMenuItem(value: 'factory', child: Text('المصنع (خطأ تشغيل)')),
-                      DropdownMenuItem(value: 'customer', child: Text('العميل (عيب خامة/مواصفة)')),
+                      DropdownMenuItem(
+                        value: 'factory',
+                        child: Text('المصنع (خطأ تشغيل)'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'customer',
+                        child: Text('العميل (عيب خامة/مواصفة)'),
+                      ),
                     ],
                     onChanged: (v) => setDlg(() => faultParty = v ?? 'factory'),
                   ),
@@ -253,69 +326,84 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                 TextField(
                   controller: qtyCtrl,
                   decoration: const InputDecoration(labelText: 'الكمية'),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                 ),
                 const Gap(12),
                 TextField(
                   controller: partyCtrl,
                   decoration: const InputDecoration(
-                      labelText: 'المسؤول (إجباري)'),
+                    labelText: 'المسؤول (إجباري)',
+                  ),
                 ),
                 const Gap(12),
                 TextField(
                   controller: noteCtrl,
                   decoration: const InputDecoration(
-                      labelText: 'ملاحظة / رقم تفويض (اختياري)'),
+                    labelText: 'ملاحظة / رقم تفويض (اختياري)',
+                  ),
                 ),
               ],
             ),
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(c, false),
-                child: const Text('إلغاء')),
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('إلغاء'),
+            ),
             FilledButton(
               onPressed: () async {
                 final qty = double.tryParse(qtyCtrl.text.trim());
                 if (qty == null || qty <= 0) {
-                  ScaffoldMessenger.of(c).showSnackBar(const SnackBar(
+                  ScaffoldMessenger.of(c).showSnackBar(
+                    const SnackBar(
                       content: Text('اكتب كمية أكبر من صفر'),
-                      backgroundColor: Colors.red));
+                      backgroundColor: Colors.red,
+                    ),
+                  );
                   return;
                 }
                 if (partyCtrl.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(c).showSnackBar(const SnackBar(
-                      content: Text('لازم حد يتحمل responsibility — اكتب المسؤول'),
-                      backgroundColor: Colors.red));
+                  ScaffoldMessenger.of(c).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'لازم حد يتحمل responsibility — اكتب المسؤول',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
                   return;
                 }
                 try {
                   ManufacturingScrap createdScrap;
                   if (order.orderType != 'internal') {
-                    createdScrap = await widget.db.manufacturingScrapDao.recordOrderScrapWithPolicy(
-                      orderId: order.id,
-                      productId: productId,
-                      quantity: qty,
-                      reason: reason,
-                      responsibleParty: partyCtrl.text.trim(),
-                      faultParty: faultParty,
-                      dispositionNote: noteCtrl.text.trim().isEmpty
-                          ? null
-                          : noteCtrl.text.trim(),
-                      performedBy: 'ui',
-                    );
+                    createdScrap = await widget.db.manufacturingScrapDao
+                        .recordOrderScrapWithPolicy(
+                          orderId: order.id,
+                          productId: productId,
+                          quantity: qty,
+                          reason: reason,
+                          responsibleParty: partyCtrl.text.trim(),
+                          faultParty: faultParty,
+                          dispositionNote: noteCtrl.text.trim().isEmpty
+                              ? null
+                              : noteCtrl.text.trim(),
+                          performedBy: 'ui',
+                        );
                   } else {
-                    createdScrap = await widget.db.manufacturingScrapDao.recordScrap(
-                      orderId: order.id,
-                      productId: productId,
-                      quantity: qty,
-                      reason: reason,
-                      responsibleParty: partyCtrl.text.trim(),
-                      dispositionNote: noteCtrl.text.trim().isEmpty
-                          ? null
-                          : noteCtrl.text.trim(),
-                      performedBy: 'ui',
-                    );
+                    createdScrap = await widget.db.manufacturingScrapDao
+                        .recordScrap(
+                          orderId: order.id,
+                          productId: productId,
+                          quantity: qty,
+                          reason: reason,
+                          responsibleParty: partyCtrl.text.trim(),
+                          dispositionNote: noteCtrl.text.trim().isEmpty
+                              ? null
+                              : noteCtrl.text.trim(),
+                          performedBy: 'ui',
+                        );
                   }
                   if (c.mounted) Navigator.pop(c, true);
                   if (mounted && order.orderType != 'internal') {
@@ -325,11 +413,13 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                   // recordScrap throws ArgumentError/StateError with a message
                   // written for a shop owner; surface it verbatim.
                   if (!c.mounted) return;
-                  ScaffoldMessenger.of(c).showSnackBar(SnackBar(
-                    content: Text(_readableScrapError(e)),
-                    backgroundColor: Colors.red,
-                    duration: const Duration(seconds: 5),
-                  ));
+                  ScaffoldMessenger.of(c).showSnackBar(
+                    SnackBar(
+                      content: Text(_readableScrapError(e)),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 5),
+                    ),
+                  );
                 }
               },
               child: const Text('حفظ'),
@@ -345,15 +435,17 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
 
     if (saved == true && mounted) {
       _loadData();
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم تسجيل الهالك')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم تسجيل الهالك')));
     }
   }
 
   Future<void> _showScrapPolicyResultDialog(ManufacturingScrap scrap) async {
     String desc = 'سياسة الهالك المنفذة: ';
     if (scrap.compensationAction == 'deducted_from_invoice') {
-      desc += 'تم تحديد خصم ${scrap.compensationAmount} ج.م من الفاتورة لصالح العميل.';
+      desc +=
+          'تم تحديد خصم ${scrap.compensationAmount} ج.م من الفاتورة لصالح العميل.';
     } else if (scrap.compensationAction == 'replaced') {
       desc += 'تم استبدال القطعة وصرفها من مخزن المصنع لحساب العميل.';
     } else if (scrap.compensationAction == 'labour_waived') {
@@ -365,10 +457,19 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     await showDialog(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Row(children: [Icon(Icons.info_outline, color: Colors.blue), Gap(8), Text('نتيجة سياسة الهالك')]),
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.blue),
+            Gap(8),
+            Text('نتيجة سياسة الهالك'),
+          ],
+        ),
         content: Text(desc, style: const TextStyle(fontSize: 14)),
         actions: [
-          FilledButton(onPressed: () => Navigator.pop(c), child: const Text('حسناً')),
+          FilledButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('حسناً'),
+          ),
         ],
       ),
     );
@@ -385,8 +486,10 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     if (e is StateError) return e.message;
     if (e is InsufficientStockException) {
       return e.shortages
-          .map((s) =>
-              '${s.productName}: مطلوب ${s.required} ${s.unit ?? ''}، متاح ${s.available}')
+          .map(
+            (s) =>
+                '${s.productName}: مطلوب ${s.required} ${s.unit ?? ''}، متاح ${s.available}',
+          )
           .join('\n');
     }
     return 'فشل تسجيل الهالك: $e';
@@ -394,7 +497,9 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
 
   Future<void> _completeOrder() async {
     if (_order == null || _bom == null) return;
-    final actualQtyCtrl = TextEditingController(text: _order!.plannedQuantity.toString());
+    final actualQtyCtrl = TextEditingController(
+      text: _order!.plannedQuantity.toString(),
+    );
     String? dialogError;
     bool isSubmitting = false;
 
@@ -415,20 +520,23 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                 dialogError = null;
               });
               try {
-                if (_order!.orderType == 'for_others' || _order!.orderType == 'mixed') {
-                  final result = await widget.db.manufacturingOrderDao.completeForOthersOrder(
-                    orderId: _order!.id,
-                    actualProducedQuantity: actual,
-                  );
+                if (_order!.orderType == 'for_others' ||
+                    _order!.orderType == 'mixed') {
+                  final result = await widget.db.manufacturingOrderDao
+                      .completeForOthersOrder(
+                        orderId: _order!.id,
+                        actualProducedQuantity: actual,
+                      );
                   if (dialogCtx.mounted) Navigator.pop(dialogCtx, true);
                   if (!mounted) return;
                   await _showForOthersCompletionSuccess(result);
                   _loadData();
                 } else {
-                  final result = await widget.db.manufacturingOrderDao.completeManufacturingOrder(
-                    orderId: _order!.id,
-                    actualProducedQuantity: actual,
-                  );
+                  final result = await widget.db.manufacturingOrderDao
+                      .completeManufacturingOrder(
+                        orderId: _order!.id,
+                        actualProducedQuantity: actual,
+                      );
                   if (dialogCtx.mounted) Navigator.pop(dialogCtx, true);
                   if (!mounted) return;
                   // Success — show cost summary + offer to update product cost
@@ -456,15 +564,21 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _order!.orderType == 'for_others' || _order!.orderType == 'mixed'
+                      _order!.orderType == 'for_others' ||
+                              _order!.orderType == 'mixed'
                           ? 'سيتم خصم خامات العميل من رصيد العهدة بالمخزن في معاملة واحدة ذريّة (دون زيادة مخزون المصنع لأن البضاعة ملك العميل وتنتظر التسليم).'
                           : 'سيتم خصم المواد الخام وإضافة المنتج النهائي للمخزون في معاملة واحدة (ذريّة).',
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
                     ),
                     const Gap(12),
                     TextField(
                       controller: actualQtyCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'الكمية المنتجة فعلياً *',
                         border: OutlineInputBorder(),
@@ -479,27 +593,35 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                     // (same ownership rule as completeForOthersOrder).
                     ..._bomItems.map((entry) {
                       final (item, product) = entry;
-                      final waste = item.wastePercentageOverride ?? _bom!.wastePercentage;
-                      final actualForPreview = double.tryParse(actualQtyCtrl.text) ?? _order!.plannedQuantity;
-                      final factor = _bom!.yieldQuantity > 0 ? actualForPreview / _bom!.yieldQuantity : actualForPreview;
-                      final required = (item.quantityRequired * factor * (1 + waste / 100)).round();
+                      final waste =
+                          item.wastePercentageOverride ?? _bom!.wastePercentage;
+                      final actualForPreview =
+                          double.tryParse(actualQtyCtrl.text) ??
+                          _order!.plannedQuantity;
+                      final factor = _bom!.yieldQuantity > 0
+                          ? actualForPreview / _bom!.yieldQuantity
+                          : actualForPreview;
+                      final required =
+                          (item.quantityRequired * factor * (1 + waste / 100))
+                              .round();
                       final isCustomerOwned = isCustomerOwnedBomLine(
                         orderType: _order!.orderType ?? 'internal',
                         rawMaterialProductId: item.rawMaterialProductId,
-                        hasCustodyBalance: _customerBalances.any((b) =>
-                            b.productId == item.rawMaterialProductId),
+                        hasCustodyBalance: _customerBalances.any(
+                          (b) => b.productId == item.rawMaterialProductId,
+                        ),
                       );
                       final int available;
                       if (isCustomerOwned) {
                         available = _customerBalances
-                            .where((b) =>
-                                b.productId == item.rawMaterialProductId)
+                            .where(
+                              (b) => b.productId == item.rawMaterialProductId,
+                            )
                             .fold<double>(
-                                0,
-                                (s, b) =>
-                                    s +
-                                    (b.quantityOnHand -
-                                        b.quantityAllocated))
+                              0,
+                              (s, b) =>
+                                  s + (b.quantityOnHand - b.quantityAllocated),
+                            )
                             .round();
                       } else {
                         available = product.quantity;
@@ -509,14 +631,31 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Row(
                           children: [
-                            Expanded(child: Text(
+                            Expanded(
+                              child: Text(
                                 isCustomerOwned
                                     ? '${product.name} (عهدة العميل)'
                                     : product.name,
-                                style: const TextStyle(fontSize: 12))),
-                            Text('$required / $available ${product.unit ?? ''}',
-                                style: TextStyle(fontSize: 12, color: short ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),
-                            if (short) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.warning, size: 14, color: Colors.red)),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                            Text(
+                              '$required / $available ${product.unit ?? ''}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: short ? Colors.red : Colors.green,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (short)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 6),
+                                child: Icon(
+                                  Icons.warning,
+                                  size: 14,
+                                  color: Colors.red,
+                                ),
+                              ),
                           ],
                         ),
                       );
@@ -525,19 +664,40 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       const Gap(12),
                       Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: Theme.of(ctx).colorScheme.errorContainer, borderRadius: BorderRadius.circular(6)),
-                        child: Text(dialogError!, style: TextStyle(color: Theme.of(ctx).colorScheme.onErrorContainer, fontSize: 12)),
+                        decoration: BoxDecoration(
+                          color: Theme.of(ctx).colorScheme.errorContainer,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          dialogError!,
+                          style: TextStyle(
+                            color: Theme.of(ctx).colorScheme.onErrorContainer,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
                     ],
                   ],
                 ),
               ),
               actions: [
-                TextButton(onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx, false), child: const Text('إلغاء')),
+                TextButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () => Navigator.pop(dialogCtx, false),
+                  child: const Text('إلغاء'),
+                ),
                 FilledButton(
                   onPressed: isSubmitting ? null : doComplete,
                   child: isSubmitting
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
                       : const Text('تأكيد الإكمال'),
                 ),
               ],
@@ -551,33 +711,74 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     }
   }
 
-  Future<void> _showCompletionSuccess(ManufacturingCompletionResult result) async {
+  Future<void> _showCompletionSuccess(
+    ManufacturingCompletionResult result,
+  ) async {
     bool updateCost = false;
     await showDialog(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (ctx, setStateDialog) {
           return AlertDialog(
-            title: const Row(children: [Icon(Icons.check_circle, color: Colors.green), Gap(8), Text('تم إكمال التصنيع')]),
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green),
+                Gap(8),
+                Text('تم إكمال التصنيع'),
+              ],
+            ),
             content: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('أمر ${result.orderNumber} • المنتج: ${result.finishedProductName}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    'أمر ${result.orderNumber} • المنتج: ${result.finishedProductName}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const Gap(12),
-                  _costRow('الكمية المنتجة:', '${result.producedInt} وحدة (${result.producedQuantity} فعلي)'),
-                  _costRow('تكلفة المواد:', '${result.materialCost.toStringAsFixed(2)} ج.م'),
-                  _costRow('تكاليف إضافية:', '${result.componentsCost.toStringAsFixed(2)} ج.م'),
+                  _costRow(
+                    'الكمية المنتجة:',
+                    '${result.producedInt} وحدة (${result.producedQuantity} فعلي)',
+                  ),
+                  _costRow(
+                    'تكلفة المواد:',
+                    '${result.materialCost.toStringAsFixed(2)} ج.م',
+                  ),
+                  _costRow(
+                    'تكاليف إضافية:',
+                    '${result.componentsCost.toStringAsFixed(2)} ج.م',
+                  ),
                   const Divider(),
-                  _costRow('الإجمالي:', '${result.totalCost.toStringAsFixed(2)} ج.م', isBold: true),
-                  _costRow('تكلفة الوحدة:', '${result.unitCost.toStringAsFixed(2)} ج.م / وحدة', isBold: true, color: Theme.of(ctx).colorScheme.primary),
+                  _costRow(
+                    'الإجمالي:',
+                    '${result.totalCost.toStringAsFixed(2)} ج.م',
+                    isBold: true,
+                  ),
+                  _costRow(
+                    'تكلفة الوحدة:',
+                    '${result.unitCost.toStringAsFixed(2)} ج.م / وحدة',
+                    isBold: true,
+                    color: Theme.of(ctx).colorScheme.primary,
+                  ),
                   const Gap(12),
-                  Text('المخزون: ${result.previousFinishedQuantity} → ${result.nextFinishedQuantity} وحدة', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                  Text(
+                    'المخزون: ${result.previousFinishedQuantity} → ${result.nextFinishedQuantity} وحدة',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
                   const Gap(16),
                   Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.withValues(alpha: 0.4))),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.4),
+                      ),
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -585,17 +786,35 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                           children: [
                             Checkbox(
                               value: updateCost,
-                              onChanged: (v) => setStateDialog(() => updateCost = v ?? false),
+                              onChanged: (v) =>
+                                  setStateDialog(() => updateCost = v ?? false),
                             ),
-                            Expanded(child: Text('تحديث سعر تكلفة المنتج النهائي؟', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade800))),
+                            Expanded(
+                              child: Text(
+                                'تحديث سعر تكلفة المنتج النهائي؟',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.amber.shade800,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                         Text(
-                            'السعر الحالي: ${result.previousCostPrice?.toStringAsFixed(2) ?? 'غير محدد'} ج.م → الجديد: ${result.unitCost.toStringAsFixed(2)} ج.م',
-                            style: TextStyle(fontSize: 12, color: Colors.amber.shade800)),
+                          'السعر الحالي: ${result.previousCostPrice?.toStringAsFixed(2) ?? 'غير محدد'} ج.م → الجديد: ${result.unitCost.toStringAsFixed(2)} ج.م',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.amber.shade800,
+                          ),
+                        ),
                         const Gap(4),
-                        Text('اختياري ويحتاج تأكيدك. لن يتم التحديث بدون موافقتك.',
-                            style: TextStyle(fontSize: 11, color: Colors.amber.shade700)),
+                        Text(
+                          'اختياري ويحتاج تأكيدك. لن يتم التحديث بدون موافقتك.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.amber.shade700,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -607,13 +826,28 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                 onPressed: () async {
                   if (updateCost) {
                     try {
-                      final product = await widget.db.productDao.getProductById(result.finishedProductId);
+                      final product = await widget.db.productDao.getProductById(
+                        result.finishedProductId,
+                      );
                       if (product != null) {
-                        await widget.db.productDao.updateProduct(product.copyWith(costPrice: Value(result.unitCost)));
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث سعر التكلفة')));
+                        await widget.db.productDao.updateProduct(
+                          product.copyWith(costPrice: Value(result.unitCost)),
+                        );
+                        if (mounted)
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('تم تحديث سعر التكلفة'),
+                            ),
+                          );
                       }
                     } catch (e) {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل تحديث التكلفة: $e'), backgroundColor: Colors.red));
+                      if (mounted)
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('فشل تحديث التكلفة: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
                     }
                   }
                   if (c.mounted) Navigator.pop(c);
@@ -627,42 +861,67 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     );
   }
 
-  Future<void> _showForOthersCompletionSuccess(ForOthersCompletionResult result) async {
+  Future<void> _showForOthersCompletionSuccess(
+    ForOthersCompletionResult result,
+  ) async {
     await showDialog(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Row(children: [Icon(Icons.check_circle, color: Colors.green), Gap(8), Text('تم إكمال أمر التشغيل للغير')]),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green),
+            Gap(8),
+            Text('تم إكمال أمر التشغيل للغير'),
+          ],
+        ),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('أمر ${result.orderNumber} • المنتج: ${result.finishedProductName}',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                'أمر ${result.orderNumber} • المنتج: ${result.finishedProductName}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
               const Gap(12),
               _costRow('الكمية المنتجة:', '${result.producedQuantity} وحدة'),
               const Divider(),
-              const Text('خامات العميل المستهلكة من العهدة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const Text(
+                'خامات العميل المستهلكة من العهدة:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
               const Gap(4),
               for (final cons in result.customerConsumptions)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Text('• ${cons.productName}: ${cons.quantity} ${cons.unit ?? ''}', style: const TextStyle(fontSize: 12)),
+                  child: Text(
+                    '• ${cons.productName}: ${cons.quantity} ${cons.unit ?? ''}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ),
               if (result.factoryConsumptions.isNotEmpty) ...[
                 const Gap(8),
-                const Text('خامات المصنع المستهلكة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const Text(
+                  'خامات المصنع المستهلكة:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
                 const Gap(4),
                 for (final f in result.factoryConsumptions)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Text('• ${f.productName}: ${f.required} ${f.unit ?? ''}', style: const TextStyle(fontSize: 12)),
+                    child: Text(
+                      '• ${f.productName}: ${f.required} ${f.unit ?? ''}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
               ],
               const Gap(12),
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
                 child: const Text(
                   'تم خصم المواد من عهدة العميل ولم تتم إضافة المنتج النهائي لمخزون المصنع لأن البضاعة ملك للعميل وتنتظر إصدار إذن التسليم.',
                   style: TextStyle(fontSize: 11, color: Colors.blueAccent),
@@ -672,7 +931,10 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
           ),
         ),
         actions: [
-          FilledButton(onPressed: () => Navigator.pop(c), child: const Text('حسناً')),
+          FilledButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('حسناً'),
+          ),
         ],
       ),
     );
@@ -681,13 +943,17 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
   Future<void> _openDeliveryDialog() async {
     final order = _order;
     if (order == null) return;
-    final alreadyDelivered = await widget.db.manufacturingDeliveryDao.getTotalDeliveredQuantity(order.id);
+    final alreadyDelivered = await widget.db.manufacturingDeliveryDao
+        .getTotalDeliveredQuantity(order.id);
     if (!mounted) return;
     final remaining = order.producedQuantity - alreadyDelivered;
     if (remaining <= 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم تسليم كامل الكمية المنتجة بالفعل'), backgroundColor: Colors.orange),
+          const SnackBar(
+            content: Text('تم تسليم كامل الكمية المنتجة بالفعل'),
+            backgroundColor: Colors.orange,
+          ),
         );
       }
       return;
@@ -705,7 +971,9 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       barrierDismissible: false,
       builder: (dlgCtx) => StatefulBuilder(
         builder: (ctx, setDlg) => AlertDialog(
-          title: Text('إذن تسليم منتجات تامة للعميل — أمر ${order.orderNumber}'),
+          title: Text(
+            'إذن تسليم منتجات تامة للعميل — أمر ${order.orderNumber}',
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -713,14 +981,23 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
               children: [
                 Text('المنتج: ${_finishedProduct?.name ?? ''}'),
                 const Gap(4),
-                Text('المنتج كلياً: ${order.producedQuantity} | المسلم سابقاً: $alreadyDelivered | المتبقي للتسليم: $remaining',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.indigo)),
+                Text(
+                  'المنتج كلياً: ${order.producedQuantity} | المسلم سابقاً: $alreadyDelivered | المتبقي للتسليم: $remaining',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: Colors.indigo,
+                  ),
+                ),
                 const Gap(16),
                 TextField(
                   controller: qtyCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: InputDecoration(
-                    labelText: 'الكمية المراد تسليمها (الحد الأقصى: $remaining) *',
+                    labelText:
+                        'الكمية المراد تسليمها (الحد الأقصى: $remaining) *',
                     border: const OutlineInputBorder(),
                     prefixIcon: const Icon(Icons.numbers),
                   ),
@@ -756,15 +1033,24 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                   const Gap(12),
                   Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
-                    child: Text(dlgError!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      dlgError!,
+                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                    ),
                   ),
                 ],
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: isSubmitting ? null : () => Navigator.pop(dlgCtx), child: const Text('إلغاء')),
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(dlgCtx),
+              child: const Text('إلغاء'),
+            ),
             FilledButton.icon(
               onPressed: isSubmitting
                   ? null
@@ -775,7 +1061,10 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                         return;
                       }
                       if (q > remaining + 1e-9) {
-                        setDlg(() => dlgError = 'الكمية المطلوبة تتجاوز المتاح للتسليم ($remaining)');
+                        setDlg(
+                          () => dlgError =
+                              'الكمية المطلوبة تتجاوز المتاح للتسليم ($remaining)',
+                        );
                         return;
                       }
                       setDlg(() {
@@ -791,14 +1080,23 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                               quantity: q,
                             ),
                           ],
-                          deliveredBy: deliveredByCtrl.text.trim().isEmpty ? null : deliveredByCtrl.text.trim(),
-                          receiverName: receiverCtrl.text.trim().isEmpty ? null : receiverCtrl.text.trim(),
-                          notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
+                          deliveredBy: deliveredByCtrl.text.trim().isEmpty
+                              ? null
+                              : deliveredByCtrl.text.trim(),
+                          receiverName: receiverCtrl.text.trim().isEmpty
+                              ? null
+                              : receiverCtrl.text.trim(),
+                          notes: notesCtrl.text.trim().isEmpty
+                              ? null
+                              : notesCtrl.text.trim(),
                         );
                         if (dlgCtx.mounted) Navigator.pop(dlgCtx);
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('تم تسجيل إذن التسليم بنجاح'), backgroundColor: Colors.green),
+                            const SnackBar(
+                              content: Text('تم تسجيل إذن التسليم بنجاح'),
+                              backgroundColor: Colors.green,
+                            ),
                           );
                           _loadData();
                         }
@@ -810,7 +1108,14 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       }
                     },
               icon: isSubmitting
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : const Icon(Icons.local_shipping),
               label: const Text('تأكيد التسليم'),
             ),
@@ -827,12 +1132,16 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
   Future<void> _generateServiceInvoice() async {
     final order = _order;
     if (order == null) return;
-    final deliveredQty = await widget.db.manufacturingDeliveryDao.getTotalDeliveredQuantity(order.id);
+    final deliveredQty = await widget.db.manufacturingDeliveryDao
+        .getTotalDeliveredQuantity(order.id);
     if (!mounted) return;
     if (deliveredQty <= 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('لا يمكن إصدار فاتورة قبل تسليم أي كمية للعميل'), backgroundColor: Colors.orange),
+          const SnackBar(
+            content: Text('لا يمكن إصدار فاتورة قبل تسليم أي كمية للعميل'),
+            backgroundColor: Colors.orange,
+          ),
         );
       }
       return;
@@ -843,35 +1152,61 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       builder: (c) => AlertDialog(
         title: const Text('إصدار فاتورة خدمات التشغيل للغير'),
         content: Text(
-            'سيتم إنشاء فاتورة خدمات للعميل ${_customer?.name ?? ''} عن الكمية المسلمة ($deliveredQty وحدة) وترحيلها مباشرة إلى كشف حساب العميل ورصيد المديونية.\n\nهل تريد المتابعة؟'),
+          'سيتم إنشاء فاتورة خدمات للعميل ${_customer?.name ?? ''} عن الكمية المسلمة ($deliveredQty وحدة) وترحيلها مباشرة إلى كشف حساب العميل ورصيد المديونية.\n\nهل تريد المتابعة؟',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('إصدار الفاتورة')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('إصدار الفاتورة'),
+          ),
         ],
       ),
     );
     if (confirm != true) return;
 
     try {
-      final inv = await widget.db.manufacturingDeliveryDao.generateServiceInvoice(order.id);
+      final inv = await widget.db.manufacturingDeliveryDao
+          .generateServiceInvoice(order.id);
       if (mounted) {
         await showDialog(
           context: context,
           builder: (c) => AlertDialog(
-            title: const Row(children: [Icon(Icons.check_circle, color: Colors.green), Gap(8), Text('تم إصدار الفاتورة')]),
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green),
+                Gap(8),
+                Text('تم إصدار الفاتورة'),
+              ],
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('رقم الفاتورة: ${inv.invoiceNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(
+                  'رقم الفاتورة: ${inv.invoiceNumber}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
                 const Gap(8),
                 Text('الإجمالي: ${inv.totalAmount.toStringAsFixed(2)} ج.م'),
                 const Gap(8),
-                const Text('تم ترحيل الفاتورة إلى سجل حساب العميل بنجاح.', style: TextStyle(color: Colors.green)),
+                const Text(
+                  'تم ترحيل الفاتورة إلى سجل حساب العميل بنجاح.',
+                  style: TextStyle(color: Colors.green),
+                ),
               ],
             ),
             actions: [
-              FilledButton(onPressed: () => Navigator.pop(c), child: const Text('حسناً')),
+              FilledButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text('حسناً'),
+              ),
             ],
           ),
         );
@@ -880,7 +1215,10 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('فشل إصدار الفاتورة: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('فشل إصدار الفاتورة: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -928,13 +1266,21 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.local_shipping, color: theme.colorScheme.primary),
+                    Icon(
+                      Icons.local_shipping,
+                      color: theme.colorScheme.primary,
+                    ),
                     const Gap(8),
-                    Text('أذونات تسليم المنتج للعميل (${_deliveries.length})',
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                    Text(
+                      'أذونات تسليم المنتج للعميل (${_deliveries.length})',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
-                if (_order!.status == ManufacturingOrderStatus.completed && undelivered > 0)
+                if (_order!.status == ManufacturingOrderStatus.completed &&
+                    undelivered > 0)
                   FilledButton.icon(
                     onPressed: _openDeliveryDialog,
                     icon: const Icon(Icons.add),
@@ -946,7 +1292,12 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
             if (_deliveries.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(12),
-                child: Text('لم يتم تسجيل أي أذونات تسليم بعد', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                child: Text(
+                  'لم يتم تسجيل أي أذونات تسليم بعد',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
               )
             else
               ListView.separated(
@@ -959,14 +1310,25 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                   return ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
-                    leading: const CircleAvatar(child: Icon(Icons.inventory, size: 18)),
-                    title: Text('إذن تسليم: ${d.deliveryNumber}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.inventory, size: 18),
+                    ),
+                    title: Text(
+                      'إذن تسليم: ${d.deliveryNumber}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     subtitle: Text(
-                        'التاريخ: ${DateFormat('yyyy/MM/dd HH:mm').format(d.deliveryDate)} | المستلم: ${d.receiverName ?? '—'} | المندوب: ${d.deliveredBy ?? '—'}'),
+                      'التاريخ: ${DateFormat('yyyy/MM/dd HH:mm').format(d.deliveryDate)} | المستلم: ${d.receiverName ?? '—'} | المندوب: ${d.deliveredBy ?? '—'}',
+                    ),
                     trailing: Chip(
-                      label: Text(d.status == 'delivered' ? 'تم التسليم' : d.status),
+                      label: Text(
+                        d.status == 'delivered' ? 'تم التسليم' : d.status,
+                      ),
                       backgroundColor: Colors.green.withValues(alpha: 0.12),
-                      labelStyle: const TextStyle(color: Colors.green, fontSize: 12),
+                      labelStyle: const TextStyle(
+                        color: Colors.green,
+                        fontSize: 12,
+                      ),
                     ),
                   );
                 },
@@ -1005,8 +1367,12 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
               children: [
                 Icon(Icons.compare_arrows, color: theme.colorScheme.primary),
                 const Gap(8),
-                Text('بطاقة مطابقة الخامات والتشغيل (Reconciliation)',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'بطاقة مطابقة الخامات والتشغيل (Reconciliation)',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
             const Divider(height: 24),
@@ -1014,21 +1380,55 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
               spacing: 20,
               runSpacing: 12,
               children: [
-                _stat(context, 'العميل صاحب العهدة', _customer?.name ?? '—', Icons.person),
-                _stat(context, 'الكمية المنتجة', '${mo.producedQuantity} وحدة', Icons.check_circle_outline),
-                _stat(context, 'المسلم للعميل', '$_deliveredQty وحدة', Icons.local_shipping_outlined),
-                _stat(context, 'المتبقي للتسليم', '${mo.producedQuantity - _deliveredQty} وحدة', Icons.hourglass_bottom),
-                _stat(context, 'المستهلك من العهدة', '$totalConsumed وحدة', Icons.remove_circle_outline),
-                _stat(context, 'رصيد العهدة بالمخزن', '$totalOnHand وحدة', Icons.warehouse_outlined),
+                _stat(
+                  context,
+                  'العميل صاحب العهدة',
+                  _customer?.name ?? '—',
+                  Icons.person,
+                ),
+                _stat(
+                  context,
+                  'الكمية المنتجة',
+                  '${mo.producedQuantity} وحدة',
+                  Icons.check_circle_outline,
+                ),
+                _stat(
+                  context,
+                  'المسلم للعميل',
+                  '$_deliveredQty وحدة',
+                  Icons.local_shipping_outlined,
+                ),
+                _stat(
+                  context,
+                  'المتبقي للتسليم',
+                  '${mo.producedQuantity - _deliveredQty} وحدة',
+                  Icons.hourglass_bottom,
+                ),
+                _stat(
+                  context,
+                  'المستهلك من العهدة',
+                  '$totalConsumed وحدة',
+                  Icons.remove_circle_outline,
+                ),
+                _stat(
+                  context,
+                  'رصيد العهدة بالمخزن',
+                  '$totalOnHand وحدة',
+                  Icons.warehouse_outlined,
+                ),
               ],
             ),
             if (_customerBalances.isNotEmpty) ...[
               const Gap(16),
-              const Text('أرصدة عهدة العميل الحالية بالمخزن:',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const Text(
+                'أرصدة عهدة العميل الحالية بالمخزن:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
               const Gap(8),
               Table(
-                border: TableBorder.all(color: Theme.of(context).colorScheme.outlineVariant),
+                border: TableBorder.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
                 columnWidths: const {
                   0: FlexColumnWidth(3),
                   1: FlexColumnWidth(2),
@@ -1037,21 +1437,74 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                 },
                 children: [
                   TableRow(
-                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                    ),
                     children: const [
-                      Padding(padding: EdgeInsets.all(6), child: Text('كود الصنف', style: TextStyle(fontWeight: FontWeight.bold))),
-                      Padding(padding: EdgeInsets.all(6), child: Text('الرصيد المتاح', style: TextStyle(fontWeight: FontWeight.bold))),
-                      Padding(padding: EdgeInsets.all(6), child: Text('المحجوز', style: TextStyle(fontWeight: FontWeight.bold))),
-                      Padding(padding: EdgeInsets.all(6), child: Text('اللون / المقاس', style: TextStyle(fontWeight: FontWeight.bold))),
+                      Padding(
+                        padding: EdgeInsets.all(6),
+                        child: Text(
+                          'الصنف',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.all(6),
+                        child: Text(
+                          'الرصيد المتاح',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.all(6),
+                        child: Text(
+                          'المحجوز',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.all(6),
+                        child: Text(
+                          'اللون / المقاس',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ],
                   ),
                   for (final b in _customerBalances)
                     TableRow(
                       children: [
-                        Padding(padding: const EdgeInsets.all(6), child: Text('#${b.productId}')),
-                        Padding(padding: const EdgeInsets.all(6), child: Text('${b.quantityOnHand}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green))),
-                        Padding(padding: const EdgeInsets.all(6), child: Text('${b.quantityAllocated}')),
-                        Padding(padding: const EdgeInsets.all(6), child: Text('${b.color ?? ''} ${b.size ?? ''}'.trim().isEmpty ? '—' : '${b.color ?? ''} ${b.size ?? ''}'.trim())),
+                        Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Text(
+                            _balanceProductNames[b.productId] ??
+                                '#${b.productId}',
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Text(
+                            '${b.quantityOnHand}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Text('${b.quantityAllocated}'),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Text(
+                            '${b.color ?? ''} ${b.size ?? ''}'.trim().isEmpty
+                                ? '—'
+                                : '${b.color ?? ''} ${b.size ?? ''}'.trim(),
+                          ),
+                        ),
                       ],
                     ),
                 ],
@@ -1063,14 +1516,32 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     );
   }
 
-  Widget _costRow(String label, String value, {bool isBold = false, Color? color}) {
+  Widget _costRow(
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? color,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
-          Text(value, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: color, fontSize: 13)),
+          Text(
+            label,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 13,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: color,
+              fontSize: 13,
+            ),
+          ),
         ],
       ),
     );
@@ -1094,7 +1565,10 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (_isLoading) {
-      return Scaffold(appBar: AppBar(title: const Text('تفاصيل أمر التصنيع')), body: const Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        appBar: AppBar(title: const Text('تفاصيل أمر التصنيع')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
     if (_error != null || _order == null) {
       return Scaffold(
@@ -1103,11 +1577,21 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error),
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: theme.colorScheme.error,
+              ),
               const Gap(16),
-              Text(_error ?? 'خطأ غير معروف', style: theme.textTheme.titleMedium),
+              Text(
+                _error ?? 'خطأ غير معروف',
+                style: theme.textTheme.titleMedium,
+              ),
               const Gap(16),
-              ElevatedButton(onPressed: _loadData, child: const Text('إعادة المحاولة')),
+              ElevatedButton(
+                onPressed: _loadData,
+                child: const Text('إعادة المحاولة'),
+              ),
             ],
           ),
         ),
@@ -1118,13 +1602,19 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     final product = _finishedProduct;
     final color = _statusColor(mo.status);
     final totalCost = _totalMaterialCostForOrder();
-    final unitCost = mo.plannedQuantity > 0 ? totalCost / mo.plannedQuantity : 0;
+    final unitCost = mo.plannedQuantity > 0
+        ? totalCost / mo.plannedQuantity
+        : 0;
 
     return Scaffold(
       appBar: AppBar(
         title: Text('أمر ${mo.orderNumber}'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData, tooltip: 'تحديث'),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: 'تحديث',
+          ),
           if (mo.status == ManufacturingOrderStatus.planned)
             IconButton(
               icon: const Icon(Icons.edit),
@@ -1147,7 +1637,9 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
             // Header card
             Card(
               elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -1157,30 +1649,54 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       children: [
                         Container(
                           padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                          child: Icon(Icons.precision_manufacturing, color: color, size: 32),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.precision_manufacturing,
+                            color: color,
+                            size: 32,
+                          ),
                         ),
                         const Gap(16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(mo.orderNumber, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                              Text(
+                                mo.orderNumber,
+                                style: theme.textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               const Gap(4),
                               Text(
                                 '${product?.name ?? '#${mo.finishedProductId}'} • وصفة: ${bom?.name ?? '#${mo.bomId}'}',
-                                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
                               ),
                             ],
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: color)),
-                          child: Text(_statusLabel(mo.status), style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                            color: color.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: color),
+                          ),
+                          child: Text(
+                            _statusLabel(mo.status),
+                            style: TextStyle(
+                              color: color,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -1189,20 +1705,85 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       spacing: 24,
                       runSpacing: 16,
                       children: [
-                        _stat(context, 'الكمية المخططة', '${mo.plannedQuantity} وحدة', Icons.numbers),
-                        _stat(context, 'الكمية المنتجة', '${mo.producedQuantity} وحدة', Icons.inventory),
-                        _stat(context, 'العائد للوصفة', '${bom?.yieldQuantity ?? '-'} وحدة', Icons.scale),
-                        _stat(context, 'تاريخ مخطط', mo.plannedDate != null ? DateFormat('yyyy/MM/dd').format(mo.plannedDate!) : '—', Icons.calendar_today),
-                        _stat(context, 'تكلفة مادية تقديرية', '${totalCost.toStringAsFixed(2)} ج.م', Icons.attach_money),
-                        _stat(context, 'تكلفة الوحدة', '${unitCost.toStringAsFixed(2)} ج.م', Icons.calculate),
+                        _stat(
+                          context,
+                          'الكمية المخططة',
+                          '${mo.plannedQuantity} وحدة',
+                          Icons.numbers,
+                        ),
+                        _stat(
+                          context,
+                          'الكمية المنتجة',
+                          '${mo.producedQuantity} وحدة',
+                          Icons.inventory,
+                        ),
+                        _stat(
+                          context,
+                          'العائد للوصفة',
+                          '${bom?.yieldQuantity ?? '-'} وحدة',
+                          Icons.scale,
+                        ),
+                        _stat(
+                          context,
+                          'تاريخ مخطط',
+                          mo.plannedDate != null
+                              ? DateFormat('yyyy/MM/dd').format(mo.plannedDate!)
+                              : '—',
+                          Icons.calendar_today,
+                        ),
+                        _stat(
+                          context,
+                          'تكلفة مادية تقديرية',
+                          '${totalCost.toStringAsFixed(2)} ج.م',
+                          Icons.attach_money,
+                        ),
+                        _stat(
+                          context,
+                          'تكلفة الوحدة',
+                          '${unitCost.toStringAsFixed(2)} ج.م',
+                          Icons.calculate,
+                        ),
                         if (mo.orderType != 'internal') ...[
-                          _stat(context, 'نوع التشغيل', mo.orderType == 'for_others' ? 'تشغيل للغير' : 'تشغيل مشترك', Icons.category),
-                          _stat(context, 'العميل', _customer?.name ?? '—', Icons.person),
-                          _stat(context, 'حالة التسليم', _deliveryStatusLabel(mo.deliveryStatus), Icons.local_shipping),
-                          _stat(context, 'أجر التشغيل للوحدة', '${mo.serviceUnitPrice ?? 0} ج.م', Icons.attach_money),
-                          _stat(context, 'سياسة الهالك', _scrapPolicyLabel(mo.scrapPolicy), Icons.policy),
+                          _stat(
+                            context,
+                            'نوع التشغيل',
+                            mo.orderType == 'for_others'
+                                ? 'تشغيل للغير'
+                                : 'تشغيل مشترك',
+                            Icons.category,
+                          ),
+                          _stat(
+                            context,
+                            'العميل',
+                            _customer?.name ?? '—',
+                            Icons.person,
+                          ),
+                          _stat(
+                            context,
+                            'حالة التسليم',
+                            _deliveryStatusLabel(mo.deliveryStatus),
+                            Icons.local_shipping,
+                          ),
+                          _stat(
+                            context,
+                            'أجر التشغيل للوحدة',
+                            '${mo.serviceUnitPrice ?? 0} ج.م',
+                            Icons.attach_money,
+                          ),
+                          _stat(
+                            context,
+                            'سياسة الهالك',
+                            _scrapPolicyLabel(mo.scrapPolicy),
+                            Icons.policy,
+                          ),
                         ],
-                        if (mo.cancelReason != null) _stat(context, 'سبب الإلغاء', mo.cancelReason!, Icons.cancel_outlined),
+                        if (mo.cancelReason != null)
+                          _stat(
+                            context,
+                            'سبب الإلغاء',
+                            mo.cancelReason!,
+                            Icons.cancel_outlined,
+                          ),
                       ],
                     ),
                     if (mo.notes != null && mo.notes!.isNotEmpty) ...[
@@ -1210,8 +1791,17 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.withValues(alpha: 0.4))),
-                        child: Text('ملاحظات: ${mo.notes!}', style: TextStyle(color: Colors.amber.shade800)),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.amber.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          'ملاحظات: ${mo.notes!}',
+                          style: TextStyle(color: Colors.amber.shade800),
+                        ),
                       ),
                     ],
                     const Gap(16),
@@ -1221,15 +1811,23 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       runSpacing: 8,
                       children: [
                         if (mo.status == ManufacturingOrderStatus.planned)
-                          FilledButton.icon(onPressed: _startOrder, icon: const Icon(Icons.play_arrow), label: const Text('بدء التنفيذ')),
-                        if (mo.status == ManufacturingOrderStatus.planned || mo.status == ManufacturingOrderStatus.inProgress)
+                          FilledButton.icon(
+                            onPressed: _startOrder,
+                            icon: const Icon(Icons.play_arrow),
+                            label: const Text('بدء التنفيذ'),
+                          ),
+                        if (mo.status == ManufacturingOrderStatus.planned ||
+                            mo.status == ManufacturingOrderStatus.inProgress)
                           FilledButton.icon(
                             onPressed: _completeOrder,
                             icon: const Icon(Icons.check_circle),
                             label: const Text('إكمال التصنيع'),
-                            style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.green,
+                            ),
                           ),
-                        if (mo.status == ManufacturingOrderStatus.completed && mo.orderType != 'internal') ...[
+                        if (mo.status == ManufacturingOrderStatus.completed &&
+                            mo.orderType != 'internal') ...[
                           if ((mo.producedQuantity - _deliveredQty) > 0)
                             FilledButton.icon(
                               onPressed: _openDeliveryDialog,
@@ -1241,11 +1839,16 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                               onPressed: _generateServiceInvoice,
                               icon: const Icon(Icons.receipt_long),
                               label: const Text('إصدار فاتورة خدمات'),
-                              style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.teal,
+                              ),
                             )
                           else
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.teal.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(20),
@@ -1254,21 +1857,40 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.check_circle, size: 16, color: Colors.teal),
+                                  const Icon(
+                                    Icons.check_circle,
+                                    size: 16,
+                                    color: Colors.teal,
+                                  ),
                                   const Gap(6),
-                                  Text('فاتورة مسجلة #${mo.invoiceId}',
-                                      style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold, fontSize: 13)),
+                                  Text(
+                                    'فاتورة مسجلة #${mo.invoiceId}',
+                                    style: const TextStyle(
+                                      color: Colors.teal,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
                         ],
-                        if (mo.status == ManufacturingOrderStatus.planned || mo.status == ManufacturingOrderStatus.inProgress)
+                        if (mo.status == ManufacturingOrderStatus.planned ||
+                            mo.status == ManufacturingOrderStatus.inProgress)
                           OutlinedButton.icon(
-                              onPressed: _cancelOrder,
-                              icon: const Icon(Icons.cancel, color: Colors.red),
-                              label: const Text('إلغاء الأمر', style: TextStyle(color: Colors.red))),
+                            onPressed: _cancelOrder,
+                            icon: const Icon(Icons.cancel, color: Colors.red),
+                            label: const Text(
+                              'إلغاء الأمر',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
                         if (mo.status == ManufacturingOrderStatus.cancelled)
-                          OutlinedButton.icon(onPressed: _reopenOrder, icon: const Icon(Icons.replay), label: const Text('إعادة فتح')),
+                          OutlinedButton.icon(
+                            onPressed: _reopenOrder,
+                            icon: const Icon(Icons.replay),
+                            label: const Text('إعادة فتح'),
+                          ),
                       ],
                     ),
                   ],
@@ -1288,9 +1910,12 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
             // allowance on the BOM is the plan; these rows are what actually
             // happened, and the variance between the two is the useful number.
             if (mo.status == ManufacturingOrderStatus.completed) ...[
-              Text('الهالك',
-                  style: theme.textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                'الهالك',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const Gap(8),
               Card(
                 child: Padding(
@@ -1305,24 +1930,31 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                       ),
                       const Gap(8),
                       StreamBuilder<List<ManufacturingScrap>>(
-                        stream: widget.db.manufacturingScrapDao
-                            .watchForOrder(mo.id),
+                        stream: widget.db.manufacturingScrapDao.watchForOrder(
+                          mo.id,
+                        ),
                         builder: (context, snap) {
-                          final rows = snap.data ?? const <ManufacturingScrap>[];
+                          final rows =
+                              snap.data ?? const <ManufacturingScrap>[];
                           if (rows.isEmpty) {
-                            return Text('لا يوجد هالك مسجّل على هذا الأمر',
-                                style: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                    fontSize: 12));
+                            return Text(
+                              'لا يوجد هالك مسجّل على هذا الأمر',
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                fontSize: 12,
+                              ),
+                            );
                           }
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               for (final r in rows)
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 2,
+                                  ),
                                   child: Row(
                                     children: [
                                       Expanded(
@@ -1331,22 +1963,22 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                                           r.productId == mo.finishedProductId
                                               ? 'منتج نهائي'
                                               : 'خام #${r.productId}',
-                                          style:
-                                              const TextStyle(fontSize: 12),
+                                          style: const TextStyle(fontSize: 12),
                                         ),
                                       ),
                                       Expanded(
                                         flex: 2,
                                         child: Text(
-                                            '${r.quantity} — ${ManufacturingScrapReason.label(r.reason)}',
-                                            style: const TextStyle(
-                                                fontSize: 12)),
+                                          '${r.quantity} — ${ManufacturingScrapReason.label(r.reason)}',
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
                                       ),
                                       Expanded(
                                         flex: 3,
-                                        child: Text(r.responsibleParty,
-                                            style:
-                                                const TextStyle(fontSize: 12)),
+                                        child: Text(
+                                          r.responsibleParty,
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1367,61 +1999,165 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
               _buildReconciliationCard(),
               const Gap(24),
             ],
-            Text('مكونات الوصفة المطلوبة (للكمية المخططة)',
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'مكونات الوصفة المطلوبة (للكمية المخططة)',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const Gap(12),
             if (_bomItems.isEmpty)
-              Card(child: Container(width: double.infinity, padding: const EdgeInsets.all(32), child: Text('لا توجد مكونات لهذه الوصفة', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant), textAlign: TextAlign.center)))
+              Card(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(32),
+                  child: Text(
+                    'لا توجد مكونات لهذه الوصفة',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              )
             else
               Card(
                 clipBehavior: Clip.antiAlias,
                 child: Column(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       color: theme.colorScheme.surfaceContainerHighest,
                       child: Row(
                         children: const [
-                          Expanded(flex: 3, child: Text('المادة الخام', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                          Expanded(flex: 2, child: Text('المطلوب', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                          Expanded(flex: 2, child: Text('المتاح', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                          Expanded(flex: 2, child: Text('الحالة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              'المادة الخام',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'المطلوب',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'المتاح',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'الحالة',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                     ..._bomItems.map((entry) {
                       final (item, product) = entry;
                       final bomYield = bom?.yieldQuantity ?? 1;
-                      final factor = bomYield > 0 ? mo.plannedQuantity / bomYield : mo.plannedQuantity;
-                      final waste = item.wastePercentageOverride ?? bom?.wastePercentage ?? 0;
-                      final required = item.quantityRequired * factor * (1 + waste / 100);
+                      final factor = bomYield > 0
+                          ? mo.plannedQuantity / bomYield
+                          : mo.plannedQuantity;
+                      final waste =
+                          item.wastePercentageOverride ??
+                          bom?.wastePercentage ??
+                          0;
+                      final required =
+                          item.quantityRequired * factor * (1 + waste / 100);
                       final requiredInt = required.round(); // Option A rounding
                       final available = product.quantity;
                       final short = requiredInt > available;
                       final statusColor = short ? Colors.red : Colors.green;
-                      final statusText = short ? 'ناقص ${requiredInt - available}' : 'متوفر';
+                      final statusText = short
+                          ? 'ناقص ${requiredInt - available}'
+                          : 'متوفر';
                       return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         child: Row(
                           children: [
                             Expanded(
-                                flex: 3,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                    Text('${item.quantityRequired} ${item.unit ?? product.unit ?? ''} × ${factor.toStringAsFixed(2)} + هدر $waste%', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
-                                  ],
-                                )),
-                            Expanded(flex: 2, child: Text('$requiredInt ${product.unit ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold))),
-                            Expanded(flex: 2, child: Text('$available ${product.unit ?? ''}')),
+                              flex: 3,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    product.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${item.quantityRequired} ${item.unit ?? product.unit ?? ''} × ${factor.toStringAsFixed(2)} + هدر $waste%',
+                                    style: TextStyle(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             Expanded(
-                                flex: 2,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
-                                  child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold)),
-                                )),
+                              flex: 2,
+                              child: Text(
+                                '$requiredInt ${product.unit ?? ''}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text('$available ${product.unit ?? ''}'),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  statusText,
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       );
@@ -1435,7 +2171,12 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     );
   }
 
-  Widget _stat(BuildContext context, String label, String value, IconData icon) {
+  Widget _stat(
+    BuildContext context,
+    String label,
+    String value,
+    IconData icon,
+  ) {
     final theme = Theme.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -1445,8 +2186,18 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            Text(value, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            Text(
+              value,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
       ],
