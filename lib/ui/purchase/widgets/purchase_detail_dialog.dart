@@ -8,6 +8,8 @@ import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
 import 'package:pos_offline_desktop/core/services/purchase_print_service_simple.dart';
 import 'package:pos_offline_desktop/core/services/purchase_return_service.dart';
+import 'package:pos_offline_desktop/core/services/document_date_service.dart';
+import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
 import 'enhanced_purchase_invoice_page.dart';
 import 'void_purchase_dialog.dart';
 
@@ -247,6 +249,37 @@ class _PurchaseDetailDialogState extends ConsumerState<PurchaseDetailDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('إغلاق'),
         ),
+        if (_purchase != null && _purchase!.status != 'voided')
+          TextButton.icon(
+            onPressed: () async {
+              final newDate = await pickDocumentDate(
+                context: context,
+                db: widget.db,
+                initialDate: _purchase!.purchaseDate,
+              );
+              if (newDate != null) {
+                await DocumentDateService(widget.db).updatePurchaseDate(
+                  purchaseId: _purchase!.id,
+                  newDate: newDate,
+                );
+                if (mounted) {
+                  _load();
+                  widget.onChanged?.call();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('تم تعديل تاريخ فاتورة المشتريات بنجاح'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+            icon: const Icon(Icons.edit_calendar, size: 18),
+            label: const Text('تعديل التاريخ'),
+            style: TextButton.styleFrom(foregroundColor: Colors.blue),
+          ),
         TextButton.icon(
           onPressed: _loading || _error != null ? null : _print,
           icon: const Icon(Icons.print, size: 18),

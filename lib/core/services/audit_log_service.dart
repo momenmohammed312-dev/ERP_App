@@ -11,12 +11,15 @@ class AuditService {
     String? details,
     dynamic oldValue,
     dynamic newValue,
+    int? userId,
   }) async {
-    final logId = DateTime.now().millisecondsSinceEpoch.toString();
+    final rand = DateTime.now().microsecondsSinceEpoch;
+    final logId = '${rand}_${(rand % 10000).toString().padLeft(4, '0')}';
     
     await db.into(db.auditLog).insert(
       AuditLogCompanion.insert(
         id: logId,
+        userId: Value(userId),
         action: action,
         tableNameField: tableName,
         recordId: Value(recordId),

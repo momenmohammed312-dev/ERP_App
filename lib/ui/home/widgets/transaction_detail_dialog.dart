@@ -12,6 +12,8 @@ import 'package:pos_offline_desktop/ui/invoice/widgets/invoice_partial_return_di
 import 'package:pos_offline_desktop/ui/invoice/widgets/void_invoice_dialog.dart';
 import 'package:pos_offline_desktop/ui/widgets/permission_guarded_action.dart';
 import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
+import 'package:pos_offline_desktop/core/services/document_date_service.dart';
+import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
 
 const Color _bgDark = Color(0xFF0D1117);
 const Color _gold = Color(0xFFC9A84C);
@@ -298,7 +300,11 @@ class _TransactionDetailDialogState extends ConsumerState<TransactionDetailDialo
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _InvoiceDetailView(db: widget.db, invoiceId: invoiceId),
+      builder: (ctx) => _InvoiceDetailView(
+        db: widget.db,
+        invoiceId: invoiceId,
+        onChanged: _notifyChanged,
+      ),
     );
   }
 
@@ -341,8 +347,13 @@ void _refundInvoice(BuildContext context, int? invoiceId) async {
 class _InvoiceDetailView extends ConsumerStatefulWidget {
   final AppDatabase db;
   final int invoiceId;
+  final VoidCallback? onChanged;
 
-  const _InvoiceDetailView({required this.db, required this.invoiceId});
+  const _InvoiceDetailView({
+    required this.db,
+    required this.invoiceId,
+    this.onChanged,
+  });
 
   @override
   ConsumerState<_InvoiceDetailView> createState() => _InvoiceDetailViewState();
@@ -482,6 +493,39 @@ class _InvoiceDetailViewState extends ConsumerState<_InvoiceDetailView> {
               ),
       ),
       actions: [
+        if (_invoice != null && _invoice!.status != 'voided')
+          TextButton.icon(
+            onPressed: () async {
+              final newDate = await pickDocumentDate(
+                context: context,
+                db: widget.db,
+                initialDate: _invoice!.date,
+              );
+              if (newDate != null) {
+                final user = ref.read<User?>(authProvider)?.username;
+                await DocumentDateService(widget.db).updateInvoiceDate(
+                  invoiceId: _invoice!.id,
+                  newDate: newDate,
+                  userId: user,
+                );
+                if (mounted) {
+                  _load();
+                  widget.onChanged?.call();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('تم تعديل تاريخ الفاتورة بنجاح'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+            icon: const Icon(Icons.edit_calendar, size: 18),
+            label: const Text('تعديل التاريخ'),
+            style: TextButton.styleFrom(foregroundColor: Colors.blue),
+          ),
         if (_invoice != null)
           TextButton.icon(
             onPressed: _print,

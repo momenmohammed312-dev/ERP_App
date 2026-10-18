@@ -81,9 +81,11 @@ class SalesReturnService {
     String? notes,
     String? processedBy,
     Map<int, String>? restockConditions,
+    DateTime? returnDate,
   }) async {
     final wanted = itemReturns.entries.where((e) => e.value > 0).toList();
     if (wanted.isEmpty) throw Exception('لم يتم اختيار أي صنف للإرجاع');
+    final effectiveDate = returnDate ?? DateTime.now();
 
     return _db.transaction(() async {
       final invoice = await (_db.select(_db.invoices)..where((t) => t.id.equals(invoiceId))).getSingleOrNull();
@@ -121,7 +123,7 @@ class SalesReturnService {
       if (totalReturn <= 0) throw Exception('قيمة المرتجع صفر');
 
       // 2) إنشاء header
-      final now = DateTime.now();
+      final now = effectiveDate;
       final returnNumber = 'RET-${now.year}${now.month.toString().padLeft(2, '0')}'
           '${now.day.toString().padLeft(2, '0')}-'
           '${now.microsecondsSinceEpoch % 1000000}'
@@ -132,7 +134,7 @@ class SalesReturnService {
           originalInvoiceId: invoiceId,
           customerId: Value(invoice.customerId),
           customerName: invoice.customerName ?? 'عميل',
-          returnDate: now,
+          returnDate: effectiveDate,
           totalAmount: totalReturn,
           returnReason: reason,
           notes: Value(notes),

@@ -1040,15 +1040,22 @@ class BackupService {
       // Clear existing data
       await _db.customUpdate('DELETE FROM $tableName');
 
+      // Discover target table columns so we only insert columns that exist in the target schema
+      final tableInfo = await _db.customSelect('PRAGMA table_info($tableName)').get();
+      final targetColumns = tableInfo.map((r) => r.data['name'] as String).toSet();
+
       // Insert new data
       for (final rawRow in data) {
         final row = (rawRow as Map).cast<String, dynamic>();
-        final columns = row.keys.join(', ');
-        final placeholders = List.filled(row.values.length, '?').join(', ');
-        final values = row.values.toList();
+        final validEntries = targetColumns.isNotEmpty
+            ? row.entries.where((e) => targetColumns.contains(e.key)).toList()
+            : row.entries.toList();
+        final columns = validEntries.map((e) => e.key).join(', ');
+        final placeholders = List.filled(validEntries.length, '?').join(', ');
+        final values = validEntries.map((e) => e.value).toList();
 
         await _db.customUpdate(
-          'INSERT INTO $tableName ($columns) VALUES ($placeholders)',
+          'INSERT OR IGNORE INTO $tableName ($columns) VALUES ($placeholders)',
           variables: values.map((v) => Variable(v)).toList(),
         );
       }

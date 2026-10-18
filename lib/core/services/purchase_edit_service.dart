@@ -45,6 +45,7 @@ class PurchaseEditService {
     required double paid,
     required String paymentMethod,
     required List<PurchaseEditLine> lines,
+    DateTime? purchaseDate,
   }) async {
     if (lines.isEmpty) throw Exception('يرجى إضافة منتج واحد على الأقل');
     for (final l in lines) {
@@ -56,6 +57,7 @@ class PurchaseEditService {
             ..where((t) => t.id.equals(purchaseId)))
           .getSingleOrNull();
       if (purchase == null) throw Exception('فاتورة المشتريات غير موجودة');
+      final resolvedDate = purchaseDate ?? purchase.purchaseDate;
       // Lines are keyed by invoice NUMBER (not row id) — resolve it here.
       final lineKey = purchase.invoiceNumber;
       final oldLines = await _db.purchaseDao.getPurchaseItems(lineKey);
@@ -126,6 +128,7 @@ class PurchaseEditService {
           totalAmount: Value(total),
           paidAmount: Value(paid),
           paymentMethod: Value(paymentMethod),
+          purchaseDate: Value(resolvedDate),
           status: Value(
             remaining <= 0.01
                 ? 'paid'
@@ -142,7 +145,7 @@ class PurchaseEditService {
         invoiceNumber: invoiceNumber,
         total: total,
         paid: paid,
-        date: DateTime.now(),
+        date: resolvedDate,
       );
     });
   }

@@ -56,11 +56,13 @@ class InvoiceService {
     String? ledgerDescription,
     List<SplitPaymentEntry>? splitPayments,
     int? primaryShipmentId,
+    DateTime? invoiceDate,
   }) async {
     // Bug 3: no timestamp numbering. A caller-supplied value is preserved
     // as legacy; otherwise the canonical display number derives from the
     // row id (assigned below) — never generated before the insert.
     final rand = Random.secure();
+    final resolvedDate = invoiceDate ?? DateTime.now();
 
     return _db.transaction(() async {
       final invoiceId = await _db.invoiceDao.insertInvoice(
@@ -77,7 +79,7 @@ class InvoiceService {
           cardAmount: Value(cardAmount),
           creditAmount: Value(creditAmount),
           status: Value(status),
-          date: Value(DateTime.now()),
+          date: Value(resolvedDate),
           shipmentId: Value(primaryShipmentId),
         ),
       );
@@ -176,6 +178,7 @@ class InvoiceService {
               invoiceId: invoiceId,
               paymentMethod: sp.method,
               amount: sp.amount,
+              paidAt: Value(resolvedDate),
             ),
           );
         }
@@ -200,7 +203,7 @@ class InvoiceService {
             id: ledgerIdSale,
             entityType: 'Customer',
             refId: customerId,
-            date: DateTime.now(),
+            date: resolvedDate,
             description: desc,
             debit: Value(totalAmount),
             credit: const Value(0.0),
@@ -217,7 +220,7 @@ class InvoiceService {
               id: ledgerIdPay,
               entityType: 'Customer',
               refId: customerId,
-              date: DateTime.now(),
+              date: resolvedDate,
               description: 'سداد $actualInvoiceNumber',
               debit: const Value(0.0),
               credit: Value(paidAmount),
@@ -240,7 +243,7 @@ class InvoiceService {
             id: ledgerIdSupplier,
             entityType: 'Supplier',
             refId: acc.supplierId,
-            date: DateTime.now(),
+            date: resolvedDate,
             description: 'عمولة $actualInvoiceNumber',
             debit: Value(supplierDue),
             credit: const Value(0.0),
@@ -291,12 +294,14 @@ class InvoiceService {
     required String status,
     required List<InvoiceItemParams> items,
     int? primaryShipmentId,
+    DateTime? invoiceDate,
   }) async {
     final original = await getInvoiceById(invoiceId);
     if (original == null) throw Exception('الفاتورة غير موجودة');
     if (original.status == 'voided') {
       throw Exception('لا يمكن تعديل فاتورة ملغاة');
     }
+    final resolvedDate = invoiceDate ?? original.date;
 
     // Guard: do not edit an invoice that already has returns — that would
     // double-count stock/ledger. User must reverse the return first.
@@ -428,6 +433,7 @@ class InvoiceService {
           cardAmount: Value(cardAmount),
           creditAmount: Value(creditAmount),
           status: Value(status),
+          date: Value(resolvedDate),
           shipmentId: Value(primaryShipmentId),
         ),
       );
@@ -443,7 +449,7 @@ class InvoiceService {
                 '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_sale',
             entityType: 'Customer',
             refId: customerId,
-            date: DateTime.now(),
+            date: resolvedDate,
             description: desc,
             debit: Value(totalAmount),
             credit: const Value(0.0),
@@ -460,7 +466,7 @@ class InvoiceService {
                   '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_pay',
               entityType: 'Customer',
               refId: customerId,
-              date: DateTime.now(),
+              date: resolvedDate,
               description: 'سداد $actualInvoiceNumber',
               debit: const Value(0.0),
               credit: Value(paidAmount),
@@ -482,7 +488,7 @@ class InvoiceService {
                 '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_supplier',
             entityType: 'Supplier',
             refId: acc.supplierId,
-            date: DateTime.now(),
+            date: resolvedDate,
             description: 'عمولة $actualInvoiceNumber',
             debit: Value(supplierDue),
             credit: const Value(0.0),

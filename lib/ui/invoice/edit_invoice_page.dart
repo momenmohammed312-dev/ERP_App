@@ -7,6 +7,8 @@ import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart'
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/audit_log_service.dart';
 import 'package:pos_offline_desktop/core/services/invoice_service.dart';
+import 'package:pos_offline_desktop/core/services/document_date_service.dart';
+import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
 
 class EditInvoicePage extends ConsumerStatefulWidget {
   final AppDatabase db;
@@ -56,6 +58,7 @@ class _EditInvoicePageState extends ConsumerState<EditInvoicePage> {
 
   String? _selectedCustomerId; // null = نقدي
   String _paymentMethod = 'cash';
+  late DateTime _invoiceDate;
   final _paidAmountController = TextEditingController();
   final _numberFormat = NumberFormat('#,##0.00');
 
@@ -130,6 +133,7 @@ class _EditInvoicePageState extends ConsumerState<EditInvoicePage> {
         _products = products;
         _selectedCustomerId = invoice.customerId;
         _paymentMethod = invoice.paymentMethod ?? 'cash';
+        _invoiceDate = invoice.date;
         _paidAmountController.text = invoice.paidAmount.toStringAsFixed(2);
         _isLoading = false;
       });
@@ -239,6 +243,7 @@ class _EditInvoicePageState extends ConsumerState<EditInvoicePage> {
       'paidAmount': _invoice!.paidAmount,
       'paymentMethod': _invoice!.paymentMethod,
       'status': _invoice!.status,
+      'date': _invoice!.date.toIso8601String(),
     };
 
     try {
@@ -257,15 +262,19 @@ class _EditInvoicePageState extends ConsumerState<EditInvoicePage> {
         status: status,
         items: items,
         primaryShipmentId: _invoice!.shipmentId,
+        invoiceDate: _invoiceDate,
       );
 
       final user = ref.read(authProvider);
+      final isClosed = await DocumentDateService(widget.db).isDateInClosedDay(_invoiceDate);
       await AuditService.log(
         db: widget.db,
         action: 'UPDATE',
         tableName: 'invoices',
         recordId: updated.id,
-        details: 'تعديل فاتورة ${updated.invoiceNumber}',
+        details: '[MONEY] تعديل فاتورة ${updated.invoiceNumber}'
+            '${_invoiceDate != _invoice!.date ? ' وتغيير التاريخ إلى ${DateFormat('yyyy/MM/dd HH:mm').format(_invoiceDate)}' : ''}'
+            '${isClosed ? ' (تحذير: يوم مغلق)' : ''}',
         oldValue: oldValues,
         newValue: {
           'invoiceNumber': updated.invoiceNumber,
@@ -274,6 +283,8 @@ class _EditInvoicePageState extends ConsumerState<EditInvoicePage> {
           'paidAmount': updated.paidAmount,
           'paymentMethod': updated.paymentMethod,
           'status': updated.status,
+          'date': _invoiceDate.toIso8601String(),
+          'day_closed_warning': isClosed,
           'performedBy': user?.username,
         },
       );
@@ -402,6 +413,33 @@ class _EditInvoicePageState extends ConsumerState<EditInvoicePage> {
                               decimal: true,
                             ),
                             onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 200,
+                          child: InkWell(
+                            onTap: () async {
+                              final picked = await pickDocumentDate(
+                                context: context,
+                                db: widget.db,
+                                initialDate: _invoiceDate,
+                              );
+                              if (picked != null) {
+                                setState(() => _invoiceDate = picked);
+                              }
+                            },
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'تاريخ الفاتورة',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.calendar_today, size: 18),
+                                suffixIcon: Icon(Icons.edit_calendar, size: 16),
+                              ),
+                              child: Text(
+                                DateFormat('yyyy/MM/dd HH:mm').format(_invoiceDate),
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                            ),
                           ),
                         ),
                       ],

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:ui' as ui;
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -27,6 +28,8 @@ import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
 import 'package:pos_offline_desktop/core/services/shipment_pricing_service.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/shipment_picker_dialog.dart';
+import 'package:intl/intl.dart';
+import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
 
 class EnhancedNewInvoicePage extends StatefulHookConsumerWidget {
   final AppDatabase db;
@@ -54,7 +57,19 @@ class _EnhancedNewInvoicePageState
   InvoiceType _invoiceType = InvoiceType.cash;
   PaymentMethod _paymentMethod = PaymentMethod.cash;
   String? _selectedCustomerId;
+  DateTime _invoiceDate = DateTime.now();
   final List<ProductEntry> _productEntries = [];
+
+  Future<void> _pickInvoiceDate() async {
+    final picked = await pickDocumentDate(
+      context: context,
+      db: widget.db,
+      initialDate: _invoiceDate,
+    );
+    if (picked != null) {
+      setState(() => _invoiceDate = picked);
+    }
+  }
 
   // Products and search
   List<Product> _filteredProducts = [];
@@ -120,7 +135,7 @@ class _EnhancedNewInvoicePageState
       context: context,
       barrierDismissible: false,
       builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: ui.TextDirection.rtl,
         child: AlertDialog(
           title: const Row(children: [
             Icon(Icons.business, color: Color(0xFFC9A84C)),
@@ -604,7 +619,7 @@ class _EnhancedNewInvoicePageState
           paymentMethod: Value(_invoiceType == InvoiceType.credit ? 'credit' : _paymentMethod.name),
           totalAmount: Value(_grandTotal),
           paidAmount: Value(_paidAmount),
-          date: Value(now),
+          date: Value(_invoiceDate),
           status: const Value('draft'),
         ),
       );
@@ -947,6 +962,7 @@ class _EnhancedNewInvoicePageState
       items: items,
       ledgerDescription: ledgerDescription,
       primaryShipmentId: primaryShipmentId,
+      invoiceDate: _invoiceDate,
     );
 
     final invoiceId = result.invoiceId;
@@ -1002,7 +1018,7 @@ class _EnhancedNewInvoicePageState
       customerPhone: selectedCustomer?.phone ?? 'N/A',
       customerZipCode: '',
       customerState: '',
-      invoiceDate: DateTime.now(),
+      invoiceDate: _invoiceDate,
       subtotal: _grandTotal,
       isCreditAccount: _invoiceType == InvoiceType.credit,
       previousBalance: previousBalance,
@@ -1222,43 +1238,86 @@ class _EnhancedNewInvoicePageState
             ),
           ),
 
-          // Customer selection
+          // Customer selection and Invoice Date
           Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: DropdownButtonFormField<String>(
-              initialValue: _selectedCustomerId,
-              decoration: InputDecoration(
-                labelText: 'العميل',
-                prefixIcon: const Icon(Icons.person),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Theme.of(context).dividerColor),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Theme.of(context).dividerColor),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(
-                    color: Theme.of(context).colorScheme.primary,
-                    width: 2,
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedCustomerId,
+                    decoration: InputDecoration(
+                      labelText: 'العميل',
+                      prefixIcon: const Icon(Icons.person),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 2,
+                        ),
+                      ),
+                      filled: true,
+                      fillColor: Theme.of(context).colorScheme.surface,
+                    ),
+                    items: _customers.map((customer) {
+                      return DropdownMenuItem(
+                        value: customer.id,
+                        child: Text(customer.name),
+                      );
+                    }).toList(),
+                    onChanged: (customerId) {
+                      setState(() {
+                        _selectedCustomerId = customerId;
+                      });
+                    },
                   ),
                 ),
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surface,
-              ),
-              items: _customers.map((customer) {
-                return DropdownMenuItem(
-                  value: customer.id,
-                  child: Text(customer.name),
-                );
-              }).toList(),
-              onChanged: (customerId) {
-                setState(() {
-                  _selectedCustomerId = customerId;
-                });
-              },
+                const Gap(12),
+                Expanded(
+                  flex: 2,
+                  child: InkWell(
+                    onTap: _pickInvoiceDate,
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'تاريخ الفاتورة',
+                        prefixIcon: const Icon(Icons.calendar_today, size: 20),
+                        suffixIcon: const Icon(Icons.edit_calendar, size: 16),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 2,
+                          ),
+                        ),
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surface,
+                      ),
+                      child: Text(
+                        DateFormat('yyyy/MM/dd HH:mm').format(_invoiceDate),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
 
