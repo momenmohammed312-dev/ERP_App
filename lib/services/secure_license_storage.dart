@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -43,17 +44,17 @@ class SecureLicenseStorage {
   /// Read and decrypt the license data. Returns null if file doesn't exist or is corrupt.
   static Future<SecureLicenseData?> read() async {
     try {
-      if (!await _file.exists()) {
+      if (!_file.existsSync()) {
         // Try backup
-        if (await _backupFile.exists()) {
+        if (_backupFile.existsSync()) {
           AppLogger.w('Primary file missing, restoring from backup');
-          await _backupFile.copy(_file.path);
+          _backupFile.copySync(_file.path);
         } else {
           return null;
         }
       }
 
-      final encryptedContent = await _file.readAsString();
+      final encryptedContent = _file.readAsStringSync();
 
       // Verify HMAC signature
       final signatureValid = _verifySignature(encryptedContent);
@@ -61,11 +62,11 @@ class SecureLicenseStorage {
         AppLogger.w('License file signature INVALID — possible tampering');
 
         // Try backup
-        if (await _backupFile.exists()) {
+        if (_backupFile.existsSync()) {
           AppLogger.w('Attempting recovery from backup');
-          final backupContent = await _backupFile.readAsString();
+          final backupContent = _backupFile.readAsStringSync();
           if (_verifySignature(backupContent)) {
-            await _backupFile.copy(_file.path);
+            _backupFile.copySync(_file.path);
             return _decryptAndParse(backupContent);
           }
         }
@@ -86,8 +87,8 @@ class SecureLicenseStorage {
       if (_appDir == null) await init();
 
       // Create backup of current file
-      if (await _file.exists()) {
-        await _file.copy(_backupFile.path);
+      if (_file.existsSync()) {
+        _file.copySync(_backupFile.path);
       }
 
       // Serialize, encrypt, sign
@@ -97,7 +98,7 @@ class SecureLicenseStorage {
       final signature = _computeSignature(encrypted);
       final fileContent = '$encrypted\n$signature';
 
-      await _file.writeAsString(fileContent);
+      _file.writeAsStringSync(fileContent, flush: true);
       AppLogger.i('Secure license saved to ${_file.path}');
       return true;
     } catch (e) {
@@ -109,8 +110,8 @@ class SecureLicenseStorage {
   /// Delete the license file (and backup).
   static Future<void> clear() async {
     try {
-      if (await _file.exists()) await _file.delete();
-      if (await _backupFile.exists()) await _backupFile.delete();
+      if (_file.existsSync()) _file.deleteSync();
+      if (_backupFile.existsSync()) _backupFile.deleteSync();
     } catch (e) {
       AppLogger.e('Error clearing secure license', e);
     }

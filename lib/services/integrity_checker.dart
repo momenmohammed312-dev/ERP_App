@@ -196,20 +196,20 @@ class IntegrityChecker {
       tableName: 'security_incident',
       details: {
         'incident_type': 'critical_integrity_failure',
-        'action_taken': 'protective_shutdown',
+        'action_taken': 'logged_only',
         'consecutive_failures': _consecutiveFailures,
       },
     );
 
-    // Deactivate license to protect system
-    final licenseManager = LicenseManager();
-    await licenseManager.deactivateLicense();
+    // NOTE: the license is intentionally NOT deactivated here anymore. A false
+    // positive used to wipe a paying customer's license in the middle of a
+    // working day. Licensing is now enforced by the signed server lease.
 
     // Stop all services
     UserSessionService.stopSessionCleanup();
     stop();
 
-    debugPrint('🛑 System protection activated - license deactivated');
+    debugPrint('🛑 Integrity failure logged (license left untouched)');
   }
 
   /// Get current integrity status

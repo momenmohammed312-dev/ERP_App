@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/logger.dart';
-import '../../services/firebase_license_service.dart';
+import '../../services/online_license_service.dart';
 import '../../services/license_manager.dart';
 
 /// Service for handling periodic online license validation
@@ -69,7 +69,7 @@ class PeriodicLicenseValidator {
         return;
       }
 
-      final firebaseService = FirebaseLicenseService();
+      final firebaseService = OnlineLicenseService();
       final result = await firebaseService.performCheckinIfNeeded(
         currentLicense.licenseKey,
       );
@@ -83,21 +83,21 @@ class PeriodicLicenseValidator {
 
       // Handle different validation results
       switch (result.status) {
-        case FirebaseLicenseStatus.active:
+        case OnlineLicenseStatus.active:
           AppLogger.i('Periodic validation successful');
           break;
 
-        case FirebaseLicenseStatus.expired:
+        case OnlineLicenseStatus.expired:
           AppLogger.w('License expired during periodic validation');
           await _showLicenseWarning('تنبيه: ترخيصك منتهي الصلاحية');
           break;
 
-        case FirebaseLicenseStatus.suspended:
+        case OnlineLicenseStatus.suspended:
           AppLogger.w('License suspended during periodic validation');
           await _showLicenseWarning('تنبيه: ترخيصك موقوف');
           break;
 
-        case FirebaseLicenseStatus.offline:
+        case OnlineLicenseStatus.offline:
           AppLogger.i('Unable to perform online validation, working offline');
           // Check grace period
           final daysSinceLastValidation = await _getDaysSinceLastValidation();

@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import '../core/utils/logger.dart';
 
 /// Individual hardware components for comparison.
@@ -109,6 +111,14 @@ class HardwareIdService {
 
   /// Collect hardware components for comparison.
   static Future<HardwareComponents> _collectHardwareComponents() async {
+    if (debugMachineGuid != null) {
+      return HardwareComponents(
+        computerName: 'debug-computer',
+        numberOfCores: 4,
+        deviceId: debugMachineGuid,
+      );
+    }
+
     // Device info signals
     if (!kIsWeb && Platform.isWindows) {
       try {
@@ -176,6 +186,11 @@ class HardwareIdService {
 
   /// Fallback if nothing else works.
   static Future<String> _fallbackHardwareId() async {
+    if (debugMachineGuid != null) {
+      final hash = sha256.convert(utf8.encode('fallback_$debugMachineGuid')).toString();
+      _cachedId = hash;
+      return hash;
+    }
     try {
       final deviceInfo = DeviceInfoPlugin();
       if (Platform.isWindows) {
@@ -188,6 +203,75 @@ class HardwareIdService {
       }
     } catch (_) {}
     return 'fallback_unknown';
+  }
+
+  // ── IDs used by the online license server ──────────────────────────────
+
+  /// Stable OS-level machine id (Windows MachineGuid via device_info_plus).
+  /// Empty string when unavailable — the server then relies on installUuid.
+  static Future<String> getMachineGuid() async {
+    if (debugMachineGuid != null) return debugMachineGuid!;
+    try {
+      final c = await getHardwareComponents();
+      if (c.deviceId != null && c.deviceId!.isNotEmpty) return c.deviceId!;
+      return c.computerName;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// Test seams (null in production).
+  @visibleForTesting
+  static String? debugMachineGuid;
+  @visibleForTesting
+  static String? debugInstallUuid;
+
+  @visibleForTesting
+  static void resetForTesting() {
+    _cachedId = null;
+    _cachedComponents = null;
+    _installUuid = null;
+    debugMachineGuid = null;
+    debugInstallUuid = null;
+  }
+
+  static String? _installUuid;
+
+  /// Random UUID generated once per installation and kept in the app support
+  /// folder. Second identifier next to [getMachineGuid].
+  static Future<String> getInstallUuid() async {
+    if (debugInstallUuid != null) return debugInstallUuid!;
+    if (_installUuid != null) return _installUuid!;
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/install_id.dat');
+      if (await file.exists()) {
+        final saved = (await file.readAsString()).trim();
+        if (saved.isNotEmpty) return _installUuid = saved;
+      }
+      final fresh = const Uuid().v4();
+      await file.writeAsString(fresh, flush: true);
+      return _installUuid = fresh;
+    } catch (e) {
+      AppLogger.w('Install UUID unavailable: $e');
+      return '';
+    }
+  }
+
+  static Future<String> getDeviceName() async {
+    try {
+      return Platform.localHostname;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  static Future<String> getPlatformName() async {
+    try {
+      return Platform.operatingSystem;
+    } catch (_) {
+      return 'unknown';
+    }
   }
 
   /// Verify that the current device matches a previously saved hardware ID.

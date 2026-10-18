@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:flutter/foundation.dart';
 import '../core/utils/logger.dart';
@@ -140,7 +141,6 @@ class LicenseManager {
   static const String _secretKey = LicenseConfig.secretKey;
   static const String _firstRunKey = 'free_version_first_run';
   static const int _freeTrialDays = 36500; // 100 years
-  static const int _trialDurationDays = 7; // مدة النسخة التجريبية: 7 أيام
 
   // Singleton
   static final LicenseManager _instance = LicenseManager._internal();
@@ -160,42 +160,6 @@ class LicenseManager {
       AppLogger.e('Error generating fingerprint', e);
       throw Exception('فشل في توليد بصمة الجهاز: $e');
     }
-  }
-
-  // ════════════════════════════════════════════════════════════════════
-  // توليد مفتاح ترخيص
-  // ════════════════════════════════════════════════════════════════════
-
-  String generateLicenseKey({
-    required String deviceFingerprint,
-    required LicenseType type,
-    required int validityDays,
-    required List<String> features,
-    required String companyName,
-    required String contactEmail,
-  }) {
-    final now = DateTime.now();
-    final expiry = now.add(Duration(days: validityDays));
-
-    final maxUsers = _getMaxUsersForType(type);
-
-    final licenseData = {
-      'device': deviceFingerprint,
-      'type': type.toString().split('.').last,
-      'issue_date': now.toIso8601String(),
-      'expiry': expiry.toIso8601String(),
-      'features': features,
-      'max_users': maxUsers,
-      'company_name': companyName,
-      'contact_email': contactEmail,
-      'version': '1.0',
-    };
-
-    final jsonString = jsonEncode(licenseData);
-    final encryptedData = _encrypt(jsonString);
-    final signature = _generateSignature(encryptedData);
-
-    return '$encryptedData.$signature';
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -541,7 +505,8 @@ class LicenseManager {
       );
     }
 
-    // Paid license: try secure storage first
+    // Paid license: signed lease issued by the license server.
+    // The lease is verified offline with the baked-in PUBLIC key.
     try {
       // Recomputed on every read so a stale value can never leak across calls.
       _legacyLicenseSeen = false;
@@ -576,83 +541,32 @@ class LicenseManager {
             return null;
           }
         }
-
-        final license = License.fromJson(secureData.licenseJson!);
-
-        // Hardware binding check with grace period
-        final currentHwId = await HardwareIdService.getHardwareId();
-        final currentComponents = await HardwareIdService.getHardwareComponents();
-        final savedComponents = secureData.lastHardwareComponents != null
-            ? HardwareComponents.fromJson(secureData.lastHardwareComponents!)
-            : null;
-        
-        if (secureData.hardwareId.isNotEmpty) {
-          final isSameDevice = await HardwareIdService.isSameDeviceTolerant(
-            secureData.hardwareId,
-            savedComponents,
-          );
-          
-          if (!isSameDevice) {
-            // Increment mismatch counter
-            final newMismatchCount = secureData.hardwareMismatchCount + 1;
-            AppLogger.w(
-              'Hardware mismatch — license bound to different device '
-              '(mismatch count: $newMismatchCount)'
-            );
-            
-            if (newMismatchCount >= 2) {
-              // Second consecutive mismatch - block
-              AppLogger.e('Hardware mismatch persisted - blocking paid license');
-              return null;
-            } else {
-              // First mismatch - update counter and allow grace launch
-              final updatedData = secureData.copyWith(
-                hardwareMismatchCount: newMismatchCount,
-                lastMismatchTime: DateTime.now(),
-                lastHardwareComponents: currentComponents.toJson(),
-              );
-              await SecureLicenseStorage.write(updatedData);
-              AppLogger.w('First hardware mismatch - grace launch allowed, user should reactivate');
-              // Allow this launch but log warning
-            }
-          } else {
-            // Match successful - reset mismatch counter
-            if (secureData.hardwareMismatchCount > 0) {
-              final updatedData = secureData.copyWith(
-                hardwareMismatchCount: 0,
-                lastMismatchTime: null,
-                lastHardwareComponents: currentComponents.toJson(),
-              );
-              await SecureLicenseStorage.write(updatedData);
-              AppLogger.i('Hardware match confirmed - mismatch counter reset');
-            }
-          }
-        }
-
-        // Update session tracking
-        await _updateSessionTracking(secureData);
-
-        return license;
       }
-    } catch (e) {
-      AppLogger.e('Error reading license from secure storage', e);
-    }
 
-    // Fallback to SharedPreferences (migration path)
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final licenseJson = prefs.getString(_storageKey);
-      if (licenseJson == null) return null;
+      final token = secureData?.licenseJson?['lease_token'] as String?;
+      if (secureData == null || token == null) return null;
 
-      final data = jsonDecode(licenseJson);
-      final license = License.fromJson(data);
+      final license = await _parseLease(token);
+      if (license == null) return null;
 
-      // Migrate to secure storage
-      await _saveLicenseSecure(license);
+      // Clock-rollback protection: compare against the last time reported by
+      // the SERVER (not the local clock), so a wrong-but-later-fixed clock can
+      // never leave the customer locked out permanently.
+      final serverTime = DateTime.tryParse(
+        '${secureData.licenseJson?['server_time'] ?? ''}',
+      );
+      if (serverTime != null &&
+          DateTime.now().toUtc().isBefore(
+            serverTime.toUtc().subtract(const Duration(days: 1)),
+          )) {
+        AppLogger.w('System clock is behind the last server time — rejecting');
+        return null;
+      }
 
+      await _updateSessionTracking(secureData);
       return license;
     } catch (e) {
-      AppLogger.e('Error loading current license: $e');
+      AppLogger.e('Error reading license lease', e);
       return null;
     }
   }
@@ -676,23 +590,141 @@ class LicenseManager {
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // FREE TRIAL ACTIVATION
+  // ONLINE LEASE (signed by the license server)
   // ════════════════════════════════════════════════════════════════════
 
-  Future<LicenseValidationResult> activateTrial() async {
+  /// Extra days the app keeps working after the lease's own expiry, so a
+  /// customer who is offline for a few days isn't locked out immediately.
+  static const int _leaseGraceDays = 7;
+
+  /// Verifies a lease JWT (RS256, public key baked into the app) and turns it
+  /// into a [License]. Returns null when the signature, the device binding or
+  /// the lease expiry is not valid. Never throws.
+  Future<License?> _parseLease(String token) async {
     try {
-      final key = generateLicenseKey(
-        deviceFingerprint: 'UNBOUND',
-        type: LicenseType.trial,
-        validityDays: _trialDurationDays,
-        features: List<String>.from(LicenseConfig.availableFeatures),
-        companyName: 'Trial',
-        contactEmail: '',
+      if (LicenseConfig.publicKey.isEmpty) {
+        AppLogger.e('LICENSE_PUBLIC_KEY not injected — cannot verify lease');
+        return null;
+      }
+
+      // Only accept RS256 (blocks "alg: none" / algorithm-confusion tricks).
+      final headerPart = token.split('.').first;
+      final header = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(headerPart))),
+      ) as Map<String, dynamic>;
+      if (header['alg'] != 'RS256') {
+        AppLogger.w('Lease rejected: unexpected alg ${header['alg']}');
+        return null;
+      }
+
+      final jwt = JWT.verify(
+        token,
+        RSAPublicKey(LicenseConfig.publicKey),
+        checkHeaderType: false,
+        checkExpiresIn: false, // lease expiry is checked below, with grace
       );
-      return await validateLicense(key);
+      final p = Map<String, dynamic>.from(jwt.payload as Map);
+
+      // Device binding: matching EITHER id is enough, so a change in one of
+      // them (Windows reinstall, restored AppData...) doesn't lock the user.
+      final machineGuid = await HardwareIdService.getMachineGuid();
+      final installUuid = await HardwareIdService.getInstallUuid();
+      final sameMachine =
+          machineGuid.isNotEmpty && p['machine_guid'] == machineGuid;
+      final sameInstall =
+          installUuid.isNotEmpty && p['install_uuid'] == installUuid;
+      if (!sameMachine && !sameInstall) {
+        AppLogger.w('Lease rejected: issued for a different device');
+        return null;
+      }
+
+      final leaseEnd = DateTime.fromMillisecondsSinceEpoch(
+        (p['exp'] as int) * 1000,
+      );
+      if (DateTime.now().isAfter(
+        leaseEnd.add(const Duration(days: _leaseGraceDays)),
+      )) {
+        AppLogger.w('Lease expired — online renewal required');
+        return null;
+      }
+
+      final issued = DateTime.fromMillisecondsSinceEpoch(
+        (p['iat'] as int) * 1000,
+      );
+      final licenseExpiryRaw = p['license_expires_at'] as String?;
+      final type = LicenseType.values.firstWhere(
+        (t) => t.name == LicensePlans.resolveOrFallback('${p['plan']}'),
+        orElse: () => LicenseType.standard,
+      );
+
+      // Empty feature list from the server → fall back to the plan defaults.
+      var features = List<String>.from((p['features'] as List?) ?? const []);
+      if (features.isEmpty) {
+        final plan = LicenseConfig.licenseTypes[type.name];
+        features = plan != null
+            ? List<String>.from(plan['features'] as List)
+            : List<String>.from(LicenseConfig.availableFeatures);
+      }
+
+      return License(
+        licenseKey: '${p['license_key']}',
+        deviceFingerprint: machineGuid,
+        type: type,
+        issueDate: issued,
+        // null on the server = lifetime license. The lease itself is enforced
+        // above, so this date only drives the "days remaining" display.
+        expiryDate: licenseExpiryRaw != null
+            ? DateTime.parse(licenseExpiryRaw)
+            : issued.add(const Duration(days: 36500)),
+        features: features,
+        maxUsers: _getMaxUsersForType(type),
+        companyName: '',
+        contactEmail: '',
+        hardwareId: await HardwareIdService.getHardwareId(),
+      );
     } catch (e) {
-      return LicenseValidationResult.invalid('فشل تفعيل النسخة التجريبية: $e');
+      AppLogger.e('Lease verification failed: $e');
+      return null;
     }
+  }
+
+  /// Verifies a lease received from the server and stores it securely.
+  /// Called by OnlineLicenseService after a successful activate / checkin.
+  Future<LicenseValidationResult> saveLease(
+    String token, {
+    String? serverTime,
+  }) async {
+    final license = await _parseLease(token);
+    if (license == null) {
+      return LicenseValidationResult.invalid(
+        'تعذر التحقق من تصريح الترخيص القادم من السيرفر',
+      );
+    }
+
+    final existing = await SecureLicenseStorage.read();
+    final hardwareId = await HardwareIdService.getHardwareId();
+    final components = await HardwareIdService.getHardwareComponents();
+
+    final saved = await SecureLicenseStorage.write(
+      SecureLicenseData(
+        firstRunDate: existing?.firstRunDate ?? DateTime.now(),
+        hardwareId: hardwareId,
+        licenseJson: {
+          'lease_token': token,
+          'license_key': license.licenseKey,
+          'server_time':
+              serverTime ?? DateTime.now().toUtc().toIso8601String(),
+        },
+        lastCheckTime: DateTime.now(),
+        sessionElapsedMs: existing?.sessionElapsedMs ?? 0,
+        installCount: (existing?.installCount ?? 0) + 1,
+        lastHardwareComponents: components.toJson(),
+      ),
+    );
+    if (!saved) {
+      return LicenseValidationResult.invalid('تعذر حفظ الترخيص على الجهاز');
+    }
+    return LicenseValidationResult.valid(license);
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -742,6 +774,9 @@ class LicenseManager {
     final now = DateTime.now();
     final elapsed = now.difference(current.lastCheckTime).inMilliseconds;
 
+    // Only write to disk if at least 1 minute elapsed to avoid thrashing I/O on every feature check
+    if (elapsed < 60000) return;
+
     // Only add if elapsed is reasonable (not negative, not more than 24h)
     final adjustedElapsed = (elapsed > 0 && elapsed < 86400000)
         ? current.sessionElapsedMs + elapsed
@@ -789,18 +824,6 @@ class LicenseManager {
   // ════════════════════════════════════════════════════════════════════
   // ENCRYPTION HELPERS
   // ════════════════════════════════════════════════════════════════════
-
-  String _encrypt(String plainText) {
-    final keyBytes = md5.convert(utf8.encode(_secretKey)).bytes;
-    final key = encrypt_pkg.Key(Uint8List.fromList(keyBytes));
-    final iv = encrypt_pkg.IV(Uint8List(16));
-    final encrypter = encrypt_pkg.Encrypter(
-      encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
-    );
-
-    final encrypted = encrypter.encrypt(plainText, iv: iv);
-    return encrypted.base64;
-  }
 
   String _decrypt(String encryptedText) {
     final keyBytes = md5.convert(utf8.encode(_secretKey)).bytes;
