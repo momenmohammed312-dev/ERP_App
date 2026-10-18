@@ -23,6 +23,9 @@
 param(
     [string]$LicenseSecretKey = $env:LICENSE_SECRET_KEY,
     [string]$TrialLicenseKey = $env:TRIAL_LICENSE_KEY,
+    # FEAT-016: not secret, but MANDATORY. It is the only thing that can verify
+    # an RS256 lease offline. A release built without it refuses every license.
+    [string]$LicensePublicKey = $env:LICENSE_PUBLIC_KEY,
     [string]$InstallerScript = "installer.iss",
     [switch]$SkipPackaging,
     [switch]$SkipLicenseCheck
@@ -42,6 +45,17 @@ if (-not $SkipLicenseCheck) {
         Write-Host "[ABORT] LICENSE_SECRET_KEY is empty or 'CHANGE_ME'." -ForegroundColor Red
         Write-Host "[ABORT] Pass -LicenseSecretKey <key> or set the LICENSE_SECRET_KEY env var." -ForegroundColor Red
         Write-Host "[ABORT] For a local non-licensed dev build use -SkipLicenseCheck (NOT for customers)." -ForegroundColor Yellow
+        exit 1
+    }
+    # The public key is required even for a "licensed" build: without it the
+    # binary cannot verify a single RS256 lease and every customer is locked
+    # out at first launch with no obvious cause.
+    if ([string]::IsNullOrWhiteSpace($LicensePublicKey)) {
+        Write-Host "[ABORT] LICENSE_PUBLIC_KEY is missing." -ForegroundColor Red
+        Write-Host "[ABORT] A release build without it cannot verify any signed" -ForegroundColor Red
+        Write-Host "[ABORT] license - every customer would be locked out." -ForegroundColor Red
+        Write-Host "[ABORT] Pass -LicensePublicKey <PEM> or set LICENSE_PUBLIC_KEY." -ForegroundColor Red
+        Write-Host "[ABORT] It is a PUBLIC key (safe to store next to the secret)." -ForegroundColor Yellow
         exit 1
     }
 }
@@ -71,6 +85,12 @@ if (-not $SkipLicenseCheck) {
     }
     if (-not [string]::IsNullOrEmpty($TrialLicenseKey)) {
         $buildArgs += "--dart-define=TRIAL_LICENSE_KEY=$TrialLicenseKey"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($LicensePublicKey)) {
+        # --dart-define cannot carry real newlines; LicenseConfig.normalizePem()
+        # converts the literal "\n" sequences back on the Dart side.
+        $publicKeyPem = ($LicensePublicKey -replace "`r`n", '\n' -replace "`n", '\n')
+        $buildArgs += "--dart-define=LICENSE_PUBLIC_KEY=$publicKeyPem"
     }
 }
 & flutter @buildArgs

@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:pos_offline_desktop/core/config/app_flavor.dart';
+import 'package:pos_offline_desktop/config/license_config.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/core/router/go_router.dart';
@@ -35,6 +36,22 @@ Future<void> bootstrapApp({Flavor? flavor}) async {
 
   await SecurityService.initialize();
   await SecureLicenseStorage.init();
+
+  // FEAT-016 — a release build compiled without --dart-define=LICENSE_PUBLIC_KEY
+  // carries an EMPTY verification key, so LicenseManager._parseLease() rejects
+  // every signed license and the customer sees "no license" with no cause. That
+  // failure mode is invisible, so surface it once, loudly, at startup.
+  if (LicenseConfig.publicKey.isEmpty && !LicenseConfig.isFreeVersion) {
+    debugPrint(
+      '╔══════════════════════════════════════════════════════════════╗\n'
+      '║ MADAR: LICENSE_PUBLIC_KEY is missing from this build.        ║\n'
+      '║ Every signed license will be REJECTED and the customer will  ║\n'
+      '║ see "no license". Rebuild with:                             ║\n'
+      '║   --dart-define=LICENSE_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\\n'
+      '║   MIIB...\\n-----END PUBLIC KEY-----"                      ║\n'
+      '╚══════════════════════════════════════════════════════════════╝',
+    );
+  }
 
   final container = ProviderContainer();
   final db = container.read(appDatabaseProvider);
