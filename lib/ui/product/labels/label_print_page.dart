@@ -62,8 +62,13 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
     _companyCtrl.text = company;
     final pageUrl = await SettingsService.getBusinessPageUrl();
     _pageUrlCtrl.text = pageUrl;
-    // لو فيه لينك محفوظ — فعّل الـ QR افتراضيًا (المستخدم يقدر يطفيه).
-    if (pageUrl.trim().isNotEmpty) _showQr = true;
+    _showPrice = await SettingsService.getLabelShowPrice();
+    final savedShowQr = await SettingsService.getLabelShowQr();
+    if (savedShowQr != null) {
+      _showQr = savedShowQr;
+    } else {
+      _showQr = pageUrl.trim().isNotEmpty;
+    }
 
     final products = await widget.db.productDao.getAllProducts();
     // لو فيه منتجات قديمة لسه مالهاش باركود محفوظ — نولّد ونحفظ لها باركود
@@ -268,6 +273,11 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
         await widget.db.productDao.updateProductBarcode(e.key, e.value);
       }
 
+      await SettingsService.setBusinessPageUrl(_pageUrlCtrl.text.trim());
+      if (_companyCtrl.text.trim().isNotEmpty) {
+        await SettingsService.setBusinessName(_companyCtrl.text.trim());
+      }
+
       await LabelPrintService.printProductLabels(
         products: selected,
         copiesPerProduct: copies,
@@ -350,19 +360,30 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
               border: OutlineInputBorder(),
               isDense: true,
             ),
+            onChanged: (v) {
+              if (v.trim().isNotEmpty) {
+                SettingsService.setBusinessName(v.trim());
+              }
+            },
           ),
           const Gap(12),
 
           SwitchListTile(
             title: const Text('إظهار السعر'),
             value: _showPrice,
-            onChanged: (v) => setState(() => _showPrice = v),
+            onChanged: (v) {
+              setState(() => _showPrice = v);
+              SettingsService.setLabelShowPrice(v);
+            },
             contentPadding: EdgeInsets.zero,
           ),
           SwitchListTile(
             title: const Text('QR بجانب الباركود (لينك الصفحة)'),
             value: _showQr,
-            onChanged: (v) => setState(() => _showQr = v),
+            onChanged: (v) {
+              setState(() => _showQr = v);
+              SettingsService.setLabelShowQr(v);
+            },
             contentPadding: EdgeInsets.zero,
           ),
           if (_showQr) ...[
@@ -372,11 +393,16 @@ class _LabelPrintPageState extends State<LabelPrintPage> {
               decoration: const InputDecoration(
                 labelText: 'لينك الصفحة',
                 hintText: 'https://facebook.com/...',
+                helperText: 'يُحفظ تلقائياً في الإعدادات ويبقى ثابتاً',
                 prefixIcon: Icon(Icons.qr_code),
+                suffixIcon: Icon(Icons.cloud_done_outlined, size: 20, color: Colors.green),
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
-              onChanged: (_) => setState(() {}),
+              onChanged: (v) {
+                SettingsService.setBusinessPageUrl(v.trim());
+                setState(() {});
+              },
             ),
             const Gap(8),
             if (_currentWidth < 50)

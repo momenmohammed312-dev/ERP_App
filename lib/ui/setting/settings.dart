@@ -501,6 +501,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           textDirection: TextDirection.ltr,
           decoration: InputDecoration(
             labelText: 'لينك صفحة المحل (للطباعة كـ QR على الملصقات)',
+            hintText: 'https://facebook.com/...',
+            helperText: 'يُطبع تلقائياً كـ QR بجانب الباركود في شاشة ملصقات الباركود ويظل ثابتاً',
             labelStyle: TextStyle(color: subTextColor),
             border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
             enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
@@ -662,6 +664,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await SettingsService.setTaxNumber(_taxController.text);
       await SettingsService.setReceiptFooter(_footerController.text);
       await SettingsService.setBusinessPageUrl(_pageUrlController.text);
+      if (_pageUrlController.text.trim().isNotEmpty) {
+        await SettingsService.setLabelShowQr(true);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
