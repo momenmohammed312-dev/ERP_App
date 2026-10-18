@@ -28,10 +28,15 @@ final isFeatureEnabledProvider = Provider.family<bool, String>((ref, featureName
 
   final licenseAsync = ref.watch(currentLicenseProvider);
   return licenseAsync.maybeWhen(
-    data: (license) =>
-        license != null &&
-        license.isValid &&
-        (license.features.contains('*') || license.features.contains(featureName)),
+    data: (license) {
+      if (license == null || !license.isValid) return false;
+      // '*' is the modern catch-all; 'all' is the marker the legacy license
+      // generators emitted. Without 'all', a year-license customer saw
+      // "(مغلق)" on custody / damaged goods / manufacturing after the merge.
+      return license.features.contains('*') ||
+          license.features.contains('all') ||
+          license.features.contains(featureName);
+    },
     orElse: () => false,
   );
 });

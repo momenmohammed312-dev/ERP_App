@@ -135,17 +135,30 @@ m1HCMTcbuIPO8gGgKdidB7vQoQe67XQ23Parpb/7jEWgq26rMQiH4d4WUUTmjUvQ
       'name_arabic': 'احترافي',
       'max_users': 1,
       'features': [
+        'pos',
         'cash_sales',
         'credit_sales',
         'customers',
         'suppliers',
         'purchases',
         'inventory',
+        // 'reports' was missing: core-features unlocking in
+        // isFeatureEnabledProvider covers it by hard-coded name, but the
+        // entitlement list used by _parseLease's fallback did not.
+        'reports',
         'advanced_reports',
+        // 'backup' was missing while 'auto_backup' was present.
+        'backup',
         'auto_backup',
         'staff_management',
         'attendance',
         'payroll',
+        // The add-on modules were missing, so a professional/yearly/lifetime
+        // customer lost manufacturing, custody and damaged goods whenever
+        // _parseLease had to fall back to the plan defaults.
+        'manufacturing',
+        'custody',
+        'damaged_goods',
         'admin_dashboard',
         'api_access',
       ],

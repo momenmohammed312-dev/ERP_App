@@ -9,6 +9,46 @@ import 'package:pos_offline_desktop/config/license_config.dart';
 import 'hardware_id_service.dart';
 import 'secure_license_storage.dart';
 
+List<String> _widenLegacyFeatures(List<String> raw, LicenseType type) {
+  final features = <String>{...raw.map((f) => '$f'.trim()).where((f) => f.isNotEmpty)};
+
+  // Legacy catch-all markers meaning "everything".
+  const catchAll = {'all', '*', 'admin'};
+  if (raw.any(catchAll.contains)) {
+    features.addAll(LicenseConfig.availableFeatures);
+  }
+
+  // Legacy aliases for modules that were renamed.
+  const aliases = <String, List<String>>{
+    'users': ['staff_management', 'attendance', 'payroll'],
+    'user': ['staff_management'],
+    'accounting': ['advanced_reports'],
+    'export': ['backup'],
+  };
+  aliases.forEach((legacy, modern) {
+    if (features.contains(legacy)) features.addAll(modern);
+  });
+
+  // Full-access bundles always included the add-on modules, which were open to
+  // everyone pre-merge.
+  if (type == LicenseType.professional ||
+      type == LicenseType.enterprise ||
+      type == LicenseType.free ||
+      type == LicenseType.trial) {
+    features.addAll(const {
+      'staff_management',
+      'attendance',
+      'payroll',
+      'custody',
+      'damaged_goods',
+      'manufacturing',
+    });
+  }
+
+  return features.toList();
+}
+
+
 enum LicenseType {
   free, // مجاني — كل المميزات بدون تفعيل
   trial, // تجريبي - 7 أيام - مستخدم واحد
@@ -344,7 +384,10 @@ class LicenseManager {
         type: type,
         issueDate: DateTime.parse('${decoded['issue_date']}'),
         expiryDate: DateTime.parse('${decoded['expiry']}'),
-        features: List<String>.from(decoded['features'] as List? ?? const []),
+        features: _widenLegacyFeatures(
+          List<String>.from(decoded['features'] as List? ?? const []),
+          type,
+        ),
         maxUsers: (decoded['max_users'] as num?)?.toInt() ?? 1,
         companyName: '${decoded['company_name'] ?? ''}',
         contactEmail: '${decoded['contact_email'] ?? ''}',
@@ -575,11 +618,42 @@ class LicenseManager {
   // FEATURE / USER CHECKS
   // ════════════════════════════════════════════════════════════════════
 
-  Future<bool> hasFeature(String featureName) async {
+  /// Restores the module access a pre-RS256 customer actually had.
+///
+/// Before the feat/online-license merge these modules were not
+/// entitlement-gated at all:
+///
+///   * `staff_management` sat in FeatureGuard's `bypassFeatures` list;
+///   * `custody`, `damaged_goods` and `manufacturing` were not wrapped in a
+///     FeatureGuard, so every licensed customer could open them.
+///
+/// The merge replaced that with real entitlement checks keyed on the feature
+/// NAME. Licenses issued by the old generators (tools/gen_year_license.dart,
+/// tools/license_generator.dart) never carried those names — they used
+/// `users`, `admin`, `all` and a short core list — so after the merge a paying
+/// customer was silently shown "(مغلق)" on modules they had always used.
+///
+/// This widens the stored list. Widening only — it never removes anything the
+/// license already granted — and it applies to LEGACY licenses only, so new
+/// signed leases stay strictly entitlement-driven.
+
+/// True when [features] grants every module — either by an explicit wildcard or
+/// by carrying the full canonical list.
+bool _hasEveryFeature(List<String> features) =>
+    features.contains('*') ||
+    features.contains('all') ||
+    LicenseConfig.availableFeatures.every(features.contains);
+
+Future<bool> hasFeature(String featureName) async {
     if (LicenseConfig.isFreeVersion) return true;
     final license = await getCurrentLicense();
     if (license == null || !license.isValid) return false;
-    return license.features.contains(featureName);
+    // Wildcards: '*' is the modern catch-all, 'all' is the marker the legacy
+    // generators emitted. Missing 'all' here silently locked paying customers
+    // out of modules they had always used.
+    return license.features.contains('*') ||
+        license.features.contains('all') ||
+        license.features.contains(featureName);
   }
 
   Future<bool> canAddUser(int currentUserCount) async {

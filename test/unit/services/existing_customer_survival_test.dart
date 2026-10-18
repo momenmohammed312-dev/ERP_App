@@ -53,14 +53,23 @@ return enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc))
       sha256.convert(utf8.encode(data + LicenseConfig.secretKey)).toString();
 
   /// Reproduces a genuine pre-merge customer license key.
-  String genuineOldLicenseKey({required DateTime expiry}) {
+  ///
+  /// [features] must be passed in HERE, not patched onto the outer payload:
+  /// `_readLegacyLicense` decrypts the AES blob and reads the feature list from
+  /// the ciphertext, so an outer override would be silently ignored.
+  String genuineOldLicenseKey({
+    required DateTime expiry,
+    List<String>? features,
+    String type = 'professional',
+  }) {
     final cipher = aesEncrypt(jsonEncode({
       'device': 'UNBOUND',
-      'type': 'professional',
+      'type': type,
       'issue_date':
           DateTime.now().subtract(const Duration(days: 60)).toIso8601String(),
       'expiry': expiry.toIso8601String(),
-      'features': ['pos', 'cash_sales', 'inventory', 'manufacturing'],
+      'features': features ??
+          ['pos', 'cash_sales', 'inventory', 'manufacturing'],
       'max_users': 5,
       'company_name': 'عميل سابق',
       'contact_email': 'legacy@example.invalid',
@@ -161,6 +170,119 @@ return enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc))
         first.legacyGraceEndsAt,
         reason: 'repeated launches must never extend the window',
       );
+    });
+  });
+
+  group('P1 REGRESSION — modules that were open before the merge stay open', () {
+    // The exact list written by tools/gen_year_license.dart, reproduced
+    // verbatim. It carries the legacy catch-all markers 'admin' and 'all' but
+    // never named custody / damaged_goods / manufacturing, because before the
+    // merge those modules were NOT entitlement-gated at all.
+    const legacyYearFeatures = <String>[
+      'pos', 'inventory', 'customers', 'suppliers', 'purchases', 'reports',
+      'advanced_reports', 'accounting', 'users', 'staff_management',
+      'attendance', 'payroll', 'credit_sales', 'auto_backup', 'backup',
+      'export', 'admin', 'all',
+    ];
+
+    Future<void> seedWithFeatures(List<String> features,
+        {LicenseType type = LicenseType.professional}) async {
+      final key = genuineOldLicenseKey(
+        expiry: DateTime.now().add(const Duration(days: 300)),
+        features: features,
+        type: type.name,
+      );
+      final payload = previousReleasePayload(key);
+      payload['type'] = type.name;
+      await SecureLicenseStorage.write(
+        SecureLicenseData(
+          firstRunDate: DateTime.now().subtract(const Duration(days: 400)),
+          hardwareId: 'HW-LEGACY',
+          licenseJson: payload,
+          lastCheckTime: DateTime.now(),
+          appVersion: '2.3.0',
+        ),
+      );
+    }
+
+    // Before the merge these four were reachable by EVERY licensed customer:
+    // staff_management sat in FeatureGuard's bypassFeatures, and custody /
+    // damaged_goods were not wrapped in a FeatureGuard at all. The merge
+    // replaced that with real entitlement checks, so the old feature names now
+    // silently revoke access the customer already paid for.
+    const previouslyOpen = <String>[
+      'staff_management',
+      'custody',
+      'damaged_goods',
+      'manufacturing',
+    ];
+
+    test("a legacy 'all' license still opens every module", () async {
+      await seedWithFeatures(legacyYearFeatures);
+
+      for (final feature in previouslyOpen) {
+        expect(
+          await LicenseManager().hasFeature(feature),
+          isTrue,
+          reason: 'REGRESSION: "$feature" was open before the merge for every '
+              'licensed customer. This license carries the legacy catch-all '
+              "marker 'all', so it must keep opening it.",
+        );
+      }
+    });
+
+    test("a legacy 'admin' license still opens every module", () async {
+      await seedWithFeatures([
+        'pos', 'inventory', 'customers', 'reports', 'admin',
+      ]);
+
+      for (final feature in previouslyOpen) {
+        expect(
+          await LicenseManager().hasFeature(feature),
+          isTrue,
+          reason: "REGRESSION: 'admin' was the legacy full-access marker; "
+              '"$feature" must not be revoked.',
+        );
+      }
+    });
+
+    test("the legacy alias 'users' still opens the staff module", () async {
+      await seedWithFeatures([
+        'pos', 'inventory', 'customers', 'suppliers', 'reports', 'users',
+      ]);
+
+      expect(
+        await LicenseManager().hasFeature('staff_management'),
+        isTrue,
+        reason: "REGRESSION: 'users' was the old name for staff management.",
+      );
+    });
+
+    test('a legacy license is not revoked for modules the merge newly gated',
+        () async {
+      await seedWithFeatures(legacyYearFeatures);
+      final license = await LicenseManager().getCurrentLicense();
+
+      expect(license, isNotNull);
+      for (final feature in previouslyOpen) {
+        expect(
+          license!.features,
+          contains(feature),
+          reason: 'the legacy bridge must widen the feature list so that '
+              '"$feature" survives — the customer paid for access to it '
+              'before the merge',
+        );
+      }
+    });
+
+    test('a legacy license never loses the entitlements it did have', () async {
+      await seedWithFeatures(['pos', 'inventory', 'customers', 'reports']);
+      final license = await LicenseManager().getCurrentLicense();
+
+      for (final feature in ['pos', 'inventory', 'customers', 'reports']) {
+        expect(license!.features, contains(feature),
+            reason: 'widening must be additive, never a replacement');
+      }
     });
   });
 
