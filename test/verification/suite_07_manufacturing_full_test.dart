@@ -1,3 +1,4 @@
+﻿import '../helpers/license_grant.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,9 @@ import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.da
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart';
 
 void main() {
+  // BUG-017: this suite exercises a licensed module directly, bypassing the
+  // splash screen that normally loads the license before any module opens.
+  grantLicensedModules();
   TestWidgetsFlutterBinding.ensureInitialized();
 
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

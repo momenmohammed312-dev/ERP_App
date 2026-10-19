@@ -112,10 +112,7 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
           text: 'العهد المالية',
         ),
       // Cash
-      Tab(
-        icon: const Icon(Icons.point_of_sale_outlined),
-        text: l10n.cash,
-      ),
+      Tab(icon: const Icon(Icons.point_of_sale_outlined), text: l10n.cash),
       // Reports
       Tab(icon: const Icon(Icons.analytics), text: l10n.reports),
     ];
@@ -160,9 +157,8 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                             backgroundColor: Colors.red,
                             action: SnackBarAction(
                               label: 'الذهاب للكاشير',
-                              onPressed: () => _tabController.animateTo(
-                                _cashierTabIndex,
-                              ),
+                              onPressed: () =>
+                                  _tabController.animateTo(_cashierTabIndex),
                             ),
                           ),
                         );
@@ -197,21 +193,21 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                   if (AppFeatures.hasStaffModule)
                     FeatureGuard(
                       featureName: 'staff_management',
-                    lockedWidget: _buildLauncherButton(
-                      context,
-                      'الموظفين (مغلق)',
-                      Icons.badge_outlined,
-                      Colors.grey,
-                      () => _tabController.animateTo(4),
+                      lockedWidget: _buildLauncherButton(
+                        context,
+                        'الموظفين (مغلق)',
+                        Icons.badge_outlined,
+                        Colors.grey,
+                        () => _tabController.animateTo(4),
+                      ),
+                      child: _buildLauncherButton(
+                        context,
+                        'الموظفين',
+                        Icons.badge_outlined,
+                        Colors.indigo,
+                        () => _tabController.animateTo(4),
+                      ),
                     ),
-                    child: _buildLauncherButton(
-                      context,
-                      'الموظفين',
-                      Icons.badge_outlined,
-                      Colors.indigo,
-                      () => _tabController.animateTo(4),
-                    ),
-                  ),
                   // Custody Button — العهد المالية
                   if (AppFeatures.hasCustodyModule)
                     FeatureGuard(
@@ -279,15 +275,39 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                   // Pushed as its own route rather than a tab, so the tab count
                   // and every index above stay exactly as they are for the
                   // base and vegetable flavors.
+                  //
+                  // BUG-017: this launcher had NO FeatureGuard at all — only
+                  // the flavor check below — so a basic-license customer was
+                  // one tap from BOMs and work orders.
                   if (AppFeatures.hasManufacturing)
-                    _buildLauncherButton(
-                      context,
-                      'التصنيع',
-                      Icons.precision_manufacturing_outlined,
-                      Colors.deepOrange,
-                      () {
-                        context.push('/manufacturing/orders');
-                      },
+                    FeatureGuard(
+                      featureName: 'manufacturing',
+                      lockedWidget: _buildLauncherButton(
+                        context,
+                        'التصنيع (مغلق)',
+                        Icons.precision_manufacturing_outlined,
+                        Colors.grey,
+                        () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'موديول التصنيع غير متاح في ترخيصك الحالي. '
+                                'للترقية تواصل معنا.',
+                              ),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                        },
+                      ),
+                      child: _buildLauncherButton(
+                        context,
+                        'التصنيع',
+                        Icons.precision_manufacturing_outlined,
+                        Colors.deepOrange,
+                        () {
+                          context.push('/manufacturing/orders');
+                        },
+                      ),
                     ),
                   // Barneka (Returnable Containers) Button — vegetable-market
                   // feature, hidden in the factory (base) flavor.
@@ -354,8 +374,7 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
       // Index 2: Customers
       CustomerTransactionsWidget(db: widget.db),
       // Suppliers
-      if (AppFeatures.hasSuppliersModule)
-        SuppliersWidget(db: widget.db),
+      if (AppFeatures.hasSuppliersModule) SuppliersWidget(db: widget.db),
       // Staff — Dashboard first (absent without the module; cash/reports
       // indices shift accordingly and _cashierTabIndex tracks it).
       if (AppFeatures.hasStaffModule)
@@ -472,7 +491,10 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                       icon: const Icon(Icons.logout, color: Colors.redAccent),
                       label: const Text(
                         'تسجيل خروج',
-                        style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.redAccent,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       onPressed: () {
                         ref.read(authProvider.notifier).logout();
@@ -582,32 +604,50 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
       final start = DateTime(now.year, now.month, now.day);
       final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
-      final salesResult = await widget.db.customSelect('''
+      final salesResult = await widget.db
+          .customSelect(
+            '''
         SELECT COALESCE(SUM(total_amount), 0) as total
         FROM invoices WHERE date BETWEEN ? AND ? AND status != 'voided'
-      ''', variables: [
-        drift.Variable.withDateTime(start),
-        drift.Variable.withDateTime(end),
-      ]).get();
-      final todaySales = (salesResult.first.data['total'] as num?)?.toDouble() ?? 0;
+      ''',
+            variables: [
+              drift.Variable.withDateTime(start),
+              drift.Variable.withDateTime(end),
+            ],
+          )
+          .get();
+      final todaySales =
+          (salesResult.first.data['total'] as num?)?.toDouble() ?? 0;
 
-      final expenseResult = await widget.db.customSelect('''
+      final expenseResult = await widget.db
+          .customSelect(
+            '''
         SELECT COALESCE(SUM(amount), 0) as total
         FROM expenses WHERE date BETWEEN ? AND ?
-      ''', variables: [
-        drift.Variable.withDateTime(start),
-        drift.Variable.withDateTime(end),
-      ]).get();
-      final todayExpenses = (expenseResult.first.data['total'] as num?)?.toDouble() ?? 0;
+      ''',
+            variables: [
+              drift.Variable.withDateTime(start),
+              drift.Variable.withDateTime(end),
+            ],
+          )
+          .get();
+      final todayExpenses =
+          (expenseResult.first.data['total'] as num?)?.toDouble() ?? 0;
 
-      final purchaseResult = await widget.db.customSelect('''
+      final purchaseResult = await widget.db
+          .customSelect(
+            '''
         SELECT COALESCE(SUM(total_amount), 0) as total
         FROM purchases WHERE purchase_date BETWEEN ? AND ? AND is_deleted = 0
-      ''', variables: [
-        drift.Variable.withDateTime(start),
-        drift.Variable.withDateTime(end),
-      ]).get();
-      final todayPurchases = (purchaseResult.first.data['total'] as num?)?.toDouble() ?? 0;
+      ''',
+            variables: [
+              drift.Variable.withDateTime(start),
+              drift.Variable.withDateTime(end),
+            ],
+          )
+          .get();
+      final todayPurchases =
+          (purchaseResult.first.data['total'] as num?)?.toDouble() ?? 0;
 
       // Vegetable-flavor cards — بتتقرأ بس لما feature الشحنات مفعّل
       int remainingBarnikas = 0;
@@ -653,19 +693,39 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
     final baseCardsRow = Row(
       children: [
         Expanded(
-          child: _buildCard('مبيعات اليوم', _todaySales, Colors.green, Icons.trending_up),
+          child: _buildCard(
+            'مبيعات اليوم',
+            _todaySales,
+            Colors.green,
+            Icons.trending_up,
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: _buildCard('مشتريات', _todayPurchases, Colors.orange, Icons.shopping_cart),
+          child: _buildCard(
+            'مشتريات',
+            _todayPurchases,
+            Colors.orange,
+            Icons.shopping_cart,
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: _buildCard('مصروفات', _todayExpenses, Colors.redAccent, Icons.receipt_long),
+          child: _buildCard(
+            'مصروفات',
+            _todayExpenses,
+            Colors.redAccent,
+            Icons.receipt_long,
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: _buildCard('صافي الربح', netProfit, netProfit >= 0 ? Colors.blue : Colors.red, Icons.account_balance),
+          child: _buildCard(
+            'صافي الربح',
+            netProfit,
+            netProfit >= 0 ? Colors.blue : Colors.red,
+            Icons.account_balance,
+          ),
         ),
       ],
     );
@@ -742,9 +802,16 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
           const SizedBox(height: 4),
           Text(
             amount.toStringAsFixed(2),
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
-          Text(label, style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8))),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8)),
+          ),
         ],
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/services/license_entitlement.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_material_receipts_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/inventory_movements_table.dart';
@@ -83,7 +84,22 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
 
   /// Creates a new manufacturing order. Validates that the referenced BOM exists and is Active
   /// (soft check — warns but does not block if BOM is Inactive, to allow historical orders).
+  /// BUG-017 — entitlement guard for the manufacturing module.
+  ///
+  /// Manufacturing had NO guard at all: the home launcher checked the flavor
+  /// only, and every route under /manufacturing was open to any valid license.
+  /// A customer on a `basic` plan got BOMs, work orders and stock consumption
+  /// for free.
+  ///
+  /// The check runs first in every mutating method, before any statement, so a
+  /// refusal cannot leave a work order created without its material movements.
+  /// `grants()` reads an in-memory snapshot — no disk I/O, so it is safe to
+  /// call from inside a transaction.
+  static void _requireLicense(String operation) => LicenseEntitlement.instance
+      .require('manufacturing', operation: operation);
+
   Future<int> createOrder(ManufacturingOrdersCompanion entry) async {
+    _requireLicense('إنشاء أمر تصنيع');
     // Basic validation
     if (!entry.bomId.present || entry.bomId.value == 0) {
       throw ArgumentError('bomId is required');
@@ -106,8 +122,10 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
 
   // ── Update (header fields only, not status via this path) ──
 
-  Future<bool> updateOrder(ManufacturingOrder order) =>
-      update(manufacturingOrders).replace(order);
+  Future<bool> updateOrder(ManufacturingOrder order) {
+    _requireLicense('تعديل أمر تصنيع');
+    return update(manufacturingOrders).replace(order);
+  }
 
   // ── Status transitions ──
 
@@ -139,6 +157,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
     double? serviceUnitPrice,
     String? notes,
   }) async {
+    _requireLicense('إنشاء أمر عمل تصنيع');
     if (bomId == null && (inputProductId == null || inputQuantity == null)) {
       throw ArgumentError('bomId or input product + quantity is required');
     }
@@ -188,6 +207,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> startOrder(int id) async {
+    _requireLicense('بدء أمر تصنيع');
     final mo = await getById(id);
     if (mo == null) throw ArgumentError('ManufacturingOrder #$id not found');
     if (mo.status != ManufacturingOrderStatus.planned) {
@@ -237,6 +257,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
 
   /// planned/in_progress -> cancelled (no stock effect in Phase 3)
   Future<void> cancelOrder(int id, {String? reason}) async {
+    _requireLicense('إلغاء أمر تصنيع');
     final mo = await getById(id);
     if (mo == null) throw ArgumentError('ManufacturingOrder #$id not found');
     if (mo.status == ManufacturingOrderStatus.completed) {
@@ -286,6 +307,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
 
   /// Re-activate a cancelled order back to planned (optional convenience)
   Future<void> reopenCancelledOrder(int id) async {
+    _requireLicense('إعادة فتح أمر تصنيع');
     final mo = await getById(id);
     if (mo == null) throw ArgumentError('ManufacturingOrder #$id not found');
     if (mo.status != ManufacturingOrderStatus.cancelled) {
@@ -302,8 +324,10 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  Future<void> deleteOrder(int id) =>
-      (delete(manufacturingOrders)..where((o) => o.id.equals(id))).go();
+  Future<void> deleteOrder(int id) {
+    _requireLicense('حذف أمر تصنيع');
+    return (delete(manufacturingOrders)..where((o) => o.id.equals(id))).go();
+  }
 
   // ── Helpers ──
 

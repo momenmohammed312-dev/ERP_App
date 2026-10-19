@@ -1,3 +1,4 @@
+﻿import '../helpers/license_grant.dart';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
@@ -16,6 +17,9 @@ import 'package:uuid/uuid.dart';
 /// Dart's static analysis for the missing API methods, simulating how they
 /// will be called once implemented.
 void main() {
+  // BUG-017: this suite exercises a licensed module directly, bypassing the
+  // splash screen that normally loads the license before any module opens.
+  grantLicensedModules();
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;

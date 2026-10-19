@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../core/utils/logger.dart';
 import 'package:pos_offline_desktop/config/license_config.dart';
 import 'hardware_id_service.dart';
+import 'license_entitlement.dart';
 import 'secure_license_storage.dart';
 
 List<String> _widenLegacyFeatures(List<String> raw, LicenseType type) {
@@ -430,7 +431,20 @@ class LicenseManager {
   // PAYED LICENSE: STORED LICENSE
   // ════════════════════════════════════════════════════════════════════
 
+  /// Reads the current license and refreshes the entitlement snapshot that
+  /// [LicenseEntitlement] serves from.
+  ///
+  /// The refresh happens here, at the one choke point every existing caller
+  /// already goes through, so no call site has to remember to do it — and so
+  /// the synchronous guards (router, DAO) are current by the time a write can
+  /// reach them.
   Future<License?> getCurrentLicense() async {
+    final license = await _readCurrentLicense();
+    LicenseEntitlement.instance.update(license);
+    return license;
+  }
+
+  Future<License?> _readCurrentLicense() async {
     if (LicenseConfig.isFreeVersion) {
       final data = await SecureLicenseStorage.read();
       final hardwareId = await HardwareIdService.getHardwareId();

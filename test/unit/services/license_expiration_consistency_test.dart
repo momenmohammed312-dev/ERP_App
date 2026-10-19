@@ -204,13 +204,18 @@ void main() {
     });
 
     test('a license with 5 whole days left reports 5, not 4', () {
-      final license = licenseEndingIn(const Duration(hours: -120)); // 5 days
+      // 120 hours lands exactly on a day boundary, so any microsecond of clock
+      // progress between building the license and reading daysRemaining
+      // truncates the remainder to 4 and the test fails at random. One hour of
+      // slack keeps the off-by-one intent (truncation must not lose a day the
+      // customer actually has) without sitting on the knife edge.
+      final license = licenseEndingIn(const Duration(hours: -121)); // 5 days
 
       expect(
         license.daysRemaining,
         5,
-        reason: '120 hours is exactly 5 whole days; truncation must not '
-            'report a day less than the customer actually has',
+        reason: 'truncation must not report a day less than the customer '
+            'actually has',
       );
     });
   });

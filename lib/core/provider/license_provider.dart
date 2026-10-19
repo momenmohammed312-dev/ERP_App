@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../config/license_config.dart';
+import '../../services/license_entitlement.dart';
 import '../../services/license_manager.dart';
 
 // Provider for license state
@@ -18,25 +19,24 @@ final currentLicenseProvider = FutureProvider((ref) async {
 });
 
 /// Reactive Provider to check if a specific module is enabled in the active license
-final isFeatureEnabledProvider = Provider.family<bool, String>((ref, featureName) {
+final isFeatureEnabledProvider = Provider.family<bool, String>((
+  ref,
+  featureName,
+) {
   // Free version flavor/build has all features enabled
   if (LicenseConfig.isFreeVersion) return true;
 
   // Fundamental core features are always unlocked
-  const coreFeatures = ['pos', 'cash_sales', 'inventory', 'reports'];
-  if (coreFeatures.contains(featureName)) return true;
+  if (LicenseEntitlement.coreFeatures.contains(featureName)) return true;
 
   final licenseAsync = ref.watch(currentLicenseProvider);
   return licenseAsync.maybeWhen(
-    data: (license) {
-      if (license == null || !license.isValid) return false;
-      // '*' is the modern catch-all; 'all' is the marker the legacy license
-      // generators emitted. Without 'all', a year-license customer saw
-      // "(مغلق)" on custody / damaged goods / manufacturing after the merge.
-      return license.features.contains('*') ||
-          license.features.contains('all') ||
-          license.features.contains(featureName);
-    },
+    // BUG-017: the verdict now comes from LicenseEntitlement, the single
+    // source of truth. This provider used to accept '*', 'all' and a name,
+    // while FeatureGateService accepted only '*' and a name — so a legacy
+    // license carrying 'all' showed a module open on the home screen and
+    // locked in the sidebar at the same time.
+    data: (license) => LicenseEntitlement.instance.grants(featureName),
     orElse: () => false,
   );
 });

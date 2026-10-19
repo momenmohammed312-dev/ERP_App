@@ -1,3 +1,4 @@
+﻿import '../helpers/license_grant.dart';
 import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNull, isNotNull;
@@ -14,6 +15,9 @@ import 'package:pos_offline_desktop/core/services/backup_service.dart';
 /// for Manufacturing for Others tables.
 @Timeout(Duration(minutes: 3))
 void main() {
+  // BUG-017: this suite exercises a licensed module directly, bypassing the
+  // splash screen that normally loads the license before any module opens.
+  grantLicensedModules();
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;

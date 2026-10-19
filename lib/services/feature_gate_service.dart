@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../config/license_config.dart';
 import '../core/provider/license_provider.dart';
+import 'license_entitlement.dart';
 import 'license_manager.dart';
 
 class FeatureGateService {
@@ -14,15 +15,13 @@ class FeatureGateService {
   /// Check if current license has access to a specific feature
   Future<bool> hasFeature(String feature) async {
     try {
-      if (LicenseConfig.isFreeVersion) return true;
-      const coreFeatures = ['pos', 'cash_sales', 'inventory', 'reports'];
-      if (coreFeatures.contains(feature)) return true;
-
-      final license = await _licenseManager.getCurrentLicense();
-      if (license == null || !license.isValid) {
-        return false;
-      }
-      return license.features.contains('*') || license.features.contains(feature);
+      // BUG-017: delegate to the single source of truth. This used to accept
+      // only '*' or an exact name, while isFeatureEnabledProvider also
+      // accepted 'all' — so one legacy license could show a module open on one
+      // screen and locked on another. Reading the license here also refreshes
+      // the snapshot the synchronous guards use.
+      await _licenseManager.getCurrentLicense();
+      return LicenseEntitlement.instance.grants(feature);
     } catch (e) {
       return false;
     }

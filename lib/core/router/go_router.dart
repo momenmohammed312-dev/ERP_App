@@ -27,6 +27,7 @@ import 'package:pos_offline_desktop/ui/manufacturing/bom_list_screen.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/mo_detail_screen.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/mo_list_screen.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/customer_material_receipt_list_screen.dart';
+import 'package:pos_offline_desktop/services/license_entitlement.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/reports/manufacturing_reports_screen.dart';
 
 final firstRunCompleteProvider = FutureProvider<bool>((ref) async {
@@ -50,7 +51,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isLoggedIn = user != null;
 
       // First-run check: redirect to /setup if not completed
-      if (!isFirstRunComplete && !isPublic && location != '/setup') return '/setup';
+      if (!isFirstRunComplete && !isPublic && location != '/setup')
+        return '/setup';
 
       // Not logged in and trying to access a protected page → /login
       if (!isLoggedIn && !isPublic) return '/login';
@@ -58,8 +60,28 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (isLoggedIn && location == '/login') return '/';
 
       // Permission guard: /admin requires manageUsers permission
-      if (isLoggedIn && location == '/admin' && !user.hasPermission(Permission.manageUsers)) return '/';
+      if (isLoggedIn &&
+          location == '/admin' &&
+          !user.hasPermission(Permission.manageUsers))
+        return '/';
 
+      // BUG-017 — entitlement guard. The home screen marks a locked module with
+      // a "(مغلق)" badge, but that badge is a child of the launcher button: it
+      // paints over the button and does nothing about the route itself, so
+      // `context.go('/manufacturing/orders')` — a bookmarked path, a restored
+      // navigation stack, or any future deep link — opened the module in full.
+      //
+      // This is the check FEAT-015 AC9 calls "locked on direct navigation".
+      // It is deliberately lenient while the entitlement snapshot is still
+      // loading (see LicenseEntitlement.allowsNavigation): failing open here
+      // would take a cashier out of the register on a transient read failure.
+      // A customer without the entitlement is still stopped at the DAO.
+      final gatedFeature = LicenseEntitlement.featureForRoute(location);
+      if (gatedFeature != null && isLoggedIn) {
+        if (!LicenseEntitlement.instance.allowsNavigation(location)) {
+          return '/?denied=$gatedFeature';
+        }
+      }
 
       return null;
     },
@@ -70,10 +92,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SplashScreen(),
       ),
       // Auth
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginScreen(),
-      ),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       // License & Setup
       GoRoute(
         path: '/setup',
@@ -116,8 +135,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/manufacturing/orders/:id',
-        builder: (context, state) =>
-            MoDetailScreen(db: db, orderId: int.parse(state.pathParameters['id']!)),
+        builder: (context, state) => MoDetailScreen(
+          db: db,
+          orderId: int.parse(state.pathParameters['id']!),
+        ),
       ),
       GoRoute(
         path: '/manufacturing/reports',
@@ -135,10 +156,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/returns-report',
         builder: (context, state) => ReturnsReportScreen(database: db),
       ),
-      GoRoute(
-        path: '/about',
-        builder: (context, state) => const AboutScreen(),
-      ),
+      GoRoute(path: '/about', builder: (context, state) => const AboutScreen()),
       GoRoute(
         path: '/shipments',
         builder: (context, state) => ShipmentsScreen(db: db),
@@ -173,5 +191,3 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
-
-
