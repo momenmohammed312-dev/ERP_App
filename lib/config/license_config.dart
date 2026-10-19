@@ -24,11 +24,13 @@ m1HCMTcbuIPO8gGgKdidB7vQoQe67XQ23Parpb/7jEWgq26rMQiH4d4WUUTmjUvQ
     'LICENSE_PUBLIC_KEY',
     defaultValue: kDebugMode ? _defaultDevPublicKey : '',
   );
+
   /// Test seam (null in production).
   @visibleForTesting
   static String? publicKeyOverride;
 
-  static String get publicKey => publicKeyOverride ?? normalizePem(_publicKeyRaw);
+  static String get publicKey =>
+      publicKeyOverride ?? normalizePem(_publicKeyRaw);
 
   /// Converts literal \n sequences (as passed through --dart-define) to real newlines.
   static String normalizePem(String raw) => raw.replaceAll(r'\n', '\n');
@@ -43,17 +45,17 @@ m1HCMTcbuIPO8gGgKdidB7vQoQe67XQ23Parpb/7jEWgq26rMQiH4d4WUUTmjUvQ
     }
   }
 
-
   /// When true, runs in fully-free mode — no license activation required.
   /// Set via: --dart-define=FREE_VERSION=true
   static bool get isFreeVersion =>
-    const bool.fromEnvironment('FREE_VERSION', defaultValue: false);
+      const bool.fromEnvironment('FREE_VERSION', defaultValue: false);
 
   /// Trial license key shown when user taps "تجربة مجانية".
   /// Only used when isFreeVersion == false.
   static const String trialLicenseKey = String.fromEnvironment(
     'TRIAL_LICENSE_KEY',
-    defaultValue: 'r7Jpnj56A/w4MTvtuxRek4X+X4Y7mAxSGVp/KsyB81Qh/Je/8qOCrMeP5HzGrwMgpU7CC3T/VC5o0o+4pDzF1u/9hzpu7ehTBx/ZbRCCiVQBAMgQ0sAONhnYcvrXOSbH1qaKKQC4FQOJqjnDXF9okTsRLGhhLHljiu671eS/Vq4gTOo92b04ExAmAWEAeqLi1wHbHS8NOtldiPLOFMpn97ZmZ7Z1o89wOuYn8B2i0BEC8PNZ23iHUKJTrHXTBFFB7t4alZ2yxt+lBJgaqOPOXQB7kFMG7bmPBwgl+3LACNIV3jUdFDpvgFIkLIPJGbn6gE54oh0oW8Pjk6n0ddrh4lepfUszrKWhi+Qwno3qFizKWel8eW44ve0Z17u3dOj4j9dTOsZc8RzeCPOWxpnIAOsuP3kNatTBWQsgRwMSengx3n3HOkArfq+dtorI7j4a.4bd8438ef9a81c07bc4ccee67ccf30d9f145673393270e0f1123bb309c044de3',
+    defaultValue:
+        'r7Jpnj56A/w4MTvtuxRek4X+X4Y7mAxSGVp/KsyB81Qh/Je/8qOCrMeP5HzGrwMgpU7CC3T/VC5o0o+4pDzF1u/9hzpu7ehTBx/ZbRCCiVQBAMgQ0sAONhnYcvrXOSbH1qaKKQC4FQOJqjnDXF9okTsRLGhhLHljiu671eS/Vq4gTOo92b04ExAmAWEAeqLi1wHbHS8NOtldiPLOFMpn97ZmZ7Z1o89wOuYn8B2i0BEC8PNZ23iHUKJTrHXTBFFB7t4alZ2yxt+lBJgaqOPOXQB7kFMG7bmPBwgl+3LACNIV3jUdFDpvgFIkLIPJGbn6gE54oh0oW8Pjk6n0ddrh4lepfUszrKWhi+Qwno3qFizKWel8eW44ve0Z17u3dOj4j9dTOsZc8RzeCPOWxpnIAOsuP3kNatTBWQsgRwMSengx3n3HOkArfq+dtorI7j4a.4bd8438ef9a81c07bc4ccee67ccf30d9f145673393270e0f1123bb309c044de3',
   );
 
   // License duration types
@@ -76,6 +78,11 @@ m1HCMTcbuIPO8gGgKdidB7vQoQe67XQ23Parpb/7jEWgq26rMQiH4d4WUUTmjUvQ
 
   // Available features / modules that can be granted per license
   static const List<String> availableFeatures = [
+    // 'pos' was used everywhere (FeatureGuard, isFeatureEnabledProvider's
+    // coreFeatures, every plan bundle) but was missing from this canonical
+    // list, so anything that filters entitlements against availableFeatures
+    // silently stripped the POS itself.
+    'pos', // Point of Sale (always available)
     'cash_sales', // Cash sales only
     'credit_sales', // Credit sales for customers
     'customers', // Customer Management

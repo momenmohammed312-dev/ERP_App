@@ -10,7 +10,9 @@ import 'hardware_id_service.dart';
 import 'secure_license_storage.dart';
 
 List<String> _widenLegacyFeatures(List<String> raw, LicenseType type) {
-  final features = <String>{...raw.map((f) => '$f'.trim()).where((f) => f.isNotEmpty)};
+  final features = <String>{
+    ...raw.map((f) => '$f'.trim()).where((f) => f.isNotEmpty),
+  };
 
   // Legacy catch-all markers meaning "everything".
   const catchAll = {'all', '*', 'admin'};
@@ -47,7 +49,6 @@ List<String> _widenLegacyFeatures(List<String> raw, LicenseType type) {
 
   return features.toList();
 }
-
 
 enum LicenseType {
   free, // مجاني — كل المميزات بدون تفعيل
@@ -239,7 +240,7 @@ class LicenseManager {
           savedDevice,
           null, // No saved components in license key itself
         );
-        
+
         if (!isSameDevice) {
           // Hard mismatch - this is a different device
           return LicenseValidationResult.invalid(
@@ -263,7 +264,9 @@ class LicenseManager {
         deviceFingerprint: licenseData['device'],
         // BUG-009: resolve dashboard/issuer plan names, never throw.
         type: LicenseType.values.firstWhere(
-          (e) => e.name == LicensePlans.resolveOrFallback('${licenseData['type']}'),
+          (e) =>
+              e.name ==
+              LicensePlans.resolveOrFallback('${licenseData['type']}'),
           orElse: () => LicenseType.standard,
         ),
         issueDate: DateTime.parse(licenseData['issue_date']),
@@ -458,7 +461,8 @@ class LicenseManager {
       if (freshData == null) {
         // First run or update — create and save fresh data
         final now = DateTime.now();
-        final currentComponents = await HardwareIdService.getHardwareComponents();
+        final currentComponents =
+            await HardwareIdService.getHardwareComponents();
         final newData = SecureLicenseData.create(
           firstRunDate: now,
           hardwareId: hardwareId,
@@ -484,24 +488,25 @@ class LicenseManager {
 
       // Hardware binding check with grace period
       if (freshData.hardwareId.isNotEmpty) {
-        final currentComponents = await HardwareIdService.getHardwareComponents();
+        final currentComponents =
+            await HardwareIdService.getHardwareComponents();
         final savedComponents = freshData.lastHardwareComponents != null
             ? HardwareComponents.fromJson(freshData.lastHardwareComponents!)
             : null;
-        
+
         final isSameDevice = await HardwareIdService.isSameDeviceTolerant(
           freshData.hardwareId,
           savedComponents,
         );
-        
+
         if (!isSameDevice) {
           // Increment mismatch counter
           final newMismatchCount = freshData.hardwareMismatchCount + 1;
           AppLogger.w(
             'Hardware mismatch — free version bound to different device '
-            '(mismatch count: $newMismatchCount)'
+            '(mismatch count: $newMismatchCount)',
           );
-          
+
           if (newMismatchCount >= 2) {
             // Second consecutive mismatch - block
             AppLogger.e('Hardware mismatch persisted - blocking free version');
@@ -514,7 +519,9 @@ class LicenseManager {
               lastHardwareComponents: currentComponents.toJson(),
             );
             await SecureLicenseStorage.write(updatedData);
-            AppLogger.w('First hardware mismatch - grace launch allowed, user should reactivate');
+            AppLogger.w(
+              'First hardware mismatch - grace launch allowed, user should reactivate',
+            );
             // Allow this launch but log warning
           }
         } else {
@@ -567,8 +574,7 @@ class LicenseManager {
             // has already served out its window is refused on THIS launch
             // rather than being granted a fresh 90 days.
             await _markLegacy(secureData);
-            final stamped =
-                (await SecureLicenseStorage.read()) ?? secureData;
+            final stamped = (await SecureLicenseStorage.read()) ?? secureData;
 
             if (_legacyStillGraced(stamped)) {
               AppLogger.i(
@@ -619,32 +625,32 @@ class LicenseManager {
   // ════════════════════════════════════════════════════════════════════
 
   /// Restores the module access a pre-RS256 customer actually had.
-///
-/// Before the feat/online-license merge these modules were not
-/// entitlement-gated at all:
-///
-///   * `staff_management` sat in FeatureGuard's `bypassFeatures` list;
-///   * `custody`, `damaged_goods` and `manufacturing` were not wrapped in a
-///     FeatureGuard, so every licensed customer could open them.
-///
-/// The merge replaced that with real entitlement checks keyed on the feature
-/// NAME. Licenses issued by the old generators (tools/gen_year_license.dart,
-/// tools/license_generator.dart) never carried those names — they used
-/// `users`, `admin`, `all` and a short core list — so after the merge a paying
-/// customer was silently shown "(مغلق)" on modules they had always used.
-///
-/// This widens the stored list. Widening only — it never removes anything the
-/// license already granted — and it applies to LEGACY licenses only, so new
-/// signed leases stay strictly entitlement-driven.
+  ///
+  /// Before the feat/online-license merge these modules were not
+  /// entitlement-gated at all:
+  ///
+  ///   * `staff_management` sat in FeatureGuard's `bypassFeatures` list;
+  ///   * `custody`, `damaged_goods` and `manufacturing` were not wrapped in a
+  ///     FeatureGuard, so every licensed customer could open them.
+  ///
+  /// The merge replaced that with real entitlement checks keyed on the feature
+  /// NAME. Licenses issued by the old generators (tools/gen_year_license.dart,
+  /// tools/license_generator.dart) never carried those names — they used
+  /// `users`, `admin`, `all` and a short core list — so after the merge a paying
+  /// customer was silently shown "(مغلق)" on modules they had always used.
+  ///
+  /// This widens the stored list. Widening only — it never removes anything the
+  /// license already granted — and it applies to LEGACY licenses only, so new
+  /// signed leases stay strictly entitlement-driven.
 
-/// True when [features] grants every module — either by an explicit wildcard or
-/// by carrying the full canonical list.
-bool _hasEveryFeature(List<String> features) =>
-    features.contains('*') ||
-    features.contains('all') ||
-    LicenseConfig.availableFeatures.every(features.contains);
+  /// True when [features] grants every module — either by an explicit wildcard or
+  /// by carrying the full canonical list.
+  bool _hasEveryFeature(List<String> features) =>
+      features.contains('*') ||
+      features.contains('all') ||
+      LicenseConfig.availableFeatures.every(features.contains);
 
-Future<bool> hasFeature(String featureName) async {
+  Future<bool> hasFeature(String featureName) async {
     if (LicenseConfig.isFreeVersion) return true;
     final license = await getCurrentLicense();
     if (license == null || !license.isValid) return false;
@@ -683,9 +689,11 @@ Future<bool> hasFeature(String featureName) async {
 
       // Only accept RS256 (blocks "alg: none" / algorithm-confusion tricks).
       final headerPart = token.split('.').first;
-      final header = jsonDecode(
-        utf8.decode(base64Url.decode(base64Url.normalize(headerPart))),
-      ) as Map<String, dynamic>;
+      final header =
+          jsonDecode(
+                utf8.decode(base64Url.decode(base64Url.normalize(headerPart))),
+              )
+              as Map<String, dynamic>;
       if (header['alg'] != 'RS256') {
         AppLogger.w('Lease rejected: unexpected alg ${header['alg']}');
         return null;
@@ -740,26 +748,71 @@ Future<bool> hasFeature(String featureName) async {
             : List<String>.from(LicenseConfig.availableFeatures);
       }
 
-      return License(
-        licenseKey: '${p['license_key']}',
-        deviceFingerprint: machineGuid,
-        type: type,
-        issueDate: issued,
-        // null on the server = lifetime license. The lease itself is enforced
-        // above, so this date only drives the "days remaining" display.
-        expiryDate: licenseExpiryRaw != null
-            ? DateTime.parse(licenseExpiryRaw)
-            : issued.add(const Duration(days: 36500)),
-        features: features,
-        maxUsers: _getMaxUsersForType(type),
-        companyName: '',
-        contactEmail: '',
-        hardwareId: await HardwareIdService.getHardwareId(),
+      return _normalizeEntitlements(
+        License(
+          licenseKey: '${p['license_key']}',
+          deviceFingerprint: machineGuid,
+          type: type,
+          issueDate: issued,
+          // null on the server = lifetime license. The lease itself is enforced
+          // above, so this date only drives the "days remaining" display.
+          expiryDate: licenseExpiryRaw != null
+              ? DateTime.parse(licenseExpiryRaw)
+              : issued.add(const Duration(days: 36500)),
+          features: features,
+          maxUsers: _getMaxUsersForType(type),
+          companyName: '',
+          contactEmail: '',
+          hardwareId: await HardwareIdService.getHardwareId(),
+        ),
       );
     } catch (e) {
       AppLogger.e('Lease verification failed: $e');
       return null;
     }
+  }
+
+  /// Drops entitlement names this build does not know, and refuses a lease that
+  /// grants nothing runnable.
+  ///
+  /// Why this lives in [_parseLease] and not in the import path: the lease is a
+  /// SIGNED token, so its claims cannot be rewritten before storing them. The
+  /// stored token stays byte-identical to what the issuer signed; normalisation
+  /// is applied every time the lease is turned into a [License], which keeps
+  /// imported and server-issued leases consistent.
+  ///
+  /// An unknown name is not an error on its own — an issuer may legitimately
+  /// name a module a given flavor has not been built with — but it is never
+  /// stored, so a forged document cannot smuggle entitlement names into the
+  /// app. Flavor scoping itself is enforced in `isFeatureEnabledProvider`.
+  static License? _normalizeEntitlements(License license) {
+    final known = license.features
+        .where(LicenseConfig.availableFeatures.contains)
+        .toSet();
+    if (known.isEmpty) {
+      AppLogger.w('Lease rejected: grants no feature this build knows');
+      return null;
+    }
+    if (known.length != license.features.length) {
+      AppLogger.w(
+        'Lease: dropped ${license.features.length - known.length} unknown '
+        'entitlement name(s)',
+      );
+    }
+
+    return License(
+      licenseKey: license.licenseKey,
+      deviceFingerprint: license.deviceFingerprint,
+      type: license.type,
+      issueDate: license.issueDate,
+      expiryDate: license.expiryDate,
+      features: known.toList(),
+      maxUsers: license.maxUsers,
+      companyName: license.companyName,
+      contactEmail: license.contactEmail,
+      signature: license.signature,
+      hardwareId: license.hardwareId,
+    );
   }
 
   /// Verifies a lease received from the server and stores it securely.
@@ -786,8 +839,7 @@ Future<bool> hasFeature(String featureName) async {
         licenseJson: {
           'lease_token': token,
           'license_key': license.licenseKey,
-          'server_time':
-              serverTime ?? DateTime.now().toUtc().toIso8601String(),
+          'server_time': serverTime ?? DateTime.now().toUtc().toIso8601String(),
         },
         lastCheckTime: DateTime.now(),
         sessionElapsedMs: existing?.sessionElapsedMs ?? 0,
@@ -799,6 +851,71 @@ Future<bool> hasFeature(String featureName) async {
       return LicenseValidationResult.invalid('تعذر حفظ الترخيص على الجهاز');
     }
     return LicenseValidationResult.valid(license);
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // OFFLINE LICENSE DOCUMENT IMPORT (FEAT-012)
+  // ════════════════════════════════════════════════════════════════════
+
+  /// Imports a signed license document (`.madarlicense`) with NO network call.
+  ///
+  /// [document] is the file content as text. Two shapes are accepted:
+  ///
+  ///   * the envelope — `{"madar_license_envelope":"v1","lease":"<jwt>"}`
+  ///   * the bare JWT, for convenience and for the clipboard
+  ///
+  /// Verification is fully local: RS256 against [LicenseConfig.publicKey],
+  /// then the device binding and the expiry handled by [_parseLease]. The
+  /// document is stored through [saveLease], so a valid license is persisted
+  /// exactly as a server-issued one would be.
+  ///
+  /// Never throws — malformed, foreign-device, forged and expired documents all
+  /// come back as an invalid result, and a rejected import never destroys the
+  /// license already on disk.
+  Future<LicenseValidationResult> importLicenseDocument(String document) async {
+    final token = _extractLeaseToken(document);
+    if (token == null) {
+      return LicenseValidationResult.invalid(
+        'الملف لا يحتوي على ترخيص صالح. تأكد أنه ملف ‎.madarlicense‎ صادر من MADAR.',
+      );
+    }
+
+    final license = await _parseLease(token);
+    if (license == null) {
+      return LicenseValidationResult.invalid(
+        'تعذّر التحقق من صحة الترخيص. قد يكون الملف تالفاً، أو صادراً بخطأ، '
+        'أو مخصصاً لجهاز آخر.',
+      );
+    }
+
+    // serverTime is the import moment: no server is involved, so the stored
+    // clock-rollback anchor is simply "now".
+    return saveLease(
+      token,
+      serverTime: DateTime.now().toUtc().toIso8601String(),
+    );
+  }
+
+  /// Pulls the JWT out of either document shape. Returns null when the input is
+  /// not a plausible envelope at all.
+  static String? _extractLeaseToken(String document) {
+    final trimmed = document.trim();
+    if (trimmed.isEmpty) return null;
+
+    // Bare JWT fast path — avoids a JSON parse for the common case.
+    if (!trimmed.startsWith('{')) {
+      return trimmed.contains('.') ? trimmed : null;
+    }
+
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is! Map) return null;
+      final lease = decoded['lease'];
+      if (lease is String && lease.contains('.')) return lease;
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -879,15 +996,17 @@ Future<bool> hasFeature(String featureName) async {
         existing.copyWith(
           firstRunDate: date,
           lastHardwareComponents: currentComponents.toJson(),
-        )
+        ),
       );
     } else {
       // Create new
-      await SecureLicenseStorage.write(SecureLicenseData.create(
-        firstRunDate: date,
-        hardwareId: hwId,
-        hardwareComponents: currentComponents.toJson(),
-      ));
+      await SecureLicenseStorage.write(
+        SecureLicenseData.create(
+          firstRunDate: date,
+          hardwareId: hwId,
+          hardwareComponents: currentComponents.toJson(),
+        ),
+      );
     }
 
     // Also save to SharedPreferences for backward compatibility
