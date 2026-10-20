@@ -397,6 +397,13 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                     height: 48,
                     child: OutlinedButton.icon(
                       onPressed: _isLoading ? null : _importLicenseFile,
+                      // The app runs in dark theme while this card is white, so
+                      // the inherited (light-on-white) outline and label were
+                      // invisible — the offline import button looked missing.
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.blue.shade900,
+                        side: BorderSide(color: Colors.blue.shade900),
+                      ),
                       icon: const Icon(Icons.upload_file, size: 20),
                       label: const Text(
                         'استيراد رخصة من ملف (بدون إنترنت)',

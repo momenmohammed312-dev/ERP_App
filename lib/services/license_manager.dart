@@ -721,15 +721,21 @@ class LicenseManager {
       );
       final p = Map<String, dynamic>.from(jwt.payload as Map);
 
-      // Device binding: matching EITHER id is enough, so a change in one of
-      // them (Windows reinstall, restored AppData...) doesn't lock the user.
+      // Device binding: matching ANY id is enough, so a change in one of them
+      // (Windows reinstall, restored AppData...) doesn't lock the user.
+      // `hardware_id` is the fingerprint shown on the activation screen
+      // (BUG-023): the customer reads it and the issuer signs exactly that
+      // value, so offline issuance doesn't depend on the invisible SQM id.
       final machineGuid = await HardwareIdService.getMachineGuid();
       final installUuid = await HardwareIdService.getInstallUuid();
+      final hardwareId = await HardwareIdService.getHardwareId();
       final sameMachine =
           machineGuid.isNotEmpty && p['machine_guid'] == machineGuid;
       final sameInstall =
           installUuid.isNotEmpty && p['install_uuid'] == installUuid;
-      if (!sameMachine && !sameInstall) {
+      final sameHardware =
+          hardwareId.isNotEmpty && p['hardware_id'] == hardwareId;
+      if (!sameMachine && !sameInstall && !sameHardware) {
         AppLogger.w('Lease rejected: issued for a different device');
         return null;
       }
@@ -777,7 +783,7 @@ class LicenseManager {
           maxUsers: _getMaxUsersForType(type),
           companyName: '',
           contactEmail: '',
-          hardwareId: await HardwareIdService.getHardwareId(),
+          hardwareId: hardwareId,
         ),
       );
     } catch (e) {

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
@@ -34,6 +35,22 @@ final firstRunCompleteProvider = FutureProvider<bool>((ref) async {
   return SettingsService.isFirstRunComplete();
 });
 
+/// BUG-023 — locations that exist only on the activation router.
+///
+/// After a successful import, `ActivationScreen` invalidates the license
+/// providers and then navigates to `/activation-success`. When the provider
+/// resolves to `true`, `AppBootstrap` swaps this router in while the current
+/// location is still `/activation-success`, which has no route here and made
+/// GoRouter throw `GoException: no routes for location`. Splash then resumes
+/// the normal first-run/login flow.
+@visibleForTesting
+String? staleActivationLocation(String location) {
+  if (location == '/activation-success' || location == '/license-info') {
+    return '/splash';
+  }
+  return null;
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
   final db = ref.watch(appDatabaseProvider);
   final user = ref.watch(authProvider);
@@ -46,6 +63,9 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/splash',
     redirect: (context, state) {
+      final stale = staleActivationLocation(state.uri.path);
+      if (stale != null) return stale;
+
       final location = state.matchedLocation;
       final isPublic = publicPaths.any((p) => location.startsWith(p));
       final isLoggedIn = user != null;

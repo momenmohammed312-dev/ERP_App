@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_offline_desktop/config/license_config.dart';
@@ -64,6 +63,7 @@ void main() {
     RSAPrivateKey? signer,
     String? machineOverride,
     String? installOverride,
+    String? hardwareOverride,
   }) {
     final now = DateTime.now();
     int secs(DateTime d) => d.millisecondsSinceEpoch ~/ 1000;
@@ -71,6 +71,7 @@ void main() {
       'license_key': key,
       'machine_guid': machineOverride ?? machine,
       'install_uuid': installOverride ?? install,
+      'hardware_id': hardwareOverride ?? '',
       'plan': plan,
       'features': features ?? const [],
       'license_expires_at': licenseExpiresAt,
@@ -206,6 +207,37 @@ void main() {
         envelope(makeLease(installOverride: 'BRAND-NEW-INSTALL-UUID')),
       );
       expect(result.isValid, isTrue, reason: result.errorMessage ?? '');
+    });
+
+    test('BUG-023 — a lease bound to the on-screen fingerprint is accepted',
+        () async {
+      // The activation screen shows getHardwareId(). The issuer can now sign
+      // exactly that value with --bind hardware, with no machine_guid or
+      // install_uuid in the document, so the code the customer reads is the
+      // code the license is bound to.
+      final onScreen = await HardwareIdService.getHardwareId();
+      final result = await manager.importLicenseDocument(
+        envelope(makeLease(
+          machineOverride: '',
+          installOverride: '',
+          hardwareOverride: onScreen,
+        )),
+      );
+      expect(result.isValid, isTrue, reason: result.errorMessage ?? '');
+      expect(result.license?.hardwareId, onScreen);
+    });
+
+    test('BUG-023 — a lease for a different on-screen fingerprint is rejected',
+        () async {
+      final result = await manager.importLicenseDocument(
+        envelope(makeLease(
+          machineOverride: '',
+          installOverride: '',
+          hardwareOverride: 'a-different-device-fingerprint',
+        )),
+      );
+      expect(result.isValid, isFalse);
+      expect(result.errorMessage, contains('جهاز'));
     });
 
     test('garbage, empty and truncated input never throw', () async {

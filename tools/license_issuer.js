@@ -93,9 +93,13 @@ const USAGE = `
   --features a,b,c         الميزات الممنوحة (مطلوب — لا قيم فارغة)
   --customer "اسم العميل"  اسم العميل (يُطبع في السجل فقط، لا يدخل التوقيع)
   --plan <name>            خطة صريحة: trial|basic|standard|professional|enterprise
-  --bind machine|install|both   أي معرّف جهاز يُربط به الترخيص (افتراضي: machine)
-  --machine-guid <GUID>    MachineGuid للجهاز (مطلوب مع machine|both)
-  --install-uuid <UUID>    معرّف التثبيت (مطلوب مع install|both)
+  --bind machine|install|both|hardware|all   أي معرّف جهاز يُربط به الترخيص
+                            (افتراضي: machine) · hardware = البصمة المعروضة على
+                            شاشة التفعيل · all = الثلاثة معاً
+  --machine-guid <GUID>    MachineGuid للجهاز (مطلوب مع machine|both|all)
+  --install-uuid <UUID>    معرّف التثبيت (مطلوب مع install|both|all)
+  --hardware-id <hash>     بصمة الجهاز الظاهرة على شاشة التفعيل
+                            (مطلوب مع hardware|all)
   --key <path>             مسار المفتاح الخاص (أو MADAR_ISSUER_KEY_FILE)
   --out <path>             مسار ملف الإخراج (مطلوب، ويجب أن يكون خارج المستودع)
   --license-key <key>      مفتاح محدَّد بدل توليده تلقائياً
@@ -110,6 +114,11 @@ const USAGE = `
   node tools/license_issuer.js --type paid --months 12 \\
     --machine-guid 3F2504E0-4F89-41D3-9A0C-0305E82C3301 \\
     --features pos,manufacturing,custody --out E:\\Temp\\c2.madarlicense
+
+مثال (ربط ببصمة الجهاز الظاهرة على شاشة التفعيل — للعميل بدون سيرفر):
+  node tools/license_issuer.js --type paid --months 12 --bind hardware \\
+    --hardware-id <الكود الظاهر على الشاشة> \\
+    --features pos,cash_sales,mobile --out E:\\Temp\\c3.madarlicense
 `;
 
 function parseArgs(argv) {
@@ -240,16 +249,35 @@ function main() {
 
   // ── device binding ──────────────────────────────────────────────────────
   const bind = String(args.bind || 'machine');
-  if (!['machine', 'install', 'both'].includes(bind)) {
-    fail('--bind يجب أن يكون machine أو install أو both.');
+  if (!['machine', 'install', 'both', 'hardware', 'all'].includes(bind)) {
+    fail('--bind يجب أن يكون machine أو install أو both أو hardware أو all.');
   }
-  const machineGuid = bind === 'install' ? '' : String(args['machine-guid'] || '');
-  const installUuid = bind === 'machine' ? '' : String(args['install-uuid'] || '');
-  if ((bind === 'machine' || bind === 'both') && !machineGuid) {
+  const usesHardware = bind === 'hardware' || bind === 'all';
+  const machineGuid =
+    bind === 'install' || bind === 'hardware'
+      ? ''
+      : String(args['machine-guid'] || '');
+  const installUuid =
+    bind === 'machine' || bind === 'hardware'
+      ? ''
+      : String(args['install-uuid'] || '');
+  const hardwareId = usesHardware
+    ? String(args['hardware-id'] || '').trim()
+    : '';
+  if (
+    (bind === 'machine' || bind === 'both' || bind === 'all') &&
+    !machineGuid
+  ) {
     fail('--machine-guid مطلوب مع --bind ' + bind + '.');
   }
-  if ((bind === 'install' || bind === 'both') && !installUuid) {
+  if (
+    (bind === 'install' || bind === 'both' || bind === 'all') &&
+    !installUuid
+  ) {
     fail('--install-uuid مطلوب مع --bind ' + bind + '.');
+  }
+  if (usesHardware && !hardwareId) {
+    fail('--hardware-id مطلوب مع --bind ' + bind + '.');
   }
 
   // ── plan ────────────────────────────────────────────────────────────────
@@ -273,11 +301,12 @@ function main() {
       ? String(args['license-key'])
       : generateLicenseKey();
 
-  // Exactly the nine claims the client verifies — nothing more, nothing less.
+  // Exactly the ten claims the client verifies — nothing more, nothing less.
   const payload = {
     license_key: licenseKey,
     machine_guid: machineGuid,
     install_uuid: installUuid,
+    hardware_id: hardwareId,
     plan: plan,
     features: features,
     license_expires_at: lifetime ? null : new Date(exp * 1000).toISOString(),
@@ -313,7 +342,8 @@ function main() {
   console.log('  الميزات        : ' + features.join('، '));
   console.log('  الربط بجهاز    : ' + bind +
     (machineGuid ? '  machine_guid=' + machineGuid : '') +
-    (installUuid ? '  install_uuid=' + installUuid : ''));
+    (installUuid ? '  install_uuid=' + installUuid : '') +
+    (hardwareId ? '  hardware_id=' + hardwareId : ''));
   console.log('  صادر في       : ' + envelope.device_clock_utc + '  (iat=' + iat + ')');
   console.log('  ينتهي في      : ' + expiry + '  (exp=' + exp + ')');
   console.log('');
