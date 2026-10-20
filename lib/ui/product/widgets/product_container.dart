@@ -248,6 +248,7 @@ class _ProductContainerState extends State<ProductContainer> {
                             columns: [
                               DataColumn(label: Text(context.l10n.index_short)),
                               DataColumn(label: Text(context.l10n.product)),
+                              DataColumn(label: Text(context.l10n.category)),
                               DataColumn(label: Text(context.l10n.quantity)),
                               DataColumn(label: Text(context.l10n.price)),
                               DataColumn(label: Text(context.l10n.status)),
@@ -290,6 +291,7 @@ class _ProductContainerState extends State<ProductContainer> {
                                       ],
                                     ),
                                   ),
+                                  DataCell(Text(product.category ?? '-')),
                                   DataCell(Text('${product.quantity}')),
                                   DataCell(
                                     Text(
