@@ -902,6 +902,18 @@ class LicenseManager {
       );
     }
 
+    // The expiry is checked BEFORE saveLease, because saveLease writes the
+    // document to disk and then reports success on the strength of the parse
+    // alone. An operator holding a licence they never installed would otherwise
+    // be shown the success screen for a licence that had already expired — and
+    // would lose the working licence already on disk. Refusing here keeps both
+    // promises in the doc comment above.
+    if (license.isExpired) {
+      return LicenseValidationResult.expired(
+        _expiredImportMessage,
+      );
+    }
+
     // serverTime is the import moment: no server is involved, so the stored
     // clock-rollback anchor is simply "now".
     return saveLease(
@@ -909,6 +921,10 @@ class LicenseManager {
       serverTime: DateTime.now().toUtc().toIso8601String(),
     );
   }
+
+  static const String _expiredImportMessage =
+      'انتهت صلاحية هذه الرخصة قبل استيرادها ولم يتم تفعيلها، '
+      'ولم تُستبدل الرخصة الحالية. تواصل للحصول على رخصة سارية.';
 
   /// Pulls the JWT out of either document shape. Returns null when the input is
   /// not a plausible envelope at all.
