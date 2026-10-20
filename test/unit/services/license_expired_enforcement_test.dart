@@ -14,7 +14,7 @@ import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/services/secure_license_storage.dart';
 import 'package:pos_offline_desktop/services/security_service.dart';
 
-/// BUG-021 / FEAT-015 — importing an EXPIRED document.
+/// BUG-022 / FEAT-015 — importing an EXPIRED document.
 ///
 /// `importLicenseDocument` documents two promises that were both false:
 ///
