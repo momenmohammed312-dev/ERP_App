@@ -11,7 +11,6 @@ import 'package:pos_offline_desktop/ui/home/widgets/customer_transactions_widget
 import 'package:pos_offline_desktop/ui/home/widgets/suppliers_widget.dart';
 import 'package:pos_offline_desktop/ui/reports/reports_page.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/enhanced_new_invoice_page.dart';
-import 'package:pos_offline_desktop/ui/backup/enhanced_backup_screen.dart';
 import 'package:pos_offline_desktop/ui/staff/employee_dashboard_page.dart';
 import 'package:pos_offline_desktop/ui/custody/custody_page.dart';
 import 'package:pos_offline_desktop/ui/setting/settings.dart';
