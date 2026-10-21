@@ -1,4 +1,4 @@
-package com.example.pos_offline_desktop
+package com.yourcompany.posapp
 
 import io.flutter.embedding.android.FlutterActivity
 
