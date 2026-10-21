@@ -1,27 +1,22 @@
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
-import 'package:pos_offline_desktop/core/models/user_model.dart';
-import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
 import 'package:intl/intl.dart';
-import 'package:pos_offline_desktop/ui/customer/customer_statement_screen.dart';
-import 'package:pos_offline_desktop/ui/invoice/widgets/void_invoice_dialog.dart';
+import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
 import 'customer_monthly_report_page.dart';
 
-class CustomerReportTab extends ConsumerStatefulWidget {
+class CustomerReportTab extends StatefulWidget {
   final AppDatabase db;
 
   const CustomerReportTab({super.key, required this.db});
 
   @override
-  ConsumerState<CustomerReportTab> createState() => _CustomerReportTabState();
+  State<CustomerReportTab> createState() => _CustomerReportTabState();
 }
 
-class _CustomerReportTabState extends ConsumerState<CustomerReportTab> {
+class _CustomerReportTabState extends State<CustomerReportTab> {
   List<CustomerWithBalance> _customers = [];
   List<CustomerWithBalance> _filteredCustomers = [];
   bool _isLoading = false;
@@ -109,164 +104,45 @@ class _CustomerReportTabState extends ConsumerState<CustomerReportTab> {
 
     await showDialog(
       context: context,
-      builder: (dialogContext) {
+      builder: (context) {
         return StatefulBuilder(
-          builder: (dCtx, setDialogState) {
+          builder: (context, setDialogState) {
             return AlertDialog(
               title: Text('كشف حساب: ${customer.name}'),
-              content: SizedBox(
-                width: 500,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                        title: const Text('الفترة'),
-                        subtitle: Text(
-                          '${DateFormat('yyyy/MM/dd').format(start)} - ${DateFormat('yyyy/MM/dd').format(end)}',
-                        ),
-                        trailing: const Icon(Icons.calendar_month),
-                        onTap: () async {
-                          final picked = await showDateRangePicker(
-                            context: dialogContext,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime.now(),
-                            initialDateRange:
-                                DateTimeRange(start: start, end: end),
-                          );
-                          if (picked != null) {
-                            setDialogState(() {
-                              start = picked.start;
-                              end = picked.end;
-                            });
-                          }
-                        },
-                      ),
-                      const Divider(),
-                      const Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          'فواتير العميل (أحدث 10 فواتير):',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      const Gap(8),
-                      FutureBuilder<List<Invoice>>(
-                        future: (widget.db.select(widget.db.invoices)
-                              ..where((t) =>
-                                  t.customerId.equals(customer.id) &
-                                  t.status.equals('voided').not())
-                              ..orderBy([(t) => OrderingTerm.desc(t.date)])
-                              ..limit(10))
-                            .get(),
-                        builder: (ctx, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(12),
-                                child: CircularProgressIndicator(),
-                              ),
-                            );
-                          }
-                          final invoices = snapshot.data ?? [];
-                          if (invoices.isEmpty) {
-                            return const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: Text(
-                                'لا توجد فواتير نشطة للعميل',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            );
-                          }
-                          return Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: invoices.map((inv) {
-                              return Container(
-                                margin: const EdgeInsets.symmetric(vertical: 2),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.withValues(alpha: 0.05),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        'فاتورة #${inv.id} (${DateFormat('MM/dd').format(inv.date)})',
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                    Text(
-                                      '${inv.totalAmount.toStringAsFixed(2)} ج.م',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12),
-                                    ),
-                                    const Gap(8),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline,
-                                          color: Colors.redAccent, size: 18),
-                                      tooltip: 'إلغاء الفاتورة',
-                                      onPressed: () async {
-                                        final done = await showDialog<bool>(
-                                          context: dialogContext,
-                                          builder: (voidCtx) =>
-                                              VoidInvoiceDialog(
-                                            db: widget.db,
-                                            invoiceId: inv.id,
-                                            voidedBy: ref
-                                                    .read<User?>(authProvider)
-                                                    ?.username ??
-                                                'admin',
-                                            onDone: () {
-                                              _loadData();
-                                            },
-                                          ),
-                                        );
-                                        if (done == true) {
-                                          if (dialogContext.mounted) {
-                                            Navigator.pop(dialogContext);
-                                          }
-                                          if (mounted) {
-                                            _loadData();
-                                          }
-                                        }
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                          );
-                        },
-                      ),
-                    ],
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    title: const Text('الفترة'),
+                    subtitle: Text(
+                      '${DateFormat('yyyy/MM/dd').format(start)} - ${DateFormat('yyyy/MM/dd').format(end)}',
+                    ),
+                    trailing: const Icon(Icons.calendar_month),
+                    onTap: () async {
+                      final picked = await showDateRangePicker(
+                        context: context,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now(),
+                        initialDateRange: DateTimeRange(start: start, end: end),
+                      );
+                      if (picked != null) {
+                        setDialogState(() {
+                          start = picked.start;
+                          end = picked.end;
+                        });
+                      }
+                    },
                   ),
-                ),
+                ],
               ),
               actions: [
                 TextButton(
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => CustomerStatementScreen(
-                          customer: customer,
-                        ),
-                      ),
-                    );
-                  },
-                  child: const Text('كشف الحساب الكامل'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
+                  onPressed: () => Navigator.pop(context),
                   child: const Text('إلغاء'),
                 ),
                 ElevatedButton.icon(
                   onPressed: () async {
-                    Navigator.pop(dialogContext);
+                    Navigator.pop(context);
                     await _exportStatement(customer, start, end);
                   },
                   icon: const Icon(Icons.print),
@@ -453,24 +329,20 @@ class _CustomerReportTabState extends ConsumerState<CustomerReportTab> {
             // Date Range Selector
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.date_range, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'الفترة: ${DateFormat('yyyy/MM/dd').format(_reportStart)} - ${DateFormat('yyyy/MM/dd').format(_reportEnd)}',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                    ),
-                    const Spacer(),
-                    TextButton.icon(
+                padding: EdgeInsets.all(PlatformUtils.isMobile ? 12 : 16),
+                child: Builder(
+                  builder: (context) {
+                    final isMobile = PlatformUtils.isMobile || MediaQuery.sizeOf(context).width < 600;
+                    final changeButton = TextButton.icon(
                       onPressed: () async {
                         final picked = await showDateRangePicker(
                           context: context,
                           firstDate: DateTime(2020),
                           lastDate: DateTime.now(),
                           initialDateRange: DateTimeRange(
-                            start: _reportStart, end: _reportEnd),
+                            start: _reportStart,
+                            end: _reportEnd,
+                          ),
                         );
                         if (picked != null) {
                           setState(() {
@@ -481,52 +353,104 @@ class _CustomerReportTabState extends ConsumerState<CustomerReportTab> {
                       },
                       icon: const Icon(Icons.edit_calendar, size: 18),
                       label: const Text('تغيير الفترة'),
-                    ),
-                  ],
+                    );
+
+                    final textDisplay = Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.date_range, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'الفترة: ${DateFormat('yyyy/MM/dd').format(_reportStart)} - ${DateFormat('yyyy/MM/dd').format(_reportEnd)}',
+                            style: TextStyle(
+                              fontSize: isMobile ? 12 : 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    );
+
+                    if (isMobile) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          textDisplay,
+                          const Gap(8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: changeButton,
+                          ),
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        Expanded(child: textDisplay),
+                        const Gap(8),
+                        changeButton,
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
             const Gap(16),
 
-            // Summary Cards
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _showOnlyDues = !_showOnlyDues;
-                        _filterCustomers();
-                      });
-                    },
-                    child: _SummaryCard(
-                      title: context.l10n.total_receivables_us,
-                      value: totalDue,
-                      color: _showOnlyDues ? Colors.orange : Colors.red,
-                      icon: Icons.trending_up,
-                    ),
+            Builder(
+              builder: (context) {
+                final isMobile = PlatformUtils.isMobile || MediaQuery.sizeOf(context).width < 600;
+                final card1 = GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _showOnlyDues = !_showOnlyDues;
+                      _filterCustomers();
+                    });
+                  },
+                  child: _SummaryCard(
+                    title: context.l10n.total_receivables_us,
+                    value: totalDue,
+                    color: _showOnlyDues ? Colors.orange : Colors.red,
+                    icon: Icons.trending_up,
                   ),
-                ),
-                const Gap(16),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _showOnlyDues = false;
-                        _filterCustomers();
-                      });
-                    },
-                    child: _SummaryCard(
-                      title: context.l10n.total_payables_us,
-                      value: totalCredited,
-                      color: Colors.green,
-                      icon: Icons.trending_down,
-                    ),
+                );
+
+                final card2 = GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _showOnlyDues = false;
+                      _filterCustomers();
+                    });
+                  },
+                  child: _SummaryCard(
+                    title: context.l10n.total_payables_us,
+                    value: totalCredited,
+                    color: Colors.green,
+                    icon: Icons.trending_down,
                   ),
-                ),
-                const Gap(16),
-                Expanded(child: Container()), // Spacer
-              ],
+                );
+
+                if (isMobile) {
+                  return Column(
+                    children: [
+                      card1,
+                      const Gap(8),
+                      card2,
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(child: card1),
+                    const Gap(16),
+                    Expanded(child: card2),
+                  ],
+                );
+              },
             ),
             const Gap(16),
 
@@ -540,47 +464,50 @@ class _CustomerReportTabState extends ConsumerState<CustomerReportTab> {
                       child: SizedBox(
                         width: double.infinity,
                         child: Card(
-                          child: DataTable(
-                            showCheckboxColumn: false, // Make rows clickable
-                            headingRowColor: WidgetStateProperty.all(
-                              Colors.purple.withValues(alpha: 0.05),
-                            ),
-                            columns: [
-                              DataColumn(label: Text(context.l10n.customer)),
-                              DataColumn(label: Text(context.l10n.phone)),
-                              DataColumn(
-                                label: Text(
-                                  context.l10n.receivable_balance,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
+                              showCheckboxColumn: false, // Make rows clickable
+                              headingRowColor: WidgetStateProperty.all(
+                                Colors.purple.withValues(alpha: 0.05),
                               ),
-                            ],
-                            rows: _filteredCustomers.map((c) {
-                              return DataRow(
-                                onSelectChanged: (selected) {
-                                  if (selected == true) {
-                                    _showStatementDialog(c.customer);
-                                  }
-                                },
-                                cells: [
-                                  DataCell(Text(c.customer.name)),
-                                  DataCell(Text(c.customer.phone ?? '')),
-                                  DataCell(
-                                    Text(
-                                      '${c.balance.toStringAsFixed(2)} ${context.l10n.currency_symbol}',
-                                      style: TextStyle(
-                                        color: c.balance > 0
-                                            ? Colors.red
-                                            : Colors.green,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                              columns: [
+                                DataColumn(label: Text(context.l10n.customer)),
+                                DataColumn(label: Text(context.l10n.phone)),
+                                DataColumn(
+                                  label: Text(
+                                    context.l10n.receivable_balance,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                ],
-                              );
-                            }).toList(),
+                                ),
+                              ],
+                              rows: _filteredCustomers.map((c) {
+                                return DataRow(
+                                  onSelectChanged: (selected) {
+                                    if (selected == true) {
+                                      _showStatementDialog(c.customer);
+                                    }
+                                  },
+                                  cells: [
+                                    DataCell(Text(c.customer.name)),
+                                    DataCell(Text(c.customer.phone ?? '')),
+                                    DataCell(
+                                      Text(
+                                        '${c.balance.toStringAsFixed(2)} ${context.l10n.currency_symbol}',
+                                        style: TextStyle(
+                                          color: c.balance > 0
+                                              ? Colors.red
+                                              : Colors.green,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
                           ),
                         ),
                       ),
@@ -618,35 +545,48 @@ class _SummaryCard extends StatelessWidget {
     return Card(
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: color, size: 28),
+              child: Icon(icon, color: color, size: 24),
             ),
-            const Gap(16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
-                ),
-                Text(
-                  '${value.toStringAsFixed(2)} ${context.l10n.currency_symbol}',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: color,
+            const Gap(10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey.shade600,
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${value.toStringAsFixed(2)} ${context.l10n.currency_symbol}',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

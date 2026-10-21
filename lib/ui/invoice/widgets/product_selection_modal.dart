@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
+import 'package:pos_offline_desktop/core/platform/responsive.dart';
 
 class ProductSelectionModal extends StatefulWidget {
   final Product product;
@@ -137,11 +139,23 @@ class _ProductSelectionModalState extends State<ProductSelectionModal> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = PlatformUtils.isMobile;
+
     return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(isMobile ? 16 : 12),
+      ),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 16 : 40,
+        vertical: 24,
+      ),
       child: Container(
-        width: 400,
-        padding: const EdgeInsets.all(24),
-        child: Form(
+        width: dialogWidth(context, 440),
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: dialogMaxHeight(context)),
+          child: SingleChildScrollView(
+            child: Form(
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -421,6 +435,8 @@ class _ProductSelectionModalState extends State<ProductSelectionModal> {
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 }

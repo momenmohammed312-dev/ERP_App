@@ -111,7 +111,10 @@ class _OrderLineItemState extends State<OrderLineItem> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -131,24 +134,29 @@ class _OrderLineItemState extends State<OrderLineItem> {
                         ),
                       ),
                     ),
-                    const Gap(8),
-                    if (widget.entry.priceOverride) ...[
-                      Icon(Icons.edit, size: 12, color: Colors.orange.shade600),
-                      const Gap(2),
-                      Text(
-                        'Price Modified',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.orange.shade600,
-                        ),
+                    if (widget.entry.priceOverride)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.edit, size: 12, color: Colors.orange.shade600),
+                          const Gap(2),
+                          Text(
+                            'Price Modified',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.orange.shade600,
+                            ),
+                          ),
+                        ],
                       ),
-                      const Gap(8),
-                    ],
-                    Text(
-                      'Line Total: ${widget.entry.lineTotal.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Line Total: ${widget.entry.lineTotal.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],

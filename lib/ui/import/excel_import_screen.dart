@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
 
 import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
@@ -28,7 +31,11 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
   @override
   Widget build(BuildContext context) {
     if (!AppFeatures.hasShipmentTracking) {
-      return const Scaffold(body: Center(child: Text('ميزة الاستيراد متاحة في فليفر سوق الخضار فقط')));
+      return const Scaffold(
+        body: Center(
+          child: Text('ميزة الاستيراد متاحة في فليفر سوق الخضار فقط'),
+        ),
+      );
     }
 
     return Scaffold(
@@ -46,7 +53,11 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.upload_file, size: 32, color: Colors.blue),
+                        const Icon(
+                          Icons.upload_file,
+                          size: 32,
+                          color: Colors.blue,
+                        ),
                         const Gap(12),
                         Expanded(
                           child: Text(
@@ -86,7 +97,13 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('معاينة البيانات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const Text(
+                        'معاينة البيانات',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
                       const Gap(8),
                       _buildPreviewRow('الموردين', _preview!['suppliers']),
                       _buildPreviewRow('العملاء', _preview!['customers']),
@@ -94,7 +111,10 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
                       _buildPreviewRow('المبيعات', _preview!['sales']),
                       _buildPreviewRow('المصروفات', _preview!['expenses']),
                       _buildPreviewRow('التحصيلات', _preview!['collections']),
-                      _buildPreviewRow('البرانيك الفاضية', _preview!['emptyBarnika']),
+                      _buildPreviewRow(
+                        'البرانيك الفاضية',
+                        _preview!['emptyBarnika'],
+                      ),
                     ],
                   ),
                 ),
@@ -108,7 +128,10 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
                 color: Colors.red.shade50,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
                 ),
               ),
 
@@ -118,10 +141,21 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
             ElevatedButton.icon(
               onPressed: _importing ? null : _runImport,
               icon: _importing
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : const Icon(Icons.cloud_download),
               label: Text(_importing ? 'جاري الاستيراد...' : 'تنفيذ الاستيراد'),
-              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), backgroundColor: Colors.teal, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+              ),
             ),
           ],
         ),
@@ -137,7 +171,13 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label),
-          Text('$count سجل', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+          Text(
+            '$count سجل',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.teal,
+            ),
+          ),
         ],
       ),
     );
@@ -147,15 +187,41 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx'],
-      withData: false,
     );
-    if (result != null && result.files.single.path != null) {
-      setState(() {
-        _pickedFile = File(result.files.single.path!);
-        _preview = null;
-        _error = null;
-      });
+    if (result == null || result.files.isEmpty) return;
+
+    final picked = result.files.first;
+    final sourcePath = picked.path;
+    final pickedBytes = picked.bytes;
+    if (sourcePath == null && pickedBytes == null) {
+      setState(() => _error = 'تعذر الوصول إلى الملف المختار');
+      return;
     }
+
+    File target;
+    if (PlatformUtils.isMobile) {
+      // Cloud providers (Drive, OneDrive) hand back a temporary path or in-memory
+      // bytes that cannot be re-read later. Stage the bytes in app documents
+      // first so the rest of the import flow keeps working on a plain local path.
+      final bytes = pickedBytes ?? await File(sourcePath!).readAsBytes();
+      final appDir = await getApplicationDocumentsDirectory();
+      target = File(path.join(appDir.path, 'import_staging.xlsx'));
+      await target.writeAsBytes(bytes, flush: true);
+    } else {
+      if (sourcePath != null) {
+        target = File(sourcePath);
+      } else {
+        final appDir = await getApplicationDocumentsDirectory();
+        target = File(path.join(appDir.path, 'import_staging.xlsx'));
+        await target.writeAsBytes(pickedBytes!, flush: true);
+      }
+    }
+
+    setState(() {
+      _pickedFile = target;
+      _preview = null;
+      _error = null;
+    });
   }
 
   Future<void> _previewFile() async {
@@ -167,12 +233,23 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
       final preview = <String, dynamic>{};
 
       // Sheets expected by the import service
-      final sheets = ['suppliers', 'customers', 'shipments', 'sales', 'expenses', 'collections', 'emptyBarnikaRecords'];
+      final sheets = [
+        'suppliers',
+        'customers',
+        'shipments',
+        'sales',
+        'expenses',
+        'collections',
+        'emptyBarnikaRecords',
+      ];
       for (final sheetName in sheets) {
         final sheet = excel.tables[sheetName];
         if (sheet != null) {
           // Skip header row
-          preview[sheetName] = sheet.rows.skip(1).map((r) => r.map((c) => c?.value).toList()).toList();
+          preview[sheetName] = sheet.rows
+              .skip(1)
+              .map((r) => r.map((c) => c?.value).toList())
+              .toList();
         } else {
           preview[sheetName] = [];
         }
@@ -190,11 +267,15 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
       _error = null;
     });
     try {
-      final result = await VegetableMarketImportService(widget.db).importFromFile(_pickedFile!.path);
+      final result = await VegetableMarketImportService(
+        widget.db,
+      ).importFromFile(_pickedFile!.path);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('تم الاستيراد: ${result.total} سجل (موردين: ${result.suppliers}, عملاء: ${result.customers}, شحنات: ${result.shipments}, مبيعات: ${result.sales}, مصروفات: ${result.expenses}, تحصيلات: ${result.collections}, برانيك: ${result.emptyBarnika})${result.errors.isNotEmpty ? ' — أخطاء: ${result.errors.length}' : ''}'),
+          content: Text(
+            'تم الاستيراد: ${result.total} سجل (موردين: ${result.suppliers}, عملاء: ${result.customers}, شحنات: ${result.shipments}, مبيعات: ${result.sales}, مصروفات: ${result.expenses}, تحصيلات: ${result.collections}, برانيك: ${result.emptyBarnika})${result.errors.isNotEmpty ? ' — أخطاء: ${result.errors.length}' : ''}',
+          ),
           backgroundColor: result.errors.isEmpty ? Colors.green : Colors.orange,
           duration: const Duration(seconds: 5),
         ),
@@ -222,10 +303,22 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
           width: 400,
           height: 300,
           child: ListView(
-            children: errors.take(20).map((e) => ListTile(title: Text(e, style: const TextStyle(fontSize: 12)))).toList(),
+            children: errors
+                .take(20)
+                .map(
+                  (e) => ListTile(
+                    title: Text(e, style: const TextStyle(fontSize: 12)),
+                  ),
+                )
+                .toList(),
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('موافق'))],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('موافق'),
+          ),
+        ],
       ),
     );
   }
