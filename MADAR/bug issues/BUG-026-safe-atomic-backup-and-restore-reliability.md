@@ -85,6 +85,17 @@
   8. `temporary directory ownership: backup cleans only its own temp directory`: PASSED (عزل وتنظيف المجلد المؤقت الخاص بالعملية فقط).
   9. `write transaction during backup does not deadlock or crash with busy_timeout configured`: PASSED (نجاح معاملات الكتابة المتزامنة بفضل busy_timeout).
   10. `restoreBackup safely handles and archives sidecar files`: PASSED (أرشفة وتنظيف ملفات الـ sidecars بأمان).
+- تم تنفيذ جناح التحقق المتقدم على بيئة Windows Staging المعزولة بالكامل `test/unit/services/windows_staging_validation_test.dart` (10 اختبارات ناجحة):
+  1. عزل المسارات بنسبة 100% (Staging في E:\Temp وقاعدة الإنتاج في G:\flutter\Documents).
+  2. قياس النسخ المتكرر تحت الحمل (100 عميل، 100 صنف، 50 فاتورة، 20 مصروف): 5 نسخ استغرقت [788ms, 662ms, 404ms, 437ms, 473ms] بحجم 24.3 KB وسلامة كاملة.
+  3. تزامن 10 معاملات كتابية أثناء النسخ اكتملت في 1470ms بدون أي قفل SQLite (SQLITE_BUSY = 0).
+  4. رفض الطلب المتزامن الثاني مع الحفاظ على القفل وتفريغه.
+  5. تنظيف دقيق للمجلد المؤقت دون لمس الملفات المجاورة.
+  6. رفض النسخة التالفة قبل لمس قاعدة البيانات الحية.
+  7. استعادة صالحة وتحديث موفر Riverpod واستئناف فوري للقراءة والكتابة.
+  8. أرشفة وتنظيف الملفات الجانبية (-wal, -shm, -journal).
+  9. توافق النسخ السابقة واكتشافها.
+  10. مطابقة SHA-256 لقاعدة الإنتاج قبل وبعد الاختبارات بنسبة 100% (ab5c0b4783cbc2ec4ba302a5ebf45f98c800cabe11d3371f5f0c6c02e041b3de).
 - اختبار جداول النسخ الحالية `test/unit/services/backup_tables_test.dart`: PASSED (جميع الجداول مطابقة والترتيب سليم).
 - فحص الكود الساكن `flutter analyze`: 0 errors, 0 warnings (خالٍ تماماً من المشاكل عبر كافة الملفات المعدلة).
 
@@ -103,3 +114,4 @@
 | 2026-10-20 | MADAR Reliability Agent | إنشاء البلاغ بحالة in-progress وبدء تنفيذ التثبيت الفني الآمن |
 | 2026-10-20 | MADAR Reliability Agent | اكتمال التنفيذ الأولي للمرحلة الأولى |
 | 2026-10-21 | MADAR Reliability Agent | مراجعة أمنية مستقلة وتطبيق حزمة الإصلاحات الدقيقة (SEC-01 حتى SEC-06) وتحويل الحالة إلى resolved |
+| 2026-10-21 | MADAR Reliability Agent | تنفيذ والتحقق من جناح Windows Staging Validation الكامل مع عزل بنسبة 100% وإثبات Zero Customer Impact |
