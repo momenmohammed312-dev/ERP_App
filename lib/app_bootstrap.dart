@@ -28,6 +28,7 @@ import 'package:pos_offline_desktop/core/services/periodic_license_validator.dar
 
 import 'package:pos_offline_desktop/screens/license/activation_screen.dart';
 import 'package:pos_offline_desktop/screens/license/activation_success_screen.dart';
+import 'package:pos_offline_desktop/screens/license/license_misconfiguration_screen.dart';
 import 'package:pos_offline_desktop/screens/license/license_info_screen.dart';
 
 /// Shared startup for all flavors. [flavor] wins over `--dart-define=FLAVOR=…`.
@@ -48,13 +49,11 @@ Future<void> bootstrapApp({Flavor? flavor}) async {
 
   AppFlavor.initialize(flavor ?? AppFlavor.fromEnvironment());
 
-  // A2: Ensure production release builds warn if running with default secret keys.
-  if (kReleaseMode) {
-    try {
-      LicenseConfig.assertSecretKeyConfigured();
-    } catch (e) {
-      AppLogger.w('Running in release mode without custom LICENSE_SECRET_KEY: $e');
-    }
+  // A2: Ensure production release builds show a clear error screen if running with default secret keys.
+  if (kReleaseMode && LicenseConfig.secretKey == 'CHANGE_ME') {
+    AppLogger.e('Refusing to run release build with insecure default CHANGE_ME key');
+    runApp(const LicenseMisconfigurationApp());
+    return;
   }
 
   // Each startup service is isolated: one failure must not stop the app from
