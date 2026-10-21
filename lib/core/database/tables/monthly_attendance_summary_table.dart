@@ -4,6 +4,9 @@ import 'package:drift/drift.dart';
 /// period = '2026-08' , lateHours/extra/overtime منفصلة
 @DataClassName('MonthlyAttendanceSummary')
 class MonthlyAttendanceSummaryTable extends Table {
+  @override
+  String get tableName => 'monthly_attendance_summary_table';
+
   IntColumn get id => integer().autoIncrement()();
   TextColumn get staffId => text()(); // STAFFxxxx
   TextColumn get period => text()(); // '2026-08'

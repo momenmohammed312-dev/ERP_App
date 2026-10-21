@@ -72,6 +72,7 @@ class AttendanceCalcResult {
 /// Engine that calculates attendance status, working hours, overtime, and late penalties
 class AttendanceCalculationEngine {
   final AppDatabase _db;
+  // ignore: unused_field
   final AttendanceDeviceDao _deviceDao;
   final StaffManagementDao _staffDao;
 

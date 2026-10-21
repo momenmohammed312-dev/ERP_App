@@ -54,12 +54,33 @@ Future<DateTime?> pickDocumentDate({
   required DateTime initialDate,
   DateTime? firstDate,
   DateTime? lastDate,
+  bool allowFutureDates = false,
 }) async {
+  final now = DateTime.now();
+  DateTime effectiveLastDate;
+  if (lastDate != null) {
+    effectiveLastDate = lastDate;
+  } else if (!allowFutureDates) {
+    effectiveLastDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+  } else {
+    effectiveLastDate = now.add(const Duration(days: 365));
+  }
+
+  // تفادي استثناء AssertionError في showDatePicker إذا كان initialDate يتجاوز lastDate
+  if (initialDate.isAfter(effectiveLastDate)) {
+    effectiveLastDate = initialDate;
+  }
+
+  final effectiveFirstDate = firstDate ?? DateTime(2020);
+  final effectiveInitialDate = initialDate.isBefore(effectiveFirstDate)
+      ? effectiveFirstDate
+      : initialDate;
+
   final picked = await showDatePicker(
     context: context,
-    initialDate: initialDate,
-    firstDate: firstDate ?? DateTime(2020),
-    lastDate: lastDate ?? DateTime.now().add(const Duration(days: 365)),
+    initialDate: effectiveInitialDate,
+    firstDate: effectiveFirstDate,
+    lastDate: effectiveLastDate,
   );
 
   if (picked == null) return null;

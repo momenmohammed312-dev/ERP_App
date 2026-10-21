@@ -11,7 +11,7 @@ import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.da
 /// BUG-004 regression: customer-owned lines must NEVER be validated against
 /// or mutate factory Products.quantity — even when factory stock is 0.
 void main() {
-  // BUG-017: this suite exercises a licensed module directly, bypassing the
+  // BUG-018: this suite exercises a licensed module directly, bypassing the
   // splash screen that normally loads the license before any module opens.
   grantLicensedModules();
   TestWidgetsFlutterBinding.ensureInitialized();

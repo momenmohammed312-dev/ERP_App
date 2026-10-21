@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
-import 'package:pos_offline_desktop/core/database/tables/product_table.dart';
 
 class ShipmentFormDialog extends StatefulWidget {
   final AppDatabase db;

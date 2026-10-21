@@ -893,8 +893,8 @@ class _EnhancedNewInvoicePageState
         : _paymentMethod.name;
 
     // Determine status
-    String status;
-    if ((_grandTotal - _paidAmount).abs() < 0.01) {
+    String status = 'unpaid';
+    if (_paidAmount >= _grandTotal - 0.01) {
       status = 'paid';
     } else if (_paidAmount > 0) {
       status = 'partial';

@@ -29,3 +29,10 @@ export 'staff_management_tables.dart';
 export 'supplier_table.dart';
 export 'user_activity_log_table.dart';
 export 'users_table.dart';
+export 'accounts_table.dart';
+export 'equity_transactions_table.dart';
+export 'journal_entries_table.dart';
+export 'journal_lines_table.dart';
+export 'monthly_attendance_summary_table.dart';
+export 'partners_table.dart';
+

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
 import 'package:pos_offline_desktop/core/services/audit_log_service.dart';
 
@@ -358,6 +359,9 @@ class _ProductFormState extends State<ProductForm> {
                     validator: (v) {
                       final q = int.tryParse(v ?? '');
                       if (q == null || q < 0) return 'أدخل كمية صحيحة (0 أو أكثر)';
+                      if (q > 999999) {
+                        return 'الكمية كبيرة جداً — تأكد من عدم مسح الباركود في حقل الكمية';
+                      }
                       return null;
                     },
                   ),
@@ -571,7 +575,9 @@ class _ProductFormState extends State<ProductForm> {
         }
 
         // كمية الأب = مجموع الأصناف لو فيه أصناف، وإلا الكمية المدخلة.
-        final effectiveQuantity = _hasVariants ? _variantsTotal : newQuantity;
+        final effectiveQuantity = (AppFeatures.hasProductVariants && _hasVariants)
+            ? _variantsTotal
+            : newQuantity;
 
         if (widget.product == null) {
           // إضافة: المنتج + أصنافه في transaction واحدة
@@ -774,11 +780,11 @@ class _ProductFormState extends State<ProductForm> {
                     Expanded(
                       child: TextFormField(
                         controller: quantityCtrl,
-                        enabled: !_hasVariants,
+                        enabled: !(AppFeatures.hasProductVariants && _hasVariants),
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
                           labelText: context.l10n.quantity,
-                          helperText: _hasVariants
+                          helperText: (AppFeatures.hasProductVariants && _hasVariants)
                               ? 'تُحسب تلقائيًا = مجموع الأصناف ($_variantsTotal)'
                               : null,
                           border: const OutlineInputBorder(),
@@ -788,8 +794,12 @@ class _ProductFormState extends State<ProductForm> {
                           if (value == null || value.trim().isEmpty) {
                             return context.l10n.enter_valid_quantity;
                           }
-                          if (int.tryParse(value) == null || int.parse(value) < 0) {
+                          final qty = int.tryParse(value);
+                          if (qty == null || qty < 0) {
                             return context.l10n.enter_valid_quantity;
+                          }
+                          if (qty > 999999) {
+                            return 'الكمية كبيرة جداً — تأكد من عدم مسح الباركود في حقل الكمية';
                           }
                           return null;
                         },
@@ -847,7 +857,9 @@ class _ProductFormState extends State<ProductForm> {
                   ],
                 ),
                 const Gap(16),
-                _buildVariantsSection(),
+                if (AppFeatures.hasProductVariants) ...[
+                  _buildVariantsSection(),
+                ],
                 const Gap(16),
                 Row(
                   children: [

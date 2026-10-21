@@ -49,6 +49,8 @@ class StaffBiometricMappings extends Table {
 
   TextColumn get externalUserId => text()(); // the user/employee ID as known BY THE DEVICE
 
+  TextColumn get deviceUserName => text().nullable()(); // name on device, if reported
+
   TextColumn get cardNumber => text().nullable()();
 
   IntColumn get fingerIndex => integer().nullable()(); // which finger was enrolled, if applicable

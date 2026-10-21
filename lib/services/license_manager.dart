@@ -187,7 +187,15 @@ class LicenseManager {
   // Singleton
   static final LicenseManager _instance = LicenseManager._internal();
   factory LicenseManager() => _instance;
-  LicenseManager._internal();
+  LicenseManager._internal() {
+    if (kReleaseMode) {
+      try {
+        LicenseConfig.assertSecretKeyConfigured();
+      } catch (e) {
+        AppLogger.w('Running in release mode without custom LICENSE_SECRET_KEY: $e');
+      }
+    }
+  }
 
   // ════════════════════════════════════════════════════════════════════
   // توليد بصمة الجهاز (Device Fingerprinting)
@@ -348,7 +356,7 @@ class LicenseManager {
   /// Returns null when the payload is not in the legacy shape, cannot be
   /// decrypted with the current secret, or is not a well-formed license — the
   /// caller then falls through to the normal "no license" path.
-  static License? _readLegacyLicense(SecureLicenseData data) {
+  static Future<License?> _readLegacyLicense(SecureLicenseData data) async {
     final payload = data.licenseJson;
     if (payload == null) return null;
 
@@ -373,6 +381,17 @@ class LicenseManager {
       final decoded =
           jsonDecode(_instance._decrypt(parts[0])) as Map<String, dynamic>;
 
+      // A8: Enforce hardware fingerprint on legacy licenses so files cloned
+      // to another machine are rejected even within the 90-day grace window.
+      final savedDevice = '${decoded['device'] ?? ''}';
+      if (savedDevice.isNotEmpty && savedDevice != 'UNBOUND') {
+        final match = await HardwareIdService.isSameDeviceTolerant(savedDevice, null);
+        if (!match) {
+          AppLogger.w('Legacy license device mismatch: expected $savedDevice');
+          return null;
+        }
+      }
+
       final typeName = '${decoded['type']}';
       if (LicensePlans.isUnknown(typeName)) {
         AppLogger.w('Unknown plan "$typeName" in legacy license');
@@ -384,7 +403,7 @@ class LicenseManager {
 
       return License(
         licenseKey: encoded,
-        deviceFingerprint: '${decoded['device'] ?? ''}',
+        deviceFingerprint: savedDevice,
         type: type,
         issueDate: DateTime.parse('${decoded['issue_date']}'),
         expiryDate: DateTime.parse('${decoded['expiry']}'),
@@ -581,7 +600,7 @@ class LicenseManager {
         // shape first and keep the customer working during the grace window
         // instead of dropping them on the activation screen with no warning.
         if (!secureData.licenseJson!.containsKey('lease_token')) {
-          final legacy = _readLegacyLicense(secureData);
+          final legacy = await _readLegacyLicense(secureData);
           if (legacy != null) {
             _legacyLicenseSeen = true;
             // Stamp the deadline before deciding, so a legacy license that
@@ -659,6 +678,7 @@ class LicenseManager {
 
   /// True when [features] grants every module — either by an explicit wildcard or
   /// by carrying the full canonical list.
+  // ignore: unused_element
   bool _hasEveryFeature(List<String> features) =>
       features.contains('*') ||
       features.contains('all') ||
@@ -916,10 +936,54 @@ class LicenseManager {
     );
   }
 
+  /// Decodes a license document's bytes, tolerating the encodings Windows
+  /// tools produce: UTF-8 with BOM, UTF-16 LE/BE with BOM, or plain UTF-8.
+  ///
+  /// The `.madarlicense` file is signed over its exact text, so it must be
+  /// decoded faithfully before [_extractLeaseToken] runs. Saving it from
+  /// Notepad or PowerShell (which add a BOM / default to UTF-16) used to turn
+  /// a valid document into "تعذّر التحقق من صحة الترخيص".
+  static String decodeDocumentBytes(List<int> bytes) {
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
+      return utf8.decode(bytes.sublist(3), allowMalformed: true);
+    }
+    if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
+      return _decodeUtf16(bytes, 2, littleEndian: true);
+    }
+    if (bytes.length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) {
+      return _decodeUtf16(bytes, 2, littleEndian: false);
+    }
+    return utf8.decode(bytes, allowMalformed: true);
+  }
+
+  static String _decodeUtf16(
+    List<int> bytes,
+    int start, {
+    required bool littleEndian,
+  }) {
+    final units = <int>[];
+    for (var i = start; i + 1 < bytes.length; i += 2) {
+      units.add(
+        littleEndian
+            ? bytes[i] | (bytes[i + 1] << 8)
+            : (bytes[i] << 8) | bytes[i + 1],
+      );
+    }
+    return String.fromCharCodes(units);
+  }
+
   /// Pulls the JWT out of either document shape. Returns null when the input is
   /// not a plausible envelope at all.
   static String? _extractLeaseToken(String document) {
-    final trimmed = document.trim();
+    var trimmed = document.trim();
+    // U+FEFF is not Unicode whitespace in Dart, so `trim()` keeps it and the
+    // envelope would be mistaken for a bare JWT.
+    while (trimmed.startsWith('\uFEFF')) {
+      trimmed = trimmed.substring(1).trim();
+    }
     if (trimmed.isEmpty) return null;
 
     // Bare JWT fast path — avoids a JSON parse for the common case.

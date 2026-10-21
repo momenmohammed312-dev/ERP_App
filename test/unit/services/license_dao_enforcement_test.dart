@@ -5,15 +5,11 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/custody_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/damaged_items_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart';
-import 'package:pos_offline_desktop/core/database/tables/cash_custody_tables.dart';
-import 'package:pos_offline_desktop/core/database/tables/damaged_items_table.dart';
-import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
-import 'package:pos_offline_desktop/core/database/tables/product_table.dart';
 import 'package:pos_offline_desktop/services/license_entitlement.dart';
 
 import '../../helpers/license_grant.dart';
 
-/// BUG-017 — the DAOs themselves must refuse an unlicensed write.
+/// BUG-018 — the DAOs themselves must refuse an unlicensed write.
 ///
 /// Hiding a launcher button is not enforcement. These tests call the DAOs
 /// directly — exactly the way a route, a background task or a future refactor

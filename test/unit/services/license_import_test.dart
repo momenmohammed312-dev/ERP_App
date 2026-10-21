@@ -150,6 +150,41 @@ void main() {
     });
   });
 
+  group('BUG-025 — Windows text encodings are decoded, not rejected', () {
+    test('a UTF-8 BOM at the start of the document is ignored', () async {
+      final result = await manager.importLicenseDocument(
+        '\uFEFF${envelope(makeLease())}',
+      );
+      expect(result.isValid, isTrue, reason: result.errorMessage ?? '');
+    });
+
+    test('a UTF-16 LE document (PowerShell Out-File) is decoded', () async {
+      final doc = envelope(makeLease());
+      final bytes = <int>[0xFF, 0xFE];
+      for (final unit in doc.codeUnits) {
+        bytes.add(unit & 0xFF);
+        bytes.add((unit >> 8) & 0xFF);
+      }
+
+      final decoded = LicenseManager.decodeDocumentBytes(bytes);
+      expect(decoded, doc);
+
+      final result = await manager.importLicenseDocument(decoded);
+      expect(result.isValid, isTrue, reason: result.errorMessage ?? '');
+    });
+
+    test('a UTF-16 BE document is decoded', () {
+      final doc = envelope(makeLease());
+      final bytes = <int>[0xFE, 0xFF];
+      for (final unit in doc.codeUnits) {
+        bytes.add((unit >> 8) & 0xFF);
+        bytes.add(unit & 0xFF);
+      }
+
+      expect(LicenseManager.decodeDocumentBytes(bytes), doc);
+    });
+  });
+
   group('FEAT-012 — malformed and hostile documents are refused', () {
     test('a lease signed by another private key is rejected', () async {
       final attacker = RSAPrivateKey(

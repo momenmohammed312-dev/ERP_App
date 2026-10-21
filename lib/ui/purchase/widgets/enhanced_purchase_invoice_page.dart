@@ -70,7 +70,11 @@ class _EnhancedPurchaseInvoicePageState
 
   // Totals
   double _subtotal = 0.0;
+  // ignore: unused_field
+  // ignore: unused_field
   double _totalDiscount = 0.0;
+  // ignore: unused_field
+  // ignore: unused_field
   double _totalTax = 0.0;
   double _grandTotal = 0.0;
   double _paidAmount = 0.0;

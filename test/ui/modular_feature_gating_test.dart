@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/services/feature_gate_service.dart' hide FeatureGuard;
 import 'package:pos_offline_desktop/services/hardware_id_service.dart';
-import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/services/online_license_service.dart';
 import 'package:pos_offline_desktop/services/secure_license_storage.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';

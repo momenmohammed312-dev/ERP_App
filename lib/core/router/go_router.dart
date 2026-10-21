@@ -85,7 +85,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           !user.hasPermission(Permission.manageUsers))
         return '/';
 
-      // BUG-017 — entitlement guard. The home screen marks a locked module with
+      // BUG-018 — entitlement guard. The home screen marks a locked module with
       // a "(مغلق)" badge, but that badge is a child of the launcher button: it
       // paints over the button and does nothing about the route itself, so
       // `context.go('/manufacturing/orders')` — a bookmarked path, a restored

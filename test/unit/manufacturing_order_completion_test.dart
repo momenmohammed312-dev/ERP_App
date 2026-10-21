@@ -35,7 +35,7 @@ import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_ta
 /// الأرقام في كل test ثابتة عن قصد. لو الـport غيّر الحساب، الـtests دي
 /// هتفشل — وده المقصود.
 void main() {
-  // BUG-017: this suite exercises a licensed module directly, bypassing the
+  // BUG-018: this suite exercises a licensed module directly, bypassing the
   // splash screen that normally loads the license before any module opens.
   grantLicensedModules();
   TestWidgetsFlutterBinding.ensureInitialized();

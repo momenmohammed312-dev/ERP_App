@@ -221,6 +221,13 @@ class StaffAdvances extends Table {
   RealColumn get monthlyDeduction =>
       real().nullable()(); // Monthly installment amount
 
+  /// تراكمي ما خُصم فعلاً من المرتبات
+  RealColumn get paidAmount =>
+      real().withDefault(const Constant(0.0))();
+
+  /// فترة بدء الخصم ('YYYY-MM' أو 'YYYY-MM-Wn')
+  TextColumn get deductOnPeriod => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
 
   DateTimeColumn get updatedAt => dateTime()();

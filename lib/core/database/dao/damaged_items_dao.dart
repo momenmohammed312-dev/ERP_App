@@ -11,7 +11,7 @@ class DamagedItemsDao extends DatabaseAccessor<AppDatabase>
     with _$DamagedItemsDaoMixin {
   DamagedItemsDao(super.db);
 
-  /// BUG-017 — entitlement guard.
+  /// BUG-018 — entitlement guard.
   ///
   /// The home screen greys out the launcher, but that is a widget around a
   /// button. This DAO is reachable from the route, from a test, and from any

@@ -1,8 +1,7 @@
-import 'package:pos_offline_desktop/config/license_config.dart';
-import 'package:pos_offline_desktop/services/license_entitlement.dart';
+﻿import 'package:pos_offline_desktop/services/license_entitlement.dart';
 import 'package:pos_offline_desktop/services/license_manager.dart';
 
-/// BUG-017 — declares which entitlement a test assumes.
+/// BUG-018 â€” declares which entitlement a test assumes.
 ///
 /// The write guards on the manufacturing / custody / damaged-goods DAOs fail
 /// CLOSED until a license has actually been read, because a licence has to be

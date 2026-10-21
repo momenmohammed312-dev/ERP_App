@@ -478,6 +478,13 @@ class BackupService {
       'customer_stock_movements',
       'manufacturing_deliveries',
       'manufacturing_delivery_items',
+      // ── Foundation: Accounting, Equity & Attendance Summary ──
+      'accounts',
+      'journal_entries',
+      'journal_lines',
+      'partners',
+      'equity_transactions',
+      'monthly_attendance_summary_table',
     ];
 
     for (final tableName in tables) {
@@ -551,6 +558,7 @@ class BackupService {
       'staff_table',
       'attendance_v59_duplicate_backup',
       'attendance_table',
+      'monthly_attendance_summary_table',
       'vacations',
       'staff_advances',
       'payroll_table',
@@ -594,6 +602,13 @@ class BackupService {
       'customer_stock_movements',
       'manufacturing_deliveries',
       'manufacturing_delivery_items',
+      // ── Foundation: Accounting & Equity ──
+      // FK order: accounts and journal_entries before journal_lines; partners before equity_transactions
+      'accounts',
+      'journal_entries',
+      'journal_lines',
+      'partners',
+      'equity_transactions',
     ];
 
     await _db.exclusively(() async {

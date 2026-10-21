@@ -84,7 +84,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
 
   /// Creates a new manufacturing order. Validates that the referenced BOM exists and is Active
   /// (soft check — warns but does not block if BOM is Inactive, to allow historical orders).
-  /// BUG-017 — entitlement guard for the manufacturing module.
+  /// BUG-018 — entitlement guard for the manufacturing module.
   ///
   /// Manufacturing had NO guard at all: the home launcher checked the flavor
   /// only, and every route under /manufacturing was open to any valid license.

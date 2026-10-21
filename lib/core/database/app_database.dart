@@ -86,6 +86,16 @@ import 'supplier_ledger_backfill.dart';
 import 'package:pos_offline_desktop/core/utils/security_utils.dart';
 import 'package:pos_offline_desktop/core/database/tables/product_variants_table.dart';
 import 'package:pos_offline_desktop/core/database/dao/product_variant_dao.dart';
+import 'package:pos_offline_desktop/core/database/tables/accounts_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/journal_entries_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/journal_lines_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/partners_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/equity_transactions_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/monthly_attendance_summary_table.dart';
+import 'package:pos_offline_desktop/core/database/dao/accounts_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/journal_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/equity_dao.dart';
+import 'package:pos_offline_desktop/services/attendance/attendance_shift_bounds.dart';
 // import 'package:pos_offline_desktop/core/database/amount_types_fix.dart';
 
 part 'app_database.g.dart';
@@ -162,6 +172,12 @@ part 'app_database.g.dart';
     ManufacturingDeliveries,
     ManufacturingDeliveryItems,
     ProductVariants,
+    Accounts,
+    JournalEntries,
+    JournalLines,
+    Partners,
+    EquityTransactions,
+    MonthlyAttendanceSummaryTable,
   ],
   daos: [
     ProductDao,
@@ -198,6 +214,9 @@ part 'app_database.g.dart';
     ManufacturingScrapDao,
     CustomerMaterialReceiptDao,
     ManufacturingDeliveryDao,
+    AccountsDao,
+    JournalDao,
+    EquityDao,
     ProductVariantDao,
   ],
 )
@@ -209,7 +228,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 79;
+  int get schemaVersion => 80;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -219,6 +238,7 @@ class AppDatabase extends _$AppDatabase {
       await _ensureCriticalColumns(m);
       await _ensureAttendanceV59BackupTable();
       await _ensureAttendanceUniqueIndex();
+      await _ensureV80IndexesAndSeed();
     },
     onUpgrade: (Migrator m, int from, int to) async {
       log('Migration: from $from to $to');
@@ -411,6 +431,12 @@ class AppDatabase extends _$AppDatabase {
         await _runV79Migrations(m);
       }
 
+      // Schema v80 — Unified Foundation: Accounting, Equity, Product Variants,
+      // and Historical Attendance Summary. 100% Idempotent.
+      if (from < 80) {
+        await _runV80UnifiedFoundation(m);
+      }
+
       // 6. Special data fixes
       if (from < 36) {
         try {
@@ -423,6 +449,7 @@ class AppDatabase extends _$AppDatabase {
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
+      await customStatement('PRAGMA busy_timeout = 5000');
       await _ensureAttendanceV59BackupTable();
       await _ensureMigrationLogTable();
       await CustomerStatusFix.fixCustomerStatusColumn(this);
@@ -430,6 +457,22 @@ class AppDatabase extends _$AppDatabase {
       // One-time repair: supplier purchases saved before the ledger pair
       // became mandatory (runs once, guarded by _migration_log).
       await SupplierLedgerBackfill.run(this);
+
+      // BUG-017: Ensure overpaid invoices have status 'paid'
+      try {
+        await customStatement('''
+          UPDATE invoices
+          SET status = 'paid'
+          WHERE status = 'partial'
+            AND paid_amount >= total_amount - 0.01
+            AND total_amount > 0;
+        ''');
+      } catch (e) {
+        log('beforeOpen: fix overpaid invoices error: $e');
+      }
+
+      // BUG-020: One-time idempotent repair for corrupted attendance late_minutes
+      await _repairCorruptedAttendanceLateMinutes();
 
       // Safety check to prevent SQL logic error on missing audit_log
       try {
@@ -1789,6 +1832,12 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'invoice_items', 'column': 'sync_id', 'type': 'TEXT'},
       {'table': 'invoice_items', 'column': 'created_at', 'type': 'INTEGER'},
       {'table': 'invoice_items', 'column': 'updated_at', 'type': 'INTEGER'},
+      // Schema v80 unified foundation columns
+      {'table': 'staff_biometric_mappings', 'column': 'device_user_name', 'type': 'TEXT'},
+      {'table': 'invoice_items', 'column': 'variant_id', 'type': 'INTEGER REFERENCES product_variants(id)'},
+      {'table': 'sales_return_items', 'column': 'variant_id', 'type': 'INTEGER REFERENCES product_variants(id)'},
+      {'table': 'staff_advances', 'column': 'paid_amount', 'type': 'REAL NOT NULL DEFAULT 0.0'},
+      {'table': 'staff_advances', 'column': 'deduct_on_period', 'type': 'TEXT'},
     ];
 
     for (final check in columnChecks) {
@@ -2711,7 +2760,7 @@ class AppDatabase extends _$AppDatabase {
           'AND check_in_time IS NOT NULL '
           'AND CAST((check_in_time / 1000) AS INTEGER) % 86400 > ?',
           variables: [
-            Variable.withInt(workStart ~/ 60),
+            Variable.withInt(workStart),
             Variable.withInt(graceEndSeconds),
           ],
         );
@@ -3626,4 +3675,397 @@ class AppDatabase extends _$AppDatabase {
       rethrow;
     }
   }
+
+  /// Schema v80 — Unified Foundation: Accounting, Equity, Product Variants,
+  /// and Historical Attendance Summary.
+  /// 100% Idempotent and defensive.
+  Future<void> _runV80UnifiedFoundation(Migrator m) async {
+    await _logMigrationStep(80, 'v80_unified_foundation', 'started');
+    try {
+      // 1. Create tables if not exists
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS accounts (
+          id TEXT NOT NULL PRIMARY KEY,
+          code TEXT NOT NULL,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL,
+          normal_balance TEXT NOT NULL,
+          parent_id TEXT,
+          is_system INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS journal_entries (
+          id TEXT NOT NULL PRIMARY KEY,
+          date INTEGER NOT NULL,
+          posting_date INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+          description TEXT NOT NULL,
+          source_type TEXT NOT NULL,
+          source_id TEXT NOT NULL,
+          posting_key TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'posted',
+          reversal_of_id TEXT,
+          created_by TEXT,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS journal_lines (
+          id TEXT NOT NULL PRIMARY KEY,
+          journal_entry_id TEXT NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+          account_id TEXT NOT NULL REFERENCES accounts(id),
+          debit REAL NOT NULL DEFAULT 0.0,
+          credit REAL NOT NULL DEFAULT 0.0,
+          description TEXT,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS partners (
+          id TEXT NOT NULL PRIMARY KEY,
+          name TEXT NOT NULL,
+          phone TEXT,
+          ownership_percentage REAL,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS equity_transactions (
+          id TEXT NOT NULL PRIMARY KEY,
+          partner_id TEXT NOT NULL REFERENCES partners(id),
+          type TEXT NOT NULL,
+          amount REAL NOT NULL,
+          date INTEGER NOT NULL,
+          notes TEXT,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS monthly_attendance_summary_table (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          staff_id TEXT NOT NULL,
+          period TEXT NOT NULL,
+          late_hours REAL NOT NULL DEFAULT 0.0,
+          overtime_hours REAL NOT NULL DEFAULT 0.0,
+          excused_hours REAL NOT NULL DEFAULT 0.0,
+          absent_days INTEGER NOT NULL DEFAULT 0,
+          notes TEXT,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS product_variants (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          product_id INTEGER NOT NULL REFERENCES products(id),
+          name TEXT NOT NULL,
+          quantity INTEGER NOT NULL DEFAULT 0,
+          price REAL,
+          barcode TEXT,
+          status TEXT NOT NULL DEFAULT 'Active',
+          sync_id TEXT,
+          created_at INTEGER,
+          updated_at INTEGER
+        );
+      ''');
+
+      // 2. Safe add columns using PRAGMA check
+      Future<void> safeAddColumn(String table, String column, String typeDef) async {
+        try {
+          final pragma = await customSelect('PRAGMA table_info($table)').get();
+          final exists = pragma.any((col) => col.data['name'] == column);
+          if (!exists) {
+            await customStatement('ALTER TABLE $table ADD COLUMN $column $typeDef;');
+          }
+        } catch (e) {
+          log('v80: safeAddColumn ($table.$column) error: $e');
+        }
+      }
+
+      await safeAddColumn('staff_biometric_mappings', 'device_user_name', 'TEXT');
+      await safeAddColumn('invoice_items', 'variant_id', 'INTEGER REFERENCES product_variants(id)');
+      await safeAddColumn('sales_return_items', 'variant_id', 'INTEGER REFERENCES product_variants(id)');
+      await safeAddColumn('staff_advances', 'paid_amount', 'REAL NOT NULL DEFAULT 0.0');
+      await safeAddColumn('staff_advances', 'deduct_on_period', 'TEXT');
+
+      // 3. Ensure indexes and seeds
+      await _ensureV80IndexesAndSeed();
+
+      await _logMigrationStep(80, 'v80_unified_foundation', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        80,
+        'v80_unified_foundation',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// Ensures v80 indexes and seeds exist (called by onCreate and _runV80UnifiedFoundation).
+  Future<void> _ensureV80IndexesAndSeed() async {
+    try {
+      await customStatement('''
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_code
+        ON accounts(code);
+      ''');
+      await customStatement('''
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_journal_entries_posting_key 
+        ON journal_entries(posting_key);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_journal_lines_entry 
+        ON journal_lines(journal_entry_id);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_monthly_summary_staff_period 
+        ON monthly_attendance_summary_table(staff_id, period);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_variants_product 
+        ON product_variants(product_id);
+      ''');
+
+      final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final systemAccounts = [
+        ['acc-1000', '1000', 'الصندوق', 'asset', 'debit'],
+        ['acc-1010', '1010', 'البنك', 'asset', 'debit'],
+        ['acc-1100', '1100', 'ذمم العملاء', 'asset', 'debit'],
+        ['acc-1200', '1200', 'المخزون', 'asset', 'debit'],
+        ['acc-2000', '2000', 'ذمم الموردين', 'liability', 'credit'],
+        ['acc-3000', '3000', 'رأس المال', 'equity', 'credit'],
+        ['acc-3100', '3100', 'مسحوبات الشركاء', 'equity', 'debit'],
+        ['acc-3200', '3200', 'الأرباح المرحلة', 'equity', 'credit'],
+        ['acc-4000', '4000', 'إيرادات المبيعات', 'revenue', 'credit'],
+        ['acc-4100', '4100', 'مردودات المبيعات', 'revenue', 'debit'],
+        ['acc-5000', '5000', 'تكلفة البضاعة المباعة', 'expense', 'debit'],
+      ];
+      for (final acc in systemAccounts) {
+        await customStatement(
+          'INSERT OR IGNORE INTO accounts (id, code, name, type, normal_balance, is_system, is_active, created_at) VALUES (?, ?, ?, ?, ?, 1, 1, ?)',
+          [acc[0], acc[1], acc[2], acc[3], acc[4], nowSec],
+        );
+      }
+
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      await customStatement(
+        'INSERT OR IGNORE INTO attendance_settings (setting_key, setting_value, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        ['overtime_grace_minutes', '30', 'فترة السماح للإضافي بالدقائق', nowMs, nowMs],
+      );
+
+      // BUG-017: Repair historical overpaid invoices where paid_amount >= total_amount but status was 'partial'
+      await customStatement('''
+        UPDATE invoices
+        SET status = 'paid'
+        WHERE status = 'partial'
+          AND paid_amount >= total_amount - 0.01
+          AND total_amount > 0;
+      ''');
+
+      // BUG-020: Repair corrupted attendance late_minutes
+      await _repairCorruptedAttendanceLateMinutes();
+    } catch (e) {
+      log('v80: _ensureV80IndexesAndSeed warning: $e');
+    }
+  }
+
+  /// BUG-020: One-time idempotent repair for corrupted attendance late_minutes (Bug B4).
+  ///
+  /// Backfill in v72 subtracted the start hour instead of start minutes and
+  /// calculated UTC seconds instead of local wall-clock time, causing late_minutes
+  /// to explode to 1.3M+ minutes in customer databases.
+  /// This repair recalculates late_minutes using local time and shift schedules,
+  /// guarded by `_migration_log` with step_name 'v80_repair_attendance_late_minutes'.
+  Future<void> repairCorruptedAttendanceLateMinutes() =>
+      _repairCorruptedAttendanceLateMinutes();
+
+  Future<void> _repairCorruptedAttendanceLateMinutes() async {
+    try {
+      await _ensureMigrationLogTable();
+      final done = await customSelect(
+        "SELECT 1 FROM _migration_log WHERE step = 'v80_repair_attendance_late_minutes' AND status = 'completed' LIMIT 1",
+      ).get();
+      if (done.isNotEmpty) {
+        return;
+      }
+
+      int defaultStartMinutes = 9 * 60;
+      int defaultEndMinutes = 17 * 60;
+      int defaultGraceMinutes = 15;
+
+      try {
+        final settingsRows = await customSelect(
+          "SELECT setting_key, setting_value FROM attendance_settings WHERE setting_key IN ('default_work_start', 'default_work_end', 'grace_period_minutes')",
+        ).get();
+        for (final row in settingsRows) {
+          final key = row.read<String>('setting_key');
+          final val = row.read<String>('setting_value');
+          if (key == 'default_work_start') {
+            final parts = val.split(':');
+            final h = int.tryParse(parts[0]) ?? 9;
+            final m = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+            defaultStartMinutes = h * 60 + m;
+          } else if (key == 'default_work_end') {
+            final parts = val.split(':');
+            final h = int.tryParse(parts[0]) ?? 17;
+            final m = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+            defaultEndMinutes = h * 60 + m;
+          } else if (key == 'grace_period_minutes') {
+            defaultGraceMinutes = int.tryParse(val) ?? 15;
+          }
+        }
+      } catch (_) {}
+
+      final Map<String, (int, int)> staffCustomSchedules = {};
+      try {
+        final staffRows = await customSelect(
+          "SELECT staff_id, work_schedule_start, work_schedule_end, use_default_schedule FROM staff_table",
+        ).get();
+        for (final row in staffRows) {
+          final staffId = row.data['staff_id']?.toString() ?? '';
+          final useDef = row.data['use_default_schedule'];
+          final isCustom = useDef == false || useDef == 0 || useDef == '0';
+          if (isCustom && staffId.isNotEmpty) {
+            final startStr = row.data['work_schedule_start']?.toString();
+            final endStr = row.data['work_schedule_end']?.toString();
+            if (startStr != null && startStr.isNotEmpty) {
+              final pStart = startStr.split(':');
+              final sh = int.tryParse(pStart[0]) ?? (defaultStartMinutes ~/ 60);
+              final sm = pStart.length > 1 ? (int.tryParse(pStart[1]) ?? 0) : 0;
+              int eh = defaultEndMinutes ~/ 60;
+              int em = defaultEndMinutes % 60;
+              if (endStr != null && endStr.isNotEmpty) {
+                final pEnd = endStr.split(':');
+                eh = int.tryParse(pEnd[0]) ?? eh;
+                em = pEnd.length > 1 ? (int.tryParse(pEnd[1]) ?? 0) : em;
+              }
+              staffCustomSchedules[staffId] = (sh * 60 + sm, eh * 60 + em);
+            }
+          }
+        }
+      } catch (_) {}
+
+      final attendanceRows = await customSelect(
+        "SELECT id, staff_id, check_in_time, check_out_time, status, excused, late_minutes FROM attendance_table WHERE check_in_time IS NOT NULL",
+      ).get();
+
+      DateTime? parseDbDateTime(dynamic raw) {
+        if (raw == null) return null;
+        if (raw is DateTime) return raw.toLocal();
+        if (raw is num) {
+          final n = raw.toInt();
+          return DateTime.fromMillisecondsSinceEpoch(
+            n < 10000000000 ? n * 1000 : n,
+          ).toLocal();
+        }
+        if (raw is String) {
+          final parsed = DateTime.tryParse(raw);
+          if (parsed != null) return parsed.toLocal();
+          final n = int.tryParse(raw);
+          if (n != null) {
+            return DateTime.fromMillisecondsSinceEpoch(
+              n < 10000000000 ? n * 1000 : n,
+            ).toLocal();
+          }
+        }
+        return null;
+      }
+
+      final List<(int, int, String)> updates = [];
+
+      for (final row in attendanceRows) {
+        final id = (row.data['id'] as num).toInt();
+        final staffId = row.data['staff_id']?.toString() ?? '';
+        final localCheckIn = parseDbDateTime(row.data['check_in_time']);
+        if (localCheckIn == null) continue;
+
+        final localCheckOut = parseDbDateTime(row.data['check_out_time']);
+        final currentStatus = row.data['status']?.toString() ?? 'present';
+        final excusedVal = row.data['excused'];
+        final isExcused = excusedVal == true ||
+            excusedVal == 1 ||
+            excusedVal == '1' ||
+            currentStatus == 'excused' ||
+            currentStatus == 'excused_late';
+        final currentLate = (row.data['late_minutes'] as num?)?.toInt() ?? 0;
+
+
+        final checkInMinutes = localCheckIn.hour * 60 + localCheckIn.minute;
+        final schedule = staffCustomSchedules[staffId];
+        final workStart = schedule?.$1 ?? defaultStartMinutes;
+        final workEnd = schedule?.$2 ?? defaultEndMinutes;
+        final graceEnd = workStart + defaultGraceMinutes;
+
+        int newLateMinutes = 0;
+        String newStatus = currentStatus;
+
+        if (isExcused) {
+          newLateMinutes = 0;
+        } else if (checkInMinutes <= graceEnd) {
+          newLateMinutes = 0;
+          if (currentStatus == 'late') {
+            newStatus = 'present';
+          }
+        } else if (checkInMinutes >= workEnd &&
+            AttendanceShiftBounds.isOffScheduleMidnightCrossing(
+              co: localCheckOut,
+              ci: localCheckIn,
+            )) {
+          newLateMinutes = 0;
+          if (currentStatus == 'late') {
+            newStatus = 'present';
+          }
+        } else {
+          newLateMinutes = checkInMinutes - workStart;
+          final maxShiftDuration =
+              (workEnd > workStart) ? (workEnd - workStart) : 480;
+          if (newLateMinutes > maxShiftDuration) {
+            newLateMinutes = maxShiftDuration;
+          }
+          if (newLateMinutes < 0) {
+            newLateMinutes = 0;
+          }
+          if (newLateMinutes > 0 && currentStatus == 'present') {
+            newStatus = 'late';
+          }
+        }
+
+        if (newLateMinutes != currentLate || newStatus != currentStatus) {
+          updates.add((id, newLateMinutes, newStatus));
+        }
+      }
+
+      if (updates.isNotEmpty) {
+        await transaction(() async {
+          for (final u in updates) {
+            await customUpdate(
+              'UPDATE attendance_table SET late_minutes = ?, status = ? WHERE id = ?',
+              variables: [
+                Variable.withInt(u.$2),
+                Variable.withString(u.$3),
+                Variable.withInt(u.$1),
+              ],
+            );
+          }
+        });
+        log('v80: Repaired ${updates.length} attendance records for late_minutes');
+      }
+
+      await _logMigrationStep(80, 'v80_repair_attendance_late_minutes', 'completed');
+    } catch (e) {
+      log('v80: _repairCorruptedAttendanceLateMinutes warning: $e');
+    }
+  }
+
 }
+

@@ -150,10 +150,12 @@ class DocumentDateService {
         recordId: invoiceId,
         details: '[MONEY] تعديل تاريخ فاتورة مبيعات ${invoice.invoiceNumber ?? invoiceId} من ${oldDate.toIso8601String()} إلى ${newDate.toIso8601String()}${isClosed ? ' (تحذير: يوم مغلق)' : ''}',
         oldValue: {
+          'recordKey': invoiceId.toString(),
           'date': oldDate.toIso8601String(),
           'day_closed_warning': false,
         },
         newValue: {
+          'recordKey': invoiceId.toString(),
           'date': newDate.toIso8601String(),
           'day_closed_warning': isClosed,
           'userId': userId,
@@ -239,10 +241,12 @@ class DocumentDateService {
         recordId: int.tryParse(purchase.id),
         details: '[MONEY] تعديل تاريخ فاتورة مشتريات $invNum من ${oldDate.toIso8601String()} إلى ${newDate.toIso8601String()}${isClosed ? ' (تحذير: يوم مغلق)' : ''}',
         oldValue: {
+          'recordKey': purchase.id,
           'date': oldDate.toIso8601String(),
           'day_closed_warning': false,
         },
         newValue: {
+          'recordKey': purchase.id,
           'date': newDate.toIso8601String(),
           'day_closed_warning': isClosed,
           'userId': userId,
@@ -284,29 +288,61 @@ class DocumentDateService {
         ),
       );
 
-      // 2. تحديث قيد الأستاذ المقابل
-      // يتم البحث عن قيد المصروف المرتبط بالمعرف أو الإيصال أو الخصائص المطابقة
-      await (db.update(db.ledgerTransactions)
+      // 2. تحديث قيد الأستاذ المقابل بدقة وتجنب تحديث قيود مصروفات أخرى مصادفة (العيب C6)
+      // نبحث أولاً عن القيود المرتبطة مباشرة بمعرف المصروف
+      final directMatches = await (db.select(db.ledgerTransactions)
         ..where((t) {
           var expr = t.refId.equals(expenseId) |
                      t.id.equals(expenseId) |
+                     t.id.equals('${expenseId}_ledger') |
                      t.receiptNumber.equals(expenseId);
           if (expense.receiptNumber != null && expense.receiptNumber!.isNotEmpty) {
             expr = expr | t.receiptNumber.equals(expense.receiptNumber!);
           }
-          // وأيضاً القيود الصادرة كمصروف بنفس التاريخ والقيمة والوصف
-          expr = expr | (t.origin.equals('expense') &
-                         t.credit.equals(expense.amount) &
-                         t.date.equals(oldDate));
           return expr;
-        })
-      ).write(
-        LedgerTransactionsCompanion(
-          date: Value(newDate),
-        ),
-      );
+        })).get();
 
-      // 3. توثيق العملية في سجل التدقيق audit_logs
+      if (directMatches.isNotEmpty) {
+        final matchIds = directMatches.map((e) => e.id).toList();
+        await (db.update(db.ledgerTransactions)
+          ..where((t) => t.id.isIn(matchIds))
+        ).write(
+          LedgerTransactionsCompanion(
+            date: Value(newDate),
+          ),
+        );
+      } else {
+        // في حال عدم وجود ربط مباشر، نبحث عن القيود اليتيمة لنفس المصروف والمبلغ والتاريخ القديم
+        // مع تفضيل القيد المطابق بالوصف واختيار قيد واحد فقط لتفادي تضرر مصروفات أخرى متزامنة
+        final fallbackMatches = await (db.select(db.ledgerTransactions)
+          ..where((t) =>
+            t.origin.equals('expense') &
+            t.credit.equals(expense.amount) &
+            t.date.equals(oldDate)
+          )).get();
+
+        if (fallbackMatches.isNotEmpty) {
+          LedgerTransaction? targetTx;
+          for (final tx in fallbackMatches) {
+            if (tx.description.contains(expense.description) ||
+                expense.description.contains(tx.description)) {
+              targetTx = tx;
+              break;
+            }
+          }
+          targetTx ??= fallbackMatches.first;
+
+          await (db.update(db.ledgerTransactions)
+            ..where((t) => t.id.equals(targetTx!.id))
+          ).write(
+            LedgerTransactionsCompanion(
+              date: Value(newDate),
+            ),
+          );
+        }
+      }
+
+      // 3. توثيق العملية في سجل التدقيق audit_logs مع حفظ المعرف النصي (العيب C7)
       await AuditService.log(
         db: db,
         action: 'DATE_CHANGE',
@@ -314,10 +350,12 @@ class DocumentDateService {
         recordId: int.tryParse(expenseId),
         details: '[MONEY] تعديل تاريخ المصروف ${expense.description} من ${oldDate.toIso8601String()} إلى ${newDate.toIso8601String()}${isClosed ? ' (تحذير: يوم مغلق)' : ''}',
         oldValue: {
+          'recordKey': expenseId,
           'date': oldDate.toIso8601String(),
           'day_closed_warning': false,
         },
         newValue: {
+          'recordKey': expenseId,
           'date': newDate.toIso8601String(),
           'day_closed_warning': isClosed,
           'userId': userId,
@@ -359,7 +397,7 @@ class DocumentDateService {
         ),
       );
 
-      // 2. تحديث حركة invoice_payments إن كانت الدفعة مرتبطة بفاتورة (INV<id>)
+      // 2. تحديث حركة invoice_payments بدقة إن كانت الدفعة مرتبطة بفاتورة (INV<id>) (العيب C5)
       final invMatch = tx.receiptNumber != null
           ? RegExp(r'^INV(\d+)$').firstMatch(tx.receiptNumber!)
           : null;
@@ -367,13 +405,42 @@ class DocumentDateService {
         final invoiceId = int.tryParse(invMatch.group(1) ?? '');
         if (invoiceId != null) {
           final amount = tx.credit > 0 ? tx.credit : tx.debit;
-          await (db.update(db.invoicePayments)
+          final payments = await (db.select(db.invoicePayments)
             ..where((t) => t.invoiceId.equals(invoiceId) & t.amount.equals(amount)))
-            .write(InvoicePaymentsCompanion(paidAt: Value(newDate)));
+            .get();
+
+          if (payments.isNotEmpty) {
+            // مطابقة أدق دفعة بالزمن القديم أو طريقة الدفع لتجنب تعديل دفعات أخرى متساوية
+            InvoicePayment? targetPayment;
+            for (final p in payments) {
+              if (p.paidAt == oldDate) {
+                targetPayment = p;
+                break;
+              }
+            }
+            if (targetPayment == null && tx.paymentMethod != null) {
+              for (final p in payments) {
+                if (p.paymentMethod == tx.paymentMethod) {
+                  targetPayment = p;
+                  break;
+                }
+              }
+            }
+            if (targetPayment == null) {
+              payments.sort((a, b) =>
+                (a.paidAt.difference(oldDate).abs()).compareTo(b.paidAt.difference(oldDate).abs())
+              );
+              targetPayment = payments.first;
+            }
+
+            await (db.update(db.invoicePayments)
+              ..where((t) => t.id.equals(targetPayment!.id)))
+              .write(InvoicePaymentsCompanion(paidAt: Value(newDate)));
+          }
         }
       }
 
-      // 3. توثيق العملية في سجل التدقيق audit_logs
+      // 3. توثيق العملية في سجل التدقيق audit_logs مع حفظ المعرف النصي (العيب C7)
       await AuditService.log(
         db: db,
         action: 'DATE_CHANGE',
@@ -381,10 +448,12 @@ class DocumentDateService {
         recordId: int.tryParse(transactionId),
         details: '[MONEY] تعديل تاريخ الدفعة ${tx.description} من ${oldDate.toIso8601String()} إلى ${newDate.toIso8601String()}${isClosed ? ' (تحذير: يوم مغلق)' : ''}',
         oldValue: {
+          'recordKey': transactionId,
           'date': oldDate.toIso8601String(),
           'day_closed_warning': false,
         },
         newValue: {
+          'recordKey': transactionId,
           'date': newDate.toIso8601String(),
           'day_closed_warning': isClosed,
           'userId': userId,
@@ -427,11 +496,13 @@ class DocumentDateService {
         ),
       );
 
-      // 2. تحديث حركة العهدة في دفتر الأستاذ
+      // 2. تحديث حركة صرف العهدة فقط في دفتر الأستاذ دون المساس بقيد التسوية أو الرد (العيب C4)
       await (db.update(db.ledgerTransactions)
         ..where((t) =>
           t.entityType.equals('Custody') &
-          (t.refId.equals(custodyId.toString()) | t.id.like('%_custody_$custodyId'))
+          (t.refId.equals(custodyId.toString()) | t.id.like('%_custody_$custodyId')) &
+          t.debit.isBiggerThanValue(0.0) &
+          t.credit.equals(0.0)
         )
       ).write(
         LedgerTransactionsCompanion(
@@ -439,7 +510,7 @@ class DocumentDateService {
         ),
       );
 
-      // 3. توثيق العملية في سجل التدقيق audit_logs
+      // 3. توثيق العملية في سجل التدقيق audit_logs مع حفظ المعرف (العيب C7)
       await AuditService.log(
         db: db,
         action: 'DATE_CHANGE',
@@ -447,10 +518,12 @@ class DocumentDateService {
         recordId: custodyId,
         details: '[MONEY] تعديل تاريخ العهدة ${custody.custodyNumber} من ${oldDate.toIso8601String()} إلى ${newDate.toIso8601String()}${isClosed ? ' (تحذير: يوم مغلق)' : ''}',
         oldValue: {
+          'recordKey': custodyId.toString(),
           'date': oldDate.toIso8601String(),
           'day_closed_warning': false,
         },
         newValue: {
+          'recordKey': custodyId.toString(),
           'date': newDate.toIso8601String(),
           'day_closed_warning': isClosed,
           'userId': userId,
@@ -492,7 +565,15 @@ class DocumentDateService {
         ),
       );
 
-      // 2. تحديث قيد العكس في دفتر الأستاذ
+      // 2. تحديث سجلات الاسترداد النقدي return_refunds المرتبطة بالمرتجع (العيب C3)
+      final refunds = await db.returnRefundsDao.getRefundsForReturn(returnId);
+      await (db.update(db.returnRefunds)..where((t) => t.returnId.equals(returnId))).write(
+        ReturnRefundsCompanion(
+          refundDate: Value(newDate),
+        ),
+      );
+
+      // 3. تحديث قيد العكس في دفتر الأستاذ الخاص بالمرتجع
       await (db.update(db.ledgerTransactions)
         ..where((t) =>
           t.receiptNumber.equals('RET$returnId') |
@@ -504,7 +585,38 @@ class DocumentDateService {
         ),
       );
 
-      // 3. توثيق العملية في سجل التدقيق audit_logs
+      // 4. تحديث قيود الاسترداد النقدي في دفتر الأستاذ ledger_transactions (العيب C3)
+      for (final rf in refunds) {
+        await (db.update(db.ledgerTransactions)
+          ..where((t) =>
+            t.receiptNumber.equals('RREF${rf.id}') |
+            t.id.like('%_retref_${rf.id}') |
+            (t.entityType.equals('SalesReturnRefund') & t.refId.equals(rf.id.toString()))
+          )
+        ).write(
+          LedgerTransactionsCompanion(
+            date: Value(newDate),
+          ),
+        );
+      }
+
+      // 5. تحديث حركات المخزون inventory_movements المرتبطة بالمرتجع
+      await (db.update(db.inventoryMovements)
+        ..where((t) {
+          var expr = t.reference.equals('RET$returnId');
+          if (ret.returnNumber.isNotEmpty) {
+            expr = expr | t.reference.equals(ret.returnNumber);
+          }
+          return expr;
+        })
+      ).write(
+        InventoryMovementsCompanion(
+          movementDate: Value(newDate),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+      // 6. توثيق العملية في سجل التدقيق audit_logs مع حفظ المعرف (العيب C7)
       await AuditService.log(
         db: db,
         action: 'DATE_CHANGE',
@@ -512,10 +624,12 @@ class DocumentDateService {
         recordId: returnId,
         details: '[MONEY] تعديل تاريخ مرتجع المبيعات ${ret.returnNumber} من ${oldDate.toIso8601String()} إلى ${newDate.toIso8601String()}${isClosed ? ' (تحذير: يوم مغلق)' : ''}',
         oldValue: {
+          'recordKey': returnId.toString(),
           'date': oldDate.toIso8601String(),
           'day_closed_warning': false,
         },
         newValue: {
+          'recordKey': returnId.toString(),
           'date': newDate.toIso8601String(),
           'day_closed_warning': isClosed,
           'userId': userId,

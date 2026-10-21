@@ -1,3 +1,4 @@
+import '../../helpers/license_grant.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/services.dart';
@@ -24,6 +25,7 @@ void main() {
   late InvoiceService invoiceService;
 
   setUp(() async {
+    grantLicensedModules();
     db = AppDatabase(NativeDatabase.memory());
     businessDate = BusinessDateService(db);
     custodyService = CustodyService(db);
@@ -32,6 +34,7 @@ void main() {
 
   tearDown(() async {
     await db.close();
+    revokeLicensedModules();
   });
 
   Future<int> cashSale(double amount) async {

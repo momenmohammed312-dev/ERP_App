@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_offline_desktop/config/license_config.dart';
 import 'package:pos_offline_desktop/services/hardware_id_service.dart';

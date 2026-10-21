@@ -15,7 +15,7 @@ class FeatureGateService {
   /// Check if current license has access to a specific feature
   Future<bool> hasFeature(String feature) async {
     try {
-      // BUG-017: delegate to the single source of truth. This used to accept
+      // BUG-018: delegate to the single source of truth. This used to accept
       // only '*' or an exact name, while isFeatureEnabledProvider also
       // accepted 'all' — so one legacy license could show a module open on one
       // screen and locked on another. Reading the license here also refreshes

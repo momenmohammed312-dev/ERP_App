@@ -1,4 +1,7 @@
-﻿import '../helpers/license_grant.dart';
+﻿@Timeout(Duration(minutes: 3))
+library;
+
+import '../helpers/license_grant.dart';
 import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNull, isNotNull;
@@ -13,9 +16,9 @@ import 'package:pos_offline_desktop/core/services/backup_service.dart';
 
 /// Test Phase B1 (C6): Backup & Restore coverage and round-trip verification
 /// for Manufacturing for Others tables.
-@Timeout(Duration(minutes: 3))
+
 void main() {
-  // BUG-017: this suite exercises a licensed module directly, bypassing the
+  // BUG-018: this suite exercises a licensed module directly, bypassing the
   // splash screen that normally loads the license before any module opens.
   grantLicensedModules();
   TestWidgetsFlutterBinding.ensureInitialized();

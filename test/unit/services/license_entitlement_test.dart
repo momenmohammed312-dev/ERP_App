@@ -1,13 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pos_offline_desktop/config/license_config.dart';
 import 'package:pos_offline_desktop/services/license_entitlement.dart';
 import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/services/secure_license_storage.dart';
 import 'package:pos_offline_desktop/services/security_service.dart';
 
-/// BUG-017 — entitlement enforcement.
+/// BUG-018 — entitlement enforcement.
 ///
 /// Before this, "may this install use manufacturing?" had three answers that
 /// disagreed, and the router and the DAOs never asked at all. These tests pin

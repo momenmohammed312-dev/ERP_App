@@ -4,7 +4,14 @@ import 'package:pos_offline_desktop/core/config/app_flavor.dart';
 class AppFeatures {
   AppFeatures._();
 
-  static Flavor get flavor => AppFlavor.current;
+  static Flavor get flavor =>
+      AppFlavor.isInitialized ? AppFlavor.current : AppFlavor.fromEnvironment();
+
+  /// Product variants (الألوان والمقاسات والأصناف المتعددة).
+  /// مفعلة في التطبيق الأساسي والتجارة العامة ونكهة الملابس، ومعطلة فقط في سوق الخضار.
+  static bool? hasProductVariantsOverride;
+  static bool get hasProductVariants =>
+      hasProductVariantsOverride ?? (flavor != Flavor.vegetable);
 
   static bool get hasShipmentTracking => flavor == Flavor.vegetable;
 

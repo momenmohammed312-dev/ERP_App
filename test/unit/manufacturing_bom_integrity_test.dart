@@ -29,7 +29,7 @@ import 'package:sqlite3/sqlite3.dart';
 ///   that exists but is not backed up is silent data loss on restore. J1/J2 are
 ///   expected red until C6.
 void main() {
-  // BUG-017: this suite exercises a licensed module directly, bypassing the
+  // BUG-018: this suite exercises a licensed module directly, bypassing the
   // splash screen that normally loads the license before any module opens.
   grantLicensedModules();
   TestWidgetsFlutterBinding.ensureInitialized();

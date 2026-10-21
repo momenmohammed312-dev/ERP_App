@@ -1,4 +1,4 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+﻿import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../config/license_config.dart';
 import '../../services/license_entitlement.dart';
 import '../../services/license_manager.dart';
@@ -31,9 +31,9 @@ final isFeatureEnabledProvider = Provider.family<bool, String>((
 
   final licenseAsync = ref.watch(currentLicenseProvider);
   return licenseAsync.maybeWhen(
-    // BUG-017: the verdict now comes from LicenseEntitlement, the single
+    // BUG-018: the verdict now comes from LicenseEntitlement, the single
     // source of truth. This provider used to accept '*', 'all' and a name,
-    // while FeatureGateService accepted only '*' and a name — so a legacy
+    // while FeatureGateService accepted only '*' and a name â€” so a legacy
     // license carrying 'all' showed a module open on the home screen and
     // locked in the sidebar at the same time.
     data: (license) => LicenseEntitlement.instance.grants(featureName),

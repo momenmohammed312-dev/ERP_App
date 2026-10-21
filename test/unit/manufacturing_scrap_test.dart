@@ -32,7 +32,7 @@ import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_tab
 ///   صفر كتابة.
 /// * النوعين صح — صامت، صفر إنذارات.
 void main() {
-  // BUG-017: this suite exercises a licensed module directly, bypassing the
+  // BUG-018: this suite exercises a licensed module directly, bypassing the
   // splash screen that normally loads the license before any module opens.
   grantLicensedModules();
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -503,6 +503,20 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
         .get();
   }
 
+  /// جلب الفواتير غير الملغاة التابعة لجلسة نقدية بناءً على تاريخ الإنشاء الفعلي [createdAt].
+  /// في حال كان [createdAt] غير متوفر (سجلات قديمة)، يتم الاعتماد على [date] كـ fallback.
+  Future<List<Invoice>> getInvoicesForCashSession(DateTime start, DateTime end) {
+    return (select(invoices)
+          ..where((t) => t.status.equals('voided').not())
+          ..where((t) =>
+              (t.createdAt.isNotNull() & t.createdAt.isBetweenValues(start, end)) |
+              (t.createdAt.isNull() & t.date.isBetweenValues(start, end)))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
+          ]))
+        .get();
+  }
+
   Future<List<Invoice>> getInvoicesByDateRangeAndType(
     DateTime start,
     DateTime end,

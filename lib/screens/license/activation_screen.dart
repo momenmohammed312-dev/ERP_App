@@ -1,6 +1,6 @@
+// ignore_for_file: invalid_use_of_visible_for_testing_member
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'dart:convert';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -149,7 +149,7 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
         return;
       }
 
-      final document = utf8.decode(bytes, allowMalformed: true);
+      final document = LicenseManager.decodeDocumentBytes(bytes);
       final result = await LicenseManager().importLicenseDocument(document);
 
       if (result.isValid) {

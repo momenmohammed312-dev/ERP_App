@@ -38,7 +38,7 @@ class CustodyDao extends DatabaseAccessor<AppDatabase> with _$CustodyDaoMixin {
         .get();
   }
 
-  /// BUG-017 — entitlement guard. Denied before the statement runs, so a
+  /// BUG-018 — entitlement guard. Denied before the statement runs, so a
   /// refusal never leaves a half-written row behind. `grants()` is an
   /// in-memory read, so nothing holds a transaction open here.
   static void _requireLicense(String operation) =>

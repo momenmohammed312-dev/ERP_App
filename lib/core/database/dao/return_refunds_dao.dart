@@ -56,6 +56,22 @@ class ReturnRefundsDao extends DatabaseAccessor<AppDatabase>
     return (row ?? 0.0).toDouble();
   }
 
+  /// استردادات نقدية تمت فعلياً داخل جلسة نقدية بناءً على تاريخ الإنشاء [createdAt].
+  /// تخصم من رصيد الدرج الفعلي حتى لو تغير [refundDate] عبر DocumentDateService.
+  Future<double> getCashRefundsForSessionBetween(DateTime from, DateTime to) async {
+    final row = await (selectOnly(returnRefunds)
+          ..addColumns([returnRefunds.amount.sum()])
+          ..where(((returnRefunds.createdAt.isNotNull() &
+                      returnRefunds.createdAt.isBetweenValues(from, to)) |
+                  (returnRefunds.createdAt.isNull() &
+                      returnRefunds.refundDate.isBetweenValues(from, to))) &
+              returnRefunds.method.equals('cash') &
+              returnRefunds.isVoided.equals(false)))
+        .map((r) => r.read(returnRefunds.amount.sum()))
+        .getSingle();
+    return (row ?? 0.0).toDouble();
+  }
+
   /// كل الاستردادات النقدية من بداية اليوم (للصندوق الحيّ).
   Future<double> getCashRefundsSince(DateTime from) async {
     final row = await (selectOnly(returnRefunds)

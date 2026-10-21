@@ -2,7 +2,7 @@ import '../config/license_config.dart';
 import '../core/utils/logger.dart';
 import 'license_manager.dart';
 
-/// BUG-017 — the single place that answers "may this install use X?".
+/// BUG-018 — the single place that answers "may this install use X?".
 ///
 /// Before this there were three independent answers to that question, and they
 /// disagreed:

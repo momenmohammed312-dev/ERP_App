@@ -6,6 +6,7 @@ import 'package:encrypt/encrypt.dart' as enc;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_offline_desktop/config/license_config.dart';
+import 'package:pos_offline_desktop/services/hardware_id_service.dart';
 import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/services/secure_license_storage.dart';
 
@@ -26,6 +27,7 @@ import 'package:pos_offline_desktop/services/secure_license_storage.dart';
 /// `LicenseManager.generateLicenseKey` did, then assert the bridge reads it,
 /// serves it during the grace window, and refuses it afterwards.
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   // The cipher mirrors lib/services/license_manager.dart (_encrypt/_decrypt).
   String aesEncrypt(String plainText) {
     final keyBytes = md5.convert(utf8.encode(LicenseConfig.secretKey)).bytes;
@@ -51,9 +53,10 @@ void main() {
     required DateTime expiry,
     String type = 'professional',
     int maxUsers = 5,
+    String device = 'UNBOUND',
   }) {
     final payload = jsonEncode({
-      'device': 'UNBOUND',
+      'device': device,
       'type': type,
       'issue_date':
           DateTime.now().subtract(const Duration(days: 30)).toIso8601String(),
@@ -291,6 +294,36 @@ void main() {
             'the legacy bridge',
       );
       expect(license, isNull);
+    });
+
+    test('A8: a legacy license bound to a foreign device is rejected', () async {
+      final key = legacyLicenseKey(
+        expiry: DateTime.now().add(const Duration(days: 30)),
+        device: 'FOREIGN_MACHINE_UUID_ABC_999',
+      );
+      await seedLegacyFile(key);
+
+      final license = await LicenseManager().getCurrentLicense();
+
+      expect(
+        license,
+        isNull,
+        reason: 'cloning a legacy license file to another machine must be rejected',
+      );
+    });
+
+    test('A8: a legacy license bound to current machine device is accepted', () async {
+      final currentDevice = await HardwareIdService.getHardwareId();
+      final key = legacyLicenseKey(
+        expiry: DateTime.now().add(const Duration(days: 30)),
+        device: currentDevice,
+      );
+      await seedLegacyFile(key);
+
+      final license = await LicenseManager().getCurrentLicense();
+
+      expect(license, isNotNull);
+      expect(license!.deviceFingerprint, currentDevice);
     });
   });
 }

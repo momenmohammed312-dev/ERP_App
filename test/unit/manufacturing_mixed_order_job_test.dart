@@ -36,7 +36,7 @@ import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.da
 ///        BOM finished output (with a warning) in the receipt-first flow.
 
 void main() {
-  // BUG-017: this suite exercises a licensed module directly, bypassing the
+  // BUG-018: this suite exercises a licensed module directly, bypassing the
   // splash screen that normally loads the license before any module opens.
   grantLicensedModules();
   TestWidgetsFlutterBinding.ensureInitialized();
