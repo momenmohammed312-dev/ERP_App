@@ -18,12 +18,89 @@ import 'package:pos_offline_desktop/ui/setting/settings.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
+import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
 import 'package:pos_offline_desktop/core/services/business_date_service.dart';
 import 'package:drift/drift.dart' as drift;
 
 class ModernHomeScreen extends ConsumerStatefulWidget {
   final AppDatabase db;
   const ModernHomeScreen({super.key, required this.db});
+
+  /// Dynamic tab count based on platform (7 on mobile, 8 on desktop when all modules enabled).
+  static int get tabCount {
+    int count = 5; // Dashboard, Products, Customers, Cash, Reports
+    if (AppFeatures.hasSuppliersModule) count++;
+    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile)
+      count++;
+    if (AppFeatures.hasCustodyModule) count++;
+    return count;
+  }
+
+  /// Index of the Products tab (1 on both desktop and mobile).
+  static int get productsTabIndex => 1;
+
+  /// Index of the Customers tab (2 on both desktop and mobile).
+  static int get customersTabIndex => 2;
+
+  /// Index of the Suppliers tab (3 on both desktop and mobile).
+  static int get suppliersTabIndex => 3;
+
+  /// Index of the Staff tab (null on mobile, 4 on desktop when enabled).
+  static int? get staffTabIndex =>
+      (!AppFeatures.hasStaffModule || PlatformUtils.hidesStaffFeaturesOnMobile)
+      ? null
+      : 4;
+
+  /// Index of the Custody tab (4 on mobile, 5 on desktop when preceding enabled).
+  static int get custodyTabIndex {
+    int index =
+        4; // after Dashboard(0), Products(1), Customers(2), Suppliers(3)
+    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile)
+      index++;
+    return index;
+  }
+
+  /// Index of the Cashier tab (5 on mobile, 6 on desktop when preceding enabled).
+  static int get cashierTabIndex {
+    int index = 3; // after Dashboard(0), Products(1), Customers(2)
+    if (AppFeatures.hasSuppliersModule) index++;
+    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile)
+      index++;
+    if (AppFeatures.hasCustodyModule) index++;
+    return index;
+  }
+
+  /// Index of the Reports tab.
+  static int get reportsTabIndex => cashierTabIndex + 1;
+
+  /// Returns the list of tabs formatted for [ModernHomeScreen].
+  static List<Tab> buildTabs(AppLocalizations l10n) {
+    return <Tab>[
+      // Index 0
+      Tab(icon: const Icon(Icons.dashboard_outlined), text: l10n.dashboard),
+      // Index 1
+      Tab(icon: const Icon(Icons.shopping_bag_outlined), text: l10n.products),
+      // Index 2
+      Tab(icon: const Icon(Icons.people_outline), text: l10n.customer_list),
+      // Suppliers
+      if (AppFeatures.hasSuppliersModule)
+        Tab(icon: const Icon(Icons.inventory_outlined), text: l10n.suppliers),
+      // Staff (desktop only, index 4)
+      if (AppFeatures.hasStaffModule &&
+          !PlatformUtils.hidesStaffFeaturesOnMobile)
+        const Tab(icon: Icon(Icons.badge_outlined), text: 'الموظفين'),
+      // Custody — index 4 on mobile, 5 on desktop
+      if (AppFeatures.hasCustodyModule)
+        const Tab(
+          icon: Icon(Icons.account_balance_wallet_outlined),
+          text: 'العهد المالية',
+        ),
+      // Cash
+      Tab(icon: const Icon(Icons.point_of_sale_outlined), text: l10n.cash),
+      // Reports
+      Tab(icon: const Icon(Icons.analytics), text: l10n.reports),
+    ];
+  }
 
   @override
   ConsumerState<ModernHomeScreen> createState() => _ModernHomeScreenState();
@@ -33,23 +110,8 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  /// Tab count follows the active feature flags.
-  int get _tabCount {
-    int count = 5; // Dashboard, Products, Customers, Cash, Reports
-    if (AppFeatures.hasSuppliersModule) count++;
-    if (AppFeatures.hasStaffModule) count++;
-    if (AppFeatures.hasCustodyModule) count++;
-    return count;
-  }
-
-  /// Cashier tab index shifts when preceding tabs are hidden.
-  int get _cashierTabIndex {
-    int index = 3; // after Dashboard(0), Products(1), Customers(2)
-    if (AppFeatures.hasSuppliersModule) index++;
-    if (AppFeatures.hasStaffModule) index++;
-    if (AppFeatures.hasCustodyModule) index++;
-    return index;
-  }
+  int get _tabCount => ModernHomeScreen.tabCount;
+  int get _cashierTabIndex => ModernHomeScreen.cashierTabIndex;
 
   bool _licenseWarningShown = false;
 
@@ -92,30 +154,7 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
 
-    final tabs = <Tab>[
-      // Index 0
-      Tab(icon: const Icon(Icons.dashboard_outlined), text: l10n.dashboard),
-      // Index 1
-      Tab(icon: const Icon(Icons.shopping_bag_outlined), text: l10n.products),
-      // Index 2
-      Tab(icon: const Icon(Icons.people_outline), text: l10n.customer_list),
-      // Suppliers
-      if (AppFeatures.hasSuppliersModule)
-        Tab(icon: const Icon(Icons.inventory_outlined), text: l10n.suppliers),
-      // Staff tab — hidden in builds without the staff module.
-      if (AppFeatures.hasStaffModule)
-        const Tab(icon: Icon(Icons.badge_outlined), text: 'الموظفين'),
-      // Custody tab — العهد المالية
-      if (AppFeatures.hasCustodyModule)
-        const Tab(
-          icon: Icon(Icons.account_balance_wallet_outlined),
-          text: 'العهد المالية',
-        ),
-      // Cash
-      Tab(icon: const Icon(Icons.point_of_sale_outlined), text: l10n.cash),
-      // Reports
-      Tab(icon: const Icon(Icons.analytics), text: l10n.reports),
-    ];
+    final tabs = ModernHomeScreen.buildTabs(l10n);
 
     final tabViews = <Widget>[
       // Control Panel - Simplified with functional buttons
@@ -276,7 +315,7 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                   // and every index above stay exactly as they are for the
                   // base and vegetable flavors.
                   //
-                  // BUG-017: this launcher had NO FeatureGuard at all — only
+                  // BUG-018: this launcher had NO FeatureGuard at all — only
                   // the flavor check below — so a basic-license customer was
                   // one tap from BOMs and work orders.
                   if (AppFeatures.hasManufacturing)
@@ -377,7 +416,8 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
       if (AppFeatures.hasSuppliersModule) SuppliersWidget(db: widget.db),
       // Staff — Dashboard first (absent without the module; cash/reports
       // indices shift accordingly and _cashierTabIndex tracks it).
-      if (AppFeatures.hasStaffModule)
+      if (AppFeatures.hasStaffModule &&
+          !PlatformUtils.hidesStaffFeaturesOnMobile)
         FeatureGuard(
           featureName: 'staff_management',
           child: const EmployeeDashboardPage(),
@@ -402,111 +442,9 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
+      appBar: _buildAppBar(context),
       body: Column(
         children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.1),
-              border: Border(
-                bottom: BorderSide(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.outline.withValues(alpha: 0.2),
-                ),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        Icons.point_of_sale,
-                        color: Theme.of(context).colorScheme.onPrimary,
-                        size: 28,
-                      ),
-                    ),
-                    const Gap(16),
-                    Text(
-                      'Developed by MO2',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withValues(alpha: 0.7),
-                          ),
-                    ),
-                  ],
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const _LicenseBadge(),
-                    const Gap(8),
-                    IconButton(
-                      icon: const Icon(Icons.backup_outlined),
-                      tooltip: 'النسخ الاحتياطي',
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => EnhancedBackupScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    const Gap(4),
-                    IconButton(
-                      icon: const Icon(Icons.notifications_outlined),
-                      onPressed: () {},
-                      tooltip: 'Notifications',
-                    ),
-                    const Gap(4),
-                    IconButton(
-                      icon: const Icon(Icons.settings),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SettingsScreen(),
-                          ),
-                        );
-                      },
-                      tooltip: 'الإعدادات',
-                    ),
-                    const Gap(4),
-                    TextButton.icon(
-                      icon: const Icon(Icons.logout, color: Colors.redAccent),
-                      label: const Text(
-                        'تسجيل خروج',
-                        style: TextStyle(
-                          color: Colors.redAccent,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      onPressed: () {
-                        ref.read(authProvider.notifier).logout();
-                        context.go('/login');
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
           // Tab Bar
           Container(
             margin: const EdgeInsets.all(16),
@@ -542,6 +480,107 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
           ),
         ],
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
+    final isMobile = PlatformUtils.isMobile;
+
+    return AppBar(
+      automaticallyImplyLeading: false,
+      backgroundColor: Theme.of(
+        context,
+      ).colorScheme.primary.withValues(alpha: 0.1),
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      toolbarHeight: isMobile ? 56 : 92,
+      titleSpacing: isMobile ? 12 : 20,
+      shape: Border(
+        bottom: BorderSide(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+        ),
+      ),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: EdgeInsets.all(isMobile ? 8 : 12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
+            ),
+            child: Icon(
+              Icons.point_of_sale,
+              color: Theme.of(context).colorScheme.onPrimary,
+              size: isMobile ? 20 : 28,
+            ),
+          ),
+          Gap(isMobile ? 10 : 16),
+          Text(
+            'Developed by MO2',
+            style:
+                (isMobile
+                        ? Theme.of(context).textTheme.titleSmall
+                        : Theme.of(context).textTheme.headlineMedium)
+                    ?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+          ),
+        ],
+      ),
+      actions: [
+        Padding(
+          padding: EdgeInsetsDirectional.only(end: isMobile ? 12 : 20),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _LicenseBadge(),
+              Gap(isMobile ? 4 : 8),
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SettingsScreen(),
+                    ),
+                  );
+                },
+                tooltip: 'الإعدادات',
+              ),
+              Gap(isMobile ? 2 : 4),
+              if (isMobile)
+                IconButton(
+                  icon: const Icon(Icons.logout, color: Colors.redAccent),
+                  tooltip: 'تسجيل خروج',
+                  onPressed: () {
+                    ref.read(authProvider.notifier).logout();
+                    context.go('/login');
+                  },
+                )
+              else
+                TextButton.icon(
+                  icon: const Icon(Icons.logout, color: Colors.redAccent),
+                  label: const Text(
+                    'تسجيل خروج',
+                    style: TextStyle(
+                      color: Colors.redAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  onPressed: () {
+                    ref.read(authProvider.notifier).logout();
+                    context.go('/login');
+                  },
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -838,7 +877,7 @@ class _LicenseBadge extends ConsumerWidget {
             : Colors.green;
 
         return Padding(
-          padding: const EdgeInsets.only(left: 8),
+          padding: const EdgeInsetsDirectional.only(start: 8),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
