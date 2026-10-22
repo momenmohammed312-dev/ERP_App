@@ -15,6 +15,7 @@ import '../../core/models/user_model.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../widgets/permission_guard.dart';
+import 'widgets/google_drive_connection_card.dart';
 
 class EnhancedBackupScreen extends StatefulWidget {
   const EnhancedBackupScreen({super.key});
@@ -103,6 +104,10 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
                   _buildAutoBackupCard(),
                   const Gap(16),
                   _buildActionsCard(),
+                  const Gap(16),
+                  GoogleDriveConnectionCard(
+                    onBackupRestored: _loadData,
+                  ),
                   const Gap(16),
                   _buildBackupsList(),
                 ],

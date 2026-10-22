@@ -52,6 +52,8 @@ dependencies:
   # Security & Encryption
   crypto: ^3.0.3
   encrypt: ^5.0.3
+  pointycastle: ^3.9.1
+  url_launcher: ^6.3.0
   
   # Device Information
   device_info_plus: ^9.1.2
@@ -70,6 +72,10 @@ dependencies:
   fl_chart: ^0.69.2
   window_manager: ^0.5.1
   dart_jsonwebtoken: ^3.1.1
+
+  # Cloud Storage (Google Drive Backup)
+  googleapis: ^17.0.0
+  googleapis_auth: ^2.3.5
 
 dev_dependencies:
   flutter_test:
