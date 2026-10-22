@@ -14,7 +14,6 @@ static const std::vector<LPCWSTR> kRequiredDlls = {
     L"flutter_windows.dll",
     L"app_links_plugin.dll",
     L"connectivity_plus_plugin.dll",
-    L"desktop_window_plugin.dll",
     L"flutter_secure_storage_windows_plugin.dll",
     L"printing_plugin.dll",
     L"screen_retriever_windows_plugin.dll",

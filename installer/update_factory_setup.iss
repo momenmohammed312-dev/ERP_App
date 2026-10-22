@@ -65,7 +65,6 @@ Source: "..\build\windows\x64\runner\Release\{#MyAppExeName}"; DestDir: "{app}";
 Source: "..\build\windows\x64\runner\Release\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\x64\runner\Release\sqlite3.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\x64\runner\Release\sqlite3_flutter_libs_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\build\windows\x64\runner\Release\desktop_window_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\x64\runner\Release\flutter_secure_storage_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\x64\runner\Release\pdfium.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\x64\runner\Release\printing_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
@@ -135,7 +134,6 @@ begin
     'flutter_windows.dll',
     'app_links_plugin.dll',
     'connectivity_plus_plugin.dll',
-    'desktop_window_plugin.dll',
     'flutter_secure_storage_windows_plugin.dll',
     'printing_plugin.dll',
     'screen_retriever_windows_plugin.dll',
