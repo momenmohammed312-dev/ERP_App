@@ -591,6 +591,9 @@ class UnifiedPrintService {
     final balances =
         (additionalData?['balances'] as List<Map<String, dynamic>>?) ??
         const <Map<String, dynamic>>[];
+    final scraps =
+        (additionalData?['scraps'] as List<Map<String, dynamic>>?) ??
+        const <Map<String, dynamic>>[];
 
     final delivered = numOf('deliveredQuantity');
     final produced = numOf('producedQuantity');
@@ -833,6 +836,68 @@ class UnifiedPrintService {
           ],
         ),
       ),
+      if (scraps.isNotEmpty) ...[
+        pw.SizedBox(height: 14),
+        pw.Text(
+          'الهالك والتوالف (Scrap):',
+          style: pw.TextStyle(
+            fontSize: 11,
+            fontWeight: pw.FontWeight.bold,
+            font: arabicFontBold,
+          ),
+        ),
+        pw.SizedBox(height: 6),
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColors.grey400),
+          columnWidths: {
+            0: const pw.FlexColumnWidth(1.2),
+            1: const pw.FlexColumnWidth(2),
+            2: const pw.FlexColumnWidth(0.9),
+            3: const pw.FlexColumnWidth(1.4),
+            4: const pw.FlexColumnWidth(1.2),
+            5: const pw.FlexColumnWidth(1.3),
+          },
+          children: [
+            pw.TableRow(
+              decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              children: [
+                _buildTableCell('التاريخ', isHeader: true, font: arabicFontBold),
+                _buildTableCell('الصنف', isHeader: true, font: arabicFontBold),
+                _buildTableCell('الكمية', isHeader: true, font: arabicFontBold),
+                _buildTableCell('السبب', isHeader: true, font: arabicFontBold),
+                _buildTableCell('المتسبب', isHeader: true, font: arabicFontBold),
+                _buildTableCell('إجراء التعويض', isHeader: true, font: arabicFontBold),
+              ],
+            ),
+            ...scraps.map((s) {
+              final qty = (s['quantity'] as num?)?.toDouble() ?? 0.0;
+              final action = s['compensationAction']?.toString() ?? '—';
+              final actionText = action == 'deducted_from_invoice'
+                  ? 'خصم (${s['compensationAmount']} ج.م)'
+                  : (action == 'replaced'
+                      ? 'صرف بديل'
+                      : (action == 'labour_waived'
+                          ? 'إسقاط مصنعية'
+                          : (action == 'none' ? 'بدون تعويض' : action)));
+              return pw.TableRow(
+                children: [
+                  _buildTableCell(s['date']?.toString() ?? '—', font: arabicFont),
+                  _buildTableCell(s['productName']?.toString() ?? '—', font: arabicFont),
+                  _buildTableCell(
+                    qty.toStringAsFixed(qty.truncateToDouble() == qty ? 1 : 2),
+                    isBold: true,
+                    color: PdfColors.red700,
+                    font: arabicFont,
+                  ),
+                  _buildTableCell(s['reason']?.toString() ?? '—', font: arabicFont),
+                  _buildTableCell(s['faultParty']?.toString() ?? '—', font: arabicFont),
+                  _buildTableCell(actionText, font: arabicFont),
+                ],
+              );
+            }),
+          ],
+        ),
+      ],
     ];
   }
 

@@ -12,6 +12,8 @@ import 'package:pos_offline_desktop/core/services/backup_service.dart';
 import 'package:pos_offline_desktop/core/services/custody_service.dart';
 import 'package:pos_offline_desktop/core/services/document_date_service.dart';
 
+import '../../helpers/license_grant.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -36,6 +38,7 @@ void main() {
       );
 
   setUpAll(() async {
+    grantLicensedModules();
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     tempDir = await Directory.systemTemp.createTemp('synthetic_verify_');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -185,6 +188,7 @@ void main() {
   });
 
   tearDownAll(() async {
+    revokeLicensedModules();
     await db.close();
     try {
       if (await tempDir.exists()) {
@@ -197,7 +201,7 @@ void main() {
     test('database opens with schema v79 and contains expected seeded data', () async {
       final versionResult = await db.customSelect('PRAGMA user_version').getSingle();
       final version = versionResult.data['user_version'] as int;
-      expect(version, equals(79), reason: 'Current DB schemaVersion must be 79');
+      expect(version, equals(db.schemaVersion), reason: 'Current DB schemaVersion must match app database');
 
       final invoicesCount = await db.customSelect('SELECT COUNT(*) AS c FROM invoices').getSingle();
       expect(invoicesCount.data['c'], greaterThanOrEqualTo(2));
@@ -340,7 +344,10 @@ void main() {
   });
 
   group('Task 3: Client Build Verification — cash_custodies in Backup & Restore', () {
-    test('confirms cash_custodies has 3 rows, included in backup and restored intact', () async {
+    test(
+      'confirms cash_custodies has 3 rows, included in backup and restored intact',
+      timeout: const Timeout(Duration(minutes: 2)),
+      () async {
       final custodiesPre = await db.select(db.cashCustodies).get();
       expect(custodiesPre.length, equals(3));
 

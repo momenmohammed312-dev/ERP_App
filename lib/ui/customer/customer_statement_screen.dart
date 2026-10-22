@@ -8,6 +8,8 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/ui/customer/edit_payment_dialog.dart';
 import 'package:pos_offline_desktop/ui/customer/services/enhanced_customer_statement_generator.dart';
+import 'package:pos_offline_desktop/core/services/document_date_service.dart';
+import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
 import 'package:pos_offline_desktop/ui/invoice/edit_invoice_page.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/void_invoice_dialog.dart';
 import 'package:pos_offline_desktop/ui/widgets/invoice_items_table.dart';
@@ -856,6 +858,34 @@ class _StatementRowState extends ConsumerState<_StatementRow> {
     if (_expanded) _loadDetails();
   }
 
+  Future<void> _editInvoiceDate() async {
+    if (_invoiceId == null) return;
+    final newDate = await pickDocumentDate(
+      context: context,
+      db: widget.db,
+      initialDate: widget.data.tx.date,
+    );
+    if (newDate != null) {
+      final user = ref.read(authProvider);
+      await DocumentDateService(widget.db).updateInvoiceDate(
+        invoiceId: _invoiceId!,
+        newDate: newDate,
+        userId: user?.username,
+      );
+      if (mounted) {
+        widget.onChanged();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('تم تعديل تاريخ الفاتورة بنجاح'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   void _editInvoice() {
     if (_invoiceId == null) return;
     Navigator.push(
@@ -1030,6 +1060,14 @@ class _StatementRowState extends ConsumerState<_StatementRow> {
                 label: const Text('تعديل الفاتورة'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.blue,
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _editInvoiceDate,
+                icon: const Icon(Icons.edit_calendar, size: 18),
+                label: const Text('تعديل التاريخ'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.teal,
                 ),
               ),
               OutlinedButton.icon(

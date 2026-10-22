@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
 
 /// Manufacturing reports screen with two tabs: MO cost breakdown + material consumption.
 /// Read-only, aggregates over existing tables (no new writes).
@@ -20,7 +21,7 @@ class _ManufacturingReportsScreenState extends State<ManufacturingReportsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _range = DateTimeRange(
       start: DateTime.now().subtract(const Duration(days: 30)),
       end: DateTime.now(),
@@ -54,6 +55,7 @@ class _ManufacturingReportsScreenState extends State<ManufacturingReportsScreen>
           tabs: const [
             Tab(icon: Icon(Icons.receipt_long), text: 'تكلفة الأوامر'),
             Tab(icon: Icon(Icons.inventory), text: 'استهلاك الخامات'),
+            Tab(icon: Icon(Icons.delete_sweep_outlined), text: 'الهالك والتوالف'),
           ],
         ),
         actions: [
@@ -83,6 +85,7 @@ class _ManufacturingReportsScreenState extends State<ManufacturingReportsScreen>
               children: [
                 _MoCostBreakdownTab(db: widget.db, range: _range),
                 _MaterialConsumptionTab(db: widget.db, range: _range),
+                _ScrapReportTab(db: widget.db, range: _range),
               ],
             ),
           ),
@@ -316,6 +319,140 @@ class _MaterialConsumptionTab extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: color.withValues(alpha: 0.3))),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const Gap(6),
+            Text(title, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+            const Gap(4),
+            Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _ScrapReportTab extends StatelessWidget {
+  final AppDatabase db;
+  final DateTimeRange? range;
+  const _ScrapReportTab({required this.db, required this.range});
+
+  @override
+  Widget build(BuildContext context) {
+    final start = range?.start ?? DateTime.now().subtract(const Duration(days: 30));
+    final end = (range?.end ?? DateTime.now()).add(const Duration(days: 1));
+
+    return FutureBuilder<List<ManufacturingScrap>>(
+      future: db.manufacturingScrapDao.getScrapsInRange(start: start, end: end),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final scraps = snap.data ?? [];
+        if (scraps.isEmpty) {
+          return const Center(
+            child: Text(
+              'لا يوجد هالك مسجّل خلال الفترة المحددة',
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
+        }
+
+        return FutureBuilder<List<Product>>(
+          future: db.productDao.getAllProducts(),
+          builder: (context, prodSnap) {
+            final prodMap = <int, Product>{
+              for (final p in prodSnap.data ?? <Product>[]) p.id: p,
+            };
+
+            double totalQty = 0;
+            double totalComp = 0;
+            for (final s in scraps) {
+              totalQty += s.quantity;
+              totalComp += s.compensationAmount ?? 0.0;
+            }
+
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      _summaryCard('عدد الحركات', '\${scraps.length}', Colors.blue, Icons.receipt),
+                      const Gap(12),
+                      _summaryCard('إجمالي الكميات التالفة', totalQty.toStringAsFixed(1), Colors.red, Icons.delete_outline),
+                      const Gap(12),
+                      _summaryCard('إجمالي التعويضات', '\${totalComp.toStringAsFixed(2)} ج.م', Colors.orange, Icons.money_off),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('التاريخ')),
+                          DataColumn(label: Text('أمر التصنيع')),
+                          DataColumn(label: Text('الصنف التالف')),
+                          DataColumn(label: Text('الكمية')),
+                          DataColumn(label: Text('سبب الهالك')),
+                          DataColumn(label: Text('المتسبب')),
+                          DataColumn(label: Text('المسؤول')),
+                          DataColumn(label: Text('إجراء التعويض')),
+                          DataColumn(label: Text('مبلغ التعويض')),
+                        ],
+                        rows: scraps.map((s) {
+                          final prod = prodMap[s.productId];
+                          final prodName = prod?.name ?? '#\${s.productId}';
+                          final unit = prod?.unit ?? '';
+                          final reasonLabel = ManufacturingScrapReason.label(s.reason);
+                          final faultLabel = s.faultParty == 'factory'
+                              ? 'المصنع'
+                              : (s.faultParty == 'customer' ? 'العميل' : '—');
+                          final actionLabel = s.compensationAction == 'deducted_from_invoice'
+                              ? 'خصم من الفاتورة'
+                              : (s.compensationAction == 'replaced'
+                                  ? 'صرف قطعة بديلة'
+                                  : (s.compensationAction == 'labour_waived'
+                                      ? 'إسقاط مصنعية'
+                                      : 'بدون تعويض'));
+
+                          return DataRow(cells: [
+                            DataCell(Text(DateFormat('yyyy/MM/dd HH:mm').format(s.createdAt), style: const TextStyle(fontSize: 12))),
+                            DataCell(Text('#\${s.manufacturingOrderId}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                            DataCell(Text(prodName, style: const TextStyle(fontSize: 12))),
+                            DataCell(Text('\${s.quantity} \$unit', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.redAccent))),
+                            DataCell(Text(reasonLabel, style: const TextStyle(fontSize: 12))),
+                            DataCell(Text(faultLabel, style: const TextStyle(fontSize: 12))),
+                            DataCell(Text(s.responsibleParty, style: const TextStyle(fontSize: 12))),
+                            DataCell(Text(actionLabel, style: const TextStyle(fontSize: 12))),
+                            DataCell(Text((s.compensationAmount ?? 0.0) > 0 ? '\${s.compensationAmount!.toStringAsFixed(2)} ج.م' : '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                          ]);
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _summaryCard(String title, String value, Color color, IconData icon) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
         child: Column(
           children: [
             Icon(icon, color: color, size: 20),

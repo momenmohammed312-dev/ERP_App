@@ -228,6 +228,23 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         },
     ];
 
+    final orderScraps = await widget.db.manufacturingScrapDao.getForOrder(mo.id);
+    final scrapRows = <Map<String, dynamic>>[
+      for (final s in orderScraps)
+        {
+          'date': DateFormat('yyyy/MM/dd').format(s.createdAt),
+          'productName': _balanceProductNames[s.productId] ?? '#\${s.productId}',
+          'quantity': s.quantity,
+          'reason': ManufacturingScrapReason.label(s.reason),
+          'faultParty': s.faultParty == 'factory'
+              ? 'المصنع'
+              : (s.faultParty == 'customer' ? 'العميل' : '—'),
+          'responsibleParty': s.responsibleParty,
+          'compensationAction': s.compensationAction ?? '—',
+          'compensationAmount': s.compensationAmount,
+        },
+    ];
+
     try {
       final pdf = await ups.UnifiedPrintService.generateUnifiedDocument(
         documentType: ups.DocumentType.manufacturingCard,
@@ -256,6 +273,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         additionalData: <String, dynamic>{
           'movements': movementRows,
           'balances': balanceRows,
+          'scraps': scrapRows,
         },
       );
       if (!mounted) return;
@@ -2084,10 +2102,10 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
               onChanged: () => setState(() {}),
             ),
             const Gap(24),
-            // Scrap — only meaningful once the order is completed. Waste
-            // allowance on the BOM is the plan; these rows are what actually
-            // happened, and the variance between the two is the useful number.
-            if (mo.status == ManufacturingOrderStatus.completed) ...[
+            // Scrap — meaningful during production (in_progress) for raw materials,
+            // or once completed for final reconciliation.
+            if (mo.status == ManufacturingOrderStatus.completed ||
+                mo.status == ManufacturingOrderStatus.inProgress) ...[
               Text(
                 'الهالك',
                 style: theme.textTheme.titleLarge?.copyWith(

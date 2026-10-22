@@ -191,5 +191,62 @@ void main() {
       expect(merged.minute, equals(30));
       expect(merged.second, equals(45));
     });
+
+    test('6. editInvoice with date change syncs invoice date, payments, and movements', () async {
+      final initialDate = DateTime(2026, 9, 10, 10, 0);
+      final newDate = DateTime(2026, 9, 25, 15, 30);
+
+      final result = await invoiceService.createInvoice(
+        customerId: 'C100',
+        customerName: 'عميل C100',
+        paymentMethod: 'cash',
+        totalAmount: 100.0,
+        paidAmount: 100.0,
+        status: 'paid',
+        invoiceDate: initialDate,
+        splitPayments: [SplitPaymentEntry(method: 'cash', amount: 100.0)],
+        items: [InvoiceItemParams(productId: 1, quantity: 2, price: 50.0)],
+      );
+
+      final edited = await invoiceService.editInvoice(
+        invoiceId: result.invoiceId,
+        customerId: 'C100',
+        customerName: 'عميل C100',
+        paymentMethod: 'cash',
+        totalAmount: 100.0,
+        paidAmount: 100.0,
+        status: 'paid',
+        invoiceDate: newDate,
+        items: [InvoiceItemParams(productId: 1, quantity: 2, price: 50.0)],
+      );
+
+      expect(edited.date, equals(newDate));
+
+      // Verify invoice payments have new date
+      final payments = await (db.select(db.invoicePayments)
+            ..where((t) => t.invoiceId.equals(result.invoiceId)))
+          .get();
+      expect(payments, isNotEmpty);
+      for (final p in payments) {
+        expect(p.paidAt, equals(newDate));
+      }
+
+      // Verify ledger transactions have new date
+      final txs = await (db.select(db.ledgerTransactions)
+            ..where((t) => t.receiptNumber.equals('INV${result.invoiceId}')))
+          .get();
+      expect(txs, isNotEmpty);
+      for (final tx in txs) {
+        expect(tx.date, equals(newDate));
+      }
+
+      // Verify inventory movements have new date
+      final movements = await (db.select(db.inventoryMovements)
+            ..where((t) => t.reference.equals('INV${result.invoiceId}') | t.reference.equals(result.invoiceId.toString())))
+          .get();
+      for (final m in movements) {
+        expect(m.movementDate, equals(newDate));
+      }
+    });
   });
 }

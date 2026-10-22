@@ -49,6 +49,19 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
       (select(manufacturingScraps)..where((s) => s.id.equals(id)))
           .getSingleOrNull();
 
+  /// Scraps recorded within a specific date range (for reports).
+  Future<List<ManufacturingScrap>> getScrapsInRange({
+    required DateTime start,
+    required DateTime end,
+  }) {
+    return (select(manufacturingScraps)
+          ..where((s) =>
+              s.createdAt.isBiggerOrEqualValue(start) &
+              s.createdAt.isSmallerOrEqualValue(end))
+          ..orderBy([(s) => OrderingTerm.desc(s.createdAt)]))
+        .get();
+  }
+
   /// Total quantity already written off for one product on one order.
   Future<double> scrappedQuantityFor({
     required int orderId,
@@ -124,9 +137,10 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
       if (order == null) {
         throw ArgumentError('ManufacturingOrder #$orderId not found');
       }
-      if (order.status != ManufacturingOrderStatus.completed) {
+      if (order.status != ManufacturingOrderStatus.completed &&
+          order.status != ManufacturingOrderStatus.inProgress) {
         throw StateError(
-          'Scrap can only be recorded on a completed order '
+          'Scrap can only be recorded on an in-progress or completed order '
           '(current: ${order.status})',
         );
       }
@@ -149,6 +163,11 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
 
       // Scrapping the finished good cannot exceed what the order produced.
       if (productId == order.finishedProductId) {
+        if (order.producedQuantity <= 0) {
+          throw StateError(
+            'Cannot scrap finished product ${product.name}: the order has not produced any units yet',
+          );
+        }
         final already = await scrappedQuantityFor(
           orderId: orderId,
           productId: productId,
@@ -263,13 +282,21 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
       if (order == null) {
         throw ArgumentError('ManufacturingOrder #$orderId not found');
       }
-      if (order.status != ManufacturingOrderStatus.completed) {
-        throw StateError('Scrap can only be recorded on a completed order (current: ${order.status})');
+      if (order.status != ManufacturingOrderStatus.completed &&
+          order.status != ManufacturingOrderStatus.inProgress) {
+        throw StateError(
+          'Scrap can only be recorded on an in-progress or completed order (current: ${order.status})',
+        );
       }
 
       final product = await (select(products)..where((p) => p.id.equals(productId))).getSingleOrNull();
       if (product == null) {
         throw ArgumentError('Product #$productId not found');
+      }
+      if (productId == order.finishedProductId && order.producedQuantity <= 0) {
+        throw StateError(
+          'Cannot scrap finished product ${product.name}: the order has not produced any units yet',
+        );
       }
 
       final policy = order.scrapPolicy ?? 'customer_bears';

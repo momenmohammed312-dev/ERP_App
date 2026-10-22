@@ -12,6 +12,9 @@ import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
 import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
+import 'package:pos_offline_desktop/core/services/document_date_service.dart';
+import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
+import 'package:pos_offline_desktop/ui/invoice/edit_invoice_page.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/invoice_partial_return_dialog.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/void_invoice_dialog.dart';
 import 'package:pos_offline_desktop/ui/widgets/permission_guarded_action.dart';
@@ -428,6 +431,65 @@ class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
 
   /// إلغاء الفاتورة من التقرير — نفس الـdialog ونفس الصلاحية المستخدمة في
   /// شاشة تفاصيل المعاملة، عشان السلوك يبقى واحد في كل الشاشات.
+  void _openEditInvoice(Invoice invoice) {
+    if (invoice.status == 'voided') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يمكن تعديل فاتورة ملغاة'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditInvoicePage(
+          db: widget.db,
+          invoiceId: invoice.id,
+          onSaved: () {
+            _loadData();
+            if (mounted) setState(() {});
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editInvoiceDate(Invoice invoice) async {
+    if (invoice.status == 'voided') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يمكن تعديل تاريخ فاتورة ملغاة'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final picked = await pickDocumentDate(
+      context: context,
+      db: widget.db,
+      initialDate: invoice.date,
+    );
+    if (picked != null) {
+      final user = ref.read<User?>(authProvider)?.username;
+      await DocumentDateService(widget.db).updateInvoiceDate(
+        invoiceId: invoice.id,
+        newDate: picked,
+        userId: user,
+      );
+      if (mounted) {
+        _loadData();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم تعديل تاريخ الفاتورة بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _voidInvoice(Invoice invoice) async {
     if (invoice.status == 'voided') {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -631,6 +693,8 @@ class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
                           onPrint: () => _printIndividualInvoice(invoice),
                           onReturn: () => _showReturnDialog(invoice),
                           onVoid: () => _voidInvoice(invoice),
+                          onEditInvoice: () => _openEditInvoice(invoice),
+                          onEditDate: () => _editInvoiceDate(invoice),
                           isVoided: invoice.status == 'voided',
                         );
                       },
@@ -650,6 +714,8 @@ class _InvoiceExpansionTile extends StatefulWidget {
   final VoidCallback onPrint;
   final VoidCallback onReturn;
   final VoidCallback onVoid;
+  final VoidCallback? onEditInvoice;
+  final VoidCallback? onEditDate;
   final bool isVoided;
 
   const _InvoiceExpansionTile({
@@ -659,6 +725,8 @@ class _InvoiceExpansionTile extends StatefulWidget {
     required this.onPrint,
     required this.onReturn,
     required this.onVoid,
+    this.onEditInvoice,
+    this.onEditDate,
     this.isVoided = false,
   });
 
@@ -798,6 +866,12 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
               onPressed: widget.onReturn,
               tooltip: 'مرتجع',
             ),
+            if (!widget.isVoided && widget.onEditDate != null)
+              IconButton(
+                icon: const Icon(Icons.edit_calendar, size: 20, color: Colors.blueAccent),
+                onPressed: widget.onEditDate,
+                tooltip: 'تعديل تاريخ الفاتورة',
+              ),
             // إلغاء الفاتورة — بيظهر دايماً (الفحص جوّه الديالوج).
             if (!widget.isVoided)
               PermissionGuardedIconButton(
@@ -941,6 +1015,28 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
+                      if (!widget.isVoided) ...[
+                        if (widget.onEditInvoice != null)
+                          OutlinedButton.icon(
+                            onPressed: widget.onEditInvoice,
+                            icon: const Icon(Icons.edit_note, size: 18),
+                            label: const Text('تعديل الفاتورة'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.blueAccent,
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        if (widget.onEditDate != null)
+                          OutlinedButton.icon(
+                            onPressed: widget.onEditDate,
+                            icon: const Icon(Icons.edit_calendar, size: 18),
+                            label: const Text('تعديل التاريخ'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.tealAccent,
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                      ],
                       ElevatedButton.icon(
                         onPressed: widget.onPrint,
                         icon: const Icon(Icons.print),

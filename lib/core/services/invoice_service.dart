@@ -505,6 +505,27 @@ class InvoiceService {
         ),
       );
 
+      // 2b-2. مزامنة تاريخ المدفوعات وحركات المخزون مع تاريخ الفاتورة المعدل
+      await (_db.update(_db.invoicePayments)
+            ..where((t) => t.invoiceId.equals(invoiceId)))
+          .write(InvoicePaymentsCompanion(paidAt: Value(resolvedDate)));
+
+      await (_db.update(_db.inventoryMovements)
+            ..where((t) {
+              var expr = t.reference.equals(invoiceId.toString()) |
+                  t.reference.equals('INV$invoiceId');
+              if (actualInvoiceNumber.isNotEmpty) {
+                expr = expr | t.reference.equals(actualInvoiceNumber);
+              }
+              return expr;
+            }))
+          .write(
+            InventoryMovementsCompanion(
+              movementDate: Value(resolvedDate),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
+
       // 2c. Fresh ledger rows for a credit customer.
       final desc = 'بيع #$actualInvoiceNumber';
       if (customerId != null &&
