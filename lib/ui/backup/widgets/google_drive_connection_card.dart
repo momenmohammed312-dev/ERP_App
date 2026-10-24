@@ -91,6 +91,50 @@ class _GoogleDriveConnectionCardState extends State<GoogleDriveConnectionCard> {
   }
 
   Future<void> _handleSignIn() async {
+    final clientId = await _authService.getClientId();
+    if (clientId == GoogleDriveAuthService.defaultClientId) {
+      if (!mounted) return;
+      final setupNow = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF161B22) : Colors.white,
+          title: Row(
+            children: const [
+              Icon(Icons.info_outline, color: Color(0xFF58A6FF)),
+              Gap(8),
+              Text('إعداد Google Cloud Client ID'),
+            ],
+          ),
+          content: const Text(
+            'لربط Google Drive بحسابك بنجاح، يتطلب نظام Google تزويد التطبيق بـ Client ID (نوع Desktop App) من Google Cloud Console لتفادي خطأ 401 (invalid_client).\n\nهل ترغب في إدخال Client ID الخاص بمنشأتك الآن؟',
+            style: TextStyle(height: 1.5, fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('متابعة كـ تجريبي'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF58A6FF),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('إدخال المفاتيح الآن'),
+            ),
+          ],
+        ),
+      );
+
+      if (setupNow == true) {
+        await _showOAuthSettingsDialog();
+        final updatedId = await _authService.getClientId();
+        if (updatedId == GoogleDriveAuthService.defaultClientId) {
+          return;
+        }
+      }
+    }
+
     setState(() {
       _isActionInProgress = true;
       _actionMessage = 'جاري فتح المتصفح وربط حساب Google Drive...';
@@ -538,6 +582,115 @@ class _GoogleDriveConnectionCardState extends State<GoogleDriveConnectionCard> {
     );
   }
 
+  Future<void> _showOAuthSettingsDialog() async {
+    final currentId = await _authService.getClientId();
+    final currentSecret = await _authService.getClientSecret();
+    final isDefault = (currentId == GoogleDriveAuthService.defaultClientId);
+
+    final idController = TextEditingController(text: isDefault ? '' : currentId);
+    final secretController = TextEditingController(text: isDefault ? '' : currentSecret);
+
+    if (!mounted) return;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
+    final textColor = isDark ? const Color(0xFFE6EDF3) : Colors.black87;
+    final subTextColor = isDark ? const Color(0xFF8B949E) : Colors.black54;
+    final borderColor = isDark ? const Color(0xFF30363D) : Colors.grey.shade300;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: cardBg,
+        title: Row(
+          children: const [
+            Icon(Icons.settings_suggest_rounded, color: Color(0xFF58A6FF)),
+            Gap(8),
+            Text('إعدادات مفتاح Google Drive OAuth'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'لربط حساب Google Drive وحفظ النسخ السحابية بأمان تام في مجلدك الخاص، أدخل Client ID و Client Secret لتطبيقك من Google Cloud Console (نوع Desktop Application):',
+                style: TextStyle(fontSize: 13, height: 1.4, color: textColor),
+              ),
+              const Gap(14),
+              TextField(
+                controller: idController,
+                style: TextStyle(color: textColor, fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Client ID',
+                  hintText: 'xxxx.apps.googleusercontent.com',
+                  labelStyle: TextStyle(color: subTextColor, fontSize: 12),
+                  border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                  prefixIcon: const Icon(Icons.vpn_key_outlined, size: 18),
+                ),
+              ),
+              const Gap(12),
+              TextField(
+                controller: secretController,
+                style: TextStyle(color: textColor, fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Client Secret (اختياري لتطبيقات Desktop)',
+                  hintText: 'GOCSPX-xxxx',
+                  labelStyle: TextStyle(color: subTextColor, fontSize: 12),
+                  border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                  prefixIcon: const Icon(Icons.lock_outline, size: 18),
+                ),
+              ),
+              const Gap(14),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF21262D) : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Text(
+                  '💡 خطوات استخراج المفتاح: من لوحة Google Cloud Console -> APIs & Services -> Credentials -> Create Credentials -> OAuth client ID -> Desktop App.',
+                  style: TextStyle(fontSize: 11, color: subTextColor, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2EA043),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              final newId = idController.text.trim();
+              final newSecret = secretController.text.trim();
+              if (newId.isNotEmpty) {
+                await _authService.setCustomClientCredentials(newId, newSecret);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('تم حفظ مفاتيح Google OAuth بنجاح'),
+                      backgroundColor: Color(0xFF2EA043),
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('حفظ المفاتيح'),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _formatCurrentDate() {
     return DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
   }
@@ -633,12 +786,18 @@ class _GoogleDriveConnectionCardState extends State<GoogleDriveConnectionCard> {
                         height: 22,
                         child: CircularProgressIndicator(strokeWidth: 2.5),
                       )
-                    else
+                    else ...[
+                      IconButton(
+                        icon: Icon(Icons.settings_suggest_rounded, color: subTextColor),
+                        tooltip: 'إعدادات Google Client ID',
+                        onPressed: _showOAuthSettingsDialog,
+                      ),
                       IconButton(
                         icon: Icon(Icons.refresh, color: subTextColor),
                         tooltip: 'تحديث حالة السحابة',
                         onPressed: _checkStatus,
                       ),
+                    ],
                   ],
                 ),
                 const Gap(16),
@@ -732,6 +891,16 @@ class _GoogleDriveConnectionCardState extends State<GoogleDriveConnectionCard> {
                                 backgroundColor: blueColor,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _showOAuthSettingsDialog,
+                              icon: Icon(Icons.settings_suggest_rounded, size: 18, color: blueColor),
+                              label: Text('إعداد مفتاح OAuth Client ID', style: TextStyle(color: textColor)),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: borderColor),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
                             ),

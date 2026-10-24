@@ -28,10 +28,15 @@ class ModernHomeScreen extends ConsumerStatefulWidget {
   /// Dynamic tab count based on platform (7 on mobile, 8 on desktop when all modules enabled).
   static int get tabCount {
     int count = 5; // Dashboard, Products, Customers, Cash, Reports
-    if (AppFeatures.hasSuppliersModule) count++;
-    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile)
+    if (AppFeatures.hasSuppliersModule) {
       count++;
-    if (AppFeatures.hasCustodyModule) count++;
+    }
+    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile) {
+      count++;
+    }
+    if (AppFeatures.hasCustodyModule) {
+      count++;
+    }
     return count;
   }
 
@@ -54,18 +59,24 @@ class ModernHomeScreen extends ConsumerStatefulWidget {
   static int get custodyTabIndex {
     int index =
         4; // after Dashboard(0), Products(1), Customers(2), Suppliers(3)
-    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile)
+    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile) {
       index++;
+    }
     return index;
   }
 
   /// Index of the Cashier tab (5 on mobile, 6 on desktop when preceding enabled).
   static int get cashierTabIndex {
     int index = 3; // after Dashboard(0), Products(1), Customers(2)
-    if (AppFeatures.hasSuppliersModule) index++;
-    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile)
+    if (AppFeatures.hasSuppliersModule) {
       index++;
-    if (AppFeatures.hasCustodyModule) index++;
+    }
+    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile) {
+      index++;
+    }
+    if (AppFeatures.hasCustodyModule) {
+      index++;
+    }
     return index;
   }
 
@@ -226,14 +237,6 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                     Icons.inventory,
                     Colors.orange,
                     () => _tabController.animateTo(1),
-                  ),
-                  // Backup Launcher Button
-                  _buildLauncherButton(
-                    context,
-                    'النسخ الاحتياطي',
-                    Icons.cloud_sync_rounded,
-                    const Color(0xFF1F6FEB),
-                    () => context.push('/backup'),
                   ),
                   // Staff Management Button - Guarded + hidden without module
                   if (AppFeatures.hasStaffModule)

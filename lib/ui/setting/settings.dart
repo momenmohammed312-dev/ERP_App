@@ -75,8 +75,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _loadSyncState();
 
     // Live-update the "آخر مزامنة تلقائية" label whenever the periodic timer
-    // fires, with no manual refresh or restart needed. Same syncServiceProvider
-    // mechanism the pending-count uses.
+    // fires, with no manual refresh or restart needed.
     ref.read(syncServiceProvider).lastPeriodicRunAt.addListener(_onPeriodicRun);
   }
 
@@ -120,497 +119,815 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF0D1117) : Colors.grey.shade50;
+    final bgColor = isDark ? const Color(0xFF0D1117) : const Color(0xFFF6F8FA);
     final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
-    final textColor = isDark ? const Color(0xFFE6EDF3) : Colors.black87;
-    final subTextColor = isDark ? const Color(0xFF8B949E) : Colors.black54;
+    final innerBg = isDark ? const Color(0xFF21262D) : const Color(0xFFF0F2F5);
+    final textColor = isDark ? const Color(0xFFE6EDF3) : const Color(0xFF1F2328);
+    final subTextColor = isDark ? const Color(0xFF8B949E) : const Color(0xFF656D76);
+    final borderColor = isDark ? const Color(0xFF30363D) : const Color(0xFFD0D7DE);
     final goldColor = const Color(0xFFC9A84C);
-    final borderColor = isDark ? const Color(0xFF30363D) : Colors.grey.shade300;
+    final blueColor = const Color(0xFF58A6FF);
+    final greenColor = const Color(0xFF2EA043);
 
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
-        title: const Text('الإعدادات'),
-        backgroundColor: bgColor,
+        title: const Text('إعدادات النظام', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        backgroundColor: cardBg,
         foregroundColor: textColor,
         elevation: 0,
+        shape: Border(bottom: BorderSide(color: borderColor)),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildSectionTitle('التفضيلات', goldColor),
-          const Gap(10),
-
-          SwitchListTile(
-            title: Text(context.l10n.dark_mode, style: TextStyle(color: textColor)),
-            value: _darkModeEnabled,
-            activeColor: goldColor,
-            onChanged: (value) {
-              setState(() {
-                _darkModeEnabled = value;
-              });
-            },
-            secondary: Icon(Icons.dark_mode, color: goldColor),
-          ),
-
-          const SizedBox(height: 12),
-          Text(
-            'Calendar Theme',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: textColor),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 960),
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
             children: [
-              InkWell(
-                onTap: () {
-                  SettingsService.setCalendarTheme(CalendarThemeMode.light);
-                  setState(() => _calendarTheme = CalendarThemeMode.light);
-                },
-                child: Row(
+              // 1. التفضيلات والمظهر
+              _buildSectionCard(
+                cardBg: cardBg,
+                borderColor: borderColor,
+                title: 'المظهر والتفضيلات',
+                icon: Icons.palette_outlined,
+                iconColor: goldColor,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Radio<CalendarThemeMode>(
-                      value: CalendarThemeMode.light,
-                      groupValue: _calendarTheme,
-                      activeColor: goldColor,
-                      onChanged: (CalendarThemeMode? v) {
-                        if (v == null) return;
-                        SettingsService.setCalendarTheme(v);
-                        setState(() => _calendarTheme = v);
-                      },
-                    ),
-                    Text('Light', style: TextStyle(color: textColor)),
-                  ],
-                ),
-              ),
-              InkWell(
-                onTap: () {
-                  SettingsService.setCalendarTheme(CalendarThemeMode.gray);
-                  setState(() => _calendarTheme = CalendarThemeMode.gray);
-                },
-                child: Row(
-                  children: [
-                    Radio<CalendarThemeMode>(
-                      value: CalendarThemeMode.gray,
-                      groupValue: _calendarTheme,
-                      activeColor: goldColor,
-                      onChanged: (CalendarThemeMode? v) {
-                        if (v == null) return;
-                        SettingsService.setCalendarTheme(v);
-                        setState(() => _calendarTheme = v);
-                      },
-                    ),
-                    Text('Gray', style: TextStyle(color: textColor)),
-                  ],
-                ),
-              ),
-              InkWell(
-                onTap: () {
-                  SettingsService.setCalendarTheme(CalendarThemeMode.dark);
-                  setState(() => _calendarTheme = CalendarThemeMode.dark);
-                },
-                child: Row(
-                  children: [
-                    Radio<CalendarThemeMode>(
-                      value: CalendarThemeMode.dark,
-                      groupValue: _calendarTheme,
-                      activeColor: goldColor,
-                      onChanged: (CalendarThemeMode? v) {
-                        if (v == null) return;
-                        SettingsService.setCalendarTheme(v);
-                        setState(() => _calendarTheme = v);
-                      },
-                    ),
-                    Text('Dark', style: TextStyle(color: textColor)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          Divider(color: borderColor, height: 32),
-          _buildSectionTitle('إعدادات الطابعة', goldColor),
-          const Gap(10),
-          if (_printers.isEmpty) ...[
-            Text('لا توجد طابعات متاحة', style: TextStyle(color: subTextColor)),
-            const Gap(8),
-          ] else ...[
-            DropdownButtonFormField<String>(
-              initialValue: _selectedThermalPrinter,
-              style: TextStyle(color: textColor),
-              dropdownColor: cardBg,
-              decoration: InputDecoration(
-                labelText: 'Default Thermal Printer',
-                labelStyle: TextStyle(color: subTextColor),
-                border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-              ),
-              items: _printers
-                  .where((p) => p['type'] == 'Thermal')
-                  .map(
-                    (p) => DropdownMenuItem<String>(
-                      value: p['name'] as String,
-                      child: Text(p['name'] as String),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (val) async {
-                setState(() => _selectedThermalPrinter = val);
-                await SettingsService.setThermalPrinter(val);
-              },
-            ),
-            const Gap(8),
-            DropdownButtonFormField<String>(
-              initialValue: _selectedA4Printer,
-              style: TextStyle(color: textColor),
-              dropdownColor: cardBg,
-              decoration: InputDecoration(
-                labelText: 'Default A4 Printer',
-                labelStyle: TextStyle(color: subTextColor),
-                border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-              ),
-              items: _printers
-                  .where((p) => p['type'] == 'A4' || p['type'] == 'PDF')
-                  .map(
-                    (p) => DropdownMenuItem<String>(
-                      value: p['name'] as String,
-                      child: Text(p['name'] as String),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (val) async {
-                setState(() => _selectedA4Printer = val);
-                await SettingsService.setA4Printer(val);
-              },
-            ),
-            const Gap(12),
-            ElevatedButton(
-              onPressed: () async {
-                final list = await PrinterService.getAvailablePrinters();
-                setState(() => _printers = list);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: goldColor,
-                foregroundColor: const Color(0xFF0D1117),
-              ),
-              child: const Text('Refresh Printers'),
-            ),
-          ],
-
-          Divider(color: borderColor, height: 32),
-          _buildSectionTitle('معلومات النشاط التجاري (للتحكم في شكل الفاتورة)', goldColor),
-        const Gap(15),
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _pickLogo,
-                icon: const Icon(Icons.image),
-                label: Text(
-                  _logoPath != null ? 'تغيير الشعار' : 'إضافة شعار',
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  backgroundColor: goldColor,
-                  foregroundColor: const Color(0xFF0D1117),
-                ),
-              ),
-            ),
-            if (_logoPath != null) ...[
-              const Gap(12),
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.file(
-                      File(_logoPath!),
-                      width: 64,
-                      height: 64,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const Icon(Icons.broken_image, size: 48),
-                    ),
-                  ),
-                  Positioned(
-                    top: -4,
-                    right: -4,
-                    child: InkWell(
-                      onTap: () async {
-                        await SettingsService.setBusinessLogoPath(null);
-                        setState(() => _logoPath = null);
-                      },
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        padding: const EdgeInsets.all(2),
-                        child: const Icon(Icons.close, size: 14, color: Colors.white),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: innerBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.dark_mode_outlined, color: goldColor, size: 22),
+                          const Gap(12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  context.l10n.dark_mode,
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor),
+                                ),
+                                const Gap(2),
+                                Text(
+                                  'تفعيل المظهر الداكن لتقليل إجهاد العين أثناء العمل',
+                                  style: TextStyle(fontSize: 12, color: subTextColor),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: _darkModeEnabled,
+                            activeColor: goldColor,
+                            onChanged: (value) {
+                              setState(() {
+                                _darkModeEnabled = value;
+                              });
+                            },
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                    const Gap(16),
+                    Text(
+                      'نمط ألوان التقويم (Calendar Theme)',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor),
+                    ),
+                    const Gap(8),
+                    Row(
+                      children: [
+                        _buildCalendarThemeOption(
+                          label: 'فاتح (Light)',
+                          mode: CalendarThemeMode.light,
+                          textColor: textColor,
+                          subTextColor: subTextColor,
+                          borderColor: borderColor,
+                          innerBg: innerBg,
+                          goldColor: goldColor,
+                        ),
+                        const Gap(10),
+                        _buildCalendarThemeOption(
+                          label: 'رمادي (Gray)',
+                          mode: CalendarThemeMode.gray,
+                          textColor: textColor,
+                          subTextColor: subTextColor,
+                          borderColor: borderColor,
+                          innerBg: innerBg,
+                          goldColor: goldColor,
+                        ),
+                        const Gap(10),
+                        _buildCalendarThemeOption(
+                          label: 'داكن (Dark)',
+                          mode: CalendarThemeMode.dark,
+                          textColor: textColor,
+                          subTextColor: subTextColor,
+                          borderColor: borderColor,
+                          innerBg: innerBg,
+                          goldColor: goldColor,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
+
+              const Gap(20),
+
+              // 2. إعدادات الطابعات
+              _buildSectionCard(
+                cardBg: cardBg,
+                borderColor: borderColor,
+                title: 'إعدادات الطابعات والطباعة',
+                icon: Icons.print_outlined,
+                iconColor: blueColor,
+                trailing: OutlinedButton.icon(
+                  onPressed: () async {
+                    final list = await PrinterService.getAvailablePrinters();
+                    setState(() => _printers = list);
+                  },
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('تحديث القائمة', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: textColor,
+                    side: BorderSide(color: borderColor),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_printers.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: innerBg,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, color: subTextColor, size: 20),
+                            const Gap(10),
+                            Text(
+                              'لا توجد طابعات مثبتة على هذا الجهاز حالياً',
+                              style: TextStyle(color: subTextColor, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      )
+                    else ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: _selectedThermalPrinter,
+                              style: TextStyle(color: textColor, fontSize: 13),
+                              dropdownColor: cardBg,
+                              decoration: InputDecoration(
+                                labelText: 'طابعة الفواتير الحرارية الافتراضية (Thermal)',
+                                labelStyle: TextStyle(color: subTextColor, fontSize: 12),
+                                border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: blueColor)),
+                                prefixIcon: Icon(Icons.receipt_rounded, color: blueColor, size: 20),
+                                filled: true,
+                                fillColor: innerBg,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                              ),
+                              items: _printers
+                                  .where((p) => p['type'] == 'Thermal')
+                                  .map(
+                                    (p) => DropdownMenuItem<String>(
+                                      value: p['name'] as String,
+                                      child: Text(p['name'] as String),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (val) async {
+                                setState(() => _selectedThermalPrinter = val);
+                                await SettingsService.setThermalPrinter(val);
+                              },
+                            ),
+                          ),
+                          const Gap(14),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: _selectedA4Printer,
+                              style: TextStyle(color: textColor, fontSize: 13),
+                              dropdownColor: cardBg,
+                              decoration: InputDecoration(
+                                labelText: 'طابعة التقارير والفواتير الكبيرة (A4 / PDF)',
+                                labelStyle: TextStyle(color: subTextColor, fontSize: 12),
+                                border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: blueColor)),
+                                prefixIcon: Icon(Icons.description_outlined, color: blueColor, size: 20),
+                                filled: true,
+                                fillColor: innerBg,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                              ),
+                              items: _printers
+                                  .where((p) => p['type'] == 'A4' || p['type'] == 'PDF')
+                                  .map(
+                                    (p) => DropdownMenuItem<String>(
+                                      value: p['name'] as String,
+                                      child: Text(p['name'] as String),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (val) async {
+                                setState(() => _selectedA4Printer = val);
+                                await SettingsService.setA4Printer(val);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              const Gap(20),
+
+              // 3. معلومات النشاط التجاري
+              _buildSectionCard(
+                cardBg: cardBg,
+                borderColor: borderColor,
+                title: 'معلومات النشاط التجاري (ترويسة وهوية الفاتورة)',
+                icon: Icons.storefront_rounded,
+                iconColor: greenColor,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // قسم الشعار
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: innerBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Row(
+                        children: [
+                          if (_logoPath != null) ...[
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.file(
+                                File(_logoPath!),
+                                width: 56,
+                                height: 56,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => Container(
+                                  width: 56,
+                                  height: 56,
+                                  color: borderColor,
+                                  child: const Icon(Icons.broken_image, size: 28),
+                                ),
+                              ),
+                            ),
+                            const Gap(14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('شعار المنشأة الحالي', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: textColor)),
+                                  const Gap(2),
+                                  Text('يظهر أعلى فواتير A4 والحراري', style: TextStyle(fontSize: 11, color: subTextColor)),
+                                ],
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _pickLogo,
+                              icon: const Icon(Icons.edit, size: 15),
+                              label: const Text('تغيير'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: textColor,
+                                side: BorderSide(color: borderColor),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                            ),
+                            const Gap(8),
+                            IconButton(
+                              onPressed: () async {
+                                await SettingsService.setBusinessLogoPath(null);
+                                setState(() => _logoPath = null);
+                              },
+                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                              tooltip: 'حذف الشعار',
+                            ),
+                          ] else ...[
+                            Container(
+                              width: 56,
+                              height: 56,
+                              decoration: BoxDecoration(
+                                color: cardBg,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: borderColor, style: BorderStyle.solid),
+                              ),
+                              child: Icon(Icons.image_outlined, color: subTextColor, size: 28),
+                            ),
+                            const Gap(14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('لم يتم تحديد شعار للمنشأة', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: textColor)),
+                                  const Gap(2),
+                                  Text('أضف شعارك ليظهر بشكل احترافي أعلى الفواتير المطبوعة', style: TextStyle(fontSize: 11, color: subTextColor)),
+                                ],
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _pickLogo,
+                              icon: const Icon(Icons.add_photo_alternate_outlined, size: 16),
+                              label: const Text('إضافة شعار'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: blueColor,
+                                side: BorderSide(color: blueColor.withValues(alpha: 0.4)),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const Gap(16),
+
+                    // حقول البيانات
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTextField(
+                            controller: _nameController,
+                            label: 'اسم النشاط التجاري',
+                            icon: Icons.store,
+                            textColor: textColor,
+                            subTextColor: subTextColor,
+                            innerBg: innerBg,
+                            borderColor: borderColor,
+                            focusColor: greenColor,
+                          ),
+                        ),
+                        const Gap(12),
+                        Expanded(
+                          child: _buildTextField(
+                            controller: _phoneController,
+                            label: 'رقم الهاتف',
+                            icon: Icons.phone_outlined,
+                            textColor: textColor,
+                            subTextColor: subTextColor,
+                            innerBg: innerBg,
+                            borderColor: borderColor,
+                            focusColor: greenColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Gap(12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTextField(
+                            controller: _addressController,
+                            label: 'العنوان',
+                            icon: Icons.location_on_outlined,
+                            textColor: textColor,
+                            subTextColor: subTextColor,
+                            innerBg: innerBg,
+                            borderColor: borderColor,
+                            focusColor: greenColor,
+                          ),
+                        ),
+                        const Gap(12),
+                        Expanded(
+                          child: _buildTextField(
+                            controller: _taxController,
+                            label: 'الرقم الضريبي (اختياري)',
+                            icon: Icons.receipt_long_outlined,
+                            textColor: textColor,
+                            subTextColor: subTextColor,
+                            innerBg: innerBg,
+                            borderColor: borderColor,
+                            focusColor: greenColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Gap(12),
+                    _buildTextField(
+                      controller: _footerController,
+                      label: 'رسالة أسفل الفاتورة (شكر أو شروط الاسترجاع)',
+                      icon: Icons.notes_outlined,
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      innerBg: innerBg,
+                      borderColor: borderColor,
+                      focusColor: greenColor,
+                    ),
+                    const Gap(12),
+                    _buildTextField(
+                      controller: _pageUrlController,
+                      label: 'رابط صفحة المحل (للطباعة كـ QR على ملصقات الباركود)',
+                      hint: 'https://facebook.com/...',
+                      icon: Icons.qr_code_2_rounded,
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      innerBg: innerBg,
+                      borderColor: borderColor,
+                      focusColor: greenColor,
+                      textDirection: TextDirection.ltr,
+                    ),
+                    const Gap(16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _saveBusinessInfo,
+                        icon: const Icon(Icons.check_circle_outline, size: 18),
+                        label: const Text('حفظ معلومات النشاط التجاري', style: TextStyle(fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: greenColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const Gap(20),
+
+              // 4. المزامنة السحابية متعددة الأجهزة
+              _buildSectionCard(
+                cardBg: cardBg,
+                borderColor: borderColor,
+                title: 'المزامنة السحابية متعددة الأجهزة',
+                icon: Icons.sync_alt_rounded,
+                iconColor: blueColor,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'مزامنة المنتجات والفواتير والمخزون بصورة لحظية بين فروعك أو أجهزتك المختلفة.',
+                      style: TextStyle(color: subTextColor, fontSize: 13),
+                    ),
+                    const Gap(14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTextField(
+                            controller: _locationIdController,
+                            label: 'معرّف الجهاز / الفرع الحالي',
+                            hint: 'مثال: Branch-Main-POS1',
+                            icon: Icons.devices_outlined,
+                            textColor: textColor,
+                            subTextColor: subTextColor,
+                            innerBg: innerBg,
+                            borderColor: borderColor,
+                            focusColor: blueColor,
+                          ),
+                        ),
+                        const Gap(10),
+                        OutlinedButton.icon(
+                          onPressed: _saveLocationId,
+                          icon: const Icon(Icons.save_outlined, size: 16),
+                          label: const Text('حفظ المعرّف'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: textColor,
+                            side: BorderSide(color: borderColor),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Gap(14),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: innerBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(_lastSyncedText, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor)),
+                                const Gap(3),
+                                Text(
+                                  '$_lastPeriodicRunText | المعلق: $_pendingCount سجل',
+                                  style: TextStyle(fontSize: 11, color: subTextColor),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: _syncing ? null : _syncNow,
+                            icon: _syncing
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Icon(Icons.sync, size: 16),
+                            label: Text(_syncing ? 'جارٍ المزامنة...' : 'مزامنة يدوية الآن', style: const TextStyle(fontSize: 12)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: blueColor,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              elevation: 0,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const Gap(20),
+
+              // 5. إدارة المستخدمين والنظام
+              _buildSectionCard(
+                cardBg: cardBg,
+                borderColor: borderColor,
+                title: 'إدارة النظام والبيانات',
+                icon: Icons.admin_panel_settings_outlined,
+                iconColor: goldColor,
+                child: Column(
+                  children: [
+                    _buildSettingsTile(
+                      icon: Icons.people_outline,
+                      iconColor: blueColor,
+                      title: 'المستخدمون والصلاحيات',
+                      subtitle: 'إضافة الكاشير والمديرين وتعيين صلاحيات كل دور بدقة',
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      borderColor: borderColor,
+                      onTap: () {
+                        final db = ref.read(appDatabaseProvider);
+                        final authService = ref.read(authServiceProvider);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => UserManagementPage(database: db, authService: authService)),
+                        );
+                      },
+                    ),
+                    const Gap(10),
+                    _buildSettingsTile(
+                      icon: Icons.cloud_sync_outlined,
+                      iconColor: greenColor,
+                      title: 'النسخ الاحتياطي والاستعادة (Google Drive & محلي)',
+                      subtitle: 'تشفير وحفظ قواعد البيانات سحابياً ومحلياً مع مفتاح الاسترداد الآمن',
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      borderColor: borderColor,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const EnhancedBackupScreen()),
+                        );
+                      },
+                    ),
+                    const Gap(10),
+                    _buildSettingsTile(
+                      icon: Icons.info_outline,
+                      iconColor: goldColor,
+                      title: 'حول مدار ERP',
+                      subtitle: 'الإصدار 1.0.0 — رخصة تشغيل محلية مع حماية البيانات',
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      borderColor: borderColor,
+                      onTap: () {
+                        showAboutDialog(
+                          context: context,
+                          applicationName: 'مدار ERP',
+                          applicationVersion: '1.0.0',
+                          applicationIcon: const Icon(Icons.store, color: Color(0xFFC9A84C), size: 36),
+                          children: const [
+                            Text('نظام إدارة العمليات ونقاط البيع المتكامل MADAR ERP.'),
+                            Text('تم التطوير بواسطة MO2 مع دعم كامل للعمل بلا إنترنت والتشفير التام.'),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              const Gap(30),
+
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      'مدار ERP — الإصدار 1.0.0',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: subTextColor),
+                    ),
+                    const Gap(3),
+                    Text(
+                      'Developed by MO2',
+                      style: TextStyle(fontSize: 10, letterSpacing: 0.8, color: subTextColor.withValues(alpha: 0.7)),
+                    ),
+                  ],
+                ),
+              ),
+              const Gap(16),
             ],
-          ],
+          ),
         ),
-        const Gap(15),
-          _buildBusinessInfoSection(textColor, subTextColor, goldColor, cardBg, borderColor, isDark),
-          Divider(color: borderColor, height: 32),
+      ),
+    );
+  }
 
-          _buildSectionTitle('مزامنة متعددة الأجهزة', goldColor),
-          const Gap(10),
-          Text(
-            'استخدم نفس الحساب على أكثر من جهاز لمزامنة المنتجات والفواتير والمخزون تلقائياً.',
-            style: TextStyle(color: subTextColor, fontSize: 13),
+  Widget _buildSectionCard({
+    required Color cardBg,
+    required Color borderColor,
+    required String title,
+    required IconData icon,
+    required Color iconColor,
+    required Widget child,
+    Widget? trailing,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const Gap(10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+              ),
+              if (trailing != null) trailing,
+            ],
           ),
-          const Gap(12),
-          _buildSyncSection(textColor, subTextColor, goldColor, cardBg, borderColor),
-          Divider(color: borderColor, height: 32),
-
-          _buildSectionTitle('إدارة المستخدمين', goldColor),
-          const Gap(10),
-
-          ListTile(
-            leading: Icon(Icons.people_outline, color: goldColor),
-            title: Text('المستخدمون والصلاحيات', style: TextStyle(color: textColor)),
-            subtitle: Text('إضافة وتعديل صلاحيات المستخدمين', style: TextStyle(color: subTextColor, fontSize: 13)),
-            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: subTextColor),
-            onTap: () {
-              final db = ref.read(appDatabaseProvider);
-              final authService = ref.read(authServiceProvider);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => UserManagementPage(database: db, authService: authService)),
-              );
-            },
-          ),
-          Divider(color: borderColor, height: 32),
-
-          _buildSectionTitle(context.l10n.other_settings, goldColor),
-          const Gap(10),
-
-          ListTile(
-            leading: Icon(Icons.cloud_sync_outlined, color: goldColor),
-            title: Text('النسخ الاحتياطي والاستعادة (Google Drive والمحلي)', style: TextStyle(color: textColor, fontWeight: FontWeight.w600)),
-            subtitle: Text('حفظ واستعادة النسخ الاحتياطية المشفرة سحابياً ومحلياً', style: TextStyle(color: subTextColor, fontSize: 12)),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const EnhancedBackupScreen()),
-              );
-            },
-            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: subTextColor),
-          ),
-          Divider(color: borderColor, height: 16),
-
-          ListTile(
-            leading: Icon(Icons.info_outline, color: goldColor),
-            title: Text(context.l10n.about, style: TextStyle(color: textColor)),
-            onTap: () {
-              showAboutDialog(
-                context: context,
-                applicationName: 'POS System',
-                applicationVersion: '1.0.0',
-                applicationIcon: const Icon(Icons.store, color: Color(0xFFC9A84C)),
-                children: [
-                  const Text('This is a simple POS system built with Flutter.'),
-                ],
-              );
-            },
-            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: subTextColor),
-          ),
-          Divider(color: borderColor, height: 32),
-          Center(
-            child: Text(
-              "${context.l10n.version} 1.0.0",
-              style: TextStyle(fontSize: 14, color: subTextColor),
-            ),
-          ),
+          const Gap(14),
+          Divider(color: borderColor, height: 1),
+          const Gap(14),
+          child,
         ],
       ),
     );
   }
 
-  Widget _buildSectionTitle(String title, Color goldColor) {
-    return Text(
-      title,
-      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: goldColor),
+  Widget _buildCalendarThemeOption({
+    required String label,
+    required CalendarThemeMode mode,
+    required Color textColor,
+    required Color subTextColor,
+    required Color borderColor,
+    required Color innerBg,
+    required Color goldColor,
+  }) {
+    final isSelected = (_calendarTheme == mode);
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          SettingsService.setCalendarTheme(mode);
+          setState(() => _calendarTheme = mode);
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? goldColor.withValues(alpha: 0.12) : innerBg,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected ? goldColor : borderColor,
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                size: 16,
+                color: isSelected ? goldColor : subTextColor,
+              ),
+              const Gap(6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? textColor : subTextColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildBusinessInfoSection(Color textColor, Color subTextColor, Color goldColor, Color cardBg, Color borderColor, bool isDark) {
-    return Column(
-      children: [
-        TextFormField(
-          controller: _nameController,
-          style: TextStyle(color: textColor),
-          decoration: InputDecoration(
-            labelText: 'اسم النشاط التجاري',
-            labelStyle: TextStyle(color: subTextColor),
-            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            prefixIcon: Icon(Icons.store, color: goldColor),
-            filled: true,
-            fillColor: cardBg,
-          ),
-        ),
-        const Gap(10),
-        TextFormField(
-          controller: _phoneController,
-          style: TextStyle(color: textColor),
-          decoration: InputDecoration(
-            labelText: 'رقم الهاتف',
-            labelStyle: TextStyle(color: subTextColor),
-            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            prefixIcon: Icon(Icons.phone, color: goldColor),
-            filled: true,
-            fillColor: cardBg,
-          ),
-        ),
-        const Gap(10),
-        TextFormField(
-          controller: _addressController,
-          style: TextStyle(color: textColor),
-          decoration: InputDecoration(
-            labelText: 'العنوان',
-            labelStyle: TextStyle(color: subTextColor),
-            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            prefixIcon: Icon(Icons.location_on, color: goldColor),
-            filled: true,
-            fillColor: cardBg,
-          ),
-        ),
-        const Gap(10),
-        TextFormField(
-          controller: _taxController,
-          style: TextStyle(color: textColor),
-          decoration: InputDecoration(
-            labelText: 'الرقم الضريبي (اختياري)',
-            labelStyle: TextStyle(color: subTextColor),
-            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            prefixIcon: Icon(Icons.receipt, color: goldColor),
-            filled: true,
-            fillColor: cardBg,
-          ),
-        ),
-        const Gap(10),
-        TextFormField(
-          controller: _footerController,
-          style: TextStyle(color: textColor),
-          decoration: InputDecoration(
-            labelText: 'رسالة أسفل الفاتورة',
-            labelStyle: TextStyle(color: subTextColor),
-            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            prefixIcon: Icon(Icons.message, color: goldColor),
-            filled: true,
-            fillColor: cardBg,
-          ),
-        ),
-        const Gap(10),
-        TextFormField(
-          controller: _pageUrlController,
-          style: TextStyle(color: textColor),
-          textDirection: TextDirection.ltr,
-          decoration: InputDecoration(
-            labelText: 'لينك صفحة المحل (للطباعة كـ QR على الملصقات)',
-            hintText: 'https://facebook.com/...',
-            helperText: 'يُطبع تلقائياً كـ QR بجانب الباركود في شاشة ملصقات الباركود ويظل ثابتاً',
-            labelStyle: TextStyle(color: subTextColor),
-            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            prefixIcon: Icon(Icons.qr_code, color: goldColor),
-            filled: true,
-            fillColor: cardBg,
-          ),
-        ),
-        const Gap(15),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: _saveBusinessInfo,
-            icon: const Icon(Icons.save),
-            label: const Text('حفظ معلومات النشاط'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              backgroundColor: goldColor,
-              foregroundColor: const Color(0xFF0D1117),
-            ),
-          ),
-        ),
-      ],
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required Color textColor,
+    required Color subTextColor,
+    required Color innerBg,
+    required Color borderColor,
+    required Color focusColor,
+    String? hint,
+    TextDirection? textDirection,
+  }) {
+    return TextFormField(
+      controller: controller,
+      style: TextStyle(color: textColor, fontSize: 13),
+      textDirection: textDirection,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        hintStyle: TextStyle(color: subTextColor.withValues(alpha: 0.5), fontSize: 12),
+        labelStyle: TextStyle(color: subTextColor, fontSize: 12),
+        border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: focusColor)),
+        prefixIcon: Icon(icon, color: focusColor, size: 18),
+        filled: true,
+        fillColor: innerBg,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      ),
     );
   }
 
-  Widget _buildSyncSection(Color textColor, Color subTextColor, Color goldColor, Color cardBg, Color borderColor) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextFormField(
-          controller: _locationIdController,
-          style: TextStyle(color: textColor),
-          decoration: InputDecoration(
-            labelText: 'معرّف الجهاز / الفرع (مثال: فرع-1)',
-            labelStyle: TextStyle(color: subTextColor),
-            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-            prefixIcon: Icon(Icons.business, color: goldColor),
-            filled: true,
-            fillColor: cardBg,
-          ),
+  Widget _buildSettingsTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required Color textColor,
+    required Color subTextColor,
+    required Color borderColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: borderColor),
         ),
-        const Gap(10),
-        Row(
+        child: Row(
           children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const Gap(12),
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _saveLocationId,
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('حفظ معرّف الجهاز'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: goldColor,
-                  side: BorderSide(color: borderColor),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: textColor)),
+                  const Gap(2),
+                  Text(subtitle, style: TextStyle(fontSize: 12, color: subTextColor)),
+                ],
               ),
             ),
+            Icon(Icons.arrow_forward_ios_rounded, size: 14, color: subTextColor),
           ],
         ),
-        const Gap(16),
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _syncing ? null : _syncNow,
-                icon: _syncing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0D1117)),
-                      )
-                    : const Icon(Icons.sync),
-                label: Text(_syncing ? 'جارٍ المزامنة...' : 'مزامنة الآن'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  backgroundColor: goldColor,
-                  foregroundColor: const Color(0xFF0D1117),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const Gap(10),
-        Text(
-          '$_lastSyncedText  —  $_pendingCount قيد الانتظار',
-          style: TextStyle(color: subTextColor, fontSize: 13),
-        ),
-        const Gap(4),
-        Text(
-          _lastPeriodicRunText,
-          style: TextStyle(color: subTextColor, fontSize: 13),
-        ),
-      ],
+      ),
     );
   }
 
@@ -618,15 +935,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await SettingsService.setDeviceLocationId(_locationIdController.text);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم حفظ معرّف الجهاز'), backgroundColor: Colors.green),
+      const SnackBar(content: Text('تم حفظ معرّف الجهاز بنجاح'), backgroundColor: Color(0xFF2EA043)),
     );
   }
 
   Future<void> _syncNow() async {
     setState(() => _syncing = true);
     try {
-      // Push local changes first, then pull remote ones — so this device's own
-      // pending rows go up before any conflicting remote rows come down.
       final summary = await ref.read(syncServiceProvider).syncNow();
       final pullSummary = await ref.read(syncServiceProvider).pullNow();
       final lastSynced = await SettingsService.getLastSyncedAt();
@@ -646,7 +961,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           content: Text(message),
           backgroundColor: (summary.failed + pullSummary.failed) > 0
               ? Colors.orange
-              : Colors.green,
+              : const Color(0xFF2EA043),
         ),
       );
     } catch (e) {
@@ -686,8 +1001,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('تم حفظ البيانات بنجاح'),
-            backgroundColor: Colors.green,
+            content: Text('تم حفظ معلومات النشاط التجاري بنجاح'),
+            backgroundColor: Color(0xFF2EA043),
           ),
         );
       }
