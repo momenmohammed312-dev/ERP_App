@@ -17,6 +17,7 @@ import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/utils/app_utils.dart';
 import 'package:pos_offline_desktop/core/config/app_flavor.dart';
+import 'package:pos_offline_desktop/core/services/settings_service.dart';
 import 'package:pos_offline_desktop/core/services/backup_service.dart'
     as core_backup;
 
@@ -261,6 +262,9 @@ class EnhancedBackupService {
 
       // 13. تنظيف النسخ القديمة
       await _cleanOldBackups();
+
+      // 14. مزامنة النسخة السحابية عبر مجلد المزامنة (Google Drive / OneDrive / سحابة الجهاز)
+      await syncBackupToCloudFolder(backupPath);
 
       return EnhancedBackupInfo(
         filename: filename,
@@ -1081,6 +1085,134 @@ class EnhancedBackupService {
       debugPrint('❌ خطأ في جلب إحصائيات النسخ الاحتياطي: $e');
       return {'error': e.toString()};
     }
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // مزامنة مجلد السحابة (Google Drive / OneDrive / مجلد متزامن)
+  // ════════════════════════════════════════════════════════════════════
+
+  /// مزامنة نسخة احتياطية محددة إلى مجلد السحابة المختار
+  Future<String?> syncBackupToCloudFolder(String backupFilePath) async {
+    try {
+      final isEnabled = await SettingsService.isCloudFolderSyncEnabled();
+      if (!isEnabled) {
+        debugPrint('☁️ مزامنة مجلد السحابة معطلة حالياً في الإعدادات');
+        return null;
+      }
+
+      final folderPath = await SettingsService.getCloudSyncFolderPath();
+      if (folderPath == null || folderPath.trim().isEmpty) {
+        debugPrint('☁️ لم يتم تحديد مجلد للمزامنة السحابية بعد');
+        return null;
+      }
+
+      final targetDir = Directory(folderPath);
+      if (!await targetDir.exists()) {
+        try {
+          await targetDir.create(recursive: true);
+        } catch (e) {
+          debugPrint('⚠️ تعذر إنشاء مجلد المزامنة السحابية: $e');
+          return null;
+        }
+      }
+
+      final sourceFile = File(backupFilePath);
+      if (!await sourceFile.exists()) {
+        debugPrint('⚠️ ملف النسخة المراد مزامنتها غير موجود: $backupFilePath');
+        return null;
+      }
+
+      final fileName = path.basename(backupFilePath);
+      final destinationPath = path.join(folderPath, fileName);
+
+      // نسخ الملف المشفر
+      await sourceFile.copy(destinationPath);
+      debugPrint('☁️ تم نسخ ومزامنة النسخة الاحتياطية بنجاح إلى مجلد السحابة: $destinationPath');
+
+      // تدوير النسخ داخل مجلد السحابة للحفاظ على المساحة (الاحتفاظ بآخر 15 نسخة)
+      await _cleanOldCloudFolderBackups(targetDir);
+
+      return destinationPath;
+    } catch (e) {
+      debugPrint('⚠️ خطأ غير معطل أثناء المزامنة لمجلد السحابة: $e');
+      return null;
+    }
+  }
+
+  /// مزامنة أحدث نسخة احتياطية محلية متاحة إلى مجلد السحابة
+  Future<String?> syncLatestBackupToCloudFolder() async {
+    final backups = await listBackups();
+    if (backups.isEmpty) {
+      debugPrint('⚠️ لا توجد أي نسخ احتياطية محلية لمزامنتها');
+      return null;
+    }
+    return syncBackupToCloudFolder(backups.first.filePath);
+  }
+
+  /// تدوير النسخ داخل مجلد المزامنة السحابية (الاحتفاظ بأحدث 15 نسخة تلقائياً)
+  Future<void> _cleanOldCloudFolderBackups(Directory cloudDir, {int keepCount = 15}) async {
+    try {
+      final entities = cloudDir.listSync();
+      final backupFiles = <File>[];
+      for (final e in entities) {
+        if (e is File && (e.path.endsWith('.posbackup') || e.path.endsWith('.zip'))) {
+          backupFiles.add(e);
+        }
+      }
+
+      if (backupFiles.length <= keepCount) return;
+
+      // ترتيب من الأقدم إلى الأحدث
+      backupFiles.sort((a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
+
+      final toDeleteCount = backupFiles.length - keepCount;
+      for (int i = 0; i < toDeleteCount; i++) {
+        try {
+          await backupFiles[i].delete();
+          debugPrint('🗑️ تم تدوير وحذف نسخة سحابية قديمة من المجلد: ${backupFiles[i].path}');
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('⚠️ خطأ أثناء تدوير نسخ مجلد السحابة: $e');
+    }
+  }
+
+  /// جلب قائمة النسخ المتزامنة في مجلد السحابة
+  Future<List<EnhancedBackupInfo>> listCloudFolderBackups() async {
+    final folderPath = await SettingsService.getCloudSyncFolderPath();
+    if (folderPath == null || folderPath.trim().isEmpty) return [];
+
+    final targetDir = Directory(folderPath);
+    if (!await targetDir.exists()) return [];
+
+    final results = <EnhancedBackupInfo>[];
+    try {
+      final entities = targetDir.listSync();
+      for (final entity in entities) {
+        if (entity is File && (entity.path.endsWith('.posbackup') || entity.path.endsWith('.zip'))) {
+          try {
+            final stat = entity.statSync();
+            results.add(
+              EnhancedBackupInfo(
+                filename: path.basename(entity.path),
+                filePath: entity.path,
+                createdAt: stat.modified,
+                size: stat.size,
+                type: 'cloud_sync_folder',
+                description: 'نسخة متزامنة في مجلد السحابة',
+                checksum: '',
+                isEncrypted: entity.path.endsWith('.posbackup'),
+              ),
+            );
+          } catch (_) {}
+        }
+      }
+      results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    } catch (e) {
+      debugPrint('⚠️ خطأ في قراءة ملفات مجلد السحابة: $e');
+    }
+
+    return results;
   }
 }
 

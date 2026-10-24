@@ -273,4 +273,38 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_lastSyncedAtKey, value.toIso8601String());
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Cloud Folder Sync (Google Drive / OneDrive / Local / Network folder)
+  // ─────────────────────────────────────────────────────────────────────────
+  static const _cloudSyncFolderPathKey = 'cloud_sync_folder_path';
+  static const _cloudFolderSyncEnabledKey = 'cloud_folder_sync_enabled';
+
+  /// Returns the configured folder path for cloud-syncing backups (e.g. Google Drive folder).
+  static Future<String?> getCloudSyncFolderPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_cloudSyncFolderPathKey);
+  }
+
+  /// Sets or clears the configured cloud sync folder path.
+  static Future<void> setCloudSyncFolderPath(String? path) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (path == null || path.trim().isEmpty) {
+      await prefs.remove(_cloudSyncFolderPathKey);
+    } else {
+      await prefs.setString(_cloudSyncFolderPathKey, path.trim());
+    }
+  }
+
+  /// Whether automatic mirroring to the cloud sync folder is enabled (default true).
+  static Future<bool> isCloudFolderSyncEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_cloudFolderSyncEnabledKey) ?? true;
+  }
+
+  /// Sets whether automatic mirroring to the cloud sync folder is enabled.
+  static Future<void> setCloudFolderSyncEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_cloudFolderSyncEnabledKey, enabled);
+  }
 }

@@ -18,6 +18,7 @@ import '../../core/provider/auth_provider.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../widgets/permission_guard.dart';
 import 'widgets/google_drive_connection_card.dart';
+import 'widgets/cloud_folder_sync_card.dart';
 
 class EnhancedBackupScreen extends StatefulWidget {
   const EnhancedBackupScreen({super.key});
@@ -186,7 +187,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen>
                       tabs: const [
                         Tab(
                           icon: Icon(Icons.cloud_sync_rounded, size: 20),
-                          text: 'النسخ السحابي (Google Drive)',
+                          text: 'المزامنة السحابية (Google Drive)',
                         ),
                         Tab(
                           icon: Icon(Icons.save_rounded, size: 20),
@@ -207,14 +208,51 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen>
                     builder: (context, _) {
                       switch (_tabController.index) {
                         case 0:
-                          return GoogleDriveConnectionCard(
-                            onBackupRestored: _loadData,
-                            onStatusChanged: (connected, email) {
-                              setState(() {
-                                _isGoogleDriveConnected = connected;
-                                _googleDriveEmail = email;
-                              });
-                            },
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              CloudFolderSyncCard(
+                                onBackupRestored: _loadData,
+                                onFolderChanged: _loadData,
+                              ),
+                              const Gap(16),
+                              Theme(
+                                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: cardBg,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: borderColor),
+                                  ),
+                                  child: ExpansionTile(
+                                    tilePadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                                    leading: const Icon(Icons.vpn_key_outlined, color: Color(0xFF58A6FF)),
+                                    title: const Text(
+                                      'الربط المباشر عبر Google Drive OAuth (خيار إضافي متقدم)',
+                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                    ),
+                                    subtitle: const Text(
+                                      'لربط حساب Google API مباشرة وتخزين النسخ بدون الاعتماد على مجلد مزامنة محلي',
+                                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                                    ),
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: GoogleDriveConnectionCard(
+                                          onBackupRestored: _loadData,
+                                          onStatusChanged: (connected, email) {
+                                            setState(() {
+                                              _isGoogleDriveConnected = connected;
+                                              _googleDriveEmail = email;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           );
                         case 1:
                           return _buildLocalBackupsTab(isDark);
