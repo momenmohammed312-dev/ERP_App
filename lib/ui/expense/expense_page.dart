@@ -7,6 +7,8 @@ import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 import 'package:pos_offline_desktop/widgets/permission_guard.dart';
+import 'package:pos_offline_desktop/core/services/document_date_service.dart';
+import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
 
 class ExpensePage extends StatefulWidget {
   final AppDatabase db;
@@ -390,6 +392,39 @@ class _ExpensePageState extends State<ExpensePage> {
             permission: Permission.editSettings,
             showUpgradePrompt: false,
             fallback: const SizedBox.shrink(),
+            child: TextButton.icon(
+              onPressed: () async {
+                final picked = await pickDocumentDate(
+                  context: context,
+                  db: widget.db,
+                  initialDate: expense.date,
+                );
+                if (picked != null) {
+                  await DocumentDateService(widget.db).updateExpenseDate(
+                    expenseId: expense.id,
+                    newDate: picked,
+                  );
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    _loadExpenses();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('تم تعديل تاريخ المصروف بنجاح'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.edit_calendar, size: 18),
+              label: const Text('تعديل التاريخ'),
+              style: TextButton.styleFrom(foregroundColor: Colors.blue),
+            ),
+          ),
+          PermissionGuard(
+            permission: Permission.editSettings,
+            showUpgradePrompt: false,
+            fallback: const SizedBox.shrink(),
             child: TextButton(
               onPressed: () {
                 Navigator.pop(context);
@@ -541,37 +576,10 @@ class _ExpensePageState extends State<ExpensePage> {
                                 suffixIcon: const Icon(Icons.calendar_today),
                               ),
                               onTap: () async {
-                                final date = await showDatePicker(
+                                final date = await pickDocumentDate(
                                   context: context,
+                                  db: widget.db,
                                   initialDate: _selectedDate,
-                                  firstDate: DateTime(2020),
-                                  lastDate: DateTime.now(),
-                                  builder: (context, child) {
-                                    return Theme(
-                                      data: Theme.of(context).copyWith(
-                                        colorScheme: const ColorScheme.light(
-                                          primary: Colors
-                                              .grey, // Header background and selected date
-                                          onPrimary:
-                                              Colors.white, // Header text color
-                                          surface: Colors
-                                              .white, // Calendar background
-                                          onSurface: Colors
-                                              .black, // Calendar text color
-                                        ),
-                                        textButtonTheme: TextButtonThemeData(
-                                          style: TextButton.styleFrom(
-                                            foregroundColor: Colors
-                                                .black, // Button text color
-                                          ),
-                                        ),
-                                        dialogTheme: const DialogThemeData(
-                                          backgroundColor: Colors.white,
-                                        ),
-                                      ),
-                                      child: child!,
-                                    );
-                                  },
                                 );
                                 if (date != null) {
                                   setState(() => _selectedDate = date);

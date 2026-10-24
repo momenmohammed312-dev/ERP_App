@@ -81,6 +81,8 @@ class SettingsService {
   static const _taxNumberKey = 'business_tax_number';
   static const _receiptFooterKey = 'receipt_footer_msg';
   static const _businessPageUrlKey = 'business_page_url';
+  static const _labelShowQrKey = 'label_show_qr';
+  static const _labelShowPriceKey = 'label_show_price';
   static const _currencyKey = 'currency_symbol';
   static const _isFirstRunKey = 'is_first_run_complete';
 
@@ -144,6 +146,28 @@ class SettingsService {
   static Future<void> setBusinessPageUrl(String url) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_businessPageUrlKey, url.trim());
+  }
+
+  /// تفضيل إظهار رمز QR في شاشة طباعة الملصقات.
+  static Future<bool?> getLabelShowQr() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_labelShowQrKey);
+  }
+
+  static Future<void> setLabelShowQr(bool show) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_labelShowQrKey, show);
+  }
+
+  /// تفضيل إظهار السعر في شاشة طباعة الملصقات (الافتراضي: true).
+  static Future<bool> getLabelShowPrice() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_labelShowPriceKey) ?? true;
+  }
+
+  static Future<void> setLabelShowPrice(bool show) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_labelShowPriceKey, show);
   }
 
   static Future<Map<String, String>> getBusinessInfo() async {

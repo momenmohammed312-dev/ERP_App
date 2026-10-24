@@ -16,6 +16,8 @@ import 'package:pos_offline_desktop/ui/invoice/widgets/product_card.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/product_selection_modal.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/order_line_item.dart';
 import 'package:pos_offline_desktop/ui/invoice/models/product_entry.dart';
+import 'package:intl/intl.dart';
+import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
 import 'product_quick_add_dialog.dart';
 
 // Payment method enum
@@ -48,7 +50,19 @@ class _EnhancedPurchaseInvoicePageState
   // Purchase invoice data
   PaymentMethod _paymentMethod = PaymentMethod.cash;
   Supplier? _selectedSupplier;
+  DateTime _purchaseDate = DateTime.now();
   final List<ProductEntry> _productEntries = [];
+
+  Future<void> _pickPurchaseDate() async {
+    final picked = await pickDocumentDate(
+      context: context,
+      db: widget.db,
+      initialDate: _purchaseDate,
+    );
+    if (picked != null) {
+      setState(() => _purchaseDate = picked);
+    }
+  }
 
   // Products and search
   List<Product> _filteredProducts = [];
@@ -56,7 +70,11 @@ class _EnhancedPurchaseInvoicePageState
 
   // Totals
   double _subtotal = 0.0;
+  // ignore: unused_field
+  // ignore: unused_field
   double _totalDiscount = 0.0;
+  // ignore: unused_field
+  // ignore: unused_field
   double _totalTax = 0.0;
   double _grandTotal = 0.0;
   double _paidAmount = 0.0;
@@ -107,6 +125,7 @@ class _EnhancedPurchaseInvoicePageState
     if (purchase == null) throw Exception('فاتورة المشتريات غير موجودة');
 
     _invoiceNumber = purchase.invoiceNumber;
+    _purchaseDate = purchase.purchaseDate;
     _paidAmount = purchase.paidAmount;
     _paidAmountController.text = purchase.paidAmount.toStringAsFixed(2);
     _paymentMethod = PaymentMethod.values.firstWhere(
@@ -236,8 +255,9 @@ class _EnhancedPurchaseInvoicePageState
       context: context,
       builder: (context) => ProductSelectionModal(
         product: product ?? _filteredProducts.first,
+        db: widget.db,
         forPurchase: true,
-        onConfirm: (quantity, unit, unitPrice, discount, tax) {
+        onConfirm: (quantity, unit, unitPrice, discount, tax, [variant]) {
           _addProductToPurchase(
             product ?? _filteredProducts.first,
             quantity,
@@ -395,7 +415,7 @@ class _EnhancedPurchaseInvoicePageState
           invoiceNumber: _invoiceNumber!,
           description: 'فاتورة مشتريات من ${_selectedSupplier!.name}',
           totalAmount: _grandTotal,
-          purchaseDate: DateTime.now(),
+          purchaseDate: _purchaseDate,
           createdAt: DateTime.now(),
           supplierId: Value(_selectedSupplier!.id),
           paidAmount: Value(_paidAmount),
@@ -437,7 +457,7 @@ class _EnhancedPurchaseInvoicePageState
           invoiceNumber: _invoiceNumber!,
           total: _grandTotal,
           paid: _paidAmount,
-          date: DateTime.now(),
+          date: _purchaseDate,
         );
       });
 
@@ -489,6 +509,7 @@ class _EnhancedPurchaseInvoicePageState
         total: _grandTotal + _orphanTotal,
         paid: _paidAmount,
         paymentMethod: _paymentMethod.name,
+        purchaseDate: _purchaseDate,
         lines: [
           for (final entry in _productEntries)
             if (entry.product != null)
@@ -557,7 +578,7 @@ class _EnhancedPurchaseInvoicePageState
         customerPhone: _selectedSupplier?.phone ?? '',
         customerZipCode: '',
         customerState: '',
-        invoiceDate: DateTime.now(),
+        invoiceDate: _purchaseDate,
         subtotal: _subtotal,
         isCreditAccount: _paymentMethod != PaymentMethod.cash,
         previousBalance: 0.0,
@@ -583,6 +604,7 @@ class _EnhancedPurchaseInvoicePageState
   void _resetForm() {
     setState(() {
       _selectedSupplier = null;
+      _purchaseDate = DateTime.now();
       _productEntries.clear();
       _paidAmountController.clear();
       _notesController.clear();
@@ -695,7 +717,7 @@ class _EnhancedPurchaseInvoicePageState
                                 ),
                           ),
                           Text(
-                            'التاريخ: ${DateTime.now().toString().split(' ')[0]}',
+                            'التاريخ: ${DateFormat('yyyy/MM/dd HH:mm').format(_purchaseDate)}',
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
                                   color: Theme.of(
@@ -709,28 +731,54 @@ class _EnhancedPurchaseInvoicePageState
 
                     const Gap(16),
 
-                    // Supplier selection (locked in edit mode: moving lines
-                    // across suppliers would split one invoice's ledger pair).
-                    DropdownButtonFormField<Supplier>(
-                      initialValue: _selectedSupplier,
-                      decoration: const InputDecoration(
-                        labelText: 'اختر المورد',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.person),
-                      ),
-                      items: _suppliers.map((supplier) {
-                        return DropdownMenuItem(
-                          value: supplier,
-                          child: Text(supplier.name),
-                        );
-                      }).toList(),
-                      onChanged: widget.purchaseId != null
-                          ? null
-                          : (supplier) {
-                              setState(() {
-                                _selectedSupplier = supplier;
-                              });
-                            },
+                    // Supplier selection and Purchase Date
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: DropdownButtonFormField<Supplier>(
+                            initialValue: _selectedSupplier,
+                            decoration: const InputDecoration(
+                              labelText: 'اختر المورد',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.person),
+                            ),
+                            items: _suppliers.map((supplier) {
+                              return DropdownMenuItem(
+                                value: supplier,
+                                child: Text(supplier.name),
+                              );
+                            }).toList(),
+                            onChanged: widget.purchaseId != null
+                                ? null
+                                : (supplier) {
+                                    setState(() {
+                                      _selectedSupplier = supplier;
+                                    });
+                                  },
+                          ),
+                        ),
+                        const Gap(12),
+                        Expanded(
+                          flex: 2,
+                          child: InkWell(
+                            onTap: _pickPurchaseDate,
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'تاريخ الفاتورة',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.calendar_today, size: 20),
+                                suffixIcon: Icon(Icons.edit_calendar, size: 16),
+                              ),
+                              child: Text(
+                                DateFormat('yyyy/MM/dd HH:mm').format(_purchaseDate),
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
 
                     const Gap(8),

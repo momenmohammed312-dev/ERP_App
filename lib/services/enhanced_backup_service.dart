@@ -12,6 +12,8 @@ import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:intl/intl.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:drift/native.dart';
+import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/utils/app_utils.dart';
 import 'package:pos_offline_desktop/core/config/app_flavor.dart';
@@ -100,6 +102,23 @@ class EnhancedBackupInfo {
 // 2. خدمة النسخ الاحتياطي المحسّنة
 // ════════════════════════════════════════════════════════════════════════
 
+class BackupOperationInProgressException implements Exception {
+  final String message;
+  BackupOperationInProgressException([
+    this.message = 'عملية نسخ احتياطي أو استعادة أخرى قيد التنفيذ حالياً. يرجى الانتظار حتى اكتمالها.',
+  ]);
+  @override
+  String toString() => message;
+}
+
+class _CheckUser extends QueryExecutorUser {
+  @override
+  int get schemaVersion => 1;
+
+  @override
+  Future<void> beforeOpen(QueryExecutor executor, OpeningDetails details) async {}
+}
+
 class EnhancedBackupService {
   static const String _backupDir = 'data/backups';
   static const String _encryptionKey = 'POS-SaaS-Backup-Key-2024-32Chars';
@@ -112,7 +131,17 @@ class EnhancedBackupService {
   factory EnhancedBackupService() => _instance;
   EnhancedBackupService._internal();
 
+  static bool _isOperationInProgress = false;
+  @visibleForTesting
+  static bool get isOperationInProgress => _isOperationInProgress;
+
   AppDatabase? _db;
+  @visibleForTesting
+  static Directory? customBackupDirectory;
+
+  @visibleForTesting
+  static String? customDatabasePath;
+
   void init(AppDatabase db) {
     _db = db;
   }
@@ -130,6 +159,14 @@ class EnhancedBackupService {
     if (kIsWeb) {
       throw Exception('Backup operations not supported on web platform');
     }
+    if (_isOperationInProgress) {
+      throw BackupOperationInProgressException();
+    }
+    _isOperationInProgress = true;
+
+    Directory? thisTempDir;
+    String? thisTempZipPath;
+
     try {
       debugPrint('📦 بدء النسخ الاحتياطي المحسّن...');
 
@@ -139,27 +176,15 @@ class EnhancedBackupService {
         await backupDirectory.create(recursive: true);
       }
 
-      // تنظيف مجلدات مؤقتة من عمليات فاشلة سابقة
-      try {
-        await for (final entity in backupDirectory.list()) {
-          if (entity is Directory) {
-            final dirName = path.basename(entity.path);
-            if (dirName.startsWith('temp_')) {
-              await entity.delete(recursive: true);
-            }
-          } else if (entity is File) {
-            final fileName = path.basename(entity.path);
-            if (fileName.startsWith('temp_') && fileName.endsWith('.zip')) {
-              await entity.delete();
-            }
-          }
-        }
-      } catch (_) {}
-
       // 2. توليد اسم الملف
       final timestamp = DateTime.now();
-      final filename = 'backup_${_formatTimestamp(timestamp)}$_backupExtension';
-      final backupPath = path.join(backupDirectory.path, filename);
+      var filename = 'backup_${_formatTimestamp(timestamp)}$_backupExtension';
+      var backupPath = path.join(backupDirectory.path, filename);
+      if (await File(backupPath).exists()) {
+        filename =
+            'backup_${_formatTimestamp(timestamp)}_${timestamp.millisecond}_${timestamp.microsecond % 1000}$_backupExtension';
+        backupPath = path.join(backupDirectory.path, filename);
+      }
 
       // 3. الحصول على مسار قاعدة البيانات
       final dbPath = await _getDatabasePath();
@@ -169,17 +194,18 @@ class EnhancedBackupService {
         throw Exception('قاعدة البيانات غير موجودة: $dbPath');
       }
 
-      // 4. إنشاء مجلد مؤقت فريد لكل عملية
-      final backupId = timestamp.millisecondsSinceEpoch.toString();
+      // 4. إنشاء مجلد مؤقت فريد لهذه العملية
+      final backupId = '${timestamp.millisecondsSinceEpoch}_${timestamp.microsecond % 1000}';
       final tempDir = Directory(path.join(backupDirectory.path, 'temp_$backupId'));
+      thisTempDir = tempDir;
       if (await tempDir.exists()) {
         await tempDir.delete(recursive: true);
       }
       await tempDir.create(recursive: true);
 
-      // 5. نسخ قاعدة البيانات
+      // 5. نسخ قاعدة البيانات عبر اللقطة الذرية
       final tempDbPath = path.join(tempDir.path, 'database.db');
-      await dbFile.copy(tempDbPath);
+      await _createAtomicSnapshot(tempDbPath, dbFile);
 
       // 6. نسخ ملفات الإعدادات الهامة
       final configFiles = await _copyConfigFiles(tempDir.path);
@@ -202,6 +228,7 @@ class EnhancedBackupService {
       debugPrint('📦 ضغط الملفات...');
       final encoder = ZipFileEncoder();
       final tempZipPath = path.join(backupDirectory.path, 'temp_$backupId.zip');
+      thisTempZipPath = tempZipPath;
       encoder.create(tempZipPath);
       await encoder.addDirectory(tempDir);
       encoder.close();
@@ -223,19 +250,7 @@ class EnhancedBackupService {
       // 11. حفظ النسخة النهائية
       await File(backupPath).writeAsBytes(finalBytes);
 
-      // 12. تنظيف الملفات المؤقتة
-      try {
-        if (await tempDir.exists()) {
-          await tempDir.delete(recursive: true);
-        }
-      } catch (_) {}
-      try {
-        if (await zipFile.exists()) {
-          await zipFile.delete();
-        }
-      } catch (_) {}
-
-      // 13. الحصول على حجم الملف النهائي
+      // 12. الحصول على حجم الملف النهائي
       final backupFile = File(backupPath);
       final size = await backupFile.length();
 
@@ -244,7 +259,7 @@ class EnhancedBackupService {
       debugPrint('📊 الحجم: $_formatBytes(size)');
       debugPrint('🔐 التشفير: ${encrypt ? "مفعّل" : "معطّل"}');
 
-      // 14. تنظيف النسخ القديمة
+      // 13. تنظيف النسخ القديمة
       await _cleanOldBackups();
 
       return EnhancedBackupInfo(
@@ -261,6 +276,21 @@ class EnhancedBackupService {
     } catch (e) {
       debugPrint('❌ خطأ في النسخ الاحتياطي: $e');
       rethrow;
+    } finally {
+      _isOperationInProgress = false;
+      try {
+        if (thisTempDir != null && await thisTempDir.exists()) {
+          await thisTempDir.delete(recursive: true);
+        }
+      } catch (_) {}
+      try {
+        if (thisTempZipPath != null) {
+          final zipF = File(thisTempZipPath);
+          if (await zipF.exists()) {
+            await zipF.delete();
+          }
+        }
+      } catch (_) {}
     }
   }
 
@@ -275,6 +305,11 @@ class EnhancedBackupService {
     if (kIsWeb) {
       throw Exception('Backup restore not supported on web platform');
     }
+    if (_isOperationInProgress) {
+      throw BackupOperationInProgressException();
+    }
+    _isOperationInProgress = true;
+
     Directory? tempDir;
     try {
       debugPrint('📥 بدء الاستعادة من: $filename');
@@ -298,8 +333,6 @@ class EnhancedBackupService {
 
       // 3. التحقق أن الناتج ZIP فعلاً قبل فك الضغط
       if (!_isZipBytes(zipBytes)) {
-        // Fallback: some backups are created by core BackupService and contain
-        // encrypted ZIP with backup_data.json (table-dump) using a different key.
         try {
           final db = _db;
           if (db == null) {
@@ -316,9 +349,9 @@ class EnhancedBackupService {
         }
       }
 
-      // 4. فك الضغط
-      debugPrint('📦 فك ضغط الملفات...');
-      tempDir = Directory(path.join(backupDirectory.path, 'restore_temp'));
+      // 4. فك الضغط في مجلد مؤقت فريد
+      final restoreId = DateTime.now().millisecondsSinceEpoch.toString();
+      tempDir = Directory(path.join(backupDirectory.path, 'restore_temp_$restoreId'));
       if (await tempDir.exists()) {
         await tempDir.delete(recursive: true);
       }
@@ -328,23 +361,36 @@ class EnhancedBackupService {
       final archive = zipDecoder.decodeBytes(zipBytes);
 
       for (final file in archive) {
-        final filename = file.name;
+        final fName = file.name;
         if (file.isFile) {
           final data = file.content as List<int>;
-          final filePath = path.join(tempDir.path, filename);
+          final filePath = path.join(tempDir.path, fName);
           await File(filePath).create(recursive: true);
           await File(filePath).writeAsBytes(data);
         }
       }
 
       // 5. التحقق من معلومات النسخة
-      final infoPath = path.join(tempDir.path, 'backup_info.json');
-      if (await File(infoPath).exists()) {
-        final infoContent = await File(infoPath).readAsString();
-        final info = jsonDecode(infoContent);
-        debugPrint(
-          '📋 معلومات النسخة: ${info['created_at']} - ${info['type']}',
-        );
+      final infoCandidates = [
+        File(path.join(tempDir.path, 'backup_info.json')),
+      ];
+      for (final entity in tempDir.listSync(recursive: true)) {
+        if (entity is File && path.basename(entity.path) == 'backup_info.json') {
+          infoCandidates.add(entity);
+          break;
+        }
+      }
+      for (final infoFile in infoCandidates) {
+        if (await infoFile.exists()) {
+          try {
+            final infoContent = await infoFile.readAsString();
+            final info = jsonDecode(infoContent);
+            debugPrint(
+              '📋 معلومات النسخة: ${info['created_at']} - ${info['type']}',
+            );
+            break;
+          } catch (_) {}
+        }
       }
 
       // 6. استعادة قاعدة البيانات
@@ -359,29 +405,115 @@ class EnhancedBackupService {
         }
       }
 
-      if (sourceDbPath != null) {
-        // إنشاء نسخة احتياطية من القاعدة الحالية
-        if (createPreRestoreBackup && await File(targetDbPath).exists()) {
-          final timestamp = _formatTimestamp(DateTime.now());
-          final preRestoreBackup = '$targetDbPath.before_restore_$timestamp';
-          await File(targetDbPath).copy(preRestoreBackup);
-          debugPrint(
-            '💾 تم إنشاء نسخة احتياطية قبل الاستعادة: $preRestoreBackup',
-          );
+      if (sourceDbPath == null) {
+        for (final entity in tempDir.listSync(recursive: true)) {
+          if (entity is File) {
+            final bName = path.basename(entity.path);
+            if (bName == 'database.db' ||
+                bName == 'pos_database.db' ||
+                bName.endsWith('.sqlite')) {
+              sourceDbPath = entity.path;
+              break;
+            }
+          }
         }
+      }
 
-        // استعادة القاعدة الجديدة
-        await File(sourceDbPath).copy(targetDbPath);
-        debugPrint('✅ تمت استعادة قاعدة البيانات بنجاح');
-      } else {
+      if (sourceDbPath == null) {
         throw Exception('ملف قاعدة البيانات غير موجود في النسخة الاحتياطية');
       }
 
-      // 7. استعادة ملفات الإعدادات
-      await _restoreConfigFiles(tempDir.path);
+      // فحص الملف المرشح في بيئة العزل قبل المساس بالداتابيز الحية
+      final isCandidateValid = await _verifyDatabaseFile(sourceDbPath);
+      if (!isCandidateValid) {
+        throw StateError(
+          'ملف قاعدة البيانات في النسخة الاحتياطية تالف وفشل في فحص السلامة (integrity check)',
+        );
+      }
 
-      // 8. تنظيف
-      await tempDir.delete(recursive: true);
+      final candidateSchemaVer = await _getDatabaseUserVersion(sourceDbPath);
+      const maxSupportedVersion = 80;
+      if (candidateSchemaVer > maxSupportedVersion) {
+        throw StateError(
+          'لا يمكن استعادة النسخة: أُنشئت بإصدار أحدث ($candidateSchemaVer) يتجاوز إصدار التطبيق الحالي ($maxSupportedVersion)',
+        );
+      }
+
+      // مسارات ملفات الـ Sidecars المحتملة
+      final targetWal = File('$targetDbPath-wal');
+      final targetShm = File('$targetDbPath-shm');
+      final targetJournal = File('$targetDbPath-journal');
+
+      // إنشاء نسخة احتياطية من القاعدة الحالية ومن أي sidecars
+      String? preRestoreBackup;
+      String? preRestoreWal;
+      String? preRestoreShm;
+      String? preRestoreJournal;
+
+      if (createPreRestoreBackup && await File(targetDbPath).exists()) {
+        final timestamp = _formatTimestamp(DateTime.now());
+        preRestoreBackup = '$targetDbPath.before_restore_$timestamp';
+        await File(targetDbPath).copy(preRestoreBackup);
+        if (await targetWal.exists()) {
+          preRestoreWal = '$targetDbPath-wal.before_restore_$timestamp';
+          await targetWal.copy(preRestoreWal);
+        }
+        if (await targetShm.exists()) {
+          preRestoreShm = '$targetDbPath-shm.before_restore_$timestamp';
+          await targetShm.copy(preRestoreShm);
+        }
+        if (await targetJournal.exists()) {
+          preRestoreJournal = '$targetDbPath-journal.before_restore_$timestamp';
+          await targetJournal.copy(preRestoreJournal);
+        }
+        debugPrint(
+          '💾 تم إنشاء نسخة احتياطية قبل الاستعادة: $preRestoreBackup',
+        );
+      }
+
+      // إغلاق اتصال قاعدة البيانات الحالي قبل استبدال الملف
+      try {
+        await _db?.close();
+      } catch (e) {
+        debugPrint('Notice: Database close before file swap: $e');
+      }
+
+      // حذف ملفات الـ Sidecars القديمة لضمان عدم حدوث تلوث في الاسترداد
+      try {
+        if (await targetWal.exists()) await targetWal.delete();
+        if (await targetShm.exists()) await targetShm.delete();
+        if (await targetJournal.exists()) await targetJournal.delete();
+      } catch (e) {
+        debugPrint('Notice: clean old sidecars: $e');
+      }
+
+      // استبدال قاعدة البيانات مع التراجع الذري عند الفشل
+      try {
+        await File(sourceDbPath).copy(targetDbPath);
+      } catch (copyError) {
+        debugPrint('❌ فشل استبدال الملف، جاري التراجع: $copyError');
+        if (preRestoreBackup != null && await File(preRestoreBackup).exists()) {
+          try {
+            await File(preRestoreBackup).copy(targetDbPath);
+            if (preRestoreWal != null && await File(preRestoreWal).exists()) {
+              await File(preRestoreWal).copy(targetWal.path);
+            }
+            if (preRestoreJournal != null && await File(preRestoreJournal).exists()) {
+              await File(preRestoreJournal).copy(targetJournal.path);
+            }
+            debugPrint('🔄 تم التراجع واستعادة النسخة السابقة بنجاح');
+            throw FileSystemException('فشل استبدال قاعدة البيانات، ولكن تم التراجع واستعادة النسخة السابقة بنجاح: $copyError');
+          } catch (rollbackError) {
+            debugPrint('CRITICAL: Rollback failed: $rollbackError');
+            throw FileSystemException('خطأ حرج: فشل استبدال قاعدة البيانات وفشل التراجع التلقائي: $rollbackError');
+          }
+        }
+        rethrow;
+      }
+      debugPrint('✅ تمت استعادة قاعدة البيانات بنجاح');
+
+      // 7. استعادة ملفات الإعدادات بأمان
+      await _restoreConfigFiles(tempDir.path);
 
       debugPrint('✅ تمت الاستعادة بنجاح');
       return true;
@@ -389,6 +521,7 @@ class EnhancedBackupService {
       debugPrint('❌ خطأ في الاستعادة: $e');
       rethrow;
     } finally {
+      _isOperationInProgress = false;
       try {
         if (tempDir != null && await tempDir.exists()) {
           await tempDir.delete(recursive: true);
@@ -445,6 +578,10 @@ class EnhancedBackupService {
     if (kIsWeb) {
       throw Exception('Backup deletion not supported on web platform');
     }
+    if (_isOperationInProgress) {
+      throw BackupOperationInProgressException();
+    }
+    _isOperationInProgress = true;
     try {
       final backupDirectory = await _getBackupDirectory();
       final backupPath = path.join(backupDirectory.path, filename);
@@ -459,6 +596,8 @@ class EnhancedBackupService {
     } catch (e) {
       debugPrint('❌ خطأ في حذف النسخة الاحتياطية: $e');
       return false;
+    } finally {
+      _isOperationInProgress = false;
     }
   }
 
@@ -512,6 +651,7 @@ class EnhancedBackupService {
   // ════════════════════════════════════════════════════════════════════
 
   Future<Directory> _getBackupDirectory() async {
+    if (customBackupDirectory != null) return customBackupDirectory!;
     if (kIsWeb) {
       throw Exception('File system operations not supported on web platform');
     }
@@ -520,6 +660,7 @@ class EnhancedBackupService {
   }
 
   Future<String> _getDatabasePath() async {
+    if (customDatabasePath != null) return customDatabasePath!;
     if (kIsWeb) {
       throw Exception('File system operations not supported on web platform');
     }
@@ -572,19 +713,42 @@ class EnhancedBackupService {
   }
 
   Future<void> _restoreConfigFiles(String tempDir) async {
-    final tempConfigDir = Directory(tempDir);
-
-    await for (final entity in tempConfigDir.list()) {
-      if (entity is File && entity.path.endsWith('.json')) {
-        final filename = path.basename(entity.path);
-        final targetPath = 'data/$filename';
-        await entity.copy(targetPath);
-        debugPrint('📄 تم استعادة ملف الإعدادات: $filename');
+    try {
+      final Directory baseDir;
+      if (customBackupDirectory != null) {
+        baseDir = customBackupDirectory!.parent;
+      } else {
+        baseDir = await getApplicationDocumentsDirectory();
       }
+      final targetConfigDir = Directory(path.join(baseDir.path, 'data'));
+      if (!await targetConfigDir.exists()) {
+        await targetConfigDir.create(recursive: true);
+      }
+
+      final tempConfigDir = Directory(tempDir);
+      await for (final entity in tempConfigDir.list(recursive: true)) {
+        if (entity is File && entity.path.endsWith('.json')) {
+          final filename = path.basename(entity.path);
+          if (filename == 'backup_info.json') continue;
+          if (filename.contains('..') || filename.contains('/') || filename.contains(r'\')) continue;
+
+          final targetPath = path.join(targetConfigDir.path, filename);
+          await entity.copy(targetPath);
+          debugPrint('📄 تم استعادة ملف الإعدادات: $filename');
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ تحذير: خطأ غير حرج أثناء استعادة ملفات الإعدادات: $e');
     }
   }
 
   Future<void> _cleanOldBackups() async {
+    // Phase 1 Zero Customer Impact: automated deletion disabled.
+    return;
+  }
+
+  // ignore: unused_element
+  Future<void> _legacyCleanOldBackups() async {
     try {
       final backups = await listBackups();
 
@@ -602,6 +766,90 @@ class EnhancedBackupService {
       debugPrint('⚠️ خطأ في تنظيف النسخ القديمة: $e');
     }
   }
+
+  Future<void> _createAtomicSnapshot(
+    String targetPath,
+    File fallbackDbFile,
+  ) async {
+    final targetFile = File(targetPath);
+    if (await targetFile.exists()) {
+      await targetFile.delete();
+    }
+
+    final db = _db;
+    if (db == null) {
+      throw StateError('اتصال قاعدة البيانات غير مهيأ لأخذ نسخة احتياطية ذرية');
+    }
+
+    try {
+      final normalized =
+          targetPath.replaceAll(r'\', '/').replaceAll("'", "''");
+      await db.customStatement('PRAGMA busy_timeout = 5000');
+      await db.customStatement("VACUUM INTO '$normalized'");
+      if (!await targetFile.exists() || await targetFile.length() == 0) {
+        throw StateError('فشل إنشاء لقطة قاعدة البيانات أو حجمها صفر');
+      }
+      debugPrint('✅ تم إنشاء لقطة ذرية لقاعدة البيانات عبر VACUUM INTO');
+    } catch (e) {
+      debugPrint('❌ فشل تشغيل VACUUM INTO: $e');
+      throw StateError('تعذر إنشاء لقطة ذرية لقاعدة البيانات عبر VACUUM INTO: $e');
+    }
+
+    // فحص سلامة الملف المعزول قبل اعتماده في الأرشيف
+    final isSnapshotValid = await _verifyDatabaseFile(targetPath);
+    if (!isSnapshotValid) {
+      throw StateError(
+        'فشلت لقطة قاعدة البيانات المؤقتة في فحص السلامة الهيكلية (integrity check)',
+      );
+    }
+  }
+
+  Future<bool> _verifyDatabaseFile(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists() || await file.length() == 0) return false;
+      final executor = NativeDatabase(file);
+      try {
+        await executor.ensureOpen(_CheckUser());
+        final rows = await executor.runSelect(
+          'PRAGMA integrity_check;',
+          const [],
+        );
+        if (rows.isEmpty) return false;
+        final check = rows.first['integrity_check']?.toString();
+        return check == 'ok';
+      } finally {
+        await executor.close();
+      }
+    } catch (e) {
+      debugPrint('Database integrity verification failed: $e');
+      return false;
+    }
+  }
+
+  Future<int> _getDatabaseUserVersion(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) return 0;
+      final executor = NativeDatabase(file);
+      try {
+        await executor.ensureOpen(_CheckUser());
+        final rows = await executor.runSelect('PRAGMA user_version;', const []);
+        if (rows.isEmpty) return 0;
+        final ver = rows.first['user_version'];
+        if (ver is int) return ver;
+        if (ver != null) return int.tryParse(ver.toString()) ?? 0;
+        return 0;
+      } finally {
+        await executor.close();
+      }
+    } catch (e) {
+      debugPrint('Database user_version check error: $e');
+      return 0;
+    }
+  }
+
+
 
   Future<EnhancedBackupInfo?> _getBackupInfo(File backupFile) async {
     try {

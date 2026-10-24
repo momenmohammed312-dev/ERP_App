@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/config/license_config.dart';
 import 'package:pos_offline_desktop/services/license_manager.dart';
-import 'package:pos_offline_desktop/services/firebase_license_service.dart';
+import 'package:pos_offline_desktop/services/online_license_service.dart';
 import 'package:pos_offline_desktop/widgets/brand/madar_logo.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -122,29 +123,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       return;
     }
 
-    // Step 2 — Cloud Subscription Checkin
+    // Step 2 — Cloud Subscription Checkin (off the critical path)
+    //
+    // FEAT-012: the app must open instantly on a machine with no internet.
+    // The check-in used to be awaited here, so a dead network added up to its
+    // full timeout to every single launch, before the customer could even see
+    // the POS. Enforcement is not weakened by moving it: `checkinIfNeeded` is
+    // throttled by `_checkinInterval` and `PeriodicLicenseValidator` runs it in
+    // the background on its own schedule.
     _updateStatus('التحقق من منظومة الاشتراك...', 0.70);
     await Future.delayed(const Duration(milliseconds: 300));
     final currentLicense = await licenseManager.getCurrentLicense();
     if (currentLicense != null) {
-      final fbService = FirebaseLicenseService();
-      final fbResult = await fbService.performCheckinIfNeeded(
-        currentLicense.licenseKey,
-      );
-
-      if (fbResult.isSuspended) {
-        if (mounted) {
-          _showSuspendedDialog(
-            fbResult.suspendedReason ??
-                'تم إيقاف ترخيص المنظومة من قِبل المزود.',
-          );
-          return;
-        }
-      } else if (fbResult.warningCount > 0 && fbResult.warningCount <= 3) {
-        if (mounted) {
-          _showWarningDialog(fbResult.warningCount);
-        }
-      }
+      unawaited(_runCheckinInBackground(currentLicense.licenseKey));
     }
 
     // Step 3 — Database loading
@@ -157,6 +148,32 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     if (!mounted) return;
     context.go('/');
+  }
+
+  /// Runs the licensing check-in without blocking the launch.
+  ///
+  /// The result is surfaced once the app is already up: a suspension dialog is
+  /// modal (it has to be seen), while warnings are a snackbar so they never
+  /// interrupt the cashier mid-sale. A dead network resolves to `offline`
+  /// inside the service and is treated as "carry on working" — the hard
+  /// offline license is the authority, the server is only an advisory signal.
+  Future<void> _runCheckinInBackground(String licenseKey) async {
+    try {
+      final result = await OnlineLicenseService().performCheckinIfNeeded(
+        licenseKey,
+      );
+      if (!mounted) return;
+
+      if (result.isSuspended) {
+        _showSuspendedDialog(
+          result.suspendedReason ?? 'تم إيقاف ترخيص المنظومة من قِبل المزود.',
+        );
+      } else if (result.warningCount > 0 && result.warningCount <= 3) {
+        _showWarningDialog(result.warningCount);
+      }
+    } catch (_) {
+      // Never let a network problem keep the app off the POS screen.
+    }
   }
 
   void _showSuspendedDialog(String reason) {

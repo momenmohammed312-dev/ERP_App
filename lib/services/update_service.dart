@@ -207,8 +207,14 @@ class UpdateInfo {
       platformDownload = downloads['windows'] as Map<String, dynamic>;
     } else if (Platform.isMacOS) {
       platformDownload = downloads['macos'] as Map<String, dynamic>;
-    } else {
+    } else if (Platform.isLinux) {
       platformDownload = downloads['linux'] as Map<String, dynamic>;
+    } else {
+      // Android and iOS ship as an APK/IPA; there is no desktop installer to
+      // download, and updates are handled by the store instead.
+      throw UnsupportedError(
+        'Desktop update metadata is not available on this platform.',
+      );
     }
 
     return UpdateInfo(

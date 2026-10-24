@@ -33,6 +33,17 @@ class Invoices extends Table {
   IntColumn get shipmentId =>
       integer().nullable().references(VegetableShipments, #id)();
 
+  // === v78: صافي بعد المرتجعات ===
+  // الفاتورة الأصلية ما بتتغيرش لما يتعمل مرتجع (البيع حصل فعلاً وهو
+  // بيفضل مسجّل للأرشيف)، فالكميات دي صافي محسوب عشان التقارير ما
+  // تحتاجش تعمل join على sales_returns كل مرة.
+  /// إجمالي قيمة المرتجعات المسجلة على الفاتورة دي.
+  RealColumn get returnedAmount => real().withDefault(const Constant(0))();
+  /// totalAmount − returnedAmount (لا يقل عن صفر).
+  RealColumn get netAmount => real().withDefault(const Constant(0))();
+  /// إجمالي اللي اتسترد منه فلوساً (مش رصيد).
+  RealColumn get refundedAmount => real().withDefault(const Constant(0))();
+
   /// Sync identity used only for multi-device sync (local int `id` stays for FKs).
   TextColumn get syncId => text().nullable()();
   DateTimeColumn get createdAt => dateTime().nullable()();

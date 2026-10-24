@@ -5,6 +5,9 @@ import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
+import 'package:pos_offline_desktop/ui/purchase/widgets/purchase_detail_dialog.dart';
+import 'package:pos_offline_desktop/ui/purchase/widgets/void_purchase_dialog.dart';
 import 'package:pos_offline_desktop/ui/supplier/services/supplier_statement_generator.dart';
 
 class SupplierStatementScreen extends ConsumerStatefulWidget {
@@ -455,9 +458,68 @@ class _SupplierStatementScreenState
               ),
             ),
           ),
+          SizedBox(width: 36),
         ],
       ),
     );
+  }
+
+  Future<void> _handlePurchaseTransaction(String invoiceNumber) async {
+    final db = ref.read(appDatabaseProvider);
+    final purchase = await (db.select(db.purchases)
+          ..where((t) => t.invoiceNumber.equals(invoiceNumber)))
+        .getSingleOrNull();
+    if (purchase == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('لم يتم العثور على فاتورة الشراء المرتبطة')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (_) => PurchaseDetailDialog(
+        db: db,
+        purchaseId: purchase.id,
+        onChanged: _loadStatement,
+      ),
+    );
+    if (mounted) {
+      _loadStatement();
+    }
+  }
+
+  Future<void> _voidPurchaseDirect(String invoiceNumber) async {
+    final db = ref.read(appDatabaseProvider);
+    final purchase = await (db.select(db.purchases)
+          ..where((t) => t.invoiceNumber.equals(invoiceNumber)))
+        .getSingleOrNull();
+    if (purchase == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('لم يتم العثور على فاتورة الشراء المرتبطة')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    final username = ref.read(authProvider)?.username ?? 'admin';
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (_) => VoidPurchaseDialog(
+        db: db,
+        purchaseId: purchase.id,
+        voidedBy: username,
+        onDone: _loadStatement,
+      ),
+    );
+    if (done == true && mounted) {
+      _loadStatement();
+    }
   }
 
   Widget _buildTransactionRow(
@@ -467,70 +529,107 @@ class _SupplierStatementScreenState
     Color subTextColor,
     bool isDark,
   ) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF161B22) : Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: const Color(0xFF30363D).withValues(alpha: 0.3),
-            width: 0.5,
+    final isPurchaseTx = tx.id.contains('_ledger') || tx.origin == 'purchase';
+    final invoiceNumber = tx.id
+        .replaceAll('_ledger_pay', '')
+        .replaceAll('_ledger', '');
+
+    return InkWell(
+      onTap: isPurchaseTx
+          ? () => _handlePurchaseTransaction(invoiceNumber)
+          : null,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF161B22) : Colors.white,
+          border: Border(
+            bottom: BorderSide(
+              color: const Color(0xFF30363D).withValues(alpha: 0.3),
+              width: 0.5,
+            ),
           ),
         ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              DateFormat('MM/dd HH:mm').format(tx.date),
-              style: TextStyle(fontSize: 11, color: subTextColor),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(
-              tx.description,
-              style: TextStyle(fontSize: 12, color: textColor),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              tx.credit > 0 ? tx.credit.toStringAsFixed(2) : '-',
-              style: TextStyle(
-                color: Colors.redAccent,
-                fontWeight:
-                    tx.credit > 0 ? FontWeight.w600 : FontWeight.normal,
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: Text(
+                DateFormat('MM/dd HH:mm').format(tx.date),
+                style: TextStyle(fontSize: 11, color: subTextColor),
               ),
             ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              tx.debit > 0 ? tx.debit.toStringAsFixed(2) : '-',
-              style: TextStyle(
-                color: Colors.green,
-                fontWeight:
-                    tx.debit > 0 ? FontWeight.w600 : FontWeight.normal,
+            Expanded(
+              flex: 3,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      tx.description,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: textColor,
+                        decoration:
+                            isPurchaseTx ? TextDecoration.underline : null,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isPurchaseTx) ...[
+                    const Gap(4),
+                    const Icon(Icons.open_in_new,
+                        size: 12, color: Colors.blueAccent),
+                  ],
+                ],
               ),
             ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              currentBalance.toStringAsFixed(2),
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: currentBalance > 0
-                    ? Colors.redAccent
-                    : (currentBalance < 0 ? Colors.green : textColor),
+            Expanded(
+              flex: 2,
+              child: Text(
+                tx.credit > 0 ? tx.credit.toStringAsFixed(2) : '-',
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight:
+                      tx.credit > 0 ? FontWeight.w600 : FontWeight.normal,
+                ),
               ),
             ),
-          ),
-        ],
+            Expanded(
+              flex: 2,
+              child: Text(
+                tx.debit > 0 ? tx.debit.toStringAsFixed(2) : '-',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontWeight:
+                      tx.debit > 0 ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                currentBalance.toStringAsFixed(2),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: currentBalance > 0
+                      ? Colors.redAccent
+                      : (currentBalance < 0 ? Colors.green : textColor),
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 36,
+              child: isPurchaseTx
+                  ? IconButton(
+                      icon: const Icon(Icons.delete_outline,
+                          color: Colors.redAccent, size: 18),
+                      tooltip: 'حذف فاتورة المشتريات المرتبطة',
+                      onPressed: () => _voidPurchaseDirect(invoiceNumber),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
       ),
     );
   }

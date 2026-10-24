@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pos_offline_desktop/services/enhanced_backup_service.dart';
+import '../../core/provider/app_database_provider.dart';
 
 class BackupManagementScreen extends ConsumerStatefulWidget {
   const BackupManagementScreen({super.key});
@@ -165,15 +166,18 @@ class _BackupManagementScreenState
         await _backupService.restoreBackup(backup.filename);
 
         if (mounted) {
+          ref.invalidate(appDatabaseProvider);
+          final newDb = ref.read(appDatabaseProvider);
+          _backupService.init(newDb);
+
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('تم استعادة النسخة بنجاح'),
               backgroundColor: Colors.green,
             ),
           );
+          await _loadBackups();
         }
-
-        await _loadBackups();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

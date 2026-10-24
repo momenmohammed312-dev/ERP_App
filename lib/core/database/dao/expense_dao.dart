@@ -20,6 +20,27 @@ class ExpenseDao extends DatabaseAccessor<AppDatabase> with _$ExpenseDaoMixin {
             ]))
           .get();
 
+  /// جلب المصروفات النقدية التابعة لجلسة نقدية بناءً على تاريخ الإنشاء الفعلي [createdAt].
+  /// تستبعد المصروفات غير النقدية (البنكية، البطاقات، المحافظ، إلخ).
+  Future<List<Expense>> getCashExpensesForSession(DateTime from, DateTime to) {
+    return (select(expenses)
+          ..where((tbl) =>
+              (tbl.createdAt.isNotNull() & tbl.createdAt.isBetweenValues(from, to)) |
+              (tbl.createdAt.isNull() & tbl.date.isBetweenValues(from, to)))
+          ..where((tbl) {
+            final pm = tbl.paymentMethod;
+            return pm.isNull() |
+                pm.equals('') |
+                pm.equals('cash') |
+                pm.equals('نقدي') |
+                pm.equals('نقداً');
+          })
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
+          ]))
+        .get();
+  }
+
   Future<List<Expense>> getExpensesByCategory(String category) =>
       (select(expenses)
             ..where((tbl) => tbl.category.equals(category))

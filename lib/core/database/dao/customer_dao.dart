@@ -40,6 +40,9 @@ class CustomerDao extends DatabaseAccessor<AppDatabase>
   /// Get all customers (Legacy method)
   Future<List<Customer>> getAllCustomers() => select(customers).get();
 
+  Future<List<Customer>> getCustomersForManufacturing() =>
+      (select(customers)..where((c) => c.name.like('__SYNC_CUST_%').not())).get();
+
   /// Get customer by ID
   Future<Customer?> getCustomerById(String id) {
     return (select(customers)..where((t) => t.id.equals(id))).getSingleOrNull();

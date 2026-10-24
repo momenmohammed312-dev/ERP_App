@@ -190,15 +190,12 @@ try { [IO.File]::WriteAllBytes($tempZip, [Convert]::FromBase64String($base64Zip)
 
 $installResult = Show-Progress -ZipPath $tempZip -DestPath $InstallDir
 
-# Clear old license data after installation
-if ($installResult -eq "done") {
-    Write-Host "`nClearing old license data..."
-    $appDataPath = "$env:APPDATA\com.example\pos_offline_desktop"
-    if (Test-Path $appDataPath) {
-        Get-ChildItem $appDataPath -Filter "secure_license*" | Remove-Item -Force -ErrorAction SilentlyContinue
-        Write-Host "Old license data cleared."
-    }
-}
+# FEAT-013: the customer's license file is deliberately NOT cleared here.
+# An application update must never cost a paying customer their license.
+# The former step targeted %APPDATA%\com.example\pos_offline_desktop while the
+# app writes to %APPDATA%\pos_offline_desktop — wrong path, so it was a no-op,
+# but removing the code prevents a future "path fix" from destroying licenses.
+# Guard: test/unit/services/installer_license_persistence_test.dart
 
 if ($installResult -eq "done") {
     $lr = Show-Msg -Msg "$AppName v$AppVersion installed successfully!`n`nLaunch now?" -Buttons "YesNo" -Icon "Information"

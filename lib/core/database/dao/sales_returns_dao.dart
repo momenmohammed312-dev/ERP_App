@@ -1,8 +1,6 @@
 import 'package:drift/drift.dart';
-import 'package:uuid/uuid.dart';
 import '../app_database.dart';
 import '../tables/sales_returns_table.dart';
-import '../../services/invoice_number_formatter.dart';
 
 part 'sales_returns_dao.g.dart';
 
@@ -55,6 +53,19 @@ class SalesReturnsDao extends DatabaseAccessor<AppDatabase>
             ..where((t) => t.returnId.equals(returnId)))
           .get();
 
+  /// حذف مرتجع بالكامل: الأصناف + الاستردادات + الـheader.
+  /// مستخدم بس في إلغاء الفاتورة "كأنها مجتش" — عشان مافيش أي أثر يتسرب
+  /// للتقارير. بنحذف الأبناء صراحةً من غير الاعتماد على ON DELETE CASCADE
+  /// (الـFK enforcement بيختلف حسب إعدادات الاتصال).
+  Future<void> deleteReturnCascade(int returnId) async {
+    await (delete(salesReturnItems)..where((t) => t.returnId.equals(returnId)))
+        .go();
+    await (db.delete(db.returnRefunds)
+          ..where((t) => t.returnId.equals(returnId)))
+        .go();
+    await (delete(salesReturns)..where((t) => t.id.equals(returnId))).go();
+  }
+
   /// الحصول على مرتجع بواسطة المعرف
   Future<SalesReturn?> getReturnById(int id) =>
       (select(salesReturns)..where((t) => t.id.equals(id))).getSingleOrNull();
@@ -73,60 +84,6 @@ class SalesReturnsDao extends DatabaseAccessor<AppDatabase>
     final start = DateTime(date.year, date.month, date.day);
     final end = DateTime(date.year, date.month, date.day, 23, 59, 59);
     return getTotalReturnsByDateRange(start, end);
-  }
-
-  /// معالجة مرتجع كامل مع تحديث المخزون وقيود اليومية في معاملة واحدة
-  Future<int> processReturn({
-    required SalesReturnsCompanion returnCompanion,
-    required List<SalesReturnItemsCompanion> items,
-  }) async {
-    int returnId = 0;
-    await db.transaction(() async {
-      returnId = await into(salesReturns).insert(returnCompanion);
-
-      for (final item in items) {
-        final itemWithReturnId = item.copyWith(returnId: Value(returnId));
-        await into(salesReturnItems).insert(itemWithReturnId);
-
-        final product = await db.productDao.getProductById(item.productId.value);
-        if (product != null) {
-          await db.productDao.updateProduct(
-            product.copyWith(quantity: product.quantity + item.quantity.value),
-          );
-        }
-      }
-
-      // Create ledger reversal entry for customer invoices
-      final invoiceId = returnCompanion.originalInvoiceId.value;
-      final invoice = await (db.select(db.invoices)
-        ..where((t) => t.id.equals(invoiceId))
-      ).getSingleOrNull();
-      if (invoice != null &&
-          invoice.customerId != null &&
-          invoice.customerId != 'cash' &&
-          invoice.customerId!.isNotEmpty) {
-        final now = DateTime.now();
-        final returnAmount = returnCompanion.totalAmount.value;
-        await db.ledgerDao.insertTransaction(
-          LedgerTransactionsCompanion.insert(
-            id: '${const Uuid().v4()}_ret_$returnId',
-            entityType: 'Customer',
-            refId: invoice.customerId!,
-            date: now,
-            // Display audit (forward-only write): short فاتورة format for
-            // new return rows; historical rows untouched.
-            description:
-                'مرتجع فاتورة ${displayInvoiceNumber(invoice.invoiceNumber, invoice.id) ?? ''}',
-            debit: const Value(0.0),
-            credit: Value(returnAmount),
-            origin: 'reversal',
-            paymentMethod: const Value.absent(),
-            receiptNumber: Value('RET$returnId'),
-          ),
-        );
-      }
-    });
-    return returnId;
   }
 
   /// مراقبة كل المرتجعات (Stream)

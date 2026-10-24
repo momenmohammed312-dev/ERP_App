@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/ui/widgets/invoice_items_table.dart';
 import 'package:pos_offline_desktop/ui/customer/edit_payment_dialog.dart';
 import 'package:pos_offline_desktop/ui/invoice/edit_invoice_page.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/invoice_partial_return_dialog.dart';
+import 'package:pos_offline_desktop/ui/invoice/widgets/void_invoice_dialog.dart';
+import 'package:pos_offline_desktop/ui/widgets/permission_guarded_action.dart';
 import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
+import 'package:pos_offline_desktop/core/services/document_date_service.dart';
+import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
 
 const Color _bgDark = Color(0xFF0D1117);
 const Color _gold = Color(0xFFC9A84C);
 const Color _border = Color(0xFF30363D);
 const Color _textMuted = Color(0xFF7D8590);
 
-class TransactionDetailDialog extends StatefulWidget {
+class TransactionDetailDialog extends ConsumerStatefulWidget {
   final AppDatabase db;
   final LedgerTransaction transaction;
   final String entityType;
@@ -28,11 +35,11 @@ class TransactionDetailDialog extends StatefulWidget {
   });
 
   @override
-  State<TransactionDetailDialog> createState() =>
+  ConsumerState<TransactionDetailDialog> createState() =>
       _TransactionDetailDialogState();
 }
 
-class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
+class _TransactionDetailDialogState extends ConsumerState<TransactionDetailDialog> {
   List<InvoiceItemDisplayModel> _items = [];
   bool _isLoading = true;
 
@@ -216,6 +223,15 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
               label: const Text('استرجاع'),
               style: TextButton.styleFrom(foregroundColor: Colors.orange),
             ),
+          // إلغاء الفاتورة — دايماً ظاهر؛ فحص الصلاحية جوّه الديالوج.
+          if (_isSale)
+            PermissionGuardedAction(
+              foregroundColor: Colors.red,
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text('إلغاء الفاتورة'),
+              onPressed: () => _voidInvoice(
+                  context, invoiceId, ref.read<User?>(authProvider)?.username ?? 'unknown'),
+            ),
         ],
         TextButton(
           onPressed: () => Navigator.pop(context),
@@ -284,11 +300,15 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _InvoiceDetailView(db: widget.db, invoiceId: invoiceId),
+      builder: (ctx) => _InvoiceDetailView(
+        db: widget.db,
+        invoiceId: invoiceId,
+        onChanged: _notifyChanged,
+      ),
     );
   }
 
-  void _refundInvoice(BuildContext context, int? invoiceId) async {
+void _refundInvoice(BuildContext context, int? invoiceId) async {
     if (invoiceId == null) return;
     // مرتجع جزئي على مستوى الصنف — اختيار كمية لكل صنف
     final done = await showDialog<bool>(
@@ -304,19 +324,42 @@ class _TransactionDetailDialogState extends State<TransactionDetailDialog> {
       Navigator.pop(context);
     }
   }
+
+  /// إلغاء الفاتورة — الخدمة هي اللي بتعمل العكس الكامل جوه transaction.
+  void _voidInvoice(
+      BuildContext context, int? invoiceId, String username) async {
+    if (invoiceId == null) return;
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => VoidInvoiceDialog(
+        db: widget.db,
+        invoiceId: invoiceId,
+        voidedBy: username,
+        onDone: _notifyChanged,
+      ),
+    );
+    if (done == true && context.mounted) {
+      Navigator.pop(context);
+    }
+  }
 }
 
-class _InvoiceDetailView extends StatefulWidget {
+class _InvoiceDetailView extends ConsumerStatefulWidget {
   final AppDatabase db;
   final int invoiceId;
+  final VoidCallback? onChanged;
 
-  const _InvoiceDetailView({required this.db, required this.invoiceId});
+  const _InvoiceDetailView({
+    required this.db,
+    required this.invoiceId,
+    this.onChanged,
+  });
 
   @override
-  State<_InvoiceDetailView> createState() => _InvoiceDetailViewState();
+  ConsumerState<_InvoiceDetailView> createState() => _InvoiceDetailViewState();
 }
 
-class _InvoiceDetailViewState extends State<_InvoiceDetailView> {
+class _InvoiceDetailViewState extends ConsumerState<_InvoiceDetailView> {
   Invoice? _invoice;
   List<InvoiceItemDisplayModel> _items = [];
   bool _isLoading = true;
@@ -419,6 +462,22 @@ class _InvoiceDetailViewState extends State<_InvoiceDetailView> {
                       _row('طريقة الدفع', _invoice!.paymentMethod ?? '—'),
                       _row('الإجمالي',
                           '${_invoice!.totalAmount.toStringAsFixed(2)} ج.م'),
+                      // صافي بعد المرتجعات — بيبان بس لو فيه مرتجع فعلي
+                      if (_invoice!.returnedAmount > 0.01) ...[
+                        _row('المرتجع',
+                            '-${_invoice!.returnedAmount.toStringAsFixed(2)} ج.م',
+                            color: Colors.orange),
+                        _row('الصافي',
+                            '${_invoice!.netAmount.toStringAsFixed(2)} ج.م',
+                            color: Colors.teal),
+                      ],
+                      if (_invoice!.status == 'voided') ...[
+                        _row('الحالة', 'ملغاة', color: Colors.red),
+                        if (_invoice!.voidReason != null)
+                          _row('سبب الإلغاء', _invoice!.voidReason!),
+                        if (_invoice!.voidedBy != null)
+                          _row('بواسطة', _invoice!.voidedBy!),
+                      ],
                       const Divider(color: _border),
                     ],
                     if (_items.isEmpty)
@@ -434,6 +493,39 @@ class _InvoiceDetailViewState extends State<_InvoiceDetailView> {
               ),
       ),
       actions: [
+        if (_invoice != null && _invoice!.status != 'voided')
+          TextButton.icon(
+            onPressed: () async {
+              final newDate = await pickDocumentDate(
+                context: context,
+                db: widget.db,
+                initialDate: _invoice!.date,
+              );
+              if (newDate != null) {
+                final user = ref.read<User?>(authProvider)?.username;
+                await DocumentDateService(widget.db).updateInvoiceDate(
+                  invoiceId: _invoice!.id,
+                  newDate: newDate,
+                  userId: user,
+                );
+                if (mounted) {
+                  _load();
+                  widget.onChanged?.call();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('تم تعديل تاريخ الفاتورة بنجاح'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+            icon: const Icon(Icons.edit_calendar, size: 18),
+            label: const Text('تعديل التاريخ'),
+            style: TextButton.styleFrom(foregroundColor: Colors.blue),
+          ),
         if (_invoice != null)
           TextButton.icon(
             onPressed: _print,
@@ -462,6 +554,27 @@ class _InvoiceDetailViewState extends State<_InvoiceDetailView> {
             label: const Text('مرتجع جزئي'),
             style: TextButton.styleFrom(foregroundColor: Colors.orange),
           ),
+        // إلغاء الفاتورة — نفس flow التأكيد؛ فحص الصلاحية جوّه الديالوج.
+        if (_invoice != null && _invoice!.status != 'voided')
+          PermissionGuardedAction(
+            foregroundColor: Colors.red,
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: const Text('إلغاء الفاتورة'),
+            onPressed: () async {
+              final done = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => VoidInvoiceDialog(
+                  db: widget.db,
+                  invoiceId: widget.invoiceId,
+                  voidedBy: ref.read<User?>(authProvider)?.username ?? 'unknown',
+                  onDone: () {
+                    if (mounted) _load();
+                  },
+                ),
+              );
+              if (done == true && context.mounted) Navigator.pop(context);
+            },
+          ),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('إغلاق', style: TextStyle(color: _textMuted)),
@@ -470,7 +583,7 @@ class _InvoiceDetailViewState extends State<_InvoiceDetailView> {
     );
   }
 
-  Widget _row(String label, String value) {
+  Widget _row(String label, String value, {Color? color}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -482,7 +595,10 @@ class _InvoiceDetailViewState extends State<_InvoiceDetailView> {
           ),
           Expanded(
             child: Text(value,
-                style: const TextStyle(color: Colors.white, fontSize: 13)),
+                style: TextStyle(
+                    color: color ?? Colors.white,
+                    fontSize: 13,
+                    fontWeight: color != null ? FontWeight.bold : null)),
           ),
         ],
       ),

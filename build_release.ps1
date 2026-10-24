@@ -22,16 +22,22 @@ if (-not (Test-Path -LiteralPath $SecretsFile)) {
     Write-Host '{' -ForegroundColor Yellow
     Write-Host '  "SUPABASE_URL": "https://your-project.supabase.co",' -ForegroundColor Yellow
     Write-Host '  "SUPABASE_ANON_KEY": "sb_publishable_...",' -ForegroundColor Yellow
-    Write-Host '  "LICENSE_SECRET_KEY": "the-real-production-secret"' -ForegroundColor Yellow
+    Write-Host '  "LICENSE_SECRET_KEY": "the-real-production-secret",' -ForegroundColor Yellow
+    Write-Host '  "LICENSE_PUBLIC_KEY": "-----BEGIN PUBLIC KEY-----\nMIIB...\n-----END PUBLIC KEY-----"' -ForegroundColor Yellow
     Write-Host '}' -ForegroundColor Yellow
-    Write-Host '' -ForegroundColor Yellow
+    Write-Host '' -ForegroundColor Red
+    Write-Host 'LICENSE_PUBLIC_KEY is REQUIRED (FEAT-016). Without it the' -ForegroundColor Red
+    Write-Host 'release build compiles with an EMPTY verification key and' -ForegroundColor Red
+    Write-Host '_parseLease() rejects every signed license - which locks out' -ForegroundColor Red
+    Write-Host 'every customer. It is a PUBLIC key and is safe in this file.' -ForegroundColor Red
+    Write-Host '' -ForegroundColor Red
     Write-Host 'The file is gitignored and must never be committed.' -ForegroundColor Red
     exit 1
 }
 
 $secrets = Get-Content -LiteralPath $SecretsFile -Raw | ConvertFrom-Json
 
-foreach ($key in @('SUPABASE_URL', 'SUPABASE_ANON_KEY', 'LICENSE_SECRET_KEY')) {
+foreach ($key in @('SUPABASE_URL', 'SUPABASE_ANON_KEY', 'LICENSE_SECRET_KEY', 'LICENSE_PUBLIC_KEY')) {
     $val = $secrets.$key
     if ([string]::IsNullOrEmpty($val) -or $val -eq 'PLACEHOLDER_REPLACE_WITH_PRODUCTION_SECRET' -or $val -eq 'CHANGE_ME') {
         Write-Host "[ABORT] $key in $SecretsFile is empty or still a placeholder." -ForegroundColor Red
@@ -60,11 +66,17 @@ $appVersion = ($versionLine.Line -replace '^version:\s*', '').Trim()
 # 2) Build
 # ────────────────────────────────────────────────────────────────────────────
 Write-Host "=== Building release v$appVersion ===" -ForegroundColor Cyan
+# LICENSE_PUBLIC_KEY is not secret, but it IS mandatory: it is compiled into the
+# binary and is the only thing that can verify an RS256 lease offline. Escape
+# the literal newlines because --dart-define cannot carry real ones; the app
+# side (LicenseConfig.normalizePem) converts them back.
+$publicKeyPem = ($secrets.LICENSE_PUBLIC_KEY -replace "`r`n", '\n' -replace "`n", '\n')
 $buildArgs = @(
     'build', 'windows', '--release',
     "--dart-define=SUPABASE_URL=$($secrets.SUPABASE_URL)",
     "--dart-define=SUPABASE_ANON_KEY=$($secrets.SUPABASE_ANON_KEY)",
-    "--dart-define=LICENSE_SECRET_KEY=$($secrets.LICENSE_SECRET_KEY)"
+    "--dart-define=LICENSE_SECRET_KEY=$($secrets.LICENSE_SECRET_KEY)",
+    "--dart-define=LICENSE_PUBLIC_KEY=$publicKeyPem"
 )
 & flutter @buildArgs
 if ($LASTEXITCODE -ne 0) {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:ui' as ui;
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -27,6 +28,8 @@ import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
 import 'package:pos_offline_desktop/core/services/shipment_pricing_service.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/shipment_picker_dialog.dart';
+import 'package:intl/intl.dart';
+import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
 
 class EnhancedNewInvoicePage extends StatefulHookConsumerWidget {
   final AppDatabase db;
@@ -54,7 +57,19 @@ class _EnhancedNewInvoicePageState
   InvoiceType _invoiceType = InvoiceType.cash;
   PaymentMethod _paymentMethod = PaymentMethod.cash;
   String? _selectedCustomerId;
+  DateTime _invoiceDate = DateTime.now();
   final List<ProductEntry> _productEntries = [];
+
+  Future<void> _pickInvoiceDate() async {
+    final picked = await pickDocumentDate(
+      context: context,
+      db: widget.db,
+      initialDate: _invoiceDate,
+    );
+    if (picked != null) {
+      setState(() => _invoiceDate = picked);
+    }
+  }
 
   // Products and search
   List<Product> _filteredProducts = [];
@@ -120,7 +135,7 @@ class _EnhancedNewInvoicePageState
       context: context,
       barrierDismissible: false,
       builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: ui.TextDirection.rtl,
         child: AlertDialog(
           title: const Row(children: [
             Icon(Icons.business, color: Color(0xFFC9A84C)),
@@ -278,6 +293,20 @@ class _EnhancedNewInvoicePageState
 
   Future<void> _handleBarcodeScanned(String barcode) async {
     try {
+      // باركود صنف (لون/فئة) أولًا — يفتح اختيار المنتج الأب والصنف محدد مسبقًا.
+      final variant = await widget.db.productVariantDao.getVariantByBarcode(
+        barcode,
+      );
+      if (variant != null) {
+        final parent = await widget.db.productDao.getProductById(
+          variant.productId,
+        );
+        if (parent != null && mounted) {
+          _showProductSelectionModal(parent, initialVariant: variant);
+          return;
+        }
+      }
+
       final product = await widget.db.productDao.getProductByBarcode(barcode);
       if (product != null) {
         _showProductSelectionModal(product);
@@ -385,13 +414,26 @@ class _EnhancedNewInvoicePageState
     setState(() {});
   }
 
-  void _showProductSelectionModal(Product product) {
+  void _showProductSelectionModal(
+    Product product, {
+    ProductVariant? initialVariant,
+  }) {
     showDialog(
       context: context,
       builder: (context) => ProductSelectionModal(
         product: product,
-        onConfirm: (quantity, unit, unitPrice, discount, tax) {
-          _addProductEntry(product, quantity, unit, unitPrice, discount, tax);
+        db: widget.db,
+        initialVariant: initialVariant,
+        onConfirm: (quantity, unit, unitPrice, discount, tax, variant) {
+          _addProductEntry(
+            product,
+            quantity,
+            unit,
+            unitPrice,
+            discount,
+            tax,
+            variant,
+          );
         },
       ),
     );
@@ -404,8 +446,10 @@ class _EnhancedNewInvoicePageState
     double unitPrice,
     double discount,
     double tax,
+    ProductVariant? variant,
   ) {
-    final needsPriceOverride = unitPrice != product.price;
+    final defaultPrice = variant?.price ?? product.price;
+    final needsPriceOverride = unitPrice != defaultPrice;
     if (needsPriceOverride) {
       final currentUser = ref.read(authProvider);
       if (currentUser == null || !currentUser.hasPermission(Permission.editSale)) {
@@ -419,18 +463,19 @@ class _EnhancedNewInvoicePageState
             ),
           );
         }
-        unitPrice = product.price;
+        unitPrice = defaultPrice;
       }
     }
 
     setState(() {
       final entry = ProductEntry(product: product)
+        ..selectedVariant = variant
         ..quantity = quantity
         ..unit = unit
         ..unitPrice = unitPrice
         ..discount = discount
         ..tax = tax
-        ..priceOverride = unitPrice != product.price;
+        ..priceOverride = unitPrice != defaultPrice;
 
       _productEntries.add(entry);
       _calculateTotals();
@@ -604,7 +649,7 @@ class _EnhancedNewInvoicePageState
           paymentMethod: Value(_invoiceType == InvoiceType.credit ? 'credit' : _paymentMethod.name),
           totalAmount: Value(_grandTotal),
           paidAmount: Value(_paidAmount),
-          date: Value(now),
+          date: Value(_invoiceDate),
           status: const Value('draft'),
         ),
       );
@@ -848,8 +893,8 @@ class _EnhancedNewInvoicePageState
         : _paymentMethod.name;
 
     // Determine status
-    String status;
-    if ((_grandTotal - _paidAmount).abs() < 0.01) {
+    String status = 'unpaid';
+    if (_paidAmount >= _grandTotal - 0.01) {
       status = 'paid';
     } else if (_paidAmount > 0) {
       status = 'partial';
@@ -900,6 +945,7 @@ class _EnhancedNewInvoicePageState
             discount: subDiscount,
             unitCostAtTime: e.product!.costPrice,
             shipmentId: allocation.shipmentId,
+            variantId: e.selectedVariant?.id,
           ));
 
           if (allocation.quantity > primaryQuantity) {
@@ -920,12 +966,13 @@ class _EnhancedNewInvoicePageState
           ctn: ctn,
           discount: e.discount,
           unitCostAtTime: e.product!.costPrice,
+          variantId: e.selectedVariant?.id,
         ));
       }
     }
 
     final productSummary = _productEntries
-        .map((e) => e.product?.name ?? '')
+        .map((e) => e.displayName)
         .where((n) => n.isNotEmpty)
         .join(', ');
     // Bug 3: no number exists pre-POST; custom wording only for legacy rows
@@ -947,6 +994,7 @@ class _EnhancedNewInvoicePageState
       items: items,
       ledgerDescription: ledgerDescription,
       primaryShipmentId: primaryShipmentId,
+      invoiceDate: _invoiceDate,
     );
 
     final invoiceId = result.invoiceId;
@@ -978,7 +1026,7 @@ class _EnhancedNewInvoicePageState
         .map((e) => ups.InvoiceItem(
               id: e.product!.id,
               invoiceId: invoiceId,
-              description: e.product!.name,
+              description: e.displayName,
               unit: e.unit,
               quantity: e.quantity,
               unitPrice: e.unitPrice,
@@ -1002,7 +1050,7 @@ class _EnhancedNewInvoicePageState
       customerPhone: selectedCustomer?.phone ?? 'N/A',
       customerZipCode: '',
       customerState: '',
-      invoiceDate: DateTime.now(),
+      invoiceDate: _invoiceDate,
       subtotal: _grandTotal,
       isCreditAccount: _invoiceType == InvoiceType.credit,
       previousBalance: previousBalance,
@@ -1222,43 +1270,86 @@ class _EnhancedNewInvoicePageState
             ),
           ),
 
-          // Customer selection
+          // Customer selection and Invoice Date
           Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: DropdownButtonFormField<String>(
-              initialValue: _selectedCustomerId,
-              decoration: InputDecoration(
-                labelText: 'العميل',
-                prefixIcon: const Icon(Icons.person),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Theme.of(context).dividerColor),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Theme.of(context).dividerColor),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(
-                    color: Theme.of(context).colorScheme.primary,
-                    width: 2,
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedCustomerId,
+                    decoration: InputDecoration(
+                      labelText: 'العميل',
+                      prefixIcon: const Icon(Icons.person),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 2,
+                        ),
+                      ),
+                      filled: true,
+                      fillColor: Theme.of(context).colorScheme.surface,
+                    ),
+                    items: _customers.map((customer) {
+                      return DropdownMenuItem(
+                        value: customer.id,
+                        child: Text(customer.name),
+                      );
+                    }).toList(),
+                    onChanged: (customerId) {
+                      setState(() {
+                        _selectedCustomerId = customerId;
+                      });
+                    },
                   ),
                 ),
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surface,
-              ),
-              items: _customers.map((customer) {
-                return DropdownMenuItem(
-                  value: customer.id,
-                  child: Text(customer.name),
-                );
-              }).toList(),
-              onChanged: (customerId) {
-                setState(() {
-                  _selectedCustomerId = customerId;
-                });
-              },
+                const Gap(12),
+                Expanded(
+                  flex: 2,
+                  child: InkWell(
+                    onTap: _pickInvoiceDate,
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'تاريخ الفاتورة',
+                        prefixIcon: const Icon(Icons.calendar_today, size: 20),
+                        suffixIcon: const Icon(Icons.edit_calendar, size: 16),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 2,
+                          ),
+                        ),
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surface,
+                      ),
+                      child: Text(
+                        DateFormat('yyyy/MM/dd HH:mm').format(_invoiceDate),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
 

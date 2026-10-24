@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
+import 'package:pos_offline_desktop/core/utils/logger.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -813,18 +815,31 @@ class PrinterService {
   }
 
   static Future<List<Map<String, dynamic>>> getAvailablePrinters() async {
-    final printers = await Printing.listPrinters();
+    // The Android implementation of `printing` registers no `listPrinters`
+    // method-channel handler, so the call throws MissingPluginException.
+    // Mobile printing goes through `Printing.layoutPdf` (the system print
+    // dialog) instead, and `directPrint` is reported as false.
+    if (PlatformUtils.isMobile) {
+      return <Map<String, dynamic>>[];
+    }
 
-    return printers
-        .map(
-          (printer) => {
-            'name': printer.name,
-            'isDefault': printer.isDefault,
-            'isAvailable': printer.isAvailable,
-            'type': _classifyPrinter(printer.name),
-          },
-        )
-        .toList();
+    try {
+      final printers = await Printing.listPrinters();
+
+      return printers
+          .map(
+            (printer) => {
+              'name': printer.name,
+              'isDefault': printer.isDefault,
+              'isAvailable': printer.isAvailable,
+              'type': _classifyPrinter(printer.name),
+            },
+          )
+          .toList();
+    } on Exception catch (error) {
+      AppLogger.w('listPrinters failed', error);
+      return <Map<String, dynamic>>[];
+    }
   }
 
   static String _classifyPrinter(String printerName) {

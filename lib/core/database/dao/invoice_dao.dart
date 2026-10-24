@@ -61,24 +61,85 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
   Future deleteInvoice(Insertable<Invoice> invoice) =>
       delete(invoices).delete(invoice);
 
+  /// Pushes a void to the sync outbox so other devices see the cancellation.
+  ///
+  /// Split out of [voidInvoice] so [InvoiceVoidService] — which owns the real
+  /// symmetric reversal — can reuse it without duplicating the payload shape.
+  Future<void> voidInvoiceSync(int invoiceId) => _enqueueInvoice(invoiceId, 'update');
+
+  /// ⚠️ INCOMPLETE — do NOT wire this to UI yet.
+  ///
+  /// Only the stock side is reversed. It deliberately does NOT touch
+  /// `ledger_transactions`, `invoice_payments`, the vegetable shipment
+  /// counters, or the sync outbox. The full, symmetric reversal lives in
+  /// `InvoiceVoidService` (planned) — wire the button there, not here.
+  ///
+  /// The guards below exist only so that calling this cannot corrupt stock:
+  /// running it twice (double restock) or on an invoice that already has
+  /// returns (double restock + orphaned returns) both used to succeed.
   Future<void> voidInvoice(int invoiceId, String reason, String voidedBy) async {
     return transaction(() async {
-      final invoice = await (select(invoices)..where((t) => t.id.equals(invoiceId))).getSingleOrNull();
+      final invoice =
+          await (select(invoices)..where((t) => t.id.equals(invoiceId)))
+              .getSingleOrNull();
       if (invoice == null) throw Exception('Invoice not found');
-      
+
+      // Guard: idempotent. Re-voiding would restore the same stock twice.
+      if (invoice.status == 'voided') {
+        throw Exception('الفاتورة ملغاة بالفعل');
+      }
+
+      // Guard: an invoice with returns already had its stock adjusted by the
+      // return. Restoring it here would double-count, and would leave the
+      // return rows pointing at a voided invoice with no way to reverse them.
+      final returnCount =
+          await (db.selectOnly(db.salesReturns)
+                ..addColumns([db.salesReturns.id.count()])
+                ..where(db.salesReturns.originalInvoiceId.equals(invoiceId)))
+              .map((row) => row.read(db.salesReturns.id.count()) ?? 0)
+              .getSingle();
+      if (returnCount > 0) {
+        throw Exception(
+          'لا يمكن إلغاء فاتورة عليها مرتجعات مسجلة ($returnCount) — '
+          'يجب عكس المرتجعات أولاً',
+        );
+      }
+
       await (update(invoices)..where((t) => t.id.equals(invoiceId))).write(
         InvoicesCompanion(
           status: const Value('voided'),
           voidedAt: Value(DateTime.now()),
           voidReason: Value(reason),
           voidedBy: Value(voidedBy),
+          updatedAt: Value(DateTime.now()),
         ),
       );
 
       final items = await getItemsByInvoiceId(invoiceId);
       final productsTable = attachedDatabase.products;
       for (final item in items) {
-        final product = await (select(productsTable)..where((p) => p.id.equals(item.productId))).getSingleOrNull();
+        // سطر مباع عبر صنف (لون/فئة): الاسترجاع للصنف + إعادة حساب مجموع الأب.
+        if (item.variantId != null) {
+          final variant = await db.productVariantDao.getVariantById(
+            item.variantId!,
+          );
+          if (variant != null) {
+            await db.productVariantDao.updateVariantQuantity(
+              variant.id,
+              variant.quantity + item.quantity,
+            );
+            final total = await db.productVariantDao
+                .getTotalQuantityByProduct(item.productId);
+            await (update(productsTable)
+                  ..where((p) => p.id.equals(item.productId)))
+                .write(ProductsCompanion(quantity: Value(total)));
+            continue;
+          }
+          // الصنف اتحذف نهائيًا — نكمل للاسترجاع المباشر للأب تحت.
+        }
+        final product = await (select(productsTable)
+              ..where((p) => p.id.equals(item.productId)))
+            .getSingleOrNull();
         if (product != null) {
           await (update(productsTable)..where((p) => p.id.equals(product.id))).write(
             ProductsCompanion(
@@ -87,6 +148,10 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
           );
         }
       }
+
+      // Push the status change — without this the server keeps the invoice as
+      // paid and the void silently never reaches other devices.
+      await _enqueueInvoice(invoiceId, 'update');
     });
   }
 
@@ -362,12 +427,20 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
     int invoiceId,
   ) {
     final productsTable = attachedDatabase.products;
+    final variantsTable = attachedDatabase.productVariants;
     final query = select(invoiceItems).join([
       leftOuterJoin(productsTable, productsTable.id.equalsExp(invoiceItems.productId)),
+      leftOuterJoin(variantsTable, variantsTable.id.equalsExp(invoiceItems.variantId)),
     ])..where(invoiceItems.invoiceId.equals(invoiceId));
 
     return query.map((row) {
-      return (row.readTable(invoiceItems), row.readTableOrNull(productsTable));
+      final item = row.readTable(invoiceItems);
+      final product = row.readTableOrNull(productsTable);
+      final variant = row.readTableOrNull(variantsTable);
+      final effectiveProduct = (product != null && variant != null && variant.name.isNotEmpty)
+          ? product.copyWith(name: '${product.name} — ${variant.name}')
+          : product;
+      return (item, effectiveProduct);
     }).get();
   }
 
@@ -424,6 +497,20 @@ class InvoiceDao extends DatabaseAccessor<AppDatabase> with _$InvoiceDaoMixin {
     return (select(invoices)
           ..where((t) => t.date.isBetweenValues(start, end))
           ..where((t) => t.status.equals('voided').not())
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
+          ]))
+        .get();
+  }
+
+  /// جلب الفواتير غير الملغاة التابعة لجلسة نقدية بناءً على تاريخ الإنشاء الفعلي [createdAt].
+  /// في حال كان [createdAt] غير متوفر (سجلات قديمة)، يتم الاعتماد على [date] كـ fallback.
+  Future<List<Invoice>> getInvoicesForCashSession(DateTime start, DateTime end) {
+    return (select(invoices)
+          ..where((t) => t.status.equals('voided').not())
+          ..where((t) =>
+              (t.createdAt.isNotNull() & t.createdAt.isBetweenValues(start, end)) |
+              (t.createdAt.isNull() & t.date.isBetweenValues(start, end)))
           ..orderBy([
             (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
           ]))

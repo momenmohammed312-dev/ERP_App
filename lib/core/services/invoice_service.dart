@@ -14,6 +14,7 @@ class InvoiceItemParams {
   final double commission;
   final double? unitCostAtTime;
   final int? shipmentId;
+  final int? variantId;
 
   InvoiceItemParams({
     required this.productId,
@@ -24,6 +25,7 @@ class InvoiceItemParams {
     this.commission = 0,
     this.unitCostAtTime,
     this.shipmentId,
+    this.variantId,
   });
 }
 
@@ -56,11 +58,13 @@ class InvoiceService {
     String? ledgerDescription,
     List<SplitPaymentEntry>? splitPayments,
     int? primaryShipmentId,
+    DateTime? invoiceDate,
   }) async {
     // Bug 3: no timestamp numbering. A caller-supplied value is preserved
     // as legacy; otherwise the canonical display number derives from the
     // row id (assigned below) — never generated before the insert.
     final rand = Random.secure();
+    final resolvedDate = invoiceDate ?? DateTime.now();
 
     return _db.transaction(() async {
       final invoiceId = await _db.invoiceDao.insertInvoice(
@@ -77,7 +81,7 @@ class InvoiceService {
           cardAmount: Value(cardAmount),
           creditAmount: Value(creditAmount),
           status: Value(status),
-          date: Value(DateTime.now()),
+          date: Value(resolvedDate),
           shipmentId: Value(primaryShipmentId),
         ),
       );
@@ -92,21 +96,9 @@ class InvoiceService {
           throw Exception('المنتج غير موجود (ID: ${item.productId})');
         }
 
-        final newQty = product.quantity - item.quantity;
-        await _db.productDao.updateProduct(
-          ProductsCompanion(
-            id: Value(product.id),
-            name: Value(product.name),
-            quantity: Value(newQty < 0 ? 0 : newQty),
-            price: Value(product.price),
-            unit: Value(product.unit),
-            category: Value(product.category),
-            barcode: Value(product.barcode),
-            cartonQuantity: Value(product.cartonQuantity),
-            cartonPrice: Value(product.cartonPrice),
-            status: Value(product.status),
-          ),
-        );
+        // خصم المخزون: من الصنف (لون/فئة) لو متحدد، وإلا المسار القديم من الأب.
+        // كمية الأب بعد بيع صنف = مجموع الأصناف (تحافظ على التقارير وتنبيه النواقص).
+        await _applySaleStock(product, item.quantity, item.variantId);
 
         // Auto-calculate commission for commission-based shipments.
         var itemCommission = item.commission;
@@ -133,6 +125,7 @@ class InvoiceService {
             commission: Value(itemCommission),
             unitCostAtTime: Value(item.unitCostAtTime),
             shipmentId: Value(item.shipmentId),
+            variantId: Value(item.variantId),
           ),
         );
 
@@ -176,6 +169,7 @@ class InvoiceService {
               invoiceId: invoiceId,
               paymentMethod: sp.method,
               amount: sp.amount,
+              paidAt: Value(resolvedDate),
             ),
           );
         }
@@ -200,7 +194,7 @@ class InvoiceService {
             id: ledgerIdSale,
             entityType: 'Customer',
             refId: customerId,
-            date: DateTime.now(),
+            date: resolvedDate,
             description: desc,
             debit: Value(totalAmount),
             credit: const Value(0.0),
@@ -217,7 +211,7 @@ class InvoiceService {
               id: ledgerIdPay,
               entityType: 'Customer',
               refId: customerId,
-              date: DateTime.now(),
+              date: resolvedDate,
               description: 'سداد $actualInvoiceNumber',
               debit: const Value(0.0),
               credit: Value(paidAmount),
@@ -240,7 +234,7 @@ class InvoiceService {
             id: ledgerIdSupplier,
             entityType: 'Supplier',
             refId: acc.supplierId,
-            date: DateTime.now(),
+            date: resolvedDate,
             description: 'عمولة $actualInvoiceNumber',
             debit: Value(supplierDue),
             credit: const Value(0.0),
@@ -263,6 +257,89 @@ class InvoiceService {
 
   Future<void> deleteInvoice(Insertable<Invoice> invoice) async {
     await _db.invoiceDao.deleteInvoice(invoice);
+  }
+
+  /// خصم مخزون سطر بيع: من الصنف (لون/فئة) لو متحدد، وإلا من الأب مباشرة.
+  /// إذا خُصم من صنف، تُحدَّث كمية الأب تلقائيًا لتساوي مجموع أصنافه.
+  Future<void> _applySaleStock(
+    Product product,
+    int quantity,
+    int? variantId,
+  ) async {
+    if (variantId == null) {
+      final variants = await _db.productVariantDao.getVariantsByProduct(
+        product.id,
+      );
+      if (variants.isNotEmpty) {
+        throw Exception(
+          'المنتج «${product.name}» له أصناف (ألوان/فئات) — اختر الصنف أولًا',
+        );
+      }
+      final newQty = product.quantity - quantity;
+      await _db.productDao.updateProduct(
+        product.copyWith(quantity: newQty < 0 ? 0 : newQty),
+      );
+      return;
+    }
+    final variant = await _db.productVariantDao.getVariantById(variantId);
+    if (variant == null || variant.status == 'Deleted') {
+      throw Exception('الصنف (اللون/الفئة) غير موجود');
+    }
+    if (variant.productId != product.id) {
+      throw Exception('الصنف «${variant.name}» لا يتبع المنتج «${product.name}»');
+    }
+    if (variant.quantity < quantity) {
+      throw Exception(
+        'الكمية غير كافية للصنف «${variant.name}» من «${product.name}» '
+        '(متاح: ${variant.quantity}, مطلوب: $quantity)',
+      );
+    }
+    await _db.productVariantDao.updateVariantQuantity(
+      variant.id,
+      variant.quantity - quantity,
+    );
+    // كمية الأب = مجموع الأصناف (التقارير وتنبيه النواقص تفضل سليمة).
+    final total = await _db.productVariantDao.getTotalQuantityByProduct(
+      product.id,
+    );
+    await _db.productDao.updateProduct(
+      product.copyWith(quantity: total),
+    );
+  }
+
+  /// إرجاع مخزون سطر بيع ملغى: إلى الصنف لو متحدد، وإلا للأب.
+  /// إذا أُرجع لصنف، تُحدَّث كمية الأب تلقائيًا لتساوي مجموع أصنافه.
+  Future<void> _restoreSaleStock(
+    int productId,
+    int quantity,
+    int? variantId,
+  ) async {
+    if (variantId != null) {
+      final variant = await _db.productVariantDao.getVariantById(variantId);
+      if (variant != null) {
+        await _db.productVariantDao.updateVariantQuantity(
+          variant.id,
+          variant.quantity + quantity,
+        );
+        final total = await _db.productVariantDao.getTotalQuantityByProduct(
+          productId,
+        );
+        final product = await _db.productDao.getProductById(productId);
+        if (product != null) {
+          await _db.productDao.updateProduct(
+            product.copyWith(quantity: total),
+          );
+        }
+        return;
+      }
+      // الصنف اتحذف نهائيًا بعد البيع — نرجع الكمية للأب مباشرة عشان ماتضيعش.
+    }
+    final product = await _db.productDao.getProductById(productId);
+    if (product != null) {
+      await _db.productDao.updateProduct(
+        product.copyWith(quantity: product.quantity + quantity),
+      );
+    }
   }
 
   /// Atomically edits an existing invoice while preserving its id and number.
@@ -291,12 +368,14 @@ class InvoiceService {
     required String status,
     required List<InvoiceItemParams> items,
     int? primaryShipmentId,
+    DateTime? invoiceDate,
   }) async {
     final original = await getInvoiceById(invoiceId);
     if (original == null) throw Exception('الفاتورة غير موجودة');
     if (original.status == 'voided') {
       throw Exception('لا يمكن تعديل فاتورة ملغاة');
     }
+    final resolvedDate = invoiceDate ?? original.date;
 
     // Guard: do not edit an invoice that already has returns — that would
     // double-count stock/ledger. User must reverse the return first.
@@ -313,12 +392,7 @@ class InvoiceService {
 
       // 1a. Reverse original stock + shipment counts.
       for (final item in originalItems) {
-        final product = await _db.productDao.getProductById(item.productId);
-        if (product != null) {
-          await _db.productDao.updateProduct(
-            product.copyWith(quantity: product.quantity + item.quantity),
-          );
-        }
+        await _restoreSaleStock(item.productId, item.quantity, item.variantId);
         if (item.shipmentId != null) {
           final shipment =
               await _db.vegetableShipmentDao.getById(item.shipmentId!);
@@ -348,10 +422,7 @@ class InvoiceService {
           throw Exception('المنتج غير موجود (ID: ${item.productId})');
         }
 
-        final newQty = product.quantity - item.quantity;
-        await _db.productDao.updateProduct(
-          product.copyWith(quantity: newQty < 0 ? 0 : newQty),
-        );
+        await _applySaleStock(product, item.quantity, item.variantId);
 
         var itemCommission = item.commission;
         if (item.shipmentId != null && itemCommission == 0) {
@@ -378,6 +449,7 @@ class InvoiceService {
             commission: Value(itemCommission),
             unitCostAtTime: Value(item.unitCostAtTime),
             shipmentId: Value(item.shipmentId),
+            variantId: Value(item.variantId),
           ),
         );
 
@@ -428,9 +500,31 @@ class InvoiceService {
           cardAmount: Value(cardAmount),
           creditAmount: Value(creditAmount),
           status: Value(status),
+          date: Value(resolvedDate),
           shipmentId: Value(primaryShipmentId),
         ),
       );
+
+      // 2b-2. مزامنة تاريخ المدفوعات وحركات المخزون مع تاريخ الفاتورة المعدل
+      await (_db.update(_db.invoicePayments)
+            ..where((t) => t.invoiceId.equals(invoiceId)))
+          .write(InvoicePaymentsCompanion(paidAt: Value(resolvedDate)));
+
+      await (_db.update(_db.inventoryMovements)
+            ..where((t) {
+              var expr = t.reference.equals(invoiceId.toString()) |
+                  t.reference.equals('INV$invoiceId');
+              if (actualInvoiceNumber.isNotEmpty) {
+                expr = expr | t.reference.equals(actualInvoiceNumber);
+              }
+              return expr;
+            }))
+          .write(
+            InventoryMovementsCompanion(
+              movementDate: Value(resolvedDate),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
 
       // 2c. Fresh ledger rows for a credit customer.
       final desc = 'بيع #$actualInvoiceNumber';
@@ -443,7 +537,7 @@ class InvoiceService {
                 '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_sale',
             entityType: 'Customer',
             refId: customerId,
-            date: DateTime.now(),
+            date: resolvedDate,
             description: desc,
             debit: Value(totalAmount),
             credit: const Value(0.0),
@@ -460,7 +554,7 @@ class InvoiceService {
                   '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_pay',
               entityType: 'Customer',
               refId: customerId,
-              date: DateTime.now(),
+              date: resolvedDate,
               description: 'سداد $actualInvoiceNumber',
               debit: const Value(0.0),
               credit: Value(paidAmount),
@@ -482,7 +576,7 @@ class InvoiceService {
                 '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_supplier',
             entityType: 'Supplier',
             refId: acc.supplierId,
-            date: DateTime.now(),
+            date: resolvedDate,
             description: 'عمولة $actualInvoiceNumber',
             debit: Value(supplierDue),
             credit: const Value(0.0),

@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/utils/app_utils.dart';
 import 'package:pos_offline_desktop/core/utils/logger.dart';
+import 'package:pos_offline_desktop/ui/invoice/widgets/void_invoice_dialog.dart';
 
 /// تقرير اليوم — جدول يومي يعرض الأيام المفتوحة والمبيعات
 class DailyReportPage extends ConsumerStatefulWidget {
@@ -1097,15 +1100,49 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                         subtitle: itemSubtitle != null
                             ? Text(itemSubtitle(item) ?? '')
                             : null,
-                        trailing: itemTrailing != null
-                            ? itemTrailing(item)
-                            : Text(
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (itemTrailing != null && itemTrailing(item) != null)
+                              itemTrailing(item)!
+                            else
+                              Text(
                                 '${item['totalAmount'] ?? item['amount'] ?? ''}',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: textColor,
                                 ),
                               ),
+                            if (item['invoiceId'] != null) ...[
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline,
+                                    color: Colors.redAccent, size: 20),
+                                tooltip: 'إلغاء الفاتورة',
+                                onPressed: () async {
+                                  final db = ref.read(appDatabaseProvider);
+                                  final nav = Navigator.of(ctx);
+                                  final done = await showDialog<bool>(
+                                    context: context,
+                                    builder: (dCtx) => VoidInvoiceDialog(
+                                      db: db,
+                                      invoiceId: item['invoiceId'] as int,
+                                      voidedBy: ref
+                                              .read<User?>(authProvider)
+                                              ?.username ??
+                                          'admin',
+                                      onDone: _loadData,
+                                    ),
+                                  );
+                                  if (done == true && mounted) {
+                                    nav.pop();
+                                    _loadData();
+                                  }
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     );
                   },

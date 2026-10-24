@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart' show isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
@@ -23,10 +24,32 @@ import 'package:pos_offline_desktop/ui/day/day_management_screen.dart';
 import 'package:pos_offline_desktop/ui/customer/customer_debt_list_screen.dart';
 import 'package:pos_offline_desktop/ui/import/excel_import_screen.dart';
 import 'package:pos_offline_desktop/ui/custody/custody_page.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/bom_list_screen.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/mo_detail_screen.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/mo_list_screen.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/customer_material_receipt_list_screen.dart';
+import 'package:pos_offline_desktop/services/license_entitlement.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/reports/manufacturing_reports_screen.dart';
 
 final firstRunCompleteProvider = FutureProvider<bool>((ref) async {
   return SettingsService.isFirstRunComplete();
 });
+
+/// BUG-023 — locations that exist only on the activation router.
+///
+/// After a successful import, `ActivationScreen` invalidates the license
+/// providers and then navigates to `/activation-success`. When the provider
+/// resolves to `true`, `AppBootstrap` swaps this router in while the current
+/// location is still `/activation-success`, which has no route here and made
+/// GoRouter throw `GoException: no routes for location`. Splash then resumes
+/// the normal first-run/login flow.
+@visibleForTesting
+String? staleActivationLocation(String location) {
+  if (location == '/activation-success' || location == '/license-info') {
+    return '/splash';
+  }
+  return null;
+}
 
 final routerProvider = Provider<GoRouter>((ref) {
   final db = ref.watch(appDatabaseProvider);
@@ -40,12 +63,16 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/splash',
     redirect: (context, state) {
+      final stale = staleActivationLocation(state.uri.path);
+      if (stale != null) return stale;
+
       final location = state.matchedLocation;
       final isPublic = publicPaths.any((p) => location.startsWith(p));
       final isLoggedIn = user != null;
 
       // First-run check: redirect to /setup if not completed
-      if (!isFirstRunComplete && !isPublic && location != '/setup') return '/setup';
+      if (!isFirstRunComplete && !isPublic && location != '/setup')
+        return '/setup';
 
       // Not logged in and trying to access a protected page → /login
       if (!isLoggedIn && !isPublic) return '/login';
@@ -53,8 +80,28 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (isLoggedIn && location == '/login') return '/';
 
       // Permission guard: /admin requires manageUsers permission
-      if (isLoggedIn && location == '/admin' && !user.hasPermission(Permission.manageUsers)) return '/';
+      if (isLoggedIn &&
+          location == '/admin' &&
+          !user.hasPermission(Permission.manageUsers))
+        return '/';
 
+      // BUG-018 — entitlement guard. The home screen marks a locked module with
+      // a "(مغلق)" badge, but that badge is a child of the launcher button: it
+      // paints over the button and does nothing about the route itself, so
+      // `context.go('/manufacturing/orders')` — a bookmarked path, a restored
+      // navigation stack, or any future deep link — opened the module in full.
+      //
+      // This is the check FEAT-015 AC9 calls "locked on direct navigation".
+      // It is deliberately lenient while the entitlement snapshot is still
+      // loading (see LicenseEntitlement.allowsNavigation): failing open here
+      // would take a cashier out of the register on a transient read failure.
+      // A customer without the entitlement is still stopped at the DAO.
+      final gatedFeature = LicenseEntitlement.featureForRoute(location);
+      if (gatedFeature != null && isLoggedIn) {
+        if (!LicenseEntitlement.instance.allowsNavigation(location)) {
+          return '/?denied=$gatedFeature';
+        }
+      }
 
       return null;
     },
@@ -65,10 +112,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SplashScreen(),
       ),
       // Auth
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginScreen(),
-      ),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       // License & Setup
       GoRoute(
         path: '/setup',
@@ -100,6 +144,30 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/damaged-items',
         builder: (context, state) => DamagedItemsScreen(db: db),
       ),
+      // ── Manufacturing (gated by AppFeatures.hasManufacturing in the UI) ──
+      GoRoute(
+        path: '/manufacturing/bom',
+        builder: (context, state) => BomListScreen(db: db),
+      ),
+      GoRoute(
+        path: '/manufacturing/orders',
+        builder: (context, state) => MoListScreen(db: db),
+      ),
+      GoRoute(
+        path: '/manufacturing/orders/:id',
+        builder: (context, state) => MoDetailScreen(
+          db: db,
+          orderId: int.parse(state.pathParameters['id']!),
+        ),
+      ),
+      GoRoute(
+        path: '/manufacturing/reports',
+        builder: (context, state) => ManufacturingReportsScreen(db: db),
+      ),
+      GoRoute(
+        path: '/manufacturing/receipts',
+        builder: (context, state) => CustomerMaterialReceiptListScreen(db: db),
+      ),
       GoRoute(
         path: '/barneka',
         builder: (context, state) => BarnekaProductsScreen(db: db),
@@ -108,10 +176,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/returns-report',
         builder: (context, state) => ReturnsReportScreen(database: db),
       ),
-      GoRoute(
-        path: '/about',
-        builder: (context, state) => const AboutScreen(),
-      ),
+      GoRoute(path: '/about', builder: (context, state) => const AboutScreen()),
       GoRoute(
         path: '/shipments',
         builder: (context, state) => ShipmentsScreen(db: db),
@@ -146,5 +211,3 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
-
-

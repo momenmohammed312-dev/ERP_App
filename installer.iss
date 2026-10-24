@@ -71,7 +71,6 @@ begin
     'flutter_windows.dll',
     'app_links_plugin.dll',
     'connectivity_plus_plugin.dll',
-    'desktop_window_plugin.dll',
     'flutter_secure_storage_windows_plugin.dll',
     'printing_plugin.dll',
     'screen_retriever_windows_plugin.dll',

@@ -1,27 +1,44 @@
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
-import 'package:drift/drift.dart' as drift;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/invoice_number_formatter.dart';
-import 'package:pos_offline_desktop/core/database/dao/sales_returns_dao.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
 import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
+import 'package:pos_offline_desktop/core/services/document_date_service.dart';
+import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
+import 'package:pos_offline_desktop/ui/invoice/edit_invoice_page.dart';
+import 'package:pos_offline_desktop/ui/invoice/widgets/invoice_partial_return_dialog.dart';
+import 'package:pos_offline_desktop/ui/invoice/widgets/void_invoice_dialog.dart';
+import 'package:pos_offline_desktop/ui/widgets/permission_guarded_action.dart';
 
-class SalesReportTab extends StatefulWidget {
+class SalesReportTab extends StatelessWidget {
   final AppDatabase db;
 
   const SalesReportTab({super.key, required this.db});
 
   @override
-  State<SalesReportTab> createState() => _SalesReportTabState();
+  Widget build(BuildContext context) =>
+      _SalesReportTab(db: db);
 }
 
-class _SalesReportTabState extends State<SalesReportTab> {
+class _SalesReportTab extends ConsumerStatefulWidget {
+  final AppDatabase db;
+
+  const _SalesReportTab({required this.db});
+
+  @override
+  ConsumerState<_SalesReportTab> createState() => _SalesReportTabState();
+}
+
+class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
   DateTime _startDate = DateTime(
     DateTime.now().year,
     DateTime.now().month,
@@ -277,13 +294,29 @@ class _SalesReportTabState extends State<SalesReportTab> {
       final itemsWithProducts = await widget.db.invoiceDao
           .getItemsWithProductsByInvoice(invoice.id);
 
+      final variantMap = <int, String>{};
+      for (final itemWithProduct in itemsWithProducts) {
+        final vId = itemWithProduct.$1.variantId;
+        if (vId != null && !variantMap.containsKey(vId)) {
+          final v = await widget.db.productVariantDao.getVariantById(vId);
+          if (v != null) {
+            variantMap[vId] = v.name;
+          }
+        }
+      }
+
       // Convert to maps for printing
       final itemsMaps = itemsWithProducts.map((itemWithProduct) {
         final item = itemWithProduct.$1;
         final product = itemWithProduct.$2;
+        final baseName = product?.name ?? 'Product ${item.productId}';
+        final vName = item.variantId != null ? variantMap[item.variantId] : null;
+        final fullName = (vName != null && !baseName.endsWith('— $vName'))
+            ? '$baseName — $vName'
+            : baseName;
         return {
-          'productName': product?.name ?? 'Product ${item.productId}',
-          'name': product?.name ?? 'Product ${item.productId}',
+          'productName': fullName,
+          'name': fullName,
           'quantity': item.quantity,
           'price': item.price,
           'total': item.quantity * item.price,
@@ -370,45 +403,114 @@ class _SalesReportTabState extends State<SalesReportTab> {
     }
   }
 
+  /// يفتح ديالوج المرتجع الجزئي الموحّد — نفس المسار اللي بيستخدمه
+  /// transaction_detail_dialog. الـ dialog القديم الأول كان بيعمل إرجاع على
+  /// مستوى المنتج مش السطر (من غير invoiceItemId) فكان ممكن يرجّع نفس
+  /// الكمية أكتر من مرة ويضاعف المخزون، وبحسب السعر غلط.
   Future<void> _showReturnDialog(Invoice invoice) async {
-    try {
-      final itemsWithProducts = await widget.db.invoiceDao
-          .getItemsWithProductsByInvoice(invoice.id);
-
-      if (itemsWithProducts.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('لا توجد منتجات في هذه الفاتورة')),
-          );
-        }
-        return;
-      }
-
-      final result = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => _ReturnDialog(
-          invoice: invoice,
-          db: widget.db,
-          itemsWithProducts: itemsWithProducts,
+    if (invoice.status == 'voided') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يمكن المرتجع على فاتورة ملغاة'),
+          backgroundColor: Colors.red,
         ),
       );
+      return;
+    }
 
-      if (result == true && mounted) {
+    // الديالوج الجديد بيتولى رسالة النجاح/الخطأ بنفسه ويحدّث القائمة.
+    await showDialog<bool>(
+      context: context,
+      builder: (ctx) => InvoicePartialReturnDialog(
+        db: widget.db,
+        invoiceId: invoice.id,
+        onDone: _loadData,
+      ),
+    );
+  }
+
+  /// إلغاء الفاتورة من التقرير — نفس الـdialog ونفس الصلاحية المستخدمة في
+  /// شاشة تفاصيل المعاملة، عشان السلوك يبقى واحد في كل الشاشات.
+  void _openEditInvoice(Invoice invoice) {
+    if (invoice.status == 'voided') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يمكن تعديل فاتورة ملغاة'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditInvoicePage(
+          db: widget.db,
+          invoiceId: invoice.id,
+          onSaved: () {
+            _loadData();
+            if (mounted) setState(() {});
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editInvoiceDate(Invoice invoice) async {
+    if (invoice.status == 'voided') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يمكن تعديل تاريخ فاتورة ملغاة'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final picked = await pickDocumentDate(
+      context: context,
+      db: widget.db,
+      initialDate: invoice.date,
+    );
+    if (picked != null) {
+      final user = ref.read<User?>(authProvider)?.username;
+      await DocumentDateService(widget.db).updateInvoiceDate(
+        invoiceId: invoice.id,
+        newDate: picked,
+        userId: user,
+      );
+      if (mounted) {
+        _loadData();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('تم تسجيل المرتجع بنجاح'),
+            content: Text('تم تعديل تاريخ الفاتورة بنجاح'),
             backgroundColor: Colors.green,
           ),
         );
-        setState(() {});
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ في معالجة المرتجع: $e')),
-        );
       }
     }
+  }
+
+  Future<void> _voidInvoice(Invoice invoice) async {
+    if (invoice.status == 'voided') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('الفاتورة ملغاة بالفعل'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => VoidInvoiceDialog(
+        db: widget.db,
+        invoiceId: invoice.id,
+        voidedBy:
+            ref.read<User?>(authProvider)?.username ?? 'unknown',
+        onDone: _loadData,
+      ),
+    );
+    if (done == true && mounted) setState(() {});
   }
 
   @override
@@ -590,6 +692,10 @@ class _SalesReportTabState extends State<SalesReportTab> {
                           hasReturn: _returnsByInvoice.containsKey(invoice.id),
                           onPrint: () => _printIndividualInvoice(invoice),
                           onReturn: () => _showReturnDialog(invoice),
+                          onVoid: () => _voidInvoice(invoice),
+                          onEditInvoice: () => _openEditInvoice(invoice),
+                          onEditDate: () => _editInvoiceDate(invoice),
+                          isVoided: invoice.status == 'voided',
                         );
                       },
                     ),
@@ -607,6 +713,10 @@ class _InvoiceExpansionTile extends StatefulWidget {
   final bool hasReturn;
   final VoidCallback onPrint;
   final VoidCallback onReturn;
+  final VoidCallback onVoid;
+  final VoidCallback? onEditInvoice;
+  final VoidCallback? onEditDate;
+  final bool isVoided;
 
   const _InvoiceExpansionTile({
     required this.invoice,
@@ -614,6 +724,10 @@ class _InvoiceExpansionTile extends StatefulWidget {
     required this.hasReturn,
     required this.onPrint,
     required this.onReturn,
+    required this.onVoid,
+    this.onEditInvoice,
+    this.onEditDate,
+    this.isVoided = false,
   });
 
   @override
@@ -623,6 +737,7 @@ class _InvoiceExpansionTile extends StatefulWidget {
 class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
   bool _isExpanded = false;
   List<(InvoiceItem, Product?)> _invoiceItems = [];
+  Map<int, String> _variantNames = {};
   bool _isLoadingItems = false;
 
   Future<void> _loadInvoiceItems() async {
@@ -632,8 +747,19 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
         final items = await widget.db.invoiceDao.getItemsWithProductsByInvoice(
           widget.invoice.id,
         );
+        final variantMap = <int, String>{};
+        for (final itemWithProduct in items) {
+          final vId = itemWithProduct.$1.variantId;
+          if (vId != null && !variantMap.containsKey(vId)) {
+            final v = await widget.db.productVariantDao.getVariantById(vId);
+            if (v != null) {
+              variantMap[vId] = v.name;
+            }
+          }
+        }
         setState(() {
           _invoiceItems = items;
+          _variantNames = variantMap;
           _isLoadingItems = false;
         });
       } catch (e) {
@@ -740,6 +866,20 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
               onPressed: widget.onReturn,
               tooltip: 'مرتجع',
             ),
+            if (!widget.isVoided && widget.onEditDate != null)
+              IconButton(
+                icon: const Icon(Icons.edit_calendar, size: 20, color: Colors.blueAccent),
+                onPressed: widget.onEditDate,
+                tooltip: 'تعديل تاريخ الفاتورة',
+              ),
+            // إلغاء الفاتورة — بيظهر دايماً (الفحص جوّه الديالوج).
+            if (!widget.isVoided)
+              PermissionGuardedIconButton(
+                icon: Icons.delete_outline,
+                color: Colors.red,
+                tooltip: 'إلغاء الفاتورة',
+                onPressed: widget.onVoid,
+              ),
           ],
         ),
         onExpansionChanged: (expanded) {
@@ -838,7 +978,11 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
                         cells: [
                           DataCell(
                             Text(
-                              product?.name ?? 'منتج ${item.productId}',
+                              () {
+                                final base = product?.name ?? 'منتج ${item.productId}';
+                                final v = item.variantId != null ? _variantNames[item.variantId] : null;
+                                return (v != null && !base.endsWith('— $v')) ? '$base — $v' : base;
+                              }(),
                               style: const TextStyle(color: Colors.white70),
                             ),
                           ),
@@ -871,6 +1015,28 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
+                      if (!widget.isVoided) ...[
+                        if (widget.onEditInvoice != null)
+                          OutlinedButton.icon(
+                            onPressed: widget.onEditInvoice,
+                            icon: const Icon(Icons.edit_note, size: 18),
+                            label: const Text('تعديل الفاتورة'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.blueAccent,
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        if (widget.onEditDate != null)
+                          OutlinedButton.icon(
+                            onPressed: widget.onEditDate,
+                            icon: const Icon(Icons.edit_calendar, size: 18),
+                            label: const Text('تعديل التاريخ'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.tealAccent,
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                      ],
                       ElevatedButton.icon(
                         onPressed: widget.onPrint,
                         icon: const Icon(Icons.print),
@@ -888,207 +1054,5 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
         ],
       ),
     );
-  }
-}
-
-class _ReturnDialog extends StatefulWidget {
-  final Invoice invoice;
-  final AppDatabase db;
-  final List<(InvoiceItem, Product?)> itemsWithProducts;
-
-  const _ReturnDialog({
-    required this.invoice,
-    required this.db,
-    required this.itemsWithProducts,
-  });
-
-  @override
-  State<_ReturnDialog> createState() => _ReturnDialogState();
-}
-
-class _ReturnDialogState extends State<_ReturnDialog> {
-  late Map<int, int> _returnQty;
-  String _reason = 'تالف';
-  bool _processing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _returnQty = {
-      for (final entry in widget.itemsWithProducts)
-        entry.$1.productId: 0,
-    };
-  }
-
-  double get _totalReturn {
-    double total = 0;
-    for (final entry in widget.itemsWithProducts) {
-      final item = entry.$1;
-      final qty = _returnQty[item.productId] ?? 0;
-      if (qty > 0) {
-        total += qty * (item.quantity > 0 ? item.price / item.quantity : 0);
-      }
-    }
-    return total;
-  }
-
-  bool get _hasItems => _returnQty.values.any((q) => q > 0);
-
-  Future<void> _processReturn() async {
-    if (!_hasItems) return;
-    setState(() => _processing = true);
-
-    try {
-      final returnItems = <SalesReturnItemsCompanion>[];
-      for (final entry in widget.itemsWithProducts) {
-        final item = entry.$1;
-        final product = entry.$2;
-        final qty = _returnQty[item.productId] ?? 0;
-        if (qty <= 0) continue;
-        returnItems.add(
-          SalesReturnItemsCompanion.insert(
-            returnId: 0,
-            productId: item.productId,
-            productName: product?.name ?? 'منتج ${item.productId}',
-            quantity: qty,
-            unitPrice: item.quantity > 0 ? item.price / item.quantity : 0,
-            totalPrice: qty * (item.quantity > 0 ? item.price / item.quantity : 0),
-          ),
-        );
-      }
-
-      final returnDao = SalesReturnsDao(widget.db);
-      final returnCompanion = SalesReturnsCompanion.insert(
-        returnNumber: 'RTR-${widget.invoice.invoiceNumber ?? widget.invoice.id}-${DateTime.now().millisecondsSinceEpoch}',
-        originalInvoiceId: widget.invoice.id,
-        customerId: (widget.invoice.customerId?.isNotEmpty == true) ? drift.Value(widget.invoice.customerId!) : const drift.Value.absent(),
-        customerName: widget.invoice.customerName ?? 'عميل غير محدد',
-        returnDate: DateTime.now(),
-        totalAmount: _totalReturn,
-        returnReason: _reason,
-        notes: const drift.Value.absent(),
-        status: const drift.Value('completed'),
-        processedBy: const drift.Value.absent(),
-      );
-
-      await returnDao.processReturn(
-        returnCompanion: returnCompanion,
-        items: returnItems,
-      );
-
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      setState(() => _processing = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-        title: const Text('مرتجع فاتورة'),
-        content: SizedBox(
-          width: 500,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('الفاتورة: ${displayInvoiceNumber(widget.invoice.invoiceNumber, widget.invoice.id) ?? ''}'),
-              const SizedBox(height: 8),
-              Text('العميل: ${widget.invoice.customerName ?? 'غير محدد'}'),
-              const SizedBox(height: 16),
-              const Text('اختر الكميات المرتجعة:', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: widget.itemsWithProducts.map((entry) {
-                      final item = entry.$1;
-                      final product = entry.$2;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(product?.name ?? 'منتج ${item.productId}'),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 80,
-                              child: TextField(
-                                keyboardType: TextInputType.number,
-                                decoration: InputDecoration(
-                                  hintText: 'الكمية (${item.quantity})',
-                                  isDense: true,
-                                  border: const OutlineInputBorder(),
-                                ),
-                                onChanged: (v) {
-                                  final qty = int.tryParse(v) ?? 0;
-                                  setState(() {
-                                    _returnQty[item.productId] = qty.clamp(0, item.quantity);
-                                  });
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-              if (_hasItems) ...[
-                const SizedBox(height: 16),
-                Text(
-                  'إجمالي المرتجع: ${_totalReturn.toStringAsFixed(2)} ج.م',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Colors.red,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _reason,
-                decoration: const InputDecoration(
-                  labelText: 'سبب المرتجع',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'تالف', child: Text('تالف')),
-                  DropdownMenuItem(value: 'خطأ في الفاتورة', child: Text('خطأ في الفاتورة')),
-                  DropdownMenuItem(value: 'استبدال', child: Text('استبدال')),
-                  DropdownMenuItem(value: 'أخرى', child: Text('أخرى')),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _reason = v);
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _processing ? null : () => Navigator.pop(context),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: _hasItems && !_processing ? _processReturn : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: _processing
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('تأكيد المرتجع'),
-          ),
-        ],
-      );
   }
 }

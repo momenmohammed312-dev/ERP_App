@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 import '../config/license_config.dart';
@@ -28,6 +29,10 @@ class SecureLicenseStorage {
     }
   }
 
+  /// Test seam: point the storage at a temp folder (no path_provider needed).
+  @visibleForTesting
+  static void useDirectory(Directory dir) => _appDir = dir;
+
   static File get _file => File('${_appDir!.path}/$_fileName');
   static File get _backupFile => File('${_appDir!.path}/$_backupFileName');
 
@@ -38,17 +43,17 @@ class SecureLicenseStorage {
   /// Read and decrypt the license data. Returns null if file doesn't exist or is corrupt.
   static Future<SecureLicenseData?> read() async {
     try {
-      if (!await _file.exists()) {
+      if (!_file.existsSync()) {
         // Try backup
-        if (await _backupFile.exists()) {
+        if (_backupFile.existsSync()) {
           AppLogger.w('Primary file missing, restoring from backup');
-          await _backupFile.copy(_file.path);
+          _backupFile.copySync(_file.path);
         } else {
           return null;
         }
       }
 
-      final encryptedContent = await _file.readAsString();
+      final encryptedContent = _file.readAsStringSync();
 
       // Verify HMAC signature
       final signatureValid = _verifySignature(encryptedContent);
@@ -56,11 +61,11 @@ class SecureLicenseStorage {
         AppLogger.w('License file signature INVALID — possible tampering');
 
         // Try backup
-        if (await _backupFile.exists()) {
+        if (_backupFile.existsSync()) {
           AppLogger.w('Attempting recovery from backup');
-          final backupContent = await _backupFile.readAsString();
+          final backupContent = _backupFile.readAsStringSync();
           if (_verifySignature(backupContent)) {
-            await _backupFile.copy(_file.path);
+            _backupFile.copySync(_file.path);
             return _decryptAndParse(backupContent);
           }
         }
@@ -81,8 +86,8 @@ class SecureLicenseStorage {
       if (_appDir == null) await init();
 
       // Create backup of current file
-      if (await _file.exists()) {
-        await _file.copy(_backupFile.path);
+      if (_file.existsSync()) {
+        _file.copySync(_backupFile.path);
       }
 
       // Serialize, encrypt, sign
@@ -92,7 +97,7 @@ class SecureLicenseStorage {
       final signature = _computeSignature(encrypted);
       final fileContent = '$encrypted\n$signature';
 
-      await _file.writeAsString(fileContent);
+      _file.writeAsStringSync(fileContent, flush: true);
       AppLogger.i('Secure license saved to ${_file.path}');
       return true;
     } catch (e) {
@@ -104,8 +109,8 @@ class SecureLicenseStorage {
   /// Delete the license file (and backup).
   static Future<void> clear() async {
     try {
-      if (await _file.exists()) await _file.delete();
-      if (await _backupFile.exists()) await _backupFile.delete();
+      if (_file.existsSync()) _file.deleteSync();
+      if (_backupFile.existsSync()) _backupFile.deleteSync();
     } catch (e) {
       AppLogger.e('Error clearing secure license', e);
     }
@@ -167,6 +172,15 @@ class SecureLicenseData {
   final DateTime? lastMismatchTime;
   final Map<String, dynamic>? lastHardwareComponents; // Stored as JSON for HardwareComponents
 
+  // ── Legacy AES-license bridge (FEAT-014) ────────────────────────────
+  // Set when an old pre-RS256 license was read from this file so it can be
+  // upgraded to a signed document instead of locking the customer out.
+  //
+  // `legacyGraceEndsAt` is written once and never extended, so an app update
+  // cannot restart the grace window.
+  final bool isLegacyLicense;
+  final DateTime? legacyGraceEndsAt;
+
   SecureLicenseData({
     required this.firstRunDate,
     required this.hardwareId,
@@ -178,6 +192,8 @@ class SecureLicenseData {
     this.hardwareMismatchCount = 0,
     this.lastMismatchTime,
     this.lastHardwareComponents,
+    this.isLegacyLicense = false,
+    this.legacyGraceEndsAt,
   });
 
   /// Create a fresh entry for first run.
@@ -198,6 +214,7 @@ class SecureLicenseData {
       appVersion: appVersion,
       hardwareMismatchCount: 0,
       lastHardwareComponents: hardwareComponents,
+      isLegacyLicense: false,
     );
   }
 
@@ -212,6 +229,9 @@ class SecureLicenseData {
     'hardware_mismatch_count': hardwareMismatchCount,
     if (lastMismatchTime != null) 'last_mismatch_time': lastMismatchTime!.toIso8601String(),
     if (lastHardwareComponents != null) 'last_hardware_components': lastHardwareComponents,
+    'is_legacy_license': isLegacyLicense,
+    if (legacyGraceEndsAt != null)
+      'legacy_grace_ends_at': legacyGraceEndsAt!.toIso8601String(),
   };
 
   factory SecureLicenseData.fromJson(Map<String, dynamic> json) {
@@ -228,6 +248,11 @@ class SecureLicenseData {
           ? DateTime.tryParse(json['last_mismatch_time']) 
           : null,
       lastHardwareComponents: json['last_hardware_components'] as Map<String, dynamic>?,
+      // Absent on files written before FEAT-014 — default keeps them readable.
+      isLegacyLicense: json['is_legacy_license'] as bool? ?? false,
+      legacyGraceEndsAt: json['legacy_grace_ends_at'] != null
+          ? DateTime.tryParse(json['legacy_grace_ends_at'])
+          : null,
     );
   }
 
@@ -245,6 +270,8 @@ class SecureLicenseData {
     DateTime? lastMismatchTime,
     Map<String, dynamic>? lastHardwareComponents,
     bool clearMismatch = false,
+    bool? isLegacyLicense,
+    DateTime? legacyGraceEndsAt,
   }) {
     return SecureLicenseData(
       firstRunDate: firstRunDate ?? this.firstRunDate,
@@ -257,6 +284,13 @@ class SecureLicenseData {
       hardwareMismatchCount: clearMismatch ? 0 : (hardwareMismatchCount ?? this.hardwareMismatchCount),
       lastMismatchTime: clearMismatch ? null : (lastMismatchTime ?? this.lastMismatchTime),
       lastHardwareComponents: clearMismatch ? null : (lastHardwareComponents ?? this.lastHardwareComponents),
+      // clearLicense means the legacy license was replaced by a signed one.
+      isLegacyLicense: clearLicense
+          ? false
+          : (isLegacyLicense ?? this.isLegacyLicense),
+      legacyGraceEndsAt: clearLicense
+          ? null
+          : (legacyGraceEndsAt ?? this.legacyGraceEndsAt),
     );
   }
 }

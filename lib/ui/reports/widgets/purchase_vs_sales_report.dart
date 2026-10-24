@@ -7,6 +7,7 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/services/db_schema_cache_service.dart';
 import 'package:pos_offline_desktop/core/services/purchase_print_service_simple.dart';
 import 'package:pos_offline_desktop/core/utils/logger.dart';
+import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/charts/sales_trend_line_chart.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/charts/product_sales_pie_chart.dart';
 
@@ -52,8 +53,10 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
       String purchasesTotalColumn = 'totalAmount';
 
       try {
-        final invoiceColumns =
-            await DbSchemaCacheService.getColumns(db, 'invoices');
+        final invoiceColumns = await DbSchemaCacheService.getColumns(
+          db,
+          'invoices',
+        );
         if (!invoiceColumns.contains('totalAmount')) {
           for (final columnName in invoiceColumns) {
             if (columnName.contains('total') || columnName.contains('amount')) {
@@ -67,8 +70,10 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
       }
 
       try {
-        final purchaseColumns =
-            await DbSchemaCacheService.getColumns(db, 'purchases');
+        final purchaseColumns = await DbSchemaCacheService.getColumns(
+          db,
+          'purchases',
+        );
         if (!purchaseColumns.contains('totalAmount')) {
           for (final columnName in purchaseColumns) {
             if (columnName.contains('total') || columnName.contains('amount')) {
@@ -152,19 +157,21 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
 
       // Add sales data
       for (final row in salesResult) {
-        final date = row.readNullable<String>('report_date') ?? 'unknown';
+        final date = row.data['report_date']?.toString() ?? 'unknown';
         combinedData[date] = {
           'date': date,
-          'sales_count': row.readNullable<int>('invoice_count') ?? 0,
-          'total_sales':
-              row.readNullable<double>('total_sales') ?? 0.0,
-          'cash_sales': row.readNullable<double>('cash_sales') ?? 0.0,
-          'credit_sales':
-              row.readNullable<double>('credit_sales') ?? 0.0,
+          'sales_count': (row.data['invoice_count'] as num?)?.toInt() ?? 0,
+          'total_sales': (row.data['total_sales'] as num?)?.toDouble() ?? 0.0,
+          'cash_sales': (row.data['cash_sales'] as num?)?.toDouble() ?? 0.0,
+          'credit_sales': (row.data['credit_sales'] as num?)?.toDouble() ?? 0.0,
           'purchase_count': 0,
           'total_purchases': 0.0,
           'cash_purchases': 0.0,
           'credit_purchases': 0.0,
+          'expense_count': 0,
+          'total_expenses': 0.0,
+          'salaries_expenses': 0.0,
+          'other_expenses': 0.0,
           'net_profit': 0.0,
           'profit_margin': 0.0,
         };
@@ -172,17 +179,16 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
 
       // Add purchases data
       for (final row in purchasesResult) {
-        final date = row.readNullable<String>('report_date') ?? 'unknown';
+        final date = row.data['report_date']?.toString() ?? 'unknown';
         if (combinedData.containsKey(date)) {
           final data = combinedData[date]!;
-          data['purchase_count'] =
-              row.readNullable<int>('purchase_count') ?? 0;
+          data['purchase_count'] = (row.data['purchase_count'] as num?)?.toInt() ?? 0;
           data['total_purchases'] =
-              row.readNullable<double>('total_purchases') ?? 0.0;
+              (row.data['total_purchases'] as num?)?.toDouble() ?? 0.0;
           data['cash_purchases'] =
-              row.readNullable<double>('cash_purchases') ?? 0.0;
+              (row.data['cash_purchases'] as num?)?.toDouble() ?? 0.0;
           data['credit_purchases'] =
-              row.readNullable<double>('credit_purchases') ?? 0.0;
+              (row.data['credit_purchases'] as num?)?.toDouble() ?? 0.0;
         } else {
           combinedData[date] = {
             'date': date,
@@ -190,16 +196,16 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
             'total_sales': 0.0,
             'cash_sales': 0.0,
             'credit_sales': 0.0,
-            'purchase_count':
-                row.readNullable<int>('purchase_count') ?? 0,
+            'purchase_count': (row.data['purchase_count'] as num?)?.toInt() ?? 0,
             'total_purchases':
-                row.readNullable<double>('total_purchases') ?? 0.0,
-            'cash_purchases':
-                row.readNullable<double>('cash_purchases') ?? 0.0,
+                (row.data['total_purchases'] as num?)?.toDouble() ?? 0.0,
+            'cash_purchases': (row.data['cash_purchases'] as num?)?.toDouble() ?? 0.0,
             'credit_purchases':
-                row.readNullable<double>('credit_purchases') ?? 0.0,
+                (row.data['credit_purchases'] as num?)?.toDouble() ?? 0.0,
             'expense_count': 0,
             'total_expenses': 0.0,
+            'salaries_expenses': 0.0,
+            'other_expenses': 0.0,
             'net_profit': 0.0,
             'profit_margin': 0.0,
           };
@@ -208,13 +214,16 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
 
       // Add expenses data
       for (final row in expensesResult) {
-        final date = row.readNullable<String>('report_date') ?? 'unknown';
+        final date = row.data['report_date']?.toString() ?? 'unknown';
         if (combinedData.containsKey(date)) {
           final data = combinedData[date]!;
-          data['expense_count'] =
-              row.readNullable<int>('expense_count') ?? 0;
+          data['expense_count'] = (row.data['expense_count'] as num?)?.toInt() ?? 0;
           data['total_expenses'] =
-              row.readNullable<double>('total_expenses') ?? 0.0;
+              (row.data['total_expenses'] as num?)?.toDouble() ?? 0.0;
+          data['salaries_expenses'] =
+              (row.data['salaries_expenses'] as num?)?.toDouble() ?? 0.0;
+          data['other_expenses'] =
+              (row.data['other_expenses'] as num?)?.toDouble() ?? 0.0;
         } else {
           combinedData[date] = {
             'date': date,
@@ -226,14 +235,11 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
             'total_purchases': 0.0,
             'cash_purchases': 0.0,
             'credit_purchases': 0.0,
-            'expense_count':
-                row.readNullable<int>('expense_count') ?? 0,
-            'total_expenses':
-                row.readNullable<double>('total_expenses') ?? 0.0,
+            'expense_count': (row.data['expense_count'] as num?)?.toInt() ?? 0,
+            'total_expenses': (row.data['total_expenses'] as num?)?.toDouble() ?? 0.0,
             'salaries_expenses':
-                row.readNullable<double>('salaries_expenses') ?? 0.0,
-            'other_expenses':
-                row.readNullable<double>('other_expenses') ?? 0.0,
+                (row.data['salaries_expenses'] as num?)?.toDouble() ?? 0.0,
+            'other_expenses': (row.data['other_expenses'] as num?)?.toDouble() ?? 0.0,
             'net_profit': 0.0,
             'profit_margin': 0.0,
           };
@@ -260,11 +266,11 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
             .get();
 
         for (final row in returnsResult) {
-          final date = row.readNullable<String>('report_date') ?? 'unknown';
-          final returns = row.readNullable<double>('total_returns') ?? 0.0;
+          final date = row.data['report_date']?.toString() ?? 'unknown';
+          final returns = (row.data['total_returns'] as num?)?.toDouble() ?? 0.0;
           if (combinedData.containsKey(date)) {
             final data = combinedData[date]!;
-            data['total_sales'] = (data['total_sales'] as double) - returns;
+            data['total_sales'] = ((data['total_sales'] as num?)?.toDouble() ?? 0.0) - returns;
           }
         }
       } catch (e) {
@@ -273,9 +279,9 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
 
       // Calculate profit for each day
       final comparisonData = combinedData.values.map((data) {
-        final totalSales = data['total_sales'] as double;
-        final totalPurchases = data['total_purchases'] as double;
-        final totalExpenses = data['total_expenses'] as double;
+        final totalSales = (data['total_sales'] as num?)?.toDouble() ?? 0.0;
+        final totalPurchases = (data['total_purchases'] as num?)?.toDouble() ?? 0.0;
+        final totalExpenses = (data['total_expenses'] as num?)?.toDouble() ?? 0.0;
         final netProfit = totalSales - totalPurchases - totalExpenses;
         final profitMargin = totalSales > 0
             ? (netProfit / totalSales) * 100
@@ -297,19 +303,19 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
       // Calculate totals
       final totalSales = comparisonData.fold<double>(
         0.0,
-        (sum, item) => sum + (item['total_sales'] as double),
+        (sum, item) => sum + ((item['total_sales'] as num?)?.toDouble() ?? 0.0),
       );
       final totalPurchases = comparisonData.fold<double>(
         0.0,
-        (sum, item) => sum + (item['total_purchases'] as double),
+        (sum, item) => sum + ((item['total_purchases'] as num?)?.toDouble() ?? 0.0),
       );
       final totalExpenses = comparisonData.fold<double>(
         0.0,
-        (sum, item) => sum + (item['total_expenses'] as double),
+        (sum, item) => sum + ((item['total_expenses'] as num?)?.toDouble() ?? 0.0),
       );
       final totalSalaries = comparisonData.fold<double>(
         0.0,
-        (sum, item) => sum + (item['salaries_expenses'] as double? ?? 0.0),
+        (sum, item) => sum + ((item['salaries_expenses'] as num?)?.toDouble() ?? 0.0),
       );
       final netProfit = totalSales - totalPurchases - totalExpenses;
       final profitMargin = totalSales > 0
@@ -441,14 +447,15 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
                     if (i < 0 || i >= _comparisonData.length) {
                       return const SizedBox.shrink();
                     }
-                    final parts = (_comparisonData[i]['date'] as String).split('-');
-                    final label = parts.length >= 3 ? '${parts[2]}/${parts[1]}' : '';
+                    final parts = (_comparisonData[i]['date'] as String).split(
+                      '-',
+                    );
+                    final label = parts.length >= 3
+                        ? '${parts[2]}/${parts[1]}'
+                        : '';
                     return SideTitleWidget(
                       axisSide: meta.axisSide,
-                      child: Text(
-                        label,
-                        style: const TextStyle(fontSize: 9),
-                      ),
+                      child: Text(label, style: const TextStyle(fontSize: 9)),
                     );
                   },
                 ),
@@ -465,9 +472,7 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
                   },
                 ),
               ),
-              topTitles: AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
+              topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
               rightTitles: AxisTitles(
                 sideTitles: SideTitles(showTitles: false),
               ),
@@ -671,65 +676,153 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
                     child: Column(
                       children: [
                         // Summary Cards
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _buildSummaryCard(
-                                  'إجمالي المبيعات',
-                                  '${_totalSales.toStringAsFixed(2)} ج.م',
-                                  Colors.green,
-                                  Icons.trending_up,
+                        Builder(
+                          builder: (context) {
+                            final isMobile = PlatformUtils.isMobile || MediaQuery.sizeOf(context).width < 700;
+                            if (isMobile) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildSummaryCard(
+                                            'إجمالي المبيعات',
+                                            '${_totalSales.toStringAsFixed(2)} ج.م',
+                                            Colors.green,
+                                            Icons.trending_up,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: _buildSummaryCard(
+                                            'إجمالي المشتريات',
+                                            '${_totalPurchases.toStringAsFixed(2)} ج.م',
+                                            Colors.orange,
+                                            Icons.shopping_cart,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildSummaryCard(
+                                            'إجمالي المصروفات',
+                                            '${_totalExpenses.toStringAsFixed(2)} ج.م',
+                                            Colors.redAccent,
+                                            Icons.receipt_long,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: _buildSummaryCard(
+                                            'المرتبات',
+                                            '${_totalSalaries.toStringAsFixed(2)} ج.م',
+                                            Colors.purple,
+                                            Icons.people,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildSummaryCard(
+                                            'صافي الربح',
+                                            '${_netProfit.toStringAsFixed(2)} ج.م',
+                                            _netProfit >= 0 ? Colors.blue : Colors.red,
+                                            _netProfit >= 0
+                                                ? Icons.attach_money
+                                                : Icons.money_off,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: _buildSummaryCard(
+                                            'نسبة الربح',
+                                            '${_profitMargin.toStringAsFixed(1)}%',
+                                            _profitMargin >= 0
+                                                ? Colors.purple
+                                                : Colors.red,
+                                            Icons.percent,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
+                              );
+                            }
+
+                            return Container(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildSummaryCard(
+                                      'إجمالي المبيعات',
+                                      '${_totalSales.toStringAsFixed(2)} ج.م',
+                                      Colors.green,
+                                      Icons.trending_up,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildSummaryCard(
+                                      'إجمالي المشتريات',
+                                      '${_totalPurchases.toStringAsFixed(2)} ج.م',
+                                      Colors.orange,
+                                      Icons.shopping_cart,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildSummaryCard(
+                                      'إجمالي المصروفات',
+                                      '${_totalExpenses.toStringAsFixed(2)} ج.م',
+                                      Colors.redAccent,
+                                      Icons.receipt_long,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildSummaryCard(
+                                      'المرتبات',
+                                      '${_totalSalaries.toStringAsFixed(2)} ج.م',
+                                      Colors.purple,
+                                      Icons.people,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildSummaryCard(
+                                      'صافي الربح',
+                                      '${_netProfit.toStringAsFixed(2)} ج.م',
+                                      _netProfit >= 0 ? Colors.blue : Colors.red,
+                                      _netProfit >= 0
+                                          ? Icons.attach_money
+                                          : Icons.money_off,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildSummaryCard(
+                                      'نسبة الربح',
+                                      '${_profitMargin.toStringAsFixed(1)}%',
+                                      _profitMargin >= 0
+                                          ? Colors.purple
+                                          : Colors.red,
+                                      Icons.percent,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _buildSummaryCard(
-                                  'إجمالي المشتريات',
-                                  '${_totalPurchases.toStringAsFixed(2)} ج.م',
-                                  Colors.orange,
-                                  Icons.shopping_cart,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _buildSummaryCard(
-                                  'إجمالي المصروفات',
-                                  '${_totalExpenses.toStringAsFixed(2)} ج.م',
-                                  Colors.redAccent,
-                                  Icons.receipt_long,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _buildSummaryCard(
-                                  'المرتبات',
-                                  '${_totalSalaries.toStringAsFixed(2)} ج.م',
-                                  Colors.purple,
-                                  Icons.people,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _buildSummaryCard(
-                                  'صافي الربح',
-                                  '${_netProfit.toStringAsFixed(2)} ج.م',
-                                  _netProfit >= 0 ? Colors.blue : Colors.red,
-                                  _netProfit >= 0 ? Icons.attach_money : Icons.money_off,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _buildSummaryCard(
-                                  'نسبة الربح',
-                                  '${_profitMargin.toStringAsFixed(1)}%',
-                                  _profitMargin >= 0 ? Colors.purple : Colors.red,
-                                  Icons.percent,
-                                ),
-                              ),
-                            ],
-                          ),
+                            );
+                          },
                         ),
 
                         // Sales Trend Line Chart
@@ -837,121 +930,155 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
                         // Data Table
                         Card(
                           margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                          child: DataTable(
-                            columns: const [
-                              DataColumn(label: Text('التاريخ'), numeric: false),
-                              DataColumn(label: Text('المبيعات'), numeric: true),
-                              DataColumn(label: Text('المشتريات'), numeric: true),
-                              DataColumn(label: Text('المرتبات'), numeric: true),
-                              DataColumn(label: Text('المصروفات'), numeric: true),
-                              DataColumn(label: Text('صافي الربح'), numeric: true),
-                              DataColumn(label: Text('نسبة الربح'), numeric: true),
-                              DataColumn(label: Text('الهامش'), numeric: false),
-                            ],
-                            rows: _comparisonData.map((data) {
-                              final netProfit = data['net_profit'] as double;
-                              final profitMargin = data['profit_margin'] as double;
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
+                              columns: const [
+                                DataColumn(
+                                  label: Text('التاريخ'),
+                                  numeric: false,
+                                ),
+                                DataColumn(
+                                  label: Text('المبيعات'),
+                                  numeric: true,
+                                ),
+                                DataColumn(
+                                  label: Text('المشتريات'),
+                                  numeric: true,
+                                ),
+                                DataColumn(
+                                  label: Text('المرتبات'),
+                                  numeric: true,
+                                ),
+                                DataColumn(
+                                  label: Text('المصروفات'),
+                                  numeric: true,
+                                ),
+                                DataColumn(
+                                  label: Text('صافي الربح'),
+                                  numeric: true,
+                                ),
+                                DataColumn(
+                                  label: Text('نسبة الربح'),
+                                  numeric: true,
+                                ),
+                                DataColumn(
+                                  label: Text('الهامش'),
+                                  numeric: false,
+                                ),
+                              ],
+                              rows: _comparisonData.map((data) {
+                                final netProfit = data['net_profit'] as double;
+                                final profitMargin =
+                                    data['profit_margin'] as double;
 
-                              return DataRow(
-                                cells: [
-                                  DataCell(
-                                    Text(
-                                      data['date'] as String,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      '${(data['total_sales'] as double).toStringAsFixed(2)} ج.م',
-                                      style: const TextStyle(
-                                        color: Colors.green,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      '${(data['total_purchases'] as double).toStringAsFixed(2)} ج.م',
-                                      style: const TextStyle(
-                                        color: Colors.orange,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      '${(data['salaries_expenses'] as double? ?? 0.0).toStringAsFixed(2)} ج.م',
-                                      style: const TextStyle(
-                                        color: Colors.purple,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      '${(data['total_expenses'] as double).toStringAsFixed(2)} ج.م',
-                                      style: const TextStyle(
-                                        color: Colors.redAccent,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      '${netProfit.toStringAsFixed(2)} ج.م',
-                                      style: TextStyle(
-                                        color: netProfit >= 0
-                                            ? Colors.blue
-                                            : Colors.red,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      '${profitMargin.toStringAsFixed(1)}%',
-                                      style: TextStyle(
-                                        color: profitMargin >= 0
-                                            ? Colors.purple
-                                            : Colors.red,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: profitMargin >= 0
-                                            ? Colors.green.withValues(alpha: 0.3)
-                                            : Colors.red.withValues(alpha: 0.3),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: profitMargin >= 0
-                                              ? Colors.green
-                                              : Colors.red,
+                                return DataRow(
+                                  cells: [
+                                    DataCell(
+                                      Text(
+                                        data['date'] as String,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                      child: Text(
-                                        profitMargin >= 0 ? 'ربح' : 'خسارة',
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        '${(data['total_sales'] as double).toStringAsFixed(2)} ج.م',
+                                        style: const TextStyle(
+                                          color: Colors.green,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        '${(data['total_purchases'] as double).toStringAsFixed(2)} ج.م',
+                                        style: const TextStyle(
+                                          color: Colors.orange,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        '${(data['salaries_expenses'] as double? ?? 0.0).toStringAsFixed(2)} ج.م',
+                                        style: const TextStyle(
+                                          color: Colors.purple,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        '${(data['total_expenses'] as double).toStringAsFixed(2)} ج.م',
+                                        style: const TextStyle(
+                                          color: Colors.redAccent,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        '${netProfit.toStringAsFixed(2)} ج.م',
                                         style: TextStyle(
-                                          color: profitMargin >= 0
-                                              ? Colors.green
+                                          color: netProfit >= 0
+                                              ? Colors.blue
                                               : Colors.red,
                                           fontWeight: FontWeight.bold,
-                                          fontSize: 12,
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
+                                    DataCell(
+                                      Text(
+                                        '${profitMargin.toStringAsFixed(1)}%',
+                                        style: TextStyle(
+                                          color: profitMargin >= 0
+                                              ? Colors.purple
+                                              : Colors.red,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: profitMargin >= 0
+                                              ? Colors.green.withValues(
+                                                  alpha: 0.3,
+                                                )
+                                              : Colors.red.withValues(
+                                                  alpha: 0.3,
+                                                ),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: profitMargin >= 0
+                                                ? Colors.green
+                                                : Colors.red,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          profitMargin >= 0 ? 'ربح' : 'خسارة',
+                                          style: TextStyle(
+                                            color: profitMargin >= 0
+                                                ? Colors.green
+                                                : Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
                           ),
                         ),
                       ],
@@ -1000,12 +1127,15 @@ class _PurchaseVsSalesReportState extends ConsumerState<PurchaseVsSalesReport> {
           const SizedBox(height: 8),
           Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: color,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
           ),
         ],

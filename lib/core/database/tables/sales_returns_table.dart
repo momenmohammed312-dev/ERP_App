@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'invoice_table.dart';
 import 'invoice_items_table.dart';
 import 'product_table.dart';
+import 'product_variants_table.dart';
 import 'vegetable_shipments_table.dart';
 
 /// جدول مرتجعات المبيعات الرئيسي
@@ -21,6 +22,20 @@ class SalesReturns extends Table {
   TextColumn get status => text().withDefault(const Constant('completed'))();
   TextColumn get processedBy => text().nullable()(); // username
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  // === v78: فصل المرتجع عن الاسترداد ===
+  /// كام فلوس اتسترد فعلاً (مجموع return_refunds السارية). فارق عن totalAmount
+  /// لأن العميل ممكن ياخد المرتجع رصيد بدل فلوس.
+  RealColumn get refundedAmount => real().withDefault(const Constant(0.0))();
+
+  /// 'pending' | 'partially_refunded' | 'refunded' | 'credited'
+  TextColumn get settlementStatus =>
+      text().withDefault(const Constant('pending'))();
+
+  /// كام رجع للمخزون فعلاً — التالف لا يرجع (restockCondition).
+  RealColumn get restockedAmount => real().withDefault(const Constant(0.0))();
+
+  TextColumn get syncId => text().nullable()();
 }
 
 /// جدول أصناف مرتجعات المبيعات — يدعم المرتجع الجزئي على مستوى الصنف
@@ -34,6 +49,11 @@ class SalesReturnItems extends Table {
     onDelete: KeyAction.cascade,
   )();
   IntColumn get productId => integer().references(Products, #id)();
+
+  /// صنف المنتج (لون/مقاس/فئة) إن وجد.
+  IntColumn get variantId =>
+      integer().nullable().references(ProductVariants, #id)();
+
   TextColumn get productName => text()(); // snapshot of name
   IntColumn get quantity => integer()();
   RealColumn get unitPrice => real()();
@@ -48,4 +68,17 @@ class SalesReturnItems extends Table {
       integer().nullable().references(VegetableShipments, #id)();
   TextColumn get returnReason =>
       text().withDefault(const Constant('customer_request'))();
+
+  // === v78 ===
+  /// حالة الصنف المرتجع: 'sellable' (يعود للمخزون) | 'damaged' (تالف،
+  /// بيروح جدول التالف مش المخزون) | 'supplier' (هيتبعت للمورد).
+  TextColumn get restockCondition =>
+      text().withDefault(const Constant('sellable'))();
+
+  /// الكمية اللي رجعت للمخزون فعلياً — أقل من [quantity] لو الصنف تالف.
+  IntColumn get restockedQty => integer().withDefault(const Constant(0))();
+
+  TextColumn get syncId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
 }

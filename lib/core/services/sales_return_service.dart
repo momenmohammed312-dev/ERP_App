@@ -7,15 +7,25 @@ import '../services/invoice_number_formatter.dart';
 class ReturnableLine {
   final InvoiceItem invoiceItem;
   final Product? product;
+  final ProductVariant? variant;
   final int alreadyReturned;
   final int available;
 
   ReturnableLine({
     required this.invoiceItem,
     required this.product,
+    this.variant,
     required this.alreadyReturned,
     required this.available,
   });
+
+  String get displayName {
+    final base = product?.name ?? 'صنف ${invoiceItem.productId}';
+    if (variant != null && variant!.name.isNotEmpty) {
+      return '$base — ${variant!.name}';
+    }
+    return base;
+  }
 }
 
 /// خدمة المرتجع الجزئي على مستوى الصنف (مبيعات + مشتريات unified pattern).
@@ -31,9 +41,13 @@ class SalesReturnService {
     for (final item in items) {
       final already = await _getReturnedQtyForItem(item.id);
       final product = await _db.productDao.getProductById(item.productId);
+      final variant = item.variantId != null
+          ? await _db.productVariantDao.getVariantById(item.variantId!)
+          : null;
       result.add(ReturnableLine(
         invoiceItem: item,
         product: product,
+        variant: variant,
         alreadyReturned: already,
         available: (item.quantity - already).clamp(0, 1 << 30),
       ));
@@ -63,16 +77,29 @@ class SalesReturnService {
     return (rows.data['total'] as num?)?.toDouble() ?? 0.0;
   }
 
+  /// حالة الصنف المرتجع — تحدد هل يرجع للمخزون ولا لا.
+  /// 'sellable' (رجع للمخزون) | 'damaged' (تالف — جدول التالف مش المخزون)
+  /// | 'supplier' (هيتبعت للمورد).
+  static const restockSellable = 'sellable';
+  static const restockDamaged = 'damaged';
+  static const restockSupplier = 'supplier';
+
   /// معالجة مرتجع جزئي — [itemReturns] مفتاحها invoiceItemId والقيمة كمية الإرجاع
+  ///
+  /// [restockConditions] اختياري: نفس المفتاح، حالة الصنف لكل سطر. السطور
+  /// اللي مش موجودة في الخريطة بتتعامل على إنها `sellable` (سلوك قديم).
   Future<int> processPartialReturn({
     required int invoiceId,
     required Map<int, int> itemReturns,
     String reason = 'customer_request',
     String? notes,
     String? processedBy,
+    Map<int, String>? restockConditions,
+    DateTime? returnDate,
   }) async {
     final wanted = itemReturns.entries.where((e) => e.value > 0).toList();
     if (wanted.isEmpty) throw Exception('لم يتم اختيار أي صنف للإرجاع');
+    final effectiveDate = returnDate ?? DateTime.now();
 
     return _db.transaction(() async {
       final invoice = await (_db.select(_db.invoices)..where((t) => t.id.equals(invoiceId))).getSingleOrNull();
@@ -97,39 +124,56 @@ class SalesReturnService {
           throw Exception('الكمية المطلوبة (${e.value}) تتجاوز المتاح للإرجاع ($available) للصنف');
         }
         toProcess[line] = e.value;
-        // سعر السطر بعد الخصم موزع تناسبياً
-        final netUnit = line.price - (line.discount / line.quantity);
-        totalReturn += e.value * netUnit;
+        // سعر السطر بعد الخصم موزع تناسبياً. quantity ممكن يكون 0 في سطر
+        // تالف فبتقسم على 1 عشان ماينتجش Infinity/NaN.
+        final qtyDivisor = line.quantity == 0 ? 1 : line.quantity;
+        final netUnit = line.price - (line.discount / qtyDivisor);
+        final lineValue = e.value * netUnit;
+        if (lineValue.isNaN || lineValue.isInfinite) {
+          throw Exception('صنف "${line.productId}" له سعر غير صالح — اتشيك على بيانات الفاتورة');
+        }
+        totalReturn += lineValue;
       }
       if (totalReturn <= 0) throw Exception('قيمة المرتجع صفر');
 
       // 2) إنشاء header
-      final now = DateTime.now();
-      final returnNumber = 'RET-${now.year}${now.month.toString().padLeft(2,'0')}${now.day.toString().padLeft(2,'0')}-${DateTime.now().millisecondsSinceEpoch % 100000}';
+      final now = effectiveDate;
+      final returnNumber = 'RET-${now.year}${now.month.toString().padLeft(2, '0')}'
+          '${now.day.toString().padLeft(2, '0')}-'
+          '${now.microsecondsSinceEpoch % 1000000}'
+          '-${now.hashCode.abs() % 97}';
       final returnId = await _db.into(_db.salesReturns).insert(
         SalesReturnsCompanion.insert(
           returnNumber: returnNumber,
           originalInvoiceId: invoiceId,
           customerId: Value(invoice.customerId),
           customerName: invoice.customerName ?? 'عميل',
-          returnDate: now,
+          returnDate: effectiveDate,
           totalAmount: totalReturn,
           returnReason: reason,
           notes: Value(notes),
           status: const Value('completed'),
           processedBy: Value(processedBy),
+          refundedAmount: const Value(0.0),
+          settlementStatus: const Value('pending'),
+          syncId: Value(const Uuid().v4()),
         ),
       );
 
       // 3) لكل سطر: insert sales_return_items + رجوع مخزون + شحنة + تتبع
+      var restockedTotal = 0.0;
       for (final entry in toProcess.entries) {
         final line = entry.key;
         final qty = entry.value;
         final product = await _db.productDao.getProductById(line.productId);
-        final netUnit = line.price - (line.discount / line.quantity);
+        final qtyDivisor = line.quantity == 0 ? 1 : line.quantity;
+        final netUnit = line.price - (line.discount / qtyDivisor);
         final lineTotal = qty * netUnit;
-        final discountPortion = line.discount * qty / line.quantity;
-        final commissionPortion = line.commission * qty / line.quantity;
+        final discountPortion = line.discount * qty / qtyDivisor;
+        final commissionPortion = line.commission * qty / qtyDivisor;
+        final condition = restockConditions?[line.id] ?? restockSellable;
+        // التالف ومايُرسل للمورد مايرجعش للمخزون — بيروح جدول التالف بدل كده.
+        final goesToStock = condition == restockSellable;
 
         await _db.into(_db.salesReturnItems).insert(
           SalesReturnItemsCompanion.insert(
@@ -140,33 +184,75 @@ class SalesReturnService {
             unitPrice: line.price,
             totalPrice: lineTotal,
             invoiceItemId: Value(line.id),
+            variantId: Value(line.variantId),
             discount: Value(discountPortion),
             commission: Value(commissionPortion),
             shipmentId: Value(line.shipmentId),
             returnReason: Value(reason),
+            restockCondition: Value(condition),
+            restockedQty: Value(goesToStock ? qty : 0),
+            syncId: Value(const Uuid().v4()),
           ),
         );
 
-        // مخزون
-        if (product != null) {
-          await _db.productDao.updateProduct(
-            product.copyWith(quantity: product.quantity + qty),
-          );
-        }
-
-        // شحنة خضار — عكس sold/remaining
-        if (line.shipmentId != null) {
-          final shipment = await _db.vegetableShipmentDao.getById(line.shipmentId!);
-          if (shipment != null) {
-            await _db.vegetableShipmentDao.updateShipment(
-              shipment.copyWith(
-                barnikaSoldCount: (shipment.barnikaSoldCount - qty).clamp(0, 1 << 30),
-                barnikaRemainingCount: shipment.barnikaRemainingCount + qty,
-              ),
+        if (goesToStock) {
+          restockedTotal += lineTotal;
+          // مخزون: صنف (BUG-010) أو منتج عادي
+          if (line.variantId != null) {
+            final variant =
+                await _db.productVariantDao.getVariantById(line.variantId!);
+            if (variant != null) {
+              await _db.productVariantDao.updateVariantQuantity(
+                variant.id,
+                variant.quantity + qty,
+              );
+              final total = await _db.productVariantDao
+                  .getTotalQuantityByProduct(line.productId);
+              if (product != null) {
+                await _db.productDao.updateProduct(
+                  product.copyWith(quantity: total),
+                );
+              }
+            } else if (product != null) {
+              await _db.productDao.updateProduct(
+                product.copyWith(quantity: product.quantity + qty),
+              );
+            }
+          } else if (product != null) {
+            await _db.productDao.updateProduct(
+              product.copyWith(quantity: product.quantity + qty),
             );
+          }
+          // شحنة خضار — عكس sold/remaining
+          if (line.shipmentId != null) {
+            final shipment =
+                await _db.vegetableShipmentDao.getById(line.shipmentId!);
+            if (shipment != null) {
+              await _db.vegetableShipmentDao.updateShipment(
+                shipment.copyWith(
+                  barnikaSoldCount: (shipment.barnikaSoldCount - qty).clamp(0, 1 << 30),
+                  barnikaRemainingCount: shipment.barnikaRemainingCount + qty,
+                ),
+              );
+            }
           }
         }
       }
+
+      await (_db.update(_db.salesReturns)..where((t) => t.id.equals(returnId)))
+          .write(SalesReturnsCompanion(restockedAmount: Value(restockedTotal)));
+
+      // صافي الفاتورة — الفاتورة نفسها ماتتغيرش، بس الأرقام دي بتتسجل
+      // عشان التقارير ما تحتاجش تعمل join على sales_returns كل مرة.
+      final newReturned = invoice.returnedAmount + totalReturn;
+      await (_db.update(_db.invoices)..where((t) => t.id.equals(invoiceId))).write(
+        InvoicesCompanion(
+          returnedAmount: Value(newReturned),
+          netAmount: Value((invoice.totalAmount - newReturned) < 0
+              ? 0.0
+              : invoice.totalAmount - newReturned),
+        ),
+      );
 
       // 4) قيد محاسبي عكسي للعميل الآجل
       if (invoice.customerId != null && invoice.customerId != 'cash' && invoice.customerId!.isNotEmpty) {

@@ -6,7 +6,9 @@ import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/core/utils/app_utils.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/ui/purchase/widgets/purchase_detail_dialog.dart';
+import 'package:pos_offline_desktop/ui/purchase/widgets/void_purchase_dialog.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 
 /// List filter for the suppliers screen. Defaults to active only so that
@@ -215,9 +217,9 @@ class SuppliersWidget extends ConsumerWidget {
           .customSelect(
             '''
         SELECT p.id, p.invoice_number, p.purchase_date, p.total_amount, 
-               p.paid_amount, p.payment_method, p.status
+               p.paid_amount, p.payment_method, p.status, p.is_deleted
         FROM purchases p
-        WHERE p.supplier_id = ? AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+        WHERE p.supplier_id = ?
         ORDER BY p.purchase_date DESC
         LIMIT 20
         ''',
@@ -237,6 +239,7 @@ class SuppliersWidget extends ConsumerWidget {
           'paid_amount': (d['paid_amount'] as num?)?.toDouble() ?? 0.0,
           'payment_method': d['payment_method']?.toString() ?? 'cash',
           'status': d['status']?.toString() ?? 'pending',
+          'is_deleted': d['is_deleted'] == 1 || d['is_deleted'] == true,
         };
       }).toList();
     } catch (e) {
@@ -434,7 +437,7 @@ class _SupplierSummaryItem extends StatelessWidget {
   }
 }
 
-class _SupplierCard extends StatelessWidget {
+class _SupplierCard extends ConsumerWidget {
   final Supplier supplier;
   final double totalPurchases;
   final double totalPaid;
@@ -455,7 +458,7 @@ class _SupplierCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final remainingDebt = totalPurchases - totalPaid;
 
     return Card(
@@ -658,6 +661,7 @@ class _SupplierCard extends StatelessWidget {
                                     ),
                                   ),
                                 ),
+                                const SizedBox(width: 44),
                               ],
                             ),
                           ),
@@ -670,6 +674,9 @@ class _SupplierCard extends StatelessWidget {
                                 purchase['paid_amount'] as double;
                             final remaining = amount - paidAmount;
                             final isPaid = remaining <= 0;
+                            final isVoided = purchase['status'] == 'Voided' ||
+                                purchase['is_deleted'] == 1 ||
+                                purchase['is_deleted'] == true;
                             // Tap opens the purchase detail (عرض/تعديل/
                             // استرجاع), mirroring customer invoices. The
                             // subtree rebuild on close refreshes balances.
@@ -709,8 +716,38 @@ class _SupplierCard extends StatelessWidget {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          'فاتورة ${purchase['invoice_number'] ?? 'غير محدد'}',
+                                        Row(
+                                          children: [
+                                            Text(
+                                              'فاتورة ${purchase['invoice_number'] ?? 'غير محدد'}',
+                                            ),
+                                            if (isVoided) ...[
+                                              const Gap(4),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 1,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red
+                                                      .withValues(alpha: 0.1),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                      color: Colors.redAccent),
+                                                ),
+                                                child: const Text(
+                                                  'ملغاة',
+                                                  style: TextStyle(
+                                                    color: Colors.red,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
                                         ),
                                         const Gap(2),
                                         Container(
@@ -749,30 +786,73 @@ class _SupplierCard extends StatelessWidget {
                                         vertical: 2,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: isPaid
-                                            ? Colors.green.withValues(
-                                                alpha: 0.1,
-                                              )
-                                            : Colors.orange.withValues(
-                                                alpha: 0.1,
-                                              ),
+                                        color: isVoided
+                                            ? Colors.grey
+                                                .withValues(alpha: 0.1)
+                                            : (isPaid
+                                                ? Colors.green.withValues(
+                                                    alpha: 0.1,
+                                                  )
+                                                : Colors.orange.withValues(
+                                                    alpha: 0.1,
+                                                  )),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Text(
-                                        isPaid
-                                            ? AppLocalizations.of(
-                                                context,
-                                              ).paid_status
-                                            : 'متبقي ${remaining.toStringAsFixed(2)}',
+                                        isVoided
+                                            ? 'ملغاة'
+                                            : (isPaid
+                                                ? AppLocalizations.of(
+                                                    context,
+                                                  ).paid_status
+                                                : 'متبقي ${remaining.toStringAsFixed(2)}'),
                                         style: TextStyle(
-                                          color: isPaid
-                                              ? Colors.green
-                                              : Colors.orange,
+                                          color: isVoided
+                                              ? Colors.grey
+                                              : (isPaid
+                                                  ? Colors.green
+                                                  : Colors.orange),
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                     ),
+                                  ),
+                                  SizedBox(
+                                    width: 44,
+                                    child: isVoided
+                                        ? const SizedBox.shrink()
+                                        : IconButton(
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                              color: Colors.red,
+                                              size: 20,
+                                            ),
+                                            tooltip: 'حذف الفاتورة',
+                                            onPressed: () async {
+                                              final username = ref
+                                                      .read(authProvider)
+                                                      ?.username ??
+                                                  'admin';
+                                              final done =
+                                                  await showDialog<bool>(
+                                                context: context,
+                                                builder: (_) =>
+                                                    VoidPurchaseDialog(
+                                                  db: db,
+                                                  purchaseId: purchase['id']
+                                                          ?.toString() ??
+                                                      '',
+                                                  voidedBy: username,
+                                                ),
+                                              );
+                                              if (done == true &&
+                                                  context.mounted) {
+                                                (context as Element)
+                                                    .markNeedsBuild();
+                                              }
+                                            },
+                                          ),
                                   ),
                                 ],
                               ),

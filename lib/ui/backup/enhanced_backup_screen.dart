@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
 import 'package:intl/intl.dart';
 import 'package:gap/gap.dart';
 import 'package:path/path.dart' as path;
@@ -11,7 +13,9 @@ import '../../services/enhanced_backup_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../core/models/user_model.dart';
 import '../../core/provider/auth_provider.dart';
+import '../../core/provider/app_database_provider.dart';
 import '../../widgets/permission_guard.dart';
+import 'widgets/google_drive_connection_card.dart';
 
 class EnhancedBackupScreen extends StatefulWidget {
   const EnhancedBackupScreen({super.key});
@@ -100,6 +104,10 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
                   _buildAutoBackupCard(),
                   const Gap(16),
                   _buildActionsCard(),
+                  const Gap(16),
+                  GoogleDriveConnectionCard(
+                    onBackupRestored: _loadData,
+                  ),
                   const Gap(16),
                   _buildBackupsList(),
                 ],
@@ -485,28 +493,33 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
             // Conditionally add restore and delete based on permissions
             final user = _getCurrentUser();
             if (user?.hasPermission(Permission.restoreBackup) == true) {
-              items.insert(0, const PopupMenuItem(
-                value: 'restore',
-                child: Row(
-                  children: [
-                    Icon(Icons.restore, color: Colors.green),
-                    Gap(8),
-                    Text('استعادة'),
-                  ],
+              items.insert(
+                0,
+                const PopupMenuItem(
+                  value: 'restore',
+                  child: Row(
+                    children: [
+                      Icon(Icons.restore, color: Colors.green),
+                      Gap(8),
+                      Text('استعادة'),
+                    ],
+                  ),
                 ),
-              ));
+              );
             }
             if (user?.hasPermission(Permission.deleteBackup) == true) {
-              items.add(const PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete, color: Colors.red),
-                    Gap(8),
-                    Text('حذف'),
-                  ],
+              items.add(
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, color: Colors.red),
+                      Gap(8),
+                      Text('حذف'),
+                    ],
+                  ),
                 ),
-              ));
+              );
             }
 
             return items;
@@ -562,6 +575,20 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
 
   Future<void> _exportBackup() async {
     try {
+      if (PlatformUtils.isMobile) {
+        // `FilePicker.saveFile` returns a SAF `content://` path on Android,
+        // which is not a writable filesystem path, so the copy below would
+        // fail with a FileSystemException. The share sheet hands the file to
+        // the user directly and requires no storage permission.
+        final backup = await _backupService.createBackup(
+          type: 'manual_export',
+          description: 'نسخة احتياطية مصدرة',
+        );
+        await Share.shareXFiles([XFile(backup.filePath)]);
+        _showSuccessSnackBar('تم تصدير النسخة الاحتياطية بنجاح');
+        return;
+      }
+
       final result = await FilePicker.platform.saveFile(
         dialogTitle: 'حفظ نسخة احتياطية',
         fileName:
@@ -595,27 +622,51 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
         allowedExtensions: ['posbackup', 'zip'],
       );
 
-      if (result != null && result.files.single.path != null) {
-        final confirmed = await _showConfirmDialog(
-          'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال جميع البيانات الحالية.',
-        );
+      if (result == null || result.files.isEmpty) {
+        return;
+      }
 
-        if (confirmed) {
-          setState(() => _isLoading = true);
+      final picked = result.files.first;
+      final pickedPath = picked.path;
+      final pickedBytes = picked.bytes;
+      if (pickedPath == null && pickedBytes == null) {
+        _showErrorSnackBar('تعذر الوصول إلى ملف النسخة الاحتياطية');
+        return;
+      }
 
-          // Copy backup to backup directory
-          final backupFile = File(result.files.single.path!);
-          final appDir = await getApplicationDocumentsDirectory();
-          final backupDir = Directory('${appDir.path}/data/backups');
-          if (!await backupDir.exists()) {
-            await backupDir.create(recursive: true);
-          }
-          final targetPath =
-              '${backupDir.path}/${path.basename(result.files.single.path!)}';
-          await backupFile.copy(targetPath);
+      final confirmed = await _showConfirmDialog(
+        'هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال جميع البيانات الحالية.',
+      );
 
-          // Restore backup
-          await _backupService.restoreBackup(path.basename(targetPath));
+      if (confirmed) {
+        setState(() => _isLoading = true);
+
+        // Copy backup to backup directory
+        final appDir = await getApplicationDocumentsDirectory();
+        final backupDir = Directory('${appDir.path}/data/backups');
+        if (!await backupDir.exists()) {
+          await backupDir.create(recursive: true);
+        }
+        final sanitizedPickedName = path.basename(picked.name);
+        final backupFileName = sanitizedPickedName.isNotEmpty
+            ? sanitizedPickedName
+            : (pickedPath != null
+                  ? path.basename(pickedPath)
+                  : 'imported_backup.posbackup');
+        final targetPath = '${backupDir.path}/$backupFileName';
+        if (pickedPath != null) {
+          await File(pickedPath).copy(targetPath);
+        } else {
+          await File(targetPath).writeAsBytes(pickedBytes!, flush: true);
+        }
+
+        // Restore backup
+        await _backupService.restoreBackup(path.basename(targetPath));
+        if (mounted) {
+          final container = ProviderScope.containerOf(context);
+          container.invalidate(appDatabaseProvider);
+          final newDb = container.read(appDatabaseProvider);
+          _backupService.init(newDb);
 
           _showSuccessSnackBar('تم استعادة النسخة الاحتياطية بنجاح');
           await _loadData();
@@ -638,9 +689,15 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
         setState(() => _isLoading = true);
 
         await _backupService.restoreBackup(backup.filename);
+        if (mounted) {
+          final container = ProviderScope.containerOf(context);
+          container.invalidate(appDatabaseProvider);
+          final newDb = container.read(appDatabaseProvider);
+          _backupService.init(newDb);
 
-        _showSuccessSnackBar('تم استعادة النسخة الاحتياطية بنجاح');
-        await _loadData();
+          _showSuccessSnackBar('تم استعادة النسخة الاحتياطية بنجاح');
+          await _loadData();
+        }
       } catch (e) {
         _showErrorSnackBar('خطأ في استعادة النسخة الاحتياطية: $e');
       } finally {
@@ -650,6 +707,32 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
   }
 
   Future<void> _verifyBackup(EnhancedBackupInfo backup) async {
+    try {
+      setState(() => _isLoading = true);
+      final isValid =
+          await _backupService.verifyBackupIntegrity(backup.filename);
+      setState(() => _isLoading = false);
+
+      if (isValid) {
+        _showInfoDialog(
+          'معلومات النسخة الاحتياطية',
+          '✅ النسخة الاحتياطية سليمة وصالحة للاستعادة بنسبة 100%.\n\n'
+              'الملف: ${backup.filename}\n'
+              'الحجم: ${backup.formattedSize}\n'
+              'التاريخ: ${backup.formattedDate}\n'
+              'النوع: ${backup.type}',
+        );
+      } else {
+        _showErrorSnackBar('⚠️ النسخة الاحتياطية غير صالحة أو تالفة');
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showErrorSnackBar('خطأ في التحقق من النسخة الاحتياطية: $e');
+    }
+  }
+
+  // ignore: unused_element
+  void _legacyVerifyBackup(EnhancedBackupInfo backup) {
     try {
       // User's service doesn't have verification method, so just show info
       _showInfoDialog(
@@ -666,6 +749,12 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
 
   Future<void> _exportSpecificBackup(EnhancedBackupInfo backup) async {
     try {
+      if (PlatformUtils.isMobile) {
+        await Share.shareXFiles([XFile(backup.filePath)]);
+        _showSuccessSnackBar('تم تصدير النسخة الاحتياطية بنجاح');
+        return;
+      }
+
       final result = await FilePicker.platform.saveFile(
         dialogTitle: 'حفظ نسخة احتياطية',
         fileName: backup.filename,
@@ -700,6 +789,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
   }
 
   void _showSuccessSnackBar(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -716,6 +806,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
   }
 
   void _showErrorSnackBar(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../config/license_config.dart';
+import '../core/provider/license_provider.dart';
+import 'license_entitlement.dart';
 import 'license_manager.dart';
 
 class FeatureGateService {
@@ -12,11 +15,13 @@ class FeatureGateService {
   /// Check if current license has access to a specific feature
   Future<bool> hasFeature(String feature) async {
     try {
-      final license = await _licenseManager.getCurrentLicense();
-      if (license == null || !license.isValid) {
-        return false;
-      }
-      return license.features.contains(feature);
+      // BUG-018: delegate to the single source of truth. This used to accept
+      // only '*' or an exact name, while isFeatureEnabledProvider also
+      // accepted 'all' — so one legacy license could show a module open on one
+      // screen and locked on another. Reading the license here also refreshes
+      // the snapshot the synchronous guards use.
+      await _licenseManager.getCurrentLicense();
+      return LicenseEntitlement.instance.grants(feature);
     } catch (e) {
       return false;
     }
@@ -74,6 +79,9 @@ class FeatureGateService {
       'staff_management': 'إدارة الموظفين',
       'attendance': 'الحضور والانصراف',
       'payroll': 'المرتبات والسلف',
+      'custody': 'العهد المالية',
+      'damaged_goods': 'الهوالك والتوالف',
+      'manufacturing': 'التصنيع',
       'admin_dashboard': 'لوحة التحكم',
       'api_access': 'الوصول للـ API',
     };
@@ -101,6 +109,17 @@ class FeatureGateService {
 
   /// Check if user can access payroll
   Future<bool> canAccessPayroll() async => await hasFeature('payroll');
+
+  /// Check if user can access financial custody
+  Future<bool> canAccessCustody() async => await hasFeature('custody');
+
+  /// Check if user can access damaged goods
+  Future<bool> canAccessDamagedGoods() async =>
+      await hasFeature('damaged_goods');
+
+  /// Check if user can access manufacturing
+  Future<bool> canAccessManufacturing() async =>
+      await hasFeature('manufacturing');
 
   /// Check if user can access advanced reports
   Future<bool> canAccessAdvancedReports() async =>
@@ -369,7 +388,7 @@ class UpgradeDialog extends StatelessWidget {
 }
 
 /// Widget to conditionally show UI elements based on feature access
-class ConditionalWidget extends StatelessWidget {
+class ConditionalWidget extends ConsumerWidget {
   final String feature;
   final Widget child;
   final Widget? fallback;
@@ -382,15 +401,11 @@ class ConditionalWidget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: FeatureGateService().hasFeature(feature),
-      builder: (context, snapshot) {
-        if (snapshot.data == true) {
-          return child;
-        }
-        return fallback ?? const SizedBox.shrink();
-      },
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isEnabled = ref.watch(isFeatureEnabledProvider(feature));
+    if (isEnabled) {
+      return child;
+    }
+    return fallback ?? const SizedBox.shrink();
   }
 }

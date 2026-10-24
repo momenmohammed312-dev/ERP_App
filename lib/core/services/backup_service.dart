@@ -405,6 +405,7 @@ class BackupService {
     // Get data from each table
     final tables = [
       'products',
+      'product_variants',
       'customers',
       'suppliers',
       'categories',
@@ -437,6 +438,7 @@ class BackupService {
       'damaged_items',
       'sales_returns',
       'sales_return_items',
+      'return_refunds',
       'customer_containers',
       'vegetable_shipments',
       'empty_barnika_tracking',
@@ -462,6 +464,27 @@ class BackupService {
       'staff_biometric_mappings',
       'attendance_raw_events',
       'attendance_sync_logs',
+      // ── Manufacturing (v73-v75) ──
+      // Export order is irrelevant; grouped here for readability.
+      'bill_of_materials',
+      'bom_items',
+      'manufacturing_orders',
+      'manufacturing_cost_components',
+      'manufacturing_scrap',
+      // ── Manufacturing for Others (Phase B1 - v76) ──
+      'customer_material_receipts',
+      'customer_material_receipt_items',
+      'customer_stock_balances',
+      'customer_stock_movements',
+      'manufacturing_deliveries',
+      'manufacturing_delivery_items',
+      // ── Foundation: Accounting, Equity & Attendance Summary ──
+      'accounts',
+      'journal_entries',
+      'journal_lines',
+      'partners',
+      'equity_transactions',
+      'monthly_attendance_summary_table',
     ];
 
     for (final tableName in tables) {
@@ -479,7 +502,7 @@ class BackupService {
 
   bool _validateBackupFormat(Map<String, dynamic> backup) {
     return backup.containsKey('version') &&
-        backup.containsKey('timestamp') &&
+        (backup.containsKey('timestamp') || backup.containsKey('created_at')) &&
         backup.containsKey('database') &&
         backup.containsKey('tables');
   }
@@ -492,6 +515,7 @@ class BackupService {
       'customers',
       'suppliers',
       'products',
+      'product_variants',
       'days',
       'invoices',
       'invoice_items',
@@ -520,6 +544,7 @@ class BackupService {
       'damaged_items',
       'sales_returns',
       'sales_return_items',
+      'return_refunds',
       'customer_containers',
       'vegetable_shipments',
       'empty_barnika_tracking',
@@ -533,6 +558,7 @@ class BackupService {
       'staff_table',
       'attendance_v59_duplicate_backup',
       'attendance_table',
+      'monthly_attendance_summary_table',
       'vacations',
       'staff_advances',
       'payroll_table',
@@ -545,6 +571,44 @@ class BackupService {
       'staff_biometric_mappings',
       'attendance_raw_events',
       'attendance_sync_logs',
+      // ── Manufacturing (v73-v75) ──
+      // Restore order is FK-safe: parents before children. bill_of_materials and
+      // manufacturing_orders both reference products (restored above); bom_items
+      // needs bill_of_materials; manufacturing_cost_components and
+      // manufacturing_scrap need manufacturing_orders; manufacturing_scrap also
+      // needs bom_items, so it goes last.
+      //
+      // Appended rather than inserted so no existing entry's position shifts.
+      // _restoreTable deletes and re-inserts each table in this forward order
+      // with PRAGMA foreign_keys = OFF, and PRAGMA foreign_key_check runs after
+      // the loop, so there is no separate reversed delete list to maintain.
+      'bill_of_materials',
+      'bom_items',
+      'manufacturing_orders',
+      'manufacturing_cost_components',
+      'manufacturing_scrap',
+      // ── Manufacturing for Others (Phase B1 - v76) ──
+      // FK order:
+      // customers and products are restored above;
+      // customer_material_receipts references customers;
+      // customer_material_receipt_items references customer_material_receipts and products;
+      // customer_stock_balances references customers and products;
+      // customer_stock_movements references customers and products;
+      // manufacturing_deliveries references manufacturing_orders and customers;
+      // manufacturing_delivery_items references manufacturing_deliveries and products.
+      'customer_material_receipts',
+      'customer_material_receipt_items',
+      'customer_stock_balances',
+      'customer_stock_movements',
+      'manufacturing_deliveries',
+      'manufacturing_delivery_items',
+      // ── Foundation: Accounting & Equity ──
+      // FK order: accounts and journal_entries before journal_lines; partners before equity_transactions
+      'accounts',
+      'journal_entries',
+      'journal_lines',
+      'partners',
+      'equity_transactions',
     ];
 
     await _db.exclusively(() async {
@@ -993,14 +1057,22 @@ class BackupService {
       // Clear existing data
       await _db.customUpdate('DELETE FROM $tableName');
 
+      // Discover target table columns so we only insert columns that exist in the target schema
+      final tableInfo = await _db.customSelect('PRAGMA table_info($tableName)').get();
+      final targetColumns = tableInfo.map((r) => r.data['name'] as String).toSet();
+
       // Insert new data
-      for (final row in data as List<Map<String, dynamic>>) {
-        final columns = row.keys.join(', ');
-        final placeholders = List.filled(row.values.length, '?').join(', ');
-        final values = row.values.toList();
+      for (final rawRow in data) {
+        final row = (rawRow as Map).cast<String, dynamic>();
+        final validEntries = targetColumns.isNotEmpty
+            ? row.entries.where((e) => targetColumns.contains(e.key)).toList()
+            : row.entries.toList();
+        final columns = validEntries.map((e) => e.key).join(', ');
+        final placeholders = List.filled(validEntries.length, '?').join(', ');
+        final values = validEntries.map((e) => e.value).toList();
 
         await _db.customUpdate(
-          'INSERT INTO $tableName ($columns) VALUES ($placeholders)',
+          'INSERT OR IGNORE INTO $tableName ($columns) VALUES ($placeholders)',
           variables: values.map((v) => Variable(v)).toList(),
         );
       }
@@ -1056,7 +1128,7 @@ class BackupService {
 
     final keyBytes = deriveAesKey(_encryptionKey);
     final key = encrypt_pkg.Key(keyBytes);
-    final iv = encrypt_pkg.IV.fromLength(16);
+    final iv = encrypt_pkg.IV(Uint8List.fromList(encryptedData.sublist(0, 16)));
     final encrypter = encrypt_pkg.Encrypter(
       encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
     );

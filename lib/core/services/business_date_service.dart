@@ -66,19 +66,22 @@ class BusinessDateService {
       // Cash figures come from the invoices/expenses tables (mirrors the
       // day-close settlement). The ledger double-books a cash sale as
       // sale-debit + payment-credit, which cancels to zero.
-      final invoices = await db.invoiceDao.getInvoicesByDateRange(
+      final invoices = await db.invoiceDao.getInvoicesForCashSession(
         session.openedAt,
         now,
       );
       double income = 0;
       for (final invoice in invoices) {
-        if (invoice.paymentMethod == 'cash') {
-          income += invoice.totalAmount;
-        } else {
-          income += invoice.paidAmount;
-        }
+        income += _calculateInvoiceCashIncome(invoice);
       }
-      final expenseItems = await db.expenseDao.getExpensesByDateRange(
+      // المرتجعات اللي اتستردت نقداً بتخرج من الدرج — من غير السطر ده،
+      // يوم الإغلاق بيقول الرصيد صح وانت ناقصك قيمة كل مرتجع نقدي.
+      final cashRefunds = await db.returnRefundsDao.getCashRefundsForSessionBetween(
+        session.openedAt,
+        now,
+      );
+      income -= cashRefunds;
+      final expenseItems = await db.expenseDao.getCashExpensesForSession(
         session.openedAt,
         now,
       );
@@ -87,7 +90,14 @@ class BusinessDateService {
         expenses += e.amount;
       }
 
-      double expectedBalance = session.openingBalance + income - expenses;
+      // [MONEY] حركات العُهد النقدية: الصرف يخرج نقد من الدرج، والتسوية أو الإلغاء ترد المتبقي.
+      final custodyMovements = await _getCustodyCashMovementBetween(
+        session.openedAt,
+        now,
+      );
+
+      double expectedBalance =
+          session.openingBalance + income - expenses - custodyMovements.netOutflow;
       double difference = actualCash - expectedBalance;
 
       // 3. Update Cash Session Record
@@ -151,19 +161,15 @@ class BusinessDateService {
     if (session == null || session.status != 'open') return 0.0;
 
     final now = DateTime.now();
-    final invoices = await db.invoiceDao.getInvoicesByDateRange(
+    final invoices = await db.invoiceDao.getInvoicesForCashSession(
       session.openedAt,
       now,
     );
     double income = 0;
     for (final invoice in invoices) {
-      if (invoice.paymentMethod == 'cash') {
-        income += invoice.totalAmount;
-      } else {
-        income += invoice.paidAmount;
-      }
+      income += _calculateInvoiceCashIncome(invoice);
     }
-    final expenseItems = await db.expenseDao.getExpensesByDateRange(
+    final expenseItems = await db.expenseDao.getCashExpensesForSession(
       session.openedAt,
       now,
     );
@@ -171,6 +177,84 @@ class BusinessDateService {
     for (final e in expenseItems) {
       expenses += e.amount;
     }
-    return session.openingBalance + income - expenses;
+    // نفس منطق closeSession: المرتجع النقدي بخصم من المتوقع.
+    income -= await db.returnRefundsDao.getCashRefundsForSessionBetween(
+      session.openedAt,
+      now,
+    );
+    // [MONEY] نفس منطق closeSession: صافي حركات العُهد النقدية (صرف - رد).
+    final custodyMovements = await _getCustodyCashMovementBetween(
+      session.openedAt,
+      now,
+    );
+    return session.openingBalance +
+        income -
+        expenses -
+        custodyMovements.netOutflow;
+  }
+
+  /// [MONEY] حساب دقيق للمتحصلات النقدية الفعلية من الفاتورة التي دخلت درج الكاش.
+  /// يعالج بدقة طرق الدفع الإلكترونية والمختلطة وفواتير الآجل مع الدفعات المقدمة.
+  double _calculateInvoiceCashIncome(Invoice invoice) {
+    if (invoice.cashAmount > 0) {
+      if (invoice.cashAmount > invoice.totalAmount &&
+          invoice.paymentMethod == 'cash' &&
+          invoice.totalAmount > 0) {
+        return invoice.totalAmount;
+      }
+      return invoice.cashAmount;
+    } else if (invoice.cardAmount > 0 && invoice.cashAmount == 0) {
+      return 0.0;
+    } else {
+      final pm = invoice.paymentMethod?.toLowerCase().trim();
+      if (pm == 'cash' || pm == 'نقدي' || pm == 'نقداً') {
+        return invoice.totalAmount;
+      } else if (pm == 'credit' || pm == null || pm.isEmpty) {
+        return invoice.paidAmount;
+      } else if ([
+        'visa',
+        'mastercard',
+        'card',
+        'bank',
+        'transfer',
+        'wallet',
+        'instapay',
+        'other',
+        'split',
+      ].contains(pm)) {
+        return 0.0;
+      } else {
+        return 0.0;
+      }
+    }
+  }
+
+  /// [MONEY] صافي خروج النقدية للعهد بين تاريخين (صرف العهد − رد العهد).
+  /// صرف العهدة يخرج نقداً من الدرج (debit)، والتسوية أو الإلغاء يرد المتبقي للدرج (credit).
+  /// يعتمد على [createdAt] لضمان عدم اختفاء حركة العهدة عند تعديل [date] عبر DocumentDateService.
+  Future<({double disbursed, double returned, double netOutflow})>
+      _getCustodyCashMovementBetween(
+    DateTime from,
+    DateTime to,
+  ) async {
+    final rows = await (db.select(db.ledgerTransactions)
+          ..where((t) =>
+              t.origin.equals('custody') &
+              t.paymentMethod.equals('cash') &
+              ((t.createdAt.isNotNull() & t.createdAt.isBetweenValues(from, to)) |
+                  (t.createdAt.isNull() & t.date.isBetweenValues(from, to)))))
+        .get();
+
+    double disbursed = 0.0;
+    double returned = 0.0;
+    for (final row in rows) {
+      disbursed += row.debit;
+      returned += row.credit;
+    }
+    return (
+      disbursed: disbursed,
+      returned: returned,
+      netOutflow: disbursed - returned,
+    );
   }
 }

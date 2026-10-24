@@ -13,7 +13,6 @@ import 'package:pos_offline_desktop/core/services/settings_service.dart';
 /// MANDATORY: Single service for ALL document generation
 /// NO EXCEPTIONS - Every export must use this service
 class UnifiedPrintService {
-  static const String _logoAssetPath = 'assets/receipt/receipt_logo.png';
 
   /// Summary-box math for invoice PDFs: returns
   /// (discountTotal, paidTotal, remainingTotal).
@@ -336,6 +335,16 @@ class UnifiedPrintService {
           data,
           additionalData,
         );
+
+      case DocumentType.manufacturingCard:
+        return await _buildManufacturingCardContent(
+          pdf,
+          arabicFont,
+          arabicFontBold,
+          documentType,
+          data,
+          additionalData,
+        );
     }
   }
 
@@ -556,6 +565,339 @@ class UnifiedPrintService {
           ],
         ),
       ),
+    ];
+  }
+
+  /// FEAT-010: production/consumption documentation card per manufacturing
+  /// order. `data` = flat order fields map, `additionalData` = resolved
+  /// names + custody movement/balance rows (all pre-formatted strings).
+  static Future<List<pw.Widget>> _buildManufacturingCardContent(
+    pw.Document pdf,
+    pw.Font arabicFont,
+    pw.Font arabicFontBold,
+    DocumentType documentType,
+    dynamic data,
+    Map<String, dynamic>? additionalData,
+  ) async {
+    final order = data as Map<String, dynamic>;
+    String info(String k, [String fallback = '—']) =>
+        (order[k] ?? additionalData?[k])?.toString() ?? fallback;
+    double numOf(String k) =>
+        (order[k] as num?)?.toDouble() ?? 0.0;
+
+    final movements =
+        (additionalData?['movements'] as List<Map<String, dynamic>>?) ??
+        const <Map<String, dynamic>>[];
+    final balances =
+        (additionalData?['balances'] as List<Map<String, dynamic>>?) ??
+        const <Map<String, dynamic>>[];
+    final scraps =
+        (additionalData?['scraps'] as List<Map<String, dynamic>>?) ??
+        const <Map<String, dynamic>>[];
+
+    final delivered = numOf('deliveredQuantity');
+    final produced = numOf('producedQuantity');
+    final remaining = produced - delivered;
+
+    return [
+      /// Order info box
+      pw.Container(
+        padding: const pw.EdgeInsets.all(10),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey400),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            pw.Text(
+              'أمر التصنيع: ${info('orderNumber')} — ${info('status')} (${info('orderType')})',
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                font: arabicFontBold,
+              ),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Text(
+              'العميل: ${info('customerName')}    الوصفة: ${info('bomName')}    '
+              'المنتج النهائي: ${info('finishedProductName')}    '
+              'العهدة: ${info('custodyOnHand')} وحدة',
+              style: pw.TextStyle(fontSize: 10.5, font: arabicFont),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'التاريخ: ${info('createdDate')}',
+                  style: pw.TextStyle(fontSize: 10, font: arabicFont),
+                ),
+                pw.Text(
+                  'التشغيل: ${info('startedDate')}',
+                  style: pw.TextStyle(fontSize: 10, font: arabicFont),
+                ),
+                pw.Text(
+                  'الاكتمال: ${info('completedDate')}',
+                  style: pw.TextStyle(fontSize: 10, font: arabicFont),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      pw.SizedBox(height: 12),
+
+      /// Quantities summary row
+      pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            'مخطط: ${numOf('plannedQuantity').toStringAsFixed(1)}',
+            style: pw.TextStyle(font: arabicFont, fontSize: 10),
+          ),
+          pw.Text(
+            'المستهلك من العهدة: ${numOf('consumedQuantity').toStringAsFixed(1)}',
+            style: pw.TextStyle(font: arabicFont, fontSize: 10),
+          ),
+          pw.Text(
+            'رصيد العهدة بالمخزن: ${numOf('custodyOnHand').toStringAsFixed(1)}',
+            style: pw.TextStyle(font: arabicFont, fontSize: 10),
+          ),
+        ],
+      ),
+      pw.SizedBox(height: 12),
+
+      /// Custody movements table
+      pw.Table(
+        border: pw.TableBorder.all(color: PdfColors.grey400),
+        columnWidths: {
+          0: const pw.FlexColumnWidth(1.2), // Date
+          1: const pw.FlexColumnWidth(1.4), // Movement
+          2: const pw.FlexColumnWidth(2.2), // Product
+          3: const pw.FlexColumnWidth(0.9), // Qty
+          4: const pw.FlexColumnWidth(1.8), // Reference
+        },
+        children: [
+          pw.TableRow(
+            decoration: pw.BoxDecoration(color: PdfColors.grey300),
+            children: [
+              _buildTableCell('التاريخ', isHeader: true, font: arabicFontBold),
+              _buildTableCell(
+                'النوع',
+                isHeader: true,
+                font: arabicFontBold,
+              ),
+              _buildTableCell('الصنف', isHeader: true, font: arabicFontBold),
+              _buildTableCell('الكمية', isHeader: true, font: arabicFontBold),
+              _buildTableCell(
+                'المرجع',
+                isHeader: true,
+                font: arabicFontBold,
+              ),
+            ],
+          ),
+          ...movements.map((m) {
+            final qty = (m['quantity'] as num?)?.toDouble() ?? 0.0;
+            return pw.TableRow(
+              children: [
+                _buildTableCell(
+                  m['date']?.toString() ?? '—',
+                  font: arabicFont,
+                ),
+                _buildTableCell(
+                  m['movementType']?.toString() ?? '—',
+                  font: arabicFont,
+                ),
+                _buildTableCell(
+                  m['productName']?.toString() ?? '—',
+                  font: arabicFont,
+                ),
+                _buildTableCell(
+                  qty.toStringAsFixed(qty.truncateToDouble() == qty ? 1 : 2),
+                  isBold: true,
+                  font: arabicFont,
+                ),
+                _buildTableCell(
+                  m['reference']?.toString() ?? '—',
+                  font: arabicFont,
+                ),
+              ],
+            );
+          }),
+        ],
+      ),
+      if (movements.isEmpty)
+        pw.Container(
+          padding: const pw.EdgeInsets.all(10),
+          child: pw.Text(
+            'لم يتم تسجيل حركات عهدة على هذا الأمر بعد',
+            style: pw.TextStyle(fontSize: 10, font: arabicFont),
+            textAlign: pw.TextAlign.center,
+          ),
+        ),
+      pw.SizedBox(height: 14),
+
+      /// Remaining custody balances table
+      pw.Text(
+        'باقي رصيد العهدة بالمخزن:',
+        style: pw.TextStyle(
+          fontSize: 11,
+          fontWeight: pw.FontWeight.bold,
+          font: arabicFontBold,
+        ),
+      ),
+      pw.SizedBox(height: 6),
+      pw.Table(
+        border: pw.TableBorder.all(color: PdfColors.grey400),
+        columnWidths: {
+          0: const pw.FlexColumnWidth(2.2),
+          1: const pw.FlexColumnWidth(1.2),
+          2: const pw.FlexColumnWidth(1),
+          3: const pw.FlexColumnWidth(1.4),
+        },
+        children: [
+          pw.TableRow(
+            decoration: pw.BoxDecoration(color: PdfColors.grey300),
+            children: [
+              _buildTableCell('الصنف', isHeader: true, font: arabicFontBold),
+              _buildTableCell(
+                'الرصيد المتاح',
+                isHeader: true,
+                font: arabicFontBold,
+              ),
+              _buildTableCell('المحجوز', isHeader: true, font: arabicFontBold),
+              _buildTableCell(
+                'اللون / المقاس',
+                isHeader: true,
+                font: arabicFontBold,
+              ),
+            ],
+          ),
+          ...balances.map((b) {
+            final onHand = (b['quantityOnHand'] as num?)?.toDouble() ?? 0.0;
+            final allocated =
+                (b['quantityAllocated'] as num?)?.toDouble() ?? 0.0;
+            return pw.TableRow(
+              children: [
+                _buildTableCell(
+                  b['productName']?.toString() ?? '—',
+                  font: arabicFont,
+                ),
+                _buildTableCell(
+                  onHand.toStringAsFixed(1),
+                  isBold: true,
+                  color: PdfColors.green700,
+                  font: arabicFont,
+                ),
+                _buildTableCell(
+                  allocated.toStringAsFixed(1),
+                  font: arabicFont,
+                ),
+                _buildTableCell(
+                  b['colorSize']?.toString() ?? '—',
+                  font: arabicFont,
+                ),
+              ],
+            );
+          }),
+        ],
+      ),
+      if (balances.isEmpty)
+        pw.Container(
+          padding: const pw.EdgeInsets.all(10),
+          child: pw.Text(
+            'لا توجد أرصدة عهدة باقية للعميل',
+            style: pw.TextStyle(fontSize: 10, font: arabicFont),
+            textAlign: pw.TextAlign.center,
+          ),
+        ),
+      pw.SizedBox(height: 14),
+      pw.Container(
+        padding: const pw.EdgeInsets.all(8),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey400),
+        ),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              'المنتج فعلياً: ${produced.toStringAsFixed(1)}',
+              style: pw.TextStyle(font: arabicFont, fontSize: 10),
+            ),
+            pw.Text(
+              'المسلّم للعميل: ${delivered.toStringAsFixed(1)}',
+              style: pw.TextStyle(font: arabicFont, fontSize: 10),
+            ),
+            pw.Text(
+              'المتبقي للتسليم: ${remaining.toStringAsFixed(1)}',
+              style: pw.TextStyle(font: arabicFont, fontSize: 10),
+            ),
+          ],
+        ),
+      ),
+      if (scraps.isNotEmpty) ...[
+        pw.SizedBox(height: 14),
+        pw.Text(
+          'الهالك والتوالف (Scrap):',
+          style: pw.TextStyle(
+            fontSize: 11,
+            fontWeight: pw.FontWeight.bold,
+            font: arabicFontBold,
+          ),
+        ),
+        pw.SizedBox(height: 6),
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColors.grey400),
+          columnWidths: {
+            0: const pw.FlexColumnWidth(1.2),
+            1: const pw.FlexColumnWidth(2),
+            2: const pw.FlexColumnWidth(0.9),
+            3: const pw.FlexColumnWidth(1.4),
+            4: const pw.FlexColumnWidth(1.2),
+            5: const pw.FlexColumnWidth(1.3),
+          },
+          children: [
+            pw.TableRow(
+              decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              children: [
+                _buildTableCell('التاريخ', isHeader: true, font: arabicFontBold),
+                _buildTableCell('الصنف', isHeader: true, font: arabicFontBold),
+                _buildTableCell('الكمية', isHeader: true, font: arabicFontBold),
+                _buildTableCell('السبب', isHeader: true, font: arabicFontBold),
+                _buildTableCell('المتسبب', isHeader: true, font: arabicFontBold),
+                _buildTableCell('إجراء التعويض', isHeader: true, font: arabicFontBold),
+              ],
+            ),
+            ...scraps.map((s) {
+              final qty = (s['quantity'] as num?)?.toDouble() ?? 0.0;
+              final action = s['compensationAction']?.toString() ?? '—';
+              final actionText = action == 'deducted_from_invoice'
+                  ? 'خصم (${s['compensationAmount']} ج.م)'
+                  : (action == 'replaced'
+                      ? 'صرف بديل'
+                      : (action == 'labour_waived'
+                          ? 'إسقاط مصنعية'
+                          : (action == 'none' ? 'بدون تعويض' : action)));
+              return pw.TableRow(
+                children: [
+                  _buildTableCell(s['date']?.toString() ?? '—', font: arabicFont),
+                  _buildTableCell(s['productName']?.toString() ?? '—', font: arabicFont),
+                  _buildTableCell(
+                    qty.toStringAsFixed(qty.truncateToDouble() == qty ? 1 : 2),
+                    isBold: true,
+                    color: PdfColors.red700,
+                    font: arabicFont,
+                  ),
+                  _buildTableCell(s['reason']?.toString() ?? '—', font: arabicFont),
+                  _buildTableCell(s['faultParty']?.toString() ?? '—', font: arabicFont),
+                  _buildTableCell(actionText, font: arabicFont),
+                ],
+              );
+            }),
+          ],
+        ),
+      ],
     ];
   }
 
@@ -907,6 +1249,8 @@ class UnifiedPrintService {
         return 'سند صرف';
       case DocumentType.receiptVoucher:
         return 'سند قبض';
+      case DocumentType.manufacturingCard:
+        return 'بطاقة الإنتاج/الصرف';
     }
   }
 
@@ -966,6 +1310,8 @@ enum DocumentType {
   expenseReport,
   paymentVoucher,
   receiptVoucher,
+  /// FEAT-010: production/consumption documentation card per MO
+  manufacturingCard,
 }
 
 /// Enhanced Store Info Model (from StoreInfoTable)

@@ -110,8 +110,6 @@ class _ClothingVariantGeneratorDialogState
               category: Value(_selectedCategory),
               unit: const Value('قطعة'),
               status: const Value('Active'),
-              size: Value(size),
-              color: Value(color),
             ),
           );
           createdCount++;

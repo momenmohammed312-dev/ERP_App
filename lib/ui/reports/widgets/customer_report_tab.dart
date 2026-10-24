@@ -4,6 +4,7 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
 import 'package:intl/intl.dart';
+import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
 import 'customer_monthly_report_page.dart';
 
 class CustomerReportTab extends StatefulWidget {
@@ -328,24 +329,20 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
             // Date Range Selector
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.date_range, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'الفترة: ${DateFormat('yyyy/MM/dd').format(_reportStart)} - ${DateFormat('yyyy/MM/dd').format(_reportEnd)}',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                    ),
-                    const Spacer(),
-                    TextButton.icon(
+                padding: EdgeInsets.all(PlatformUtils.isMobile ? 12 : 16),
+                child: Builder(
+                  builder: (context) {
+                    final isMobile = PlatformUtils.isMobile || MediaQuery.sizeOf(context).width < 600;
+                    final changeButton = TextButton.icon(
                       onPressed: () async {
                         final picked = await showDateRangePicker(
                           context: context,
                           firstDate: DateTime(2020),
                           lastDate: DateTime.now(),
                           initialDateRange: DateTimeRange(
-                            start: _reportStart, end: _reportEnd),
+                            start: _reportStart,
+                            end: _reportEnd,
+                          ),
                         );
                         if (picked != null) {
                           setState(() {
@@ -356,52 +353,104 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
                       },
                       icon: const Icon(Icons.edit_calendar, size: 18),
                       label: const Text('تغيير الفترة'),
-                    ),
-                  ],
+                    );
+
+                    final textDisplay = Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.date_range, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'الفترة: ${DateFormat('yyyy/MM/dd').format(_reportStart)} - ${DateFormat('yyyy/MM/dd').format(_reportEnd)}',
+                            style: TextStyle(
+                              fontSize: isMobile ? 12 : 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    );
+
+                    if (isMobile) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          textDisplay,
+                          const Gap(8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: changeButton,
+                          ),
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        Expanded(child: textDisplay),
+                        const Gap(8),
+                        changeButton,
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
             const Gap(16),
 
-            // Summary Cards
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _showOnlyDues = !_showOnlyDues;
-                        _filterCustomers();
-                      });
-                    },
-                    child: _SummaryCard(
-                      title: context.l10n.total_receivables_us,
-                      value: totalDue,
-                      color: _showOnlyDues ? Colors.orange : Colors.red,
-                      icon: Icons.trending_up,
-                    ),
+            Builder(
+              builder: (context) {
+                final isMobile = PlatformUtils.isMobile || MediaQuery.sizeOf(context).width < 600;
+                final card1 = GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _showOnlyDues = !_showOnlyDues;
+                      _filterCustomers();
+                    });
+                  },
+                  child: _SummaryCard(
+                    title: context.l10n.total_receivables_us,
+                    value: totalDue,
+                    color: _showOnlyDues ? Colors.orange : Colors.red,
+                    icon: Icons.trending_up,
                   ),
-                ),
-                const Gap(16),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _showOnlyDues = false;
-                        _filterCustomers();
-                      });
-                    },
-                    child: _SummaryCard(
-                      title: context.l10n.total_payables_us,
-                      value: totalCredited,
-                      color: Colors.green,
-                      icon: Icons.trending_down,
-                    ),
+                );
+
+                final card2 = GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _showOnlyDues = false;
+                      _filterCustomers();
+                    });
+                  },
+                  child: _SummaryCard(
+                    title: context.l10n.total_payables_us,
+                    value: totalCredited,
+                    color: Colors.green,
+                    icon: Icons.trending_down,
                   ),
-                ),
-                const Gap(16),
-                Expanded(child: Container()), // Spacer
-              ],
+                );
+
+                if (isMobile) {
+                  return Column(
+                    children: [
+                      card1,
+                      const Gap(8),
+                      card2,
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(child: card1),
+                    const Gap(16),
+                    Expanded(child: card2),
+                  ],
+                );
+              },
             ),
             const Gap(16),
 
@@ -415,47 +464,50 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
                       child: SizedBox(
                         width: double.infinity,
                         child: Card(
-                          child: DataTable(
-                            showCheckboxColumn: false, // Make rows clickable
-                            headingRowColor: WidgetStateProperty.all(
-                              Colors.purple.withValues(alpha: 0.05),
-                            ),
-                            columns: [
-                              DataColumn(label: Text(context.l10n.customer)),
-                              DataColumn(label: Text(context.l10n.phone)),
-                              DataColumn(
-                                label: Text(
-                                  context.l10n.receivable_balance,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
+                              showCheckboxColumn: false, // Make rows clickable
+                              headingRowColor: WidgetStateProperty.all(
+                                Colors.purple.withValues(alpha: 0.05),
                               ),
-                            ],
-                            rows: _filteredCustomers.map((c) {
-                              return DataRow(
-                                onSelectChanged: (selected) {
-                                  if (selected == true) {
-                                    _showStatementDialog(c.customer);
-                                  }
-                                },
-                                cells: [
-                                  DataCell(Text(c.customer.name)),
-                                  DataCell(Text(c.customer.phone ?? '')),
-                                  DataCell(
-                                    Text(
-                                      '${c.balance.toStringAsFixed(2)} ${context.l10n.currency_symbol}',
-                                      style: TextStyle(
-                                        color: c.balance > 0
-                                            ? Colors.red
-                                            : Colors.green,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                              columns: [
+                                DataColumn(label: Text(context.l10n.customer)),
+                                DataColumn(label: Text(context.l10n.phone)),
+                                DataColumn(
+                                  label: Text(
+                                    context.l10n.receivable_balance,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                ],
-                              );
-                            }).toList(),
+                                ),
+                              ],
+                              rows: _filteredCustomers.map((c) {
+                                return DataRow(
+                                  onSelectChanged: (selected) {
+                                    if (selected == true) {
+                                      _showStatementDialog(c.customer);
+                                    }
+                                  },
+                                  cells: [
+                                    DataCell(Text(c.customer.name)),
+                                    DataCell(Text(c.customer.phone ?? '')),
+                                    DataCell(
+                                      Text(
+                                        '${c.balance.toStringAsFixed(2)} ${context.l10n.currency_symbol}',
+                                        style: TextStyle(
+                                          color: c.balance > 0
+                                              ? Colors.red
+                                              : Colors.green,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
                           ),
                         ),
                       ),
@@ -493,35 +545,48 @@ class _SummaryCard extends StatelessWidget {
     return Card(
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: color, size: 28),
+              child: Icon(icon, color: color, size: 24),
             ),
-            const Gap(16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
-                ),
-                Text(
-                  '${value.toStringAsFixed(2)} ${context.l10n.currency_symbol}',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: color,
+            const Gap(10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey.shade600,
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${value.toStringAsFixed(2)} ${context.l10n.currency_symbol}',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

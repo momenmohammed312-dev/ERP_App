@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import '../../../services/license_entitlement.dart';
 import '../app_database.dart';
 import '../tables/damaged_items_table.dart';
 
@@ -10,18 +11,37 @@ class DamagedItemsDao extends DatabaseAccessor<AppDatabase>
     with _$DamagedItemsDaoMixin {
   DamagedItemsDao(super.db);
 
-  /// إضافة سجل هالك جديد
-  Future<int> insertDamagedItem(DamagedItemsCompanion item) =>
-      into(damagedItems).insert(item);
+  /// BUG-018 — entitlement guard.
+  ///
+  /// The home screen greys out the launcher, but that is a widget around a
+  /// button. This DAO is reachable from the route, from a test, and from any
+  /// future call site, so the write itself has to ask. Denied BEFORE the
+  /// statement runs, so nothing is partially persisted.
+  ///
+  /// Deliberately not inside a transaction: `grants()` is a synchronous
+  /// in-memory read, so there is no disk I/O to hold a transaction open for.
+  static void _requireLicense(String operation) => LicenseEntitlement.instance
+      .require('damaged_goods', operation: operation);
 
-  /// تحديث سجل هالك موجود
-  Future<void> updateDamagedItem(DamagedItemsCompanion item) =>
-      (update(damagedItems)..where((t) => t.id.equals(item.id.value)))
-          .write(item);
+  /// ????? ??? ???? ????
+  Future<int> insertDamagedItem(DamagedItemsCompanion item) {
+    _requireLicense('تسجيل تالف');
+    return into(damagedItems).insert(item);
+  }
 
-  /// حذف سجل هالك
-  Future<void> deleteDamagedItem(int id) =>
-      (delete(damagedItems)..where((t) => t.id.equals(id))).go();
+  /// ????? ??? ???? ?????
+  Future<void> updateDamagedItem(DamagedItemsCompanion item) {
+    _requireLicense('تعديل تالف');
+    return (update(
+      damagedItems,
+    )..where((t) => t.id.equals(item.id.value))).write(item);
+  }
+
+  /// ??? ??? ????
+  Future<void> deleteDamagedItem(int id) {
+    _requireLicense('حذف تالف');
+    return (delete(damagedItems)..where((t) => t.id.equals(id))).go();
+  }
 
   /// إجمالي الكميات التالفة لمنتج معين
   Future<int> getTotalQuantityByProduct(int productId) async {
@@ -30,10 +50,9 @@ class DamagedItemsDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// الحصول على كل سجلات الهالك (مرتبة من الأحدث)
-  Future<List<DamagedItem>> getAllDamagedItems() =>
-      (select(damagedItems)
-            ..orderBy([(t) => OrderingTerm.desc(t.damageDate)]))
-          .get();
+  Future<List<DamagedItem>> getAllDamagedItems() => (select(
+    damagedItems,
+  )..orderBy([(t) => OrderingTerm.desc(t.damageDate)])).get();
 
   /// الحصول على سجلات الهالك في فترة زمنية
   Future<List<DamagedItem>> getDamagedItemsByDateRange(
@@ -66,34 +85,39 @@ class DamagedItemsDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// مراقبة كل سجلات الهالك (Stream)
-  Stream<List<DamagedItem>> watchAllDamagedItems() =>
-      (select(damagedItems)
-            ..orderBy([(t) => OrderingTerm.desc(t.damageDate)]))
-          .watch();
+  Stream<List<DamagedItem>> watchAllDamagedItems() => (select(
+    damagedItems,
+  )..orderBy([(t) => OrderingTerm.desc(t.damageDate)])).watch();
 
   /// JOIN query — returns damaged items with product name (eliminates nested FutureBuilder)
   Future<List<DamagedItemWithProduct>> getAllDamagedItemsWithProducts() async {
     final query = select(damagedItems).join([
       innerJoin(db.products, db.products.id.equalsExp(damagedItems.productId)),
-    ])
-      ..orderBy([OrderingTerm.desc(damagedItems.damageDate)]);
+    ])..orderBy([OrderingTerm.desc(damagedItems.damageDate)]);
 
-    return query.map((row) => DamagedItemWithProduct(
-      item: row.readTable(damagedItems),
-      productName: row.readTable(db.products).name,
-    )).get();
+    return query
+        .map(
+          (row) => DamagedItemWithProduct(
+            item: row.readTable(damagedItems),
+            productName: row.readTable(db.products).name,
+          ),
+        )
+        .get();
   }
 
   Stream<List<DamagedItemWithProduct>> watchAllDamagedItemsWithProducts() {
     final query = select(damagedItems).join([
       innerJoin(db.products, db.products.id.equalsExp(damagedItems.productId)),
-    ])
-      ..orderBy([OrderingTerm.desc(damagedItems.damageDate)]);
+    ])..orderBy([OrderingTerm.desc(damagedItems.damageDate)]);
 
-    return query.map((row) => DamagedItemWithProduct(
-      item: row.readTable(damagedItems),
-      productName: row.readTable(db.products).name,
-    )).watch();
+    return query
+        .map(
+          (row) => DamagedItemWithProduct(
+            item: row.readTable(damagedItems),
+            productName: row.readTable(db.products).name,
+          ),
+        )
+        .watch();
   }
 }
 
