@@ -9,8 +9,10 @@ import 'package:gap/gap.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../services/enhanced_backup_service.dart';
-import '../../l10n/app_localizations.dart';
+import '../../services/cloud/google_drive_auth_service.dart';
+import '../../services/cloud/cloud_backup_encryption_service.dart';
 import '../../core/models/user_model.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../core/provider/app_database_provider.dart';
@@ -24,17 +26,35 @@ class EnhancedBackupScreen extends StatefulWidget {
   State<EnhancedBackupScreen> createState() => _EnhancedBackupScreenState();
 }
 
-class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
+class _EnhancedBackupScreenState extends State<EnhancedBackupScreen>
+    with SingleTickerProviderStateMixin {
   final EnhancedBackupService _backupService = EnhancedBackupService();
+  final GoogleDriveAuthService _driveAuthService = GoogleDriveAuthService();
+  final CloudBackupEncryptionService _encryptionService =
+      CloudBackupEncryptionService();
+
+  late final TabController _tabController;
+
   List<EnhancedBackupInfo> _backups = [];
   bool _isLoading = false;
   Map<String, dynamic>? _statistics;
   Map<String, dynamic>? _autoBackupStatus;
 
+  bool _isGoogleDriveConnected = false;
+  String? _googleDriveEmail;
+  String? _disasterRecoveryKey;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -45,487 +65,974 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
       bool isAuto(EnhancedBackupInfo b) => b.type.contains('auto');
       bool isManual(EnhancedBackupInfo b) => b.type.contains('manual');
 
-      // Calculate basic statistics
       final statistics = {
         'total_backups': backups.length,
         'automatic_backups': backups.where(isAuto).length,
         'manual_backups': backups.where(isManual).length,
-        'total_size_mb':
-            (backups.fold<int>(0, (sum, b) => sum + b.size) / (1024 * 1024))
-                .toStringAsFixed(1),
+        'total_size_mb': (backups.fold<int>(0, (sum, b) => sum + b.size) /
+                (1024 * 1024))
+            .toStringAsFixed(1),
       };
 
       final autoStatus = {
-        'enabled': true, // EnhancedAutoBackupService doesn't expose status
-        'interval': '24 hours',
-        'last_backup': backups.isNotEmpty
-            ? backups.first.formattedDate
-            : 'Never',
+        'enabled': true,
+        'interval': '24 ساعة (يومي)',
+        'last_backup':
+            backups.isNotEmpty ? backups.first.formattedDate : 'لم يتم بعد',
       };
 
-      setState(() {
-        _backups = backups;
-        _statistics = statistics;
-        _autoBackupStatus = autoStatus;
-        _isLoading = false;
-      });
+      // Check Google Drive status
+      bool gdriveConnected = false;
+      String? gdriveEmail;
+      try {
+        gdriveConnected = await _driveAuthService.isSignedIn();
+        if (gdriveConnected) {
+          gdriveEmail = await _driveAuthService.getUserEmail();
+        }
+      } catch (_) {}
+
+      // Load recovery key
+      String? recKey;
+      try {
+        recKey = await _encryptionService.getRecoveryKey();
+        recKey ??= await _encryptionService.getOrCreateLocalMasterKey();
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _backups = backups;
+          _statistics = statistics;
+          _autoBackupStatus = autoStatus;
+          _isGoogleDriveConnected = gdriveConnected;
+          _googleDriveEmail = gdriveEmail;
+          _disasterRecoveryKey = recKey;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() => _isLoading = false);
-      _showErrorSnackBar('Failed to load backup data: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showErrorSnackBar('تعذر تحميل بيانات النسخ الاحتياطي: $e');
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final localizations = AppLocalizations.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0D1117) : const Color(0xFFF8F9FA);
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
+    final textColor =
+        isDark ? const Color(0xFFE6EDF3) : const Color(0xFF1F2328);
+    final subTextColor =
+        isDark ? const Color(0xFF8B949E) : const Color(0xFF656D76);
+    final borderColor =
+        isDark ? const Color(0xFF30363D) : const Color(0xFFD0D7DE);
+    final goldColor = const Color(0xFFC9A84C);
+    final blueColor = const Color(0xFF58A6FF);
 
     return Scaffold(
+      backgroundColor: bgColor,
       appBar: AppBar(
         title: const Text('النسخ الاحتياطي والاستعادة'),
-        backgroundColor: Colors.blue.shade800,
-        foregroundColor: Colors.white,
+        backgroundColor: cardBg,
+        foregroundColor: textColor,
+        elevation: 0,
+        centerTitle: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
-            tooltip: 'تحديث',
+            tooltip: 'تحديث البيانات',
+            color: subTextColor,
           ),
+          const Gap(8),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildStatisticsCard(),
-                  const Gap(16),
-                  _buildAutoBackupCard(),
-                  const Gap(16),
-                  _buildActionsCard(),
-                  const Gap(16),
-                  GoogleDriveConnectionCard(
-                    onBackupRestored: _loadData,
+                  // 1. بطاقات المؤشرات العلوية KPI
+                  _buildMetricCardsRow(isDark),
+                  const Gap(20),
+
+                  // 2. شريط التبويبات العصري
+                  Container(
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: borderColor),
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: TabBar(
+                      controller: _tabController,
+                      indicator: BoxDecoration(
+                        color: isDark ? const Color(0xFF21262D) : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: goldColor.withValues(alpha: 0.6),
+                        ),
+                      ),
+                      labelColor: isDark ? Colors.white : Colors.black,
+                      unselectedLabelColor: subTextColor,
+                      labelStyle: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      tabs: const [
+                        Tab(
+                          icon: Icon(Icons.cloud_sync_rounded, size: 20),
+                          text: 'النسخ السحابي (Google Drive)',
+                        ),
+                        Tab(
+                          icon: Icon(Icons.save_rounded, size: 20),
+                          text: 'النسخ المحلي والأرشيف',
+                        ),
+                        Tab(
+                          icon: Icon(Icons.security_rounded, size: 20),
+                          text: 'الجدولة التلقائية والأمان',
+                        ),
+                      ],
+                    ),
                   ),
-                  const Gap(16),
-                  _buildBackupsList(),
+                  const Gap(20),
+
+                  // 3. محتوى التبويبات
+                  AnimatedBuilder(
+                    animation: _tabController,
+                    builder: (context, _) {
+                      switch (_tabController.index) {
+                        case 0:
+                          return GoogleDriveConnectionCard(
+                            onBackupRestored: _loadData,
+                            onStatusChanged: (connected, email) {
+                              setState(() {
+                                _isGoogleDriveConnected = connected;
+                                _googleDriveEmail = email;
+                              });
+                            },
+                          );
+                        case 1:
+                          return _buildLocalBackupsTab(isDark);
+                        case 2:
+                          return _buildSettingsAndSecurityTab(isDark);
+                        default:
+                          return const SizedBox.shrink();
+                      }
+                    },
+                  ),
                 ],
               ),
             ),
     );
   }
 
-  Widget _buildStatisticsCard() {
-    return Card(
-      elevation: 4,
-      child: Padding(
+  // صف بطاقات المؤشرات العلوية KPI
+  Widget _buildMetricCardsRow(bool isDark) {
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
+    final borderColor =
+        isDark ? const Color(0xFF30363D) : const Color(0xFFD0D7DE);
+    final textColor =
+        isDark ? const Color(0xFFE6EDF3) : const Color(0xFF1F2328);
+    final subTextColor =
+        isDark ? const Color(0xFF8B949E) : const Color(0xFF656D76);
+    final goldColor = const Color(0xFFC9A84C);
+    final blueColor = const Color(0xFF58A6FF);
+    final greenColor = const Color(0xFF2EA043);
+    final purpleColor = const Color(0xFFA371F7);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = (constraints.maxWidth - 36) / 4;
+        final isCompact = constraints.maxWidth < 900;
+
+        final items = [
+          // البطاقة 1: Google Drive
+          _buildKpiCard(
+            cardBg: cardBg,
+            borderColor: borderColor,
+            textColor: textColor,
+            subTextColor: subTextColor,
+            accentColor: blueColor,
+            icon: Icons.cloud_done_rounded,
+            title: 'Google Drive',
+            value: _isGoogleDriveConnected
+                ? (_googleDriveEmail ?? 'متصل')
+                : 'غير مربوط',
+            badgeText: _isGoogleDriveConnected ? 'متصل 🟢' : 'غير متصل ⚪',
+            badgeColor: _isGoogleDriveConnected ? greenColor : const Color(0xFFD29922),
+            onTap: () => _tabController.animateTo(0),
+          ),
+          // البطاقة 2: النسخ المحلية
+          _buildKpiCard(
+            cardBg: cardBg,
+            borderColor: borderColor,
+            textColor: textColor,
+            subTextColor: subTextColor,
+            accentColor: goldColor,
+            icon: Icons.folder_zip_outlined,
+            title: 'النسخ المحلية',
+            value: '${_statistics?['total_backups'] ?? _backups.length} نسخة',
+            badgeText: '${_statistics?['total_size_mb'] ?? "0.0"} MB',
+            badgeColor: goldColor,
+            onTap: () => _tabController.animateTo(1),
+          ),
+          // البطاقة 3: النسخ التلقائي
+          _buildKpiCard(
+            cardBg: cardBg,
+            borderColor: borderColor,
+            textColor: textColor,
+            subTextColor: subTextColor,
+            accentColor: greenColor,
+            icon: Icons.update_rounded,
+            title: 'النسخ التلقائي',
+            value: _autoBackupStatus?['enabled'] == true ? 'مفعّل يومياً' : 'معطّل',
+            badgeText: 'كل 24 ساعة',
+            badgeColor: greenColor,
+            onTap: () => _tabController.animateTo(2),
+          ),
+          // البطاقة 4: التشفير
+          _buildKpiCard(
+            cardBg: cardBg,
+            borderColor: borderColor,
+            textColor: textColor,
+            subTextColor: subTextColor,
+            accentColor: purpleColor,
+            icon: Icons.lock_outline_rounded,
+            title: 'الأمان والتشفير',
+            value: 'AES-256-GCM',
+            badgeText: 'Zero-Knowledge',
+            badgeColor: purpleColor,
+            onTap: () => _tabController.animateTo(2),
+          ),
+        ];
+
+        if (isCompact) {
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: items
+                .map((w) => SizedBox(
+                      width: (constraints.maxWidth - 12) / 2,
+                      child: w,
+                    ))
+                .toList(),
+          );
+        }
+
+        return Row(
+          children: items
+              .map((w) => Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: w,
+                    ),
+                  ))
+              .toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildKpiCard({
+    required Color cardBg,
+    required Color borderColor,
+    required Color textColor,
+    required Color subTextColor,
+    required Color accentColor,
+    required IconData icon,
+    required String title,
+    required String value,
+    required String badgeText,
+    required Color badgeColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
         padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.analytics, color: Colors.blue.shade800),
-                const Gap(8),
-                Text(
-                  'إحصائيات النسخ الاحتياطي',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade800,
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: accentColor, size: 20),
+                ),
+                const Gap(10),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: subTextColor,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    badgeText,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: badgeColor,
+                    ),
                   ),
                 ),
               ],
             ),
             const Gap(12),
-            if (_statistics != null) ...[
-              _buildStatRow('إجمالي النسخ', '${_statistics!['total_backups']}'),
-              _buildStatRow(
-                'النسخ التلقائي',
-                '${_statistics!['automatic_backups']}',
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: textColor,
               ),
-              _buildStatRow(
-                'النسخ اليدوي',
-                '${_statistics!['manual_backups']}',
-              ),
-              _buildStatRow(
-                'الحجم الإجمالي',
-                '${_statistics!['total_size_mb']} MB',
-              ),
-            ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.blue,
+  // تبويب النسخ المحلي
+  Widget _buildLocalBackupsTab(bool isDark) {
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
+    final innerBg =
+        isDark ? const Color(0xFF21262D) : const Color(0xFFF6F8FA);
+    final textColor =
+        isDark ? const Color(0xFFE6EDF3) : const Color(0xFF1F2328);
+    final subTextColor =
+        isDark ? const Color(0xFF8B949E) : const Color(0xFF656D76);
+    final borderColor =
+        isDark ? const Color(0xFF30363D) : const Color(0xFFD0D7DE);
+    final goldColor = const Color(0xFFC9A84C);
+    final blueColor = const Color(0xFF58A6FF);
+    final greenColor = const Color(0xFF2EA043);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // شريط الإجراءات السريعة
+        Card(
+          color: cardBg,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: borderColor),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.flash_on_rounded, color: goldColor, size: 20),
+                    const Gap(8),
+                    Text(
+                      'الإجراءات والعمليات المحلية',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                    ),
+                  ],
+                ),
+                const Gap(14),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  children: [
+                    PermissionGuard(
+                      permission: Permission.createBackup,
+                      showUpgradePrompt: false,
+                      child: ElevatedButton.icon(
+                        onPressed: _createManualBackup,
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('إنشاء نسخة يدوية'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: blueColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    PermissionGuard(
+                      permission: Permission.createBackup,
+                      showUpgradePrompt: false,
+                      child: ElevatedButton.icon(
+                        onPressed: _createImmediateBackup,
+                        icon: const Icon(Icons.bolt_rounded, size: 18),
+                        label: const Text('نسخ فوري سريع'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: goldColor,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    PermissionGuard(
+                      permission: Permission.restoreBackup,
+                      showUpgradePrompt: false,
+                      child: OutlinedButton.icon(
+                        onPressed: _importBackup,
+                        icon: const Icon(Icons.file_open_outlined, size: 18),
+                        label: const Text('استيراد نسخة من ملف'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: textColor,
+                          side: BorderSide(color: borderColor),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    PermissionGuard(
+                      permission: Permission.createBackup,
+                      showUpgradePrompt: false,
+                      child: OutlinedButton.icon(
+                        onPressed: _exportBackup,
+                        icon: const Icon(Icons.ios_share_rounded, size: 18),
+                        label: const Text('تصدير نسخة إلى مسار خارجي'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: textColor,
+                          side: BorderSide(color: borderColor),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAutoBackupCard() {
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.schedule, color: Colors.green.shade800),
-                const Gap(8),
-                Text(
-                  'النسخ التلقائي',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green.shade800,
-                  ),
-                ),
-                const Spacer(),
-                Switch(
-                  value: _autoBackupStatus?['enabled'] ?? false,
-                  onChanged: (value) {
-                    if (value) {
-                      EnhancedAutoBackupService.start();
-                    } else {
-                      EnhancedAutoBackupService.stop();
-                    }
-                    _loadData();
-                  },
-                ),
-              ],
-            ),
-            const Gap(12),
-            if (_autoBackupStatus != null) ...[
-              _buildStatRow(
-                'الحالة',
-                _autoBackupStatus!['enabled'] ? 'مفعّل' : 'معطّل',
-              ),
-              _buildStatRow('الفاصل الزمني', _autoBackupStatus!['interval']),
-              _buildStatRow('أخر نسخة', _autoBackupStatus!['last_backup']),
-            ],
-          ],
         ),
-      ),
-    );
-  }
 
-  Widget _buildActionsCard() {
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        const Gap(16),
+
+        // قائمة النسخ المحلية
+        Card(
+          color: cardBg,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: borderColor),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.backup, color: Colors.orange.shade800),
-                const Gap(8),
-                Text(
-                  'الإجراءات',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange.shade800,
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.inventory_2_outlined, color: blueColor, size: 20),
+                    const Gap(8),
+                    Text(
+                      'النسخ الاحتياطية المتوفرة على القرص الصلب',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: innerBg,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Text(
+                        '${_backups.length} نسخة',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                const Gap(14),
+                Divider(color: borderColor, height: 1),
+                const Gap(10),
+
+                if (_backups.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Column(
+                      children: [
+                        Icon(Icons.folder_open_rounded,
+                            size: 48,
+                            color: subTextColor.withValues(alpha: 0.5)),
+                        const Gap(12),
+                        Text(
+                          'لا توجد نسخ احتياطية محلية حالياً',
+                          style: TextStyle(color: subTextColor, fontSize: 14),
+                        ),
+                        const Gap(6),
+                        Text(
+                          'اضغط على زر "إنشاء نسخة يدوية" بالأعلى لحفظ أول نسخة محلية.',
+                          style: TextStyle(
+                              color: subTextColor.withValues(alpha: 0.7),
+                              fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _backups.length,
+                    separatorBuilder: (context, index) =>
+                        Divider(color: borderColor.withValues(alpha: 0.5), height: 1),
+                    itemBuilder: (context, index) {
+                      final backup = _backups[index];
+                      return _buildLocalBackupItem(backup, isDark);
+                    },
+                  ),
               ],
             ),
-            const Gap(12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                PermissionGuard(
-                  permission: Permission.createBackup,
-                  showUpgradePrompt: false,
-                  child: ElevatedButton.icon(
-                    onPressed: _createManualBackup,
-                    icon: const Icon(Icons.add),
-                    label: const Text('إنشاء نسخة يدوية'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-                PermissionGuard(
-                  permission: Permission.createBackup,
-                  showUpgradePrompt: false,
-                  child: ElevatedButton.icon(
-                    onPressed: _exportBackup,
-                    icon: const Icon(Icons.upload),
-                    label: const Text('تصدير نسخة'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-                PermissionGuard(
-                  permission: Permission.restoreBackup,
-                  showUpgradePrompt: false,
-                  child: ElevatedButton.icon(
-                    onPressed: _importBackup,
-                    icon: const Icon(Icons.download),
-                    label: const Text('استيراد نسخة'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purple,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-                PermissionGuard(
-                  permission: Permission.createBackup,
-                  showUpgradePrompt: false,
-                  child: ElevatedButton.icon(
-                    onPressed: _createImmediateBackup,
-                    icon: const Icon(Icons.flash_on),
-                    label: const Text('نسخ فوري'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildBackupsList() {
-    return Card(
-      elevation: 4,
-      child: Column(
+  Widget _buildLocalBackupItem(EnhancedBackupInfo backup, bool isDark) {
+    final textColor =
+        isDark ? const Color(0xFFE6EDF3) : const Color(0xFF1F2328);
+    final subTextColor =
+        isDark ? const Color(0xFF8B949E) : const Color(0xFF656D76);
+    final blueColor = const Color(0xFF58A6FF);
+    final greenColor = const Color(0xFF2EA043);
+
+    final isManual = backup.type.contains('manual');
+    final typeColor = isManual ? blueColor : greenColor;
+    final typeIcon = isManual ? Icons.touch_app_rounded : Icons.schedule_rounded;
+    final typeLabel = isManual ? 'يدوي' : 'تلقائي';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.blue.shade800,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(8),
-                topRight: Radius.circular(8),
-              ),
+              color: typeColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(
+            child: Icon(typeIcon, color: typeColor, size: 20),
+          ),
+          const Gap(14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.list, color: Colors.white),
-                const Gap(8),
-                const Text(
-                  'النسخ الاحتياطية المتوفرة',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        backup.filename,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: textColor,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: typeColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        typeLabel,
+                        style: TextStyle(
+                          color: typeColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const Spacer(),
-                Text(
-                  '${_backups.length} نسخة',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
-                  ),
+                const Gap(4),
+                Row(
+                  children: [
+                    Icon(Icons.schedule, size: 14, color: subTextColor),
+                    const Gap(4),
+                    Text(
+                      backup.formattedDate,
+                      style: TextStyle(fontSize: 12, color: subTextColor),
+                    ),
+                    const Gap(16),
+                    Icon(Icons.storage, size: 14, color: subTextColor),
+                    const Gap(4),
+                    Text(
+                      backup.formattedSize,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: subTextColor,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          if (_backups.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(32),
-              child: Center(
-                child: Text(
-                  'لا توجد نسخ احتياطية حالياً',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
+          const Gap(12),
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, color: subTextColor),
+            onSelected: (value) {
+              switch (value) {
+                case 'verify':
+                  _verifyBackup(backup);
+                  break;
+                case 'restore':
+                  _restoreBackup(backup);
+                  break;
+                case 'export':
+                  _exportSpecificBackup(backup);
+                  break;
+                case 'delete':
+                  _deleteBackup(backup);
+                  break;
+              }
+            },
+            itemBuilder: (context) {
+              final items = <PopupMenuEntry<String>>[
+                const PopupMenuItem(
+                  value: 'verify',
+                  child: Row(
+                    children: [
+                      Icon(Icons.verified_outlined,
+                          color: Color(0xFF58A6FF), size: 18),
+                      Gap(8),
+                      Text('فحص سلامة النسخة'),
+                    ],
+                  ),
                 ),
-              ),
-            )
-          else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _backups.length,
-              itemBuilder: (context, index) {
-                final backup = _backups[index];
-                return _buildBackupItem(backup);
-              },
-            ),
+                const PopupMenuItem(
+                  value: 'export',
+                  child: Row(
+                    children: [
+                      Icon(Icons.upload_file,
+                          color: Color(0xFFC9A84C), size: 18),
+                      Gap(8),
+                      Text('تصدير إلى مسار'),
+                    ],
+                  ),
+                ),
+              ];
+
+              final user = _getCurrentUser();
+              if (user?.hasPermission(Permission.restoreBackup) == true) {
+                items.insert(
+                  0,
+                  const PopupMenuItem(
+                    value: 'restore',
+                    child: Row(
+                      children: [
+                        Icon(Icons.restore_rounded,
+                            color: Color(0xFF2EA043), size: 18),
+                        Gap(8),
+                        Text('استعادة هذه النسخة'),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              if (user?.hasPermission(Permission.deleteBackup) == true) {
+                items.add(
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline,
+                            color: Color(0xFFF85149), size: 18),
+                        Gap(8),
+                        Text('حذف من القرص'),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return items;
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildBackupItem(EnhancedBackupInfo backup) {
-    Color typeColor;
-    IconData typeIcon;
-    String typeText;
+  // تبويب الجدولة التلقائية والأمان
+  Widget _buildSettingsAndSecurityTab(bool isDark) {
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
+    final innerBg =
+        isDark ? const Color(0xFF21262D) : const Color(0xFFF6F8FA);
+    final textColor =
+        isDark ? const Color(0xFFE6EDF3) : const Color(0xFF1F2328);
+    final subTextColor =
+        isDark ? const Color(0xFF8B949E) : const Color(0xFF656D76);
+    final borderColor =
+        isDark ? const Color(0xFF30363D) : const Color(0xFFD0D7DE);
+    final goldColor = const Color(0xFFC9A84C);
+    final greenColor = const Color(0xFF2EA043);
+    final blueColor = const Color(0xFF58A6FF);
 
-    if (backup.type.contains('manual')) {
-      typeColor = Colors.blue;
-      typeIcon = Icons.touch_app;
-      typeText = 'يدوي';
-    } else if (backup.type.contains('auto')) {
-      typeColor = Colors.green;
-      typeIcon = Icons.today;
-      typeText = 'تلقائي';
-    } else {
-      typeColor = Colors.grey;
-      typeIcon = Icons.backup;
-      typeText = 'غير معروف';
-    }
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: typeColor.withValues(alpha: 0.2),
-          child: Icon(typeIcon, color: typeColor),
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                backup.filename,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: typeColor.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                typeText,
-                style: TextStyle(
-                  color: typeColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Gap(4),
-            Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. بطاقة الجدولة التلقائية
+        Card(
+          color: cardBg,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: borderColor),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.schedule, size: 16, color: Colors.grey.shade600),
-                const Gap(4),
-                Text(backup.formattedDate),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: greenColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child:
+                          Icon(Icons.schedule_rounded, color: greenColor, size: 22),
+                    ),
+                    const Gap(12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'النسخ الاحتياطي التلقائي المجدول',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                          const Gap(2),
+                          Text(
+                            'أخذ لقطات أمان تلقائية دورية وحفظها في مجلد النظام',
+                            style: TextStyle(fontSize: 12, color: subTextColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _autoBackupStatus?['enabled'] ?? false,
+                      activeThumbColor: goldColor,
+                      onChanged: (value) {
+                        if (value) {
+                          EnhancedAutoBackupService.start();
+                        } else {
+                          EnhancedAutoBackupService.stop();
+                        }
+                        _loadData();
+                      },
+                    ),
+                  ],
+                ),
                 const Gap(16),
-                Icon(Icons.storage, size: 16, color: Colors.grey.shade600),
-                const Gap(4),
-                Text(backup.formattedSize),
+                Divider(color: borderColor, height: 1),
+                const Gap(16),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: innerBg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildConfigRow('حالة الجدولة',
+                          _autoBackupStatus?['enabled'] == true ? 'مفعّل ويعمل في الخلفية' : 'معطّل', textColor,
+                          statusColor: _autoBackupStatus?['enabled'] == true ? greenColor : Colors.red),
+                      const Gap(10),
+                      _buildConfigRow('الفاصل الزمني التلقائي',
+                          _autoBackupStatus?['interval'] ?? '24 ساعة', textColor),
+                      const Gap(10),
+                      _buildConfigRow('آخر عملية نسخ تلقائي',
+                          _autoBackupStatus?['last_backup'] ?? 'لم تسجل بعد', textColor),
+                    ],
+                  ),
+                ),
               ],
             ),
-          ],
+          ),
         ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) {
-            switch (value) {
-              case 'restore':
-                _restoreBackup(backup);
-                break;
-              case 'verify':
-                _verifyBackup(backup);
-                break;
-              case 'export':
-                _exportSpecificBackup(backup);
-                break;
-              case 'delete':
-                _deleteBackup(backup);
-                break;
-            }
-          },
-          itemBuilder: (context) {
-            final items = <PopupMenuEntry<String>>[
-              const PopupMenuItem(
-                value: 'verify',
-                child: Row(
-                  children: [
-                    Icon(Icons.verified, color: Colors.blue),
-                    Gap(8),
-                    Text('تحقق'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'export',
-                child: Row(
-                  children: [
-                    Icon(Icons.upload, color: Colors.orange),
-                    Gap(8),
-                    Text('تصدير'),
-                  ],
-                ),
-              ),
-            ];
 
-            // Conditionally add restore and delete based on permissions
-            final user = _getCurrentUser();
-            if (user?.hasPermission(Permission.restoreBackup) == true) {
-              items.insert(
-                0,
-                const PopupMenuItem(
-                  value: 'restore',
+        const Gap(16),
+
+        // 2. بطاقة الأمان ومفتاح استرداد الكوارث
+        Card(
+          color: cardBg,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: borderColor),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: goldColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Icons.shield_rounded, color: goldColor, size: 22),
+                    ),
+                    const Gap(12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'الأمان والتشفير الصفري (Zero-Knowledge)',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                          const Gap(2),
+                          Text(
+                            'خوارزمية التشفير القياسية AES-256-GCM مع مفتاح استرداد خاص بالمنشأة',
+                            style: TextStyle(fontSize: 12, color: subTextColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const Gap(16),
+                Divider(color: borderColor, height: 1),
+                const Gap(16),
+                Text(
+                  'رمز استرداد الكوارث الخاص بمنشأتك (Disaster Recovery Key):\n'
+                  'احتفظ بهذا الرمز في مكان آمن خارج هذا الكمبيوتر. إذا تعرض الجهاز للتلف أو قمت بتثبيت نسخة جديدة على جهاز آخر، هذا الرمز هو الوسيلة الوحيدة لفك تشفير واستعادة بياناتك من Google Drive.',
+                  style: TextStyle(fontSize: 13, height: 1.5, color: subTextColor),
+                ),
+                const Gap(14),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: innerBg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: borderColor),
+                  ),
                   child: Row(
                     children: [
-                      Icon(Icons.restore, color: Colors.green),
-                      Gap(8),
-                      Text('استعادة'),
+                      Expanded(
+                        child: SelectableText(
+                          _disasterRecoveryKey ?? 'تعذر قراءة المفتاح',
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                            color: blueColor,
+                          ),
+                        ),
+                      ),
+                      if (_disasterRecoveryKey != null)
+                        IconButton(
+                          icon: Icon(Icons.copy, color: goldColor),
+                          tooltip: 'نسخ المفتاح',
+                          onPressed: () {
+                            Clipboard.setData(
+                                ClipboardData(text: _disasterRecoveryKey!));
+                            _showSuccessSnackBar(
+                                'تم نسخ مفتاح الاسترداد إلى الحافظة بنجاح');
+                          },
+                        ),
                     ],
                   ),
                 ),
-              );
-            }
-            if (user?.hasPermission(Permission.deleteBackup) == true) {
-              items.add(
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, color: Colors.red),
-                      Gap(8),
-                      Text('حذف'),
-                    ],
-                  ),
-                ),
-              );
-            }
-
-            return items;
-          },
+              ],
+            ),
+          ),
         ),
-      ),
+      ],
+    );
+  }
+
+  Widget _buildConfigRow(String label, String value, Color textColor,
+      {Color? statusColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: statusColor ?? textColor,
+          ),
+        ),
+      ],
     );
   }
 
@@ -576,10 +1083,6 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
   Future<void> _exportBackup() async {
     try {
       if (PlatformUtils.isMobile) {
-        // `FilePicker.saveFile` returns a SAF `content://` path on Android,
-        // which is not a writable filesystem path, so the copy below would
-        // fail with a FileSystemException. The share sheet hands the file to
-        // the user directly and requires no storage permission.
         final backup = await _backupService.createBackup(
           type: 'manual_export',
           description: 'نسخة احتياطية مصدرة',
@@ -598,15 +1101,12 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
       );
 
       if (result != null) {
-        // Create backup first
         final backup = await _backupService.createBackup(
           type: 'manual_export',
           description: 'نسخة احتياطية مصدرة',
         );
 
-        // Copy to selected location
         await File(backup.filePath).copy(result);
-
         _showSuccessSnackBar('تم تصدير النسخة الاحتياطية بنجاح');
       }
     } catch (e) {
@@ -641,7 +1141,6 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
       if (confirmed) {
         setState(() => _isLoading = true);
 
-        // Copy backup to backup directory
         final appDir = await getApplicationDocumentsDirectory();
         final backupDir = Directory('${appDir.path}/data/backups');
         if (!await backupDir.exists()) {
@@ -651,8 +1150,8 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
         final backupFileName = sanitizedPickedName.isNotEmpty
             ? sanitizedPickedName
             : (pickedPath != null
-                  ? path.basename(pickedPath)
-                  : 'imported_backup.posbackup');
+                ? path.basename(pickedPath)
+                : 'imported_backup.posbackup');
         final targetPath = '${backupDir.path}/$backupFileName';
         if (pickedPath != null) {
           await File(pickedPath).copy(targetPath);
@@ -660,7 +1159,6 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
           await File(targetPath).writeAsBytes(pickedBytes!, flush: true);
         }
 
-        // Restore backup
         await _backupService.restoreBackup(path.basename(targetPath));
         if (mounted) {
           final container = ProviderScope.containerOf(context);
@@ -731,22 +1229,6 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
     }
   }
 
-  // ignore: unused_element
-  void _legacyVerifyBackup(EnhancedBackupInfo backup) {
-    try {
-      // User's service doesn't have verification method, so just show info
-      _showInfoDialog(
-        'معلومات النسخة الاحتياطية',
-        'الملف: ${backup.filename}\n'
-            'الحجم: ${backup.formattedSize}\n'
-            'التاريخ: ${backup.formattedDate}\n'
-            'النوع: ${backup.type}',
-      );
-    } catch (e) {
-      _showErrorSnackBar('خطأ في التحقق من النسخة الاحتياطية: $e');
-    }
-  }
-
   Future<void> _exportSpecificBackup(EnhancedBackupInfo backup) async {
     try {
       if (PlatformUtils.isMobile) {
@@ -764,7 +1246,6 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
 
       if (result != null) {
         await File(backup.filePath).copy(result);
-
         _showSuccessSnackBar('تم تصدير النسخة الاحتياطية بنجاح');
       }
     } catch (e) {
@@ -799,7 +1280,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
             Text(message),
           ],
         ),
-        backgroundColor: Colors.green,
+        backgroundColor: const Color(0xFF2EA043),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -816,7 +1297,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
             Expanded(child: Text(message)),
           ],
         ),
-        backgroundColor: Colors.red,
+        backgroundColor: const Color(0xFFF85149),
         duration: const Duration(seconds: 5),
         action: SnackBarAction(
           label: 'نسخ',
@@ -830,11 +1311,19 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
   }
 
   Future<bool> _showConfirmDialog(String message) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
+    final textColor =
+        isDark ? const Color(0xFFE6EDF3) : const Color(0xFF1F2328);
+
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('تأكيد'),
-            content: Text(message),
+            backgroundColor: cardBg,
+            title: Text('تأكيد',
+                style: TextStyle(
+                    color: textColor, fontWeight: FontWeight.bold)),
+            content: Text(message, style: TextStyle(color: textColor)),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -842,7 +1331,10 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
               ),
               ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF85149),
+                  foregroundColor: Colors.white,
+                ),
                 child: const Text('تأكيد'),
               ),
             ],
@@ -852,11 +1344,18 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen> {
   }
 
   void _showInfoDialog(String title, String content) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
+    final textColor =
+        isDark ? const Color(0xFFE6EDF3) : const Color(0xFF1F2328);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(content),
+        backgroundColor: cardBg,
+        title: Text(title,
+            style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+        content: Text(content, style: TextStyle(color: textColor)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
