@@ -227,6 +227,14 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                     Colors.orange,
                     () => _tabController.animateTo(1),
                   ),
+                  // Backup Launcher Button
+                  _buildLauncherButton(
+                    context,
+                    'النسخ الاحتياطي',
+                    Icons.cloud_sync_rounded,
+                    const Color(0xFF1F6FEB),
+                    () => context.push('/backup'),
+                  ),
                   // Staff Management Button - Guarded + hidden without module
                   if (AppFeatures.hasStaffModule)
                     FeatureGuard(
@@ -487,6 +495,7 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
 
     return AppBar(
       automaticallyImplyLeading: false,
+      centerTitle: false,
       backgroundColor: Theme.of(
         context,
       ).colorScheme.primary.withValues(alpha: 0.1),
@@ -504,30 +513,60 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: EdgeInsets.all(isMobile ? 8 : 12),
+            padding: EdgeInsets.all(isMobile ? 4 : 6),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              ),
             ),
-            child: Icon(
-              Icons.point_of_sale,
-              color: Theme.of(context).colorScheme.onPrimary,
-              size: isMobile ? 20 : 28,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+              child: Image.asset(
+                'assets/logo/app_logo.png',
+                width: isMobile ? 32 : 44,
+                height: isMobile ? 32 : 44,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => Icon(
+                  Icons.point_of_sale,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: isMobile ? 24 : 32,
+                ),
+              ),
             ),
           ),
-          Gap(isMobile ? 10 : 16),
-          Text(
-            'Developed by MO2',
-            style:
-                (isMobile
-                        ? Theme.of(context).textTheme.titleSmall
-                        : Theme.of(context).textTheme.headlineMedium)
+          Gap(isMobile ? 10 : 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'مدار ERP',
+                style: (isMobile
+                        ? Theme.of(context).textTheme.titleMedium
+                        : Theme.of(context).textTheme.headlineSmall)
                     ?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.7),
-                    ),
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const Gap(1),
+              Text(
+                'Developed by MO2',
+                style: (isMobile
+                        ? Theme.of(context).textTheme.bodySmall
+                        : Theme.of(context).textTheme.labelSmall)
+                    ?.copyWith(
+                  fontSize: isMobile ? 10 : 11,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.55),
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -539,6 +578,12 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
             children: [
               const _LicenseBadge(),
               Gap(isMobile ? 4 : 8),
+              IconButton(
+                icon: const Icon(Icons.cloud_sync_rounded),
+                onPressed: () => context.push('/backup'),
+                tooltip: 'النسخ الاحتياطي (Google Drive & محلي)',
+              ),
+              Gap(isMobile ? 2 : 4),
               IconButton(
                 icon: const Icon(Icons.settings),
                 onPressed: () {

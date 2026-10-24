@@ -9,6 +9,7 @@ import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/ui/user/user_management_page.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/services/auth_service.dart';
+import '../backup/enhanced_backup_screen.dart';
 
 // ignore_for_file: deprecated_member_use
 
@@ -386,6 +387,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
           _buildSectionTitle(context.l10n.other_settings, goldColor),
           const Gap(10),
+
+          ListTile(
+            leading: Icon(Icons.cloud_sync_outlined, color: goldColor),
+            title: Text('النسخ الاحتياطي والاستعادة (Google Drive والمحلي)', style: TextStyle(color: textColor, fontWeight: FontWeight.w600)),
+            subtitle: Text('حفظ واستعادة النسخ الاحتياطية المشفرة سحابياً ومحلياً', style: TextStyle(color: subTextColor, fontSize: 12)),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EnhancedBackupScreen()),
+              );
+            },
+            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: subTextColor),
+          ),
+          Divider(color: borderColor, height: 16),
 
           ListTile(
             leading: Icon(Icons.info_outline, color: goldColor),
