@@ -8,6 +8,7 @@ import 'package:pos_offline_desktop/ui/day/close_day_dialog.dart';
 import '../../core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 
 class CashierPage extends ConsumerStatefulWidget {
@@ -364,123 +365,582 @@ class _CashierPageState extends ConsumerState<CashierPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final canPop = Navigator.of(context).canPop();
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.cashier),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadCurrentDay),
-          IconButton(icon: const Icon(Icons.assignment), onPressed: _showShiftReportDialog),
-        ],
-      ),
+      appBar: canPop
+          ? AppBar(
+              title: Text(l10n.cashier),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded),
+                  tooltip: 'تحديث',
+                  onPressed: _loadCurrentDay,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.assignment_outlined),
+                  tooltip: 'تقرير الوردية',
+                  onPressed: _showShiftReportDialog,
+                ),
+              ],
+            )
+          : null,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
+                // Top Header Strip if embedded
+                if (!canPop)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: MadarColors.gold.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.point_of_sale_rounded,
+                            size: 18,
+                            color: MadarColors.gold,
+                          ),
+                        ),
+                        const Gap(10),
+                        Text(
+                          l10n.cashier,
+                          style: const TextStyle(
+                            fontFamily: 'NotoSansArabic',
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.refresh_rounded, size: 20),
+                          tooltip: 'تحديث البيانات',
+                          onPressed: _loadCurrentDay,
+                        ),
+                        const Gap(6),
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.assignment_outlined, size: 16),
+                          label: const Text('تقرير الوردية'),
+                          onPressed: _showShiftReportDialog,
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Main Content
+                if (!_isDayOpen)
+                  Expanded(child: _buildClosedDayHero(context, l10n))
+                else
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                _isDayOpen ? l10n.day_is_open : l10n.day_is_closed,
-                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: _isDayOpen ? Colors.green : Colors.red,
-                                    ),
+                          const Gap(12),
+                          // Open Status Banner
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outline
+                                    .withValues(alpha: 0.15),
                               ),
-                              if (_isDayOpen)
-                                ElevatedButton(
-                                  onPressed: _closeDay,
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                                  child: Text(l10n.close_day),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF238636)
+                                        .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: const Color(0xFF238636)
+                                          .withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 7,
+                                        height: 7,
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Color(0xFF238636),
+                                        ),
+                                      ),
+                                      const Gap(6),
+                                      Text(
+                                        l10n.day_is_open,
+                                        style: const TextStyle(
+                                          fontFamily: 'NotoSansArabic',
+                                          color: Color(0xFF238636),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
+                                const Gap(12),
+                                if (_currentSession != null)
+                                  Expanded(
+                                    child: Text(
+                                      '${l10n.opening_date}: ${DateFormat('yyyy/MM/dd HH:mm').format(_currentSession!.openedAt)} (${_currentSession!.openedBy})',
+                                      style: TextStyle(
+                                        fontFamily: 'NotoSansArabic',
+                                        fontSize: 12.5,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.7),
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                FilledButton.icon(
+                                  onPressed: _closeDay,
+                                  icon: const Icon(
+                                    Icons.lock_clock_rounded,
+                                    size: 16,
+                                  ),
+                                  label: Text(l10n.close_day),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFFF85149),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Gap(16),
+
+                          // Drawer Stats Row
+                          Row(
+                            children: [
+                              _buildStatCard(
+                                l10n.opening_balance_drawer,
+                                _openingBalance,
+                                const Color(0xFF388BFD),
+                                Icons.account_balance_wallet_rounded,
+                              ),
+                              const Gap(12),
+                              _buildStatCard(
+                                l10n.total_revenue,
+                                _totalIncome,
+                                const Color(0xFF238636),
+                                Icons.trending_up_rounded,
+                              ),
+                              const Gap(12),
+                              _buildStatCard(
+                                l10n.current_balance_drawer,
+                                _closingBalance,
+                                MadarColors.gold,
+                                Icons.point_of_sale_rounded,
+                              ),
                             ],
                           ),
+                          const Gap(20),
+
+                          // Recent Transactions
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.history_rounded,
+                                size: 18,
+                                color: MadarColors.gold,
+                              ),
+                              const Gap(8),
+                              Text(
+                                l10n.recent_transactions_cashier,
+                                style: const TextStyle(
+                                  fontFamily: 'NotoSansArabic',
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Gap(12),
+
+                          if (_transactions.isEmpty)
+                            Container(
+                              padding: const EdgeInsets.all(32),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outline
+                                      .withValues(alpha: 0.12),
+                                ),
+                              ),
+                              child: Text(
+                                'لا توجد حركات نقدية مسجلة في هذه الوردية بعد',
+                                style: TextStyle(
+                                  fontFamily: 'NotoSansArabic',
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.5),
+                                ),
+                              ),
+                            )
+                          else
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _transactions.length,
+                              itemBuilder: (context, index) {
+                                final t = _transactions[index];
+                                final isIncome = t.debit > 0;
+                                final color = isIncome
+                                    ? const Color(0xFF238636)
+                                    : const Color(0xFFF85149);
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Theme.of(context).colorScheme.surface,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .outline
+                                          .withValues(alpha: 0.12),
+                                    ),
+                                  ),
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 2,
+                                    ),
+                                    leading: Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: color.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(
+                                        isIncome
+                                            ? Icons.arrow_downward_rounded
+                                            : Icons.arrow_upward_rounded,
+                                        color: color,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    title: Text(
+                                      t.description,
+                                      style: const TextStyle(
+                                        fontFamily: 'NotoSansArabic',
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      DateFormat(
+                                        'yyyy/MM/dd HH:mm',
+                                      ).format(t.date),
+                                      style: TextStyle(
+                                        fontFamily: 'NotoSansArabic',
+                                        fontSize: 11.5,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.5),
+                                      ),
+                                    ),
+                                    trailing: Text(
+                                      '${(t.debit - t.credit).abs().toStringAsFixed(2)} ج.م',
+                                      style: TextStyle(
+                                        fontFamily: 'NotoSansArabic',
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14,
+                                        color: color,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          const Gap(24),
                         ],
                       ),
                     ),
                   ),
-                ),
-                if (_currentSession != null) ...[
-                  const Gap(10),
-                  Text('${l10n.opening_date}: ${DateFormat('yyyy/MM/dd HH:mm').format(_currentSession!.openedAt)}'),
-                ],
-                const Gap(16),
-                if (_isDayOpen) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        _buildStatCard(l10n.opening_balance_drawer, _openingBalance, Colors.blue),
-                        const Gap(16),
-                        _buildStatCard(l10n.total_revenue, _totalIncome, Colors.green),
-                        const Gap(16),
-                        _buildStatCard(l10n.current_balance_drawer, _closingBalance, Colors.orange),
-                      ],
-                    ),
-                  ),
-                  const Gap(16),
-                ],
-                if (!_isDayOpen)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _openNewDay,
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
-                        child: Text(l10n.open_new_day),
-                      ),
-                    ),
-                  ),
-                if (_transactions.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(l10n.recent_transactions_cashier, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _transactions.length,
-                      itemBuilder: (context, index) {
-                        final t = _transactions[index];
-                        return Card(
-                          child: ListTile(
-                            leading: Icon(t.debit > 0 ? Icons.arrow_downward : Icons.arrow_upward, color: t.debit > 0 ? Colors.green : Colors.red),
-                            title: Text(t.description),
-                            subtitle: Text(DateFormat('yyyy/MM/dd HH:mm').format(t.date)),
-                            trailing: Text('${(t.debit - t.credit).toStringAsFixed(2)} ج.م', style: TextStyle(fontWeight: FontWeight.bold, color: t.debit > 0 ? Colors.green : Colors.red)),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
               ],
             ),
     );
   }
 
-  Widget _buildStatCard(String title, double value, Color color) {
-    return Expanded(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Text(title, style: const TextStyle(fontSize: 14)),
-              const Gap(8),
-              Text('${value.toStringAsFixed(2)} ج.م', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+  Widget _buildClosedDayHero(BuildContext context, AppLocalizations l10n) {
+    return Center(
+      child: SingleChildScrollView(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 540),
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color:
+                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
             ],
           ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: MadarColors.gold.withValues(alpha: 0.12),
+                  border: Border.all(
+                    color: MadarColors.gold.withValues(alpha: 0.3),
+                    width: 2,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.point_of_sale_rounded,
+                  size: 38,
+                  color: MadarColors.gold,
+                ),
+              ),
+              const Gap(20),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF85149).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFFF85149).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color(0xFFF85149),
+                      ),
+                    ),
+                    const Gap(6),
+                    Text(
+                      l10n.day_is_closed,
+                      style: const TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        color: Color(0xFFF85149),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Gap(14),
+              const Text(
+                'الوردية واليومية مغلقة حالياً',
+                style: TextStyle(
+                  fontFamily: 'NotoSansArabic',
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const Gap(8),
+              Text(
+                'لبدء تسجيل المبيعات والفواتير والتحصيلات لليوم، يرجى فتح يوم جديد وتسجيل رصيد العهدة النقدية الافتتاحية بالدرج.',
+                style: TextStyle(
+                  fontFamily: 'NotoSansArabic',
+                  fontSize: 13,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.65),
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const Gap(24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _openNewDay,
+                  icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                  label: Text(
+                    l10n.open_new_day,
+                    style: const TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF238636),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                  ),
+                ),
+              ),
+              const Gap(16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .outline
+                      .withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outline
+                        .withValues(alpha: 0.1),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 16,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.5),
+                    ),
+                    const Gap(8),
+                    Expanded(
+                      child: Text(
+                        'يتم احتساب رصيد الدرج تلقائياً: (العهدة الافتتاحية + المقبوضات الكاش - المصروفات).',
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 11.5,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard(
+    String title,
+    double value,
+    Color color,
+    IconData icon,
+  ) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(icon, color: color, size: 15),
+                ),
+                const Gap(8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontSize: 12,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.7),
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const Gap(10),
+            Text(
+              '${value.toStringAsFixed(2)} ج.م',
+              style: TextStyle(
+                fontFamily: 'NotoSansArabic',
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+          ],
         ),
       ),
     );

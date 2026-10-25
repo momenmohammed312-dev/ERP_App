@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/core/services/printer_service.dart';
-import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
 
 class ExpensesReportTab extends StatefulWidget {
@@ -30,14 +30,22 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
     59,
     59,
   );
-  List<Expense> _expenses = []; // Changed from LedgerTransaction to Expense
+  List<Expense> _expenses = [];
+  List<Expense> _filteredExpenses = [];
   bool _isLoading = false;
+  final TextEditingController _searchController = TextEditingController();
   final ExportService _exportService = ExportService();
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -52,6 +60,7 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
         _expenses = expenses;
         _isLoading = false;
       });
+      _filterExpenses();
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
@@ -64,20 +73,25 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
     }
   }
 
+  void _filterExpenses() {
+    final query = _searchController.text.trim().toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        _filteredExpenses = List.from(_expenses);
+      } else {
+        _filteredExpenses = _expenses.where((e) {
+          return e.description.toLowerCase().contains(query);
+        }).toList();
+      }
+    });
+  }
+
   Future<void> _selectDateRange(BuildContext context) async {
     final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
       initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(
-            context,
-          ).copyWith(colorScheme: ColorScheme.light(primary: Colors.purple)),
-          child: child ?? const SizedBox(),
-        );
-      },
     );
 
     if (picked != null) {
@@ -98,7 +112,7 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
 
   Future<void> _exportPDF() async {
     try {
-      final data = _expenses.map((e) {
+      final data = _filteredExpenses.map((e) {
         return {
           'id': e.id,
           'description': e.description,
@@ -130,7 +144,7 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
 
   Future<void> _exportExcel() async {
     try {
-      final data = _expenses.map((e) {
+      final data = _filteredExpenses.map((e) {
         return {
           context.l10n.date: DateFormat('yyyy/MM/dd').format(e.date),
           context.l10n.description: e.description,
@@ -172,8 +186,8 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('تم إرسال المصروف إلى الطابعة'),
-            backgroundColor: Colors.green,
+            content: Text('تم إرسال إيصال المصروف إلى الطابعة'),
+            backgroundColor: MadarColors.success,
           ),
         );
       }
@@ -182,7 +196,7 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('فشل في الطباعة: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: MadarColors.error,
           ),
         );
       }
@@ -191,7 +205,10 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
 
   @override
   Widget build(BuildContext context) {
-    final totalExpenses = _expenses.fold(0.0, (sum, item) => sum + item.amount);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final totalExpenses = _filteredExpenses.fold(0.0, (sum, item) => sum + item.amount);
+    final count = _filteredExpenses.length;
+    final avgExpense = count > 0 ? totalExpenses / count : 0.0;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -200,271 +217,447 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text('تقرير المصروفات'),
+        title: const Text(
+          'تقرير المصروفات والمنصرفات',
+          style: TextStyle(fontFamily: 'NotoSansArabic', fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
-        elevation: Theme.of(context).appBarTheme.elevation,
+        elevation: 0,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           children: [
-            // Controls
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Builder(
-                  builder: (context) {
-                    final isMobile = PlatformUtils.isMobile || MediaQuery.sizeOf(context).width < 700;
-                    final datePicker = InkWell(
-                      onTap: () => _selectDateRange(context),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.date_range,
-                              color: Colors.purple,
-                            ),
-                            const Gap(8),
-                            Expanded(
-                              child: Text(
-                                '${DateFormat('yyyy/MM/dd').format(_startDate)} - ${DateFormat('yyyy/MM/dd').format(_endDate)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
+            // Controls Card
+            _buildControlsCard(context, isDark),
+            const Gap(12),
 
-                    final buttons = [
-                      ElevatedButton.icon(
-                        onPressed: _exportPDF,
-                        icon: const Icon(Icons.picture_as_pdf, size: 18),
-                        label: Text(context.l10n.pdf_label),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                      ),
-                      const Gap(8),
-                      ElevatedButton.icon(
-                        onPressed: _exportExcel,
-                        icon: const Icon(Icons.table_chart, size: 18),
-                        label: Text(context.l10n.excel_label),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                      ),
-                    ];
+            // KPI Summary Strip
+            _buildKpiStrip(isDark, totalExpenses, count, avgExpense),
+            const Gap(12),
 
-                    if (isMobile) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          datePicker,
-                          const Gap(10),
-                          Row(children: buttons),
-                        ],
-                      );
-                    }
-
-                    return Row(
-                      children: [
-                        Expanded(child: datePicker),
-                        const Gap(16),
-                        ...buttons,
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ),
-            const Gap(16),
-
-            // Summary Cards
-            Builder(
-              builder: (context) {
-                final isMobile = PlatformUtils.isMobile || MediaQuery.sizeOf(context).width < 700;
-                final card = _SummaryCard(
-                  title: context.l10n.total_expenses,
-                  value: totalExpenses,
-                  color: Colors.red,
-                  icon: Icons.money_off,
-                );
-
-                if (isMobile) {
-                  return card;
-                }
-
-                return Row(
-                  children: [
-                    Expanded(child: card),
-                    const Gap(16),
-                    Expanded(flex: 2, child: Container()),
-                  ],
-                );
-              },
-            ),
-            const Gap(16),
-
-            // Data Table
+            // Expenses List
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : _expenses.isEmpty
-                  ? Center(child: Text(context.l10n.no_expenses_period))
-                  : SingleChildScrollView(
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: Card(
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: DataTable(
-                              headingRowColor: WidgetStateProperty.all(
-                                Colors.purple.withValues(alpha: 0.05),
-                              ),
-                              columns: [
-                                DataColumn(label: Text(context.l10n.date)),
-                                DataColumn(
-                                  label: Text(context.l10n.item_description),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    context.l10n.amount,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    context.l10n.payment_method_short,
-                                  ),
-                                ),
-                                DataColumn(label: Text('طباعة')),
-                              ],
-                              rows: _expenses.map((e) {
-                                return DataRow(
-                                  cells: [
-                                    DataCell(
-                                      Text(
-                                        DateFormat(
-                                          'yyyy/MM/dd HH:mm',
-                                        ).format(e.date),
-                                      ),
-                                    ),
-                                    DataCell(Text(e.description)),
-                                    DataCell(
-                                      Text(
-                                        '${e.amount.toStringAsFixed(2)} ${context.l10n.currency_symbol}',
-                                        style: const TextStyle(
-                                          color: Colors.red,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                    DataCell(Text('Cash')),
-                                    DataCell(
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.print,
-                                          color: Colors.blue,
-                                        ),
-                                        onPressed: () => _printExpense(e),
-                                        tooltip: 'طباعة المصروف',
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
-                          ),
+                  : _filteredExpenses.isEmpty
+                      ? _buildEmptyState(context)
+                      : ListView.builder(
+                          itemCount: _filteredExpenses.length,
+                          itemBuilder: (context, index) {
+                            final expense = _filteredExpenses[index];
+                            return _buildExpenseItemCard(context, isDark, expense);
+                          },
                         ),
-                      ),
-                    ),
             ),
           ],
         ),
       ),
     );
   }
+
+  Widget _buildControlsCard(BuildContext context, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? MadarColors.bgCard : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? MadarColors.border : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              // Search Input
+              Expanded(
+                child: SizedBox(
+                  height: 42,
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (val) => _filterExpenses(),
+                    decoration: InputDecoration(
+                      hintText: 'البحث في بنود المصروفات...',
+                      hintStyle: const TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        fontSize: 13,
+                        color: Colors.grey,
+                      ),
+                      prefixIcon: const Icon(Icons.search, size: 20, color: MadarColors.gold),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.close, size: 18),
+                              onPressed: () {
+                                _searchController.clear();
+                                _filterExpenses();
+                              },
+                            )
+                          : null,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                      filled: true,
+                      fillColor: isDark ? MadarColors.bgSurface : Colors.grey.shade100,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const Gap(10),
+
+              // Date Range Picker Button
+              InkWell(
+                onTap: () => _selectDateRange(context),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  height: 42,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: isDark ? MadarColors.bgSurface : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark ? MadarColors.border : Colors.grey.shade300,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.calendar_month_rounded, size: 18, color: MadarColors.gold),
+                      const Gap(8),
+                      Text(
+                        '${DateFormat('yyyy/MM/dd').format(_startDate)}  -  ${DateFormat('yyyy/MM/dd').format(_endDate)}',
+                        style: const TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Gap(4),
+                      const Icon(Icons.arrow_drop_down, size: 18, color: Colors.grey),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Gap(10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _exportPDF,
+                icon: const Icon(Icons.picture_as_pdf_rounded, size: 18, color: MadarColors.error),
+                label: const Text(
+                  'تصدير PDF',
+                  style: TextStyle(fontFamily: 'NotoSansArabic', fontSize: 13),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: isDark ? MadarColors.border : Colors.grey.shade300),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const Gap(10),
+              FilledButton.tonalIcon(
+                onPressed: _exportExcel,
+                icon: const Icon(Icons.table_view_rounded, size: 18, color: MadarColors.success),
+                label: const Text(
+                  'تصدير Excel',
+                  style: TextStyle(fontFamily: 'NotoSansArabic', fontSize: 13),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: MadarColors.success.withValues(alpha: 0.15),
+                  foregroundColor: MadarColors.success,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKpiStrip(bool isDark, double total, int count, double avg) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 650;
+        final kpi1 = _KpiCard(
+          title: 'إجمالي المصروفات',
+          value: total,
+          subtitle: 'خلال الفترة المحددة',
+          color: MadarColors.error,
+          icon: Icons.money_off_csred_rounded,
+          isDark: isDark,
+        );
+
+        final kpi2 = _KpiCard(
+          title: 'عدد بنود الصرف',
+          valueText: '$count بند',
+          subtitle: 'إجمالي الحركات المسجلة',
+          color: MadarColors.gold,
+          icon: Icons.receipt_long_rounded,
+          isDark: isDark,
+        );
+
+        final kpi3 = _KpiCard(
+          title: 'متوسط قيمة البند',
+          value: avg,
+          subtitle: 'معدل الصرف لكل بند',
+          color: MadarColors.info,
+          icon: Icons.analytics_outlined,
+          isDark: isDark,
+        );
+
+        if (isNarrow) {
+          return Column(
+            children: [
+              kpi1,
+              const Gap(8),
+              Row(
+                children: [
+                  Expanded(child: kpi2),
+                  const Gap(8),
+                  Expanded(child: kpi3),
+                ],
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(child: kpi1),
+            const Gap(10),
+            Expanded(child: kpi2),
+            const Gap(10),
+            Expanded(child: kpi3),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildExpenseItemCard(BuildContext context, bool isDark, Expense expense) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? MadarColors.bgCard : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? MadarColors.border : Colors.grey.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Icon badge
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: MadarColors.error.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.outbox_rounded, color: MadarColors.error, size: 20),
+          ),
+          const Gap(12),
+
+          // Description & Date
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  expense.description,
+                  style: const TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Gap(3),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time_rounded,
+                      size: 13,
+                      color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                    ),
+                    const Gap(4),
+                    Text(
+                      DateFormat('yyyy/MM/dd  HH:mm').format(expense.date),
+                      style: TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        fontSize: 12,
+                        color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                      ),
+                    ),
+                    const Gap(10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isDark ? MadarColors.bgSurface : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'خزينة / نقد',
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Amount
+          Text(
+            '${expense.amount.toStringAsFixed(2)} ج.م',
+            style: const TextStyle(
+              fontFamily: 'NotoSansArabic',
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              color: MadarColors.error,
+            ),
+          ),
+          const Gap(12),
+
+          // Print Icon Button
+          IconButton(
+            onPressed: () => _printExpense(expense),
+            icon: const Icon(Icons.print_rounded, size: 20),
+            color: MadarColors.info,
+            tooltip: 'طباعة إيصال المصروف',
+            style: IconButton.styleFrom(
+              backgroundColor: MadarColors.info.withValues(alpha: 0.1),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.receipt_long_outlined,
+            size: 56,
+            color: Colors.grey,
+          ),
+          const Gap(12),
+          Text(
+            _searchController.text.isNotEmpty
+                ? 'لا توجد بنود مصروفات مطابقة للبحث'
+                : 'لا توجد مصروفات مسجلة في هذه الفترة',
+            style: TextStyle(
+              fontFamily: 'NotoSansArabic',
+              fontSize: 14,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _SummaryCard extends StatelessWidget {
+class _KpiCard extends StatelessWidget {
   final String title;
-  final double value;
+  final double? value;
+  final String? valueText;
+  final String subtitle;
   final Color color;
   final IconData icon;
+  final bool isDark;
 
-  const _SummaryCard({
+  const _KpiCard({
     required this.title,
-    required this.value,
+    this.value,
+    this.valueText,
+    required this.subtitle,
     required this.color,
     required this.icon,
+    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const Gap(10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey.shade600,
-                      fontSize: 12,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '${value.toStringAsFixed(2)} ${context.l10n.currency_symbol}',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: color,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+    final display = valueText ?? '${value?.toStringAsFixed(2) ?? '0.00'} ج.م';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? MadarColors.bgCard : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? MadarColors.border : Colors.grey.shade200,
         ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const Gap(10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontSize: 11,
+                    color: isDark ? MadarColors.textSecondary : Colors.grey.shade600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const Gap(2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    display,
+                    style: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: color,
+                    ),
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontSize: 10,
+                    color: isDark ? MadarColors.textMuted : Colors.grey.shade500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

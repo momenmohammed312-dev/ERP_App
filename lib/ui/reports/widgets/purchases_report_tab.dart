@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
@@ -340,179 +341,314 @@ class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
     );
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text('تقارير المشتريات'),
-        backgroundColor: const Color(0xFF161B22),
-        elevation: 0,
+        title: const Text(
+          'تقارير المشتريات',
+          style: TextStyle(
+            fontFamily: 'NotoSansArabic',
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Card(
-              color: const Color(0xFF161B22),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    TextField(
+            // Controls & Filter Card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .outline
+                      .withValues(alpha: 0.15),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF21262D),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withValues(alpha: 0.15),
+                      ),
+                    ),
+                    child: TextField(
                       controller: _searchController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'البحث عن فاتورة (رقم، مورد، مبلغ)',
-                        hintStyle: TextStyle(color: Colors.white54),
-                        prefixIcon:
-                            Icon(Icons.search, color: Colors.white54),
-                        filled: true,
-                        fillColor: Color(0xFF21262D),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(8)),
+                        hintStyle: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 13,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.5),
+                        ),
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
                         ),
                       ),
-                      style: const TextStyle(color: Colors.white),
                     ),
-                    const Gap(16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => _selectDateRange(context),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade600),
-                                borderRadius: BorderRadius.circular(8),
-                                color: const Color(0xFF21262D),
+                  ),
+                  const Gap(12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _selectDateRange(context),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 11,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outline
+                                    .withValues(alpha: 0.15),
                               ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.date_range,
-                                    color: Colors.orange,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.date_range_rounded,
+                                  size: 18,
+                                  color: MadarColors.gold,
+                                ),
+                                const Gap(8),
+                                Text(
+                                  '${DateFormat('yyyy/MM/dd').format(_startDate)} - ${DateFormat('yyyy/MM/dd').format(_endDate)}',
+                                  style: const TextStyle(
+                                    fontFamily: 'NotoSansArabic',
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
                                   ),
-                                  const Gap(8),
-                                  Text(
-                                    '${DateFormat('yyyy/MM/dd').format(_startDate)} - ${DateFormat('yyyy/MM/dd').format(_endDate)}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        const Gap(8),
-                        ElevatedButton.icon(
-                          onPressed: _exportPDF,
-                          icon: const Icon(Icons.picture_as_pdf),
-                          label: Text(context.l10n.pdf_label),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                          ),
+                      ),
+                      const Gap(10),
+                      OutlinedButton.icon(
+                        onPressed: _exportPDF,
+                        icon: const Icon(
+                          Icons.picture_as_pdf_outlined,
+                          size: 17,
                         ),
-                        const Gap(8),
-                        ElevatedButton.icon(
-                          onPressed: _printThermalSummary,
-                          icon: const Icon(Icons.print),
-                          label: const Text('طباعة حرارية'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                            foregroundColor: Colors.white,
+                        label: Text(context.l10n.pdf_label),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
                           ),
-                        ),
-                        const Gap(8),
-                        ElevatedButton.icon(
-                          onPressed: _exportExcel,
-                          icon: const Icon(Icons.table_chart),
-                          label: Text(context.l10n.excel_label),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const Gap(16),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Card(
-                color: const Color(0xFF161B22),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'الإجمالي الكلي',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Text(
-                        '${grandTotal.toStringAsFixed(2)} جنيه',
-                        style: const TextStyle(
-                          color: Colors.greenAccent,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                      const Gap(8),
+                      OutlinedButton.icon(
+                        onPressed: _printThermalSummary,
+                        icon: const Icon(Icons.print_outlined, size: 17),
+                        label: const Text('طباعة حرارية'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                      const Gap(8),
+                      FilledButton.tonalIcon(
+                        onPressed: _exportExcel,
+                        icon: const Icon(Icons.table_chart_rounded, size: 17),
+                        label: Text(context.l10n.excel_label),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
             ),
+            const Gap(14),
+
+            // Grand Total KPI Card
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF388BFD).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: const Color(0xFF388BFD).withValues(alpha: 0.25),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF388BFD).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.shopping_bag_rounded,
+                      color: Color(0xFF388BFD),
+                      size: 20,
+                    ),
+                  ),
+                  const Gap(12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'إجمالي المشتريات',
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        'عدد الفواتير: ${_filteredPurchases.length}',
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 11,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${grandTotal.toStringAsFixed(2)} جنيه',
+                    style: const TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      color: Color(0xFF388BFD),
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Gap(14),
+
+            // Purchases List
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _filteredPurchases.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'لا توجد بيانات',
-                            style: TextStyle(color: Colors.white54),
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.inventory_2_outlined,
+                                size: 56,
+                                color: Colors.grey,
+                              ),
+                              const Gap(12),
+                              Text(
+                                'لا توجد فواتير مشتريات في الفترة المحددة',
+                                style: TextStyle(
+                                  fontFamily: 'NotoSansArabic',
+                                  fontSize: 14,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.5),
+                                ),
+                              ),
+                            ],
                           ),
                         )
                       : ListView.builder(
                           itemCount: _filteredPurchases.length,
                           itemBuilder: (context, index) {
                             final p = _filteredPurchases[index];
-                            final remaining =
-                                p.totalAmount - p.paidAmount;
-                            return Card(
+                            final remaining = p.totalAmount - p.paidAmount;
+                            final isPaid = remaining <= 0.001;
+
+                            return Container(
                               margin: const EdgeInsets.only(bottom: 8),
-                              color: const Color(0xFF161B22),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outline
+                                      .withValues(alpha: 0.15),
+                                ),
+                              ),
                               child: InkWell(
                                 onTap: () => _openDetail(p),
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(12),
                                 child: Padding(
-                                  padding: const EdgeInsets.all(12),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
                                   child: Row(
                                     children: [
-                                      CircleAvatar(
-                                        backgroundColor: Colors.orange
-                                            .withValues(alpha: 0.1),
-                                        child: Text(
-                                          (displayInvoiceNumber(
-                                                        p.invoiceNumber,
-                                                        null,
-                                                      ) ??
-                                                  '#')[0],
-                                          style: const TextStyle(
-                                            color: Colors.orange,
-                                            fontWeight: FontWeight.bold,
+                                      Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple
+                                              .withValues(alpha: 0.12),
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            (displayInvoiceNumber(
+                                                  p.invoiceNumber,
+                                                  null,
+                                                ) ??
+                                                '#')[0],
+                                            style: const TextStyle(
+                                              fontFamily: 'NotoSansArabic',
+                                              color: Colors.purple,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -529,24 +665,38 @@ class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
                                                   ) ??
                                                   '',
                                               style: const TextStyle(
+                                                fontFamily: 'NotoSansArabic',
                                                 fontWeight: FontWeight.bold,
-                                                color: Colors.white,
+                                                fontSize: 14,
                                               ),
                                             ),
-                                            const SizedBox(height: 4),
+                                            const Gap(2),
                                             Text(
                                               _supplierNames[p.supplierId] ??
                                                   'مورد غير محدد',
-                                              style: const TextStyle(
-                                                  color: Colors.white70),
+                                              style: TextStyle(
+                                                fontFamily: 'NotoSansArabic',
+                                                fontSize: 12.5,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurface
+                                                    .withValues(alpha: 0.7),
+                                              ),
                                             ),
                                             Text(
-                                              DateFormat('yyyy-MM-dd HH:mm')
-                                                  .format(p.purchaseDate
-                                                      .toLocal()),
-                                              style: const TextStyle(
-                                                  color: Colors.white54,
-                                                  fontSize: 12),
+                                              DateFormat(
+                                                'yyyy-MM-dd HH:mm',
+                                              ).format(
+                                                p.purchaseDate.toLocal(),
+                                              ),
+                                              style: TextStyle(
+                                                fontFamily: 'NotoSansArabic',
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurface
+                                                    .withValues(alpha: 0.45),
+                                                fontSize: 11,
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -558,39 +708,54 @@ class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
                                           Text(
                                             '${p.totalAmount.toStringAsFixed(2)} ج.م',
                                             style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.greenAccent,
+                                              fontFamily: 'NotoSansArabic',
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 14,
                                             ),
                                           ),
-                                          Text(
-                                            remaining > 0
-                                                ? 'متبقي ${remaining.toStringAsFixed(2)}'
-                                                : 'مدفوع',
-                                            style: TextStyle(
-                                              color: remaining > 0
-                                                  ? Colors.orange
-                                                  : Colors.green,
-                                              fontSize: 12,
+                                          const Gap(2),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: (isPaid
+                                                      ? const Color(0xFF238636)
+                                                      : const Color(0xFFD29922))
+                                                  .withValues(alpha: 0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              isPaid
+                                                  ? 'مدفوع'
+                                                  : 'متبقي ${remaining.toStringAsFixed(2)}',
+                                              style: TextStyle(
+                                                fontFamily: 'NotoSansArabic',
+                                                color: isPaid
+                                                    ? const Color(0xFF238636)
+                                                    : const Color(0xFFD29922),
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                              ),
                                             ),
                                           ),
                                         ],
                                       ),
+                                      const Gap(8),
                                       IconButton(
                                         icon: const Icon(
-                                          Icons.print,
-                                          size: 20,
-                                          color: Colors.orange,
+                                          Icons.print_outlined,
+                                          size: 18,
                                         ),
                                         onPressed: () => _printOne(p),
                                         tooltip: 'طباعة الفاتورة',
                                       ),
-                                      // إلغاء فاتورة المشتريات — soft delete (is_deleted) مع عكس
-                                      // كامل للمخزون والقيود. بيظهر دايماً؛
-                                      // فحص الصلاحية جوّه الديالوج.
                                       if (!p.isDeleted)
                                         PermissionGuardedIconButton(
-                                          icon: Icons.delete_outline,
-                                          color: Colors.red,
+                                          icon: Icons.delete_outline_rounded,
+                                          color: const Color(0xFFF85149),
                                           tooltip: 'إلغاء الفاتورة',
                                           onPressed: () => _voidPurchase(p),
                                         ),

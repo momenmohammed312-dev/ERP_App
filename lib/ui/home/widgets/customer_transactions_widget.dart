@@ -5,6 +5,7 @@ import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/ui/customer/services/enhanced_customer_statement_generator.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
@@ -48,28 +49,54 @@ class _CustomerTransactionsWidgetState
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: (value) =>
-                          setState(() => _searchQuery = value),
-                      decoration: InputDecoration(
-                        labelText: context.l10n.search_customer_hint,
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _searchQuery = '');
-                                },
-                              )
-                            : null,
-                        border: const OutlineInputBorder(),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .outline
+                              .withValues(alpha: 0.15),
+                        ),
+                      ),
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: (value) =>
+                            setState(() => _searchQuery = value),
+                        decoration: InputDecoration(
+                          hintText: context.l10n.search_customer_hint,
+                          hintStyle: TextStyle(
+                            fontFamily: 'NotoSansArabic',
+                            fontSize: 13,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.5),
+                          ),
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() => _searchQuery = '');
+                                  },
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                  const Gap(16),
-                  ElevatedButton.icon(
+                  const Gap(12),
+                  FilledButton.icon(
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -78,13 +105,28 @@ class _CustomerTransactionsWidgetState
                         ),
                       );
                     },
-                    icon: const Icon(Icons.person_add),
-                    label: Text(context.l10n.add_customer),
+                    icon: const Icon(Icons.person_add_rounded, size: 18),
+                    label: Text(
+                      context.l10n.add_customer,
+                      style: const TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            const SliverToBoxAdapter(child: Gap(20)),
+            const SliverToBoxAdapter(child: Gap(16)),
           ];
 
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -602,80 +644,142 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
   @override
   Widget build(BuildContext context) {
     final remainingDebt = widget.totalPurchases - widget.totalPaid;
+    final isDebtor = remainingDebt > 0.001;
+    final isCreditor = remainingDebt < -0.001;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: ExpansionTile(
-        leading: CircleAvatar(
-          backgroundColor: Theme.of(
-            context,
-          ).colorScheme.primary.withValues(alpha: 0.1),
-          child: Text(
-            widget.customer.name.isNotEmpty
-                ? widget.customer.name[0].toUpperCase()
-                : '?',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.bold,
+    final badgeColor = isDebtor
+        ? const Color(0xFFF85149)
+        : (isCreditor ? const Color(0xFF388BFD) : const Color(0xFF238636));
+
+    final badgeLabel = isDebtor
+        ? 'مطلوب منه'
+        : (isCreditor ? 'له رصيد' : 'خالص الحساب');
+
+    final badgeAmount = isDebtor
+        ? '${remainingDebt.toStringAsFixed(2)} ج.م'
+        : (isCreditor
+            ? '${(-remainingDebt).toStringAsFixed(2)} ج.م'
+            : '0.00 ج.م');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+        ),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          shape: const Border(),
+          collapsedShape: const Border(),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          leading: Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: MadarColors.gold.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
             ),
-          ),
-        ),
-        title: Text(
-          widget.customer.name,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.customer.phone != null)
-              Text(
-                widget.customer.phone ?? '',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.7),
+            child: Center(
+              child: Text(
+                widget.customer.name.isNotEmpty
+                    ? widget.customer.name.characters.first.toUpperCase()
+                    : '؟',
+                style: const TextStyle(
+                  fontFamily: 'NotoSansArabic',
+                  color: MadarColors.gold,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
                 ),
               ),
-            const Gap(4),
-            Text(
-              'الرصيد الكلي: ${remainingDebt.toStringAsFixed(2)} ج.م',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: remainingDebt > 0 ? Colors.red : Colors.green,
-                fontWeight: FontWeight.bold,
-              ),
             ),
-            Text(
-              remainingDebt >= 0 ? 'ديون مدين (لنا)' : 'دائن (علينا)',
-              style: TextStyle(
-                color: remainingDebt > 0 ? Colors.red : Colors.green,
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-              ),
+          ),
+          title: Text(
+            widget.customer.name,
+            style: const TextStyle(
+              fontFamily: 'NotoSansArabic',
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
             ),
-          ],
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              '${remainingDebt.toStringAsFixed(2)} ج.م',
-              style: TextStyle(
-                color: remainingDebt > 0 ? Colors.red : Colors.green,
-                fontWeight: FontWeight.bold,
-              ),
+          ),
+          subtitle: widget.customer.phone != null && widget.customer.phone!.isNotEmpty
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.phone_rounded,
+                        size: 13,
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                      const Gap(4),
+                      Text(
+                        widget.customer.phone!,
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 12.5,
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                        ),
+                      ),
+                      if (widget.customer.address != null && widget.customer.address!.isNotEmpty) ...[
+                        const Gap(10),
+                        Icon(
+                          Icons.location_on_outlined,
+                          size: 13,
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+                        ),
+                        const Gap(2),
+                        Flexible(
+                          child: Text(
+                            widget.customer.address!,
+                            style: TextStyle(
+                              fontFamily: 'NotoSansArabic',
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                )
+              : null,
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: badgeColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
             ),
-            Text(
-              remainingDebt >= 0 ? 'ديون مدين (لنا)' : 'دائن (علينا)',
-              style: TextStyle(
-                color: remainingDebt > 0 ? Colors.red : Colors.green,
-                fontSize: 12,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  badgeLabel,
+                  style: TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    color: badgeColor,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  badgeAmount,
+                  style: TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    color: badgeColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
         children: [
           Padding(
             padding: const EdgeInsets.all(20),
@@ -861,57 +965,68 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
                   Row(
                     children: [
                       Expanded(
-                        child: ElevatedButton.icon(
+                        child: FilledButton.icon(
                           onPressed: () {
                             _showPaymentDialog(widget.customer);
                           },
-                          icon: const Icon(Icons.payments),
-                          label: const Text('سداد قيمة'),
+                          icon: const Icon(Icons.payments_rounded, size: 17),
+                          label: const Text('تسجيل سداد'),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
                         ),
                       ),
-                      const Gap(16),
+                      const Gap(10),
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () {
                             _exportCustomerReport(context, widget.customer);
                           },
-                          icon: const Icon(Icons.picture_as_pdf),
-                          label: const Text('تصدير PDF'),
+                          icon: const Icon(Icons.picture_as_pdf_outlined, size: 17),
+                          label: const Text('كشف حساب PDF'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
                         ),
                       ),
-                      const Gap(16),
+                      const Gap(10),
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () {
                             _printCustomerStatement(context, widget.customer);
                           },
-                          icon: const Icon(Icons.print),
-                          label: const Text('طباعة'),
+                          icon: const Icon(Icons.print_outlined, size: 17),
+                          label: const Text('طباعة حرارية'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const Gap(10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            _showEditCustomerDialog(context, widget.customer);
+                          },
+                          icon: const Icon(Icons.edit_outlined, size: 17),
+                          label: const Text('تعديل البيانات'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
                         ),
                       ),
                     ],
-                  ),
-                  const Gap(16),
-                  // Edit Customer Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        _showEditCustomerDialog(context, widget.customer);
-                      },
-                      icon: const Icon(Icons.edit),
-                      label: const Text('تعديل بيانات العميل'),
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: Colors.blue.withValues(alpha: 0.1),
-                        foregroundColor: Colors.blue,
-                      ),
-                    ),
                   ),
                 ],
               ),
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -933,28 +1048,39 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 20),
+          Row(
+            children: [
+              Icon(icon, color: color, size: 15),
+              const Gap(6),
+              Text(
+                title,
+                style: TextStyle(
+                  fontFamily: 'NotoSansArabic',
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
           const Gap(4),
           Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: color),
-          ),
-          const Gap(2),
-          Text(
             '${value.toStringAsFixed(2)} ج.م',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            style: TextStyle(
+              fontFamily: 'NotoSansArabic',
               color: color,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w800,
+              fontSize: 14.5,
             ),
           ),
         ],

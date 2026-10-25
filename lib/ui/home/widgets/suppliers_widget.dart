@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/core/utils/app_utils.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
@@ -16,149 +17,344 @@ import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 /// deactivated (soft-deleted) suppliers disappear while their financial
 /// history stays intact in the ledger.
 final supplierStatusFilterProvider = StateProvider<String>((_) => 'active');
+final supplierSearchQueryProvider = StateProvider<String>((_) => '');
 
 class SuppliersWidget extends ConsumerWidget {
   final AppDatabase db;
 
   const SuppliersWidget({super.key, required this.db});
 
+  Future<Map<String, dynamic>> _getSuppliersSummary() async {
+    try {
+      final suppliers = await db.select(db.suppliers).get();
+      final supplierMap = {for (final s in suppliers) s.id: s.openingBalance};
+
+      final ledgerRows = await db.customSelect('''
+        SELECT ref_id, COALESCE(SUM(credit - debit), 0) as net
+        FROM ledger_transactions
+        WHERE entity_type = 'Supplier'
+        GROUP BY ref_id
+      ''').get();
+
+      final balances = Map<String, double>.from(supplierMap);
+      for (final row in ledgerRows) {
+        final refId = row.data['ref_id']?.toString() ?? '';
+        final net = (row.data['net'] as num?)?.toDouble() ?? 0.0;
+        balances[refId] = (balances[refId] ?? 0.0) + net;
+      }
+
+      double totalOutstandingDebt = 0.0;
+      int activeSuppliers = 0;
+      for (final b in balances.values) {
+        if (b > 0) {
+          totalOutstandingDebt += b;
+          activeSuppliers++;
+        }
+      }
+
+      final now = DateTime.now();
+      final currentMonthStart = DateTime(now.year, now.month, 1);
+      final paidResult = await db.customSelect(
+        '''
+        SELECT COALESCE(SUM(debit), 0) as paid
+        FROM ledger_transactions
+        WHERE entity_type = 'Supplier' AND debit > 0 AND date BETWEEN ? AND ?
+      ''',
+        variables: [
+          Variable.withDateTime(currentMonthStart),
+          Variable.withDateTime(now),
+        ],
+      ).get();
+
+      final paidThisMonth =
+          (paidResult.first.data['paid'] as num?)?.toDouble() ?? 0.0;
+
+      return {
+        'totalSuppliers': suppliers.length,
+        'outstandingDebt': totalOutstandingDebt,
+        'paidThisMonth': paidThisMonth,
+        'activeSuppliers': activeSuppliers,
+      };
+    } catch (e) {
+      debugPrint('Error in supplier summary: $e');
+      return {
+        'totalSuppliers': 0,
+        'outstandingDebt': 0.0,
+        'paidThisMonth': 0.0,
+        'activeSuppliers': 0,
+      };
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final statusFilter = ref.watch(supplierStatusFilterProvider);
+    final searchQuery = ref.watch(supplierSearchQueryProvider);
+    final isWide = MediaQuery.of(context).size.width >= 700;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Suppliers Summary - Use Flexible to prevent overflow
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16), // Reduced padding
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    l10n.suppliers_summary,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+          // Suppliers Summary KPI Bar
+          FutureBuilder<Map<String, dynamic>>(
+            future: _getSuppliersSummary(),
+            builder: (context, snapshot) {
+              final data = snapshot.data ?? {
+                'totalSuppliers': 0,
+                'outstandingDebt': 0.0,
+                'paidThisMonth': 0.0,
+                'activeSuppliers': 0,
+              };
+
+              final items = [
+                _SupplierSummaryItem(
+                  title: l10n.total_suppliers,
+                  value: '${data['totalSuppliers']}',
+                  icon: Icons.people_alt_rounded,
+                  color: const Color(0xFF388BFD),
+                ),
+                _SupplierSummaryItem(
+                  title: 'مستحقات الموردين (علينا)',
+                  value:
+                      '${(data['outstandingDebt'] as double).toStringAsFixed(2)} ${l10n.currency}',
+                  icon: Icons.trending_up_rounded,
+                  color: const Color(0xFFF85149),
+                ),
+                _SupplierSummaryItem(
+                  title: 'سدادات هذا الشهر',
+                  value:
+                      '${(data['paidThisMonth'] as double).toStringAsFixed(2)} ${l10n.currency}',
+                  icon: Icons.payments_rounded,
+                  color: const Color(0xFF238636),
+                ),
+                _SupplierSummaryItem(
+                  title: 'موردين لهم حساب',
+                  value: '${data['activeSuppliers']}',
+                  icon: Icons.account_balance_wallet_rounded,
+                  color: MadarColors.gold,
+                ),
+              ];
+
+              return Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outline
+                        .withValues(alpha: 0.15),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: MadarColors.gold.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(
+                            Icons.analytics_rounded,
+                            size: 15,
+                            color: MadarColors.gold,
+                          ),
+                        ),
+                        const Gap(8),
+                        Text(
+                          l10n.suppliers_summary,
+                          style: const TextStyle(
+                            fontFamily: 'NotoSansArabic',
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const Gap(12), // Reduced gap
-                  Row(
-                    children: [
-                      Expanded(
-                        child: StreamBuilder<int>(
-                          stream: db.supplierDao.watchSuppliersCount(),
-                          builder: (context, snapshot) {
-                            final count = snapshot.data ?? 0;
-                            return _SupplierSummaryItem(
-                              title: l10n.total_suppliers,
-                              value: count.toString(),
-                              icon: Icons.people,
-                              color: Colors.blue,
-                            );
-                          },
-                        ),
+                    const Gap(12),
+                    if (isWide)
+                      Row(
+                        children: [
+                          for (int i = 0; i < items.length; i++) ...[
+                            if (i > 0) const Gap(10),
+                            Expanded(child: items[i]),
+                          ],
+                        ],
+                      )
+                    else
+                      Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(child: items[0]),
+                              const Gap(10),
+                              Expanded(child: items[1]),
+                            ],
+                          ),
+                          const Gap(10),
+                          Row(
+                            children: [
+                              Expanded(child: items[2]),
+                              const Gap(10),
+                              Expanded(child: items[3]),
+                            ],
+                          ),
+                        ],
                       ),
-                      const Gap(12), // Reduced gap
-                      Expanded(
-                        child: _SupplierSummaryItem(
-                          title: l10n.outstanding_debt,
-                          value: '0.00 ${l10n.currency}',
-                          icon: Icons.money_off,
-                          color: Colors.red,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Gap(12), // Reduced gap
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _SupplierSummaryItem(
-                          title: l10n.paid_this_month,
-                          value: '0.00 ${l10n.currency}',
-                          icon: Icons.payment,
-                          color: Colors.green,
-                        ),
-                      ),
-                      const Gap(12), // Reduced gap
-                      Expanded(
-                        child: _SupplierSummaryItem(
-                          title: l10n.active_suppliers,
-                          value: '0',
-                          icon: Icons.check_circle,
-                          color: Colors.orange,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+                  ],
+                ),
+              );
+            },
           ),
 
-          const Gap(16), // Reduced gap
-          // Search and Actions - Use Flexible to prevent overflow
+          const Gap(16),
+
+          // Search and Actions Bar
           Row(
             children: [
               Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                    labelText: l10n.search_supplier_hint,
-                    prefixIcon: const Icon(Icons.search),
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8, // Reduced vertical padding
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .outline
+                          .withValues(alpha: 0.15),
+                    ),
+                  ),
+                  child: TextField(
+                    onChanged: (val) => ref
+                        .read(supplierSearchQueryProvider.notifier)
+                        .state = val,
+                    decoration: InputDecoration(
+                      hintText: l10n.search_supplier_hint,
+                      hintStyle: TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        fontSize: 13,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.5),
+                      ),
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ),
               ),
-              const Gap(12), // Reduced gap
-              DropdownButton<String>(
-                value: statusFilter,
-                items: [
-                  DropdownMenuItem(value: 'all', child: Text(l10n.all)),
-                  DropdownMenuItem(value: 'active', child: Text(l10n.active)),
-                  DropdownMenuItem(
-                    value: 'inactive',
-                    child: Text(l10n.inactive),
+              const Gap(12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outline
+                        .withValues(alpha: 0.15),
                   ),
-                  DropdownMenuItem(value: 'debt', child: Text(l10n.has_debt)),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    ref.read(supplierStatusFilterProvider.notifier).state =
-                        value;
-                  }
-                },
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: statusFilter,
+                    icon: const Icon(Icons.filter_list_rounded, size: 18),
+                    items: [
+                      DropdownMenuItem(value: 'all', child: Text(l10n.all)),
+                      DropdownMenuItem(
+                        value: 'active',
+                        child: Text(l10n.active),
+                      ),
+                      DropdownMenuItem(
+                        value: 'inactive',
+                        child: Text(l10n.inactive),
+                      ),
+                      DropdownMenuItem(
+                        value: 'debt',
+                        child: Text(l10n.has_debt),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        ref.read(supplierStatusFilterProvider.notifier).state =
+                            value;
+                      }
+                    },
+                  ),
+                ),
               ),
-              const Gap(12), // Reduced gap
-              ElevatedButton.icon(
+              const Gap(12),
+              FilledButton.icon(
                 onPressed: () {
                   _showAddSupplierDialog(context);
                 },
-                icon: const Icon(Icons.add),
-                label: Text(l10n.add_supplier),
+                icon: const Icon(Icons.add_business_rounded, size: 18),
+                label: Text(
+                  l10n.add_supplier,
+                  style: const TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
             ],
           ),
 
-          const Gap(16), // Reduced gap
-          // Suppliers List - Use ConstrainedBox to limit height
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 600),
-            child: StreamBuilder<List<Supplier>>(
-              stream: statusFilter == 'debt'
-                  ? db.supplierDao.watchSuppliersWithDebt()
-                  : db.supplierDao.watchSuppliersByStatus(statusFilter),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(
+          const Gap(16),
+
+          // Suppliers List
+          StreamBuilder<List<Supplier>>(
+            stream: statusFilter == 'debt'
+                ? db.supplierDao.watchSuppliersWithDebt()
+                : db.supplierDao.watchSuppliersByStatus(statusFilter),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+              final allSuppliers = snapshot.data ?? [];
+              final q = searchQuery.toLowerCase().trim();
+              final suppliers = q.isEmpty
+                  ? allSuppliers
+                  : allSuppliers.where((s) {
+                      final name = s.name.toLowerCase();
+                      final phone = (s.phone ?? '').toLowerCase();
+                      return name.contains(q) || phone.contains(q);
+                    }).toList();
+
+              if (suppliers.isEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -175,35 +371,36 @@ class SuppliersWidget extends ConsumerWidget {
                         ),
                       ],
                     ),
-                  );
-                }
-
-                return ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: snapshot.data!.length,
-                  itemBuilder: (context, index) {
-                    final supplier = snapshot.data![index];
-                    return FutureBuilder<double>(
-                      future: db.ledgerDao.getSupplierBalance(supplier.id),
-                      builder: (context, balanceSnapshot) {
-                        final balance = balanceSnapshot.data ?? 0.0;
-                        return _SupplierCard(
-                          supplier: supplier,
-                          totalPurchases: balance > 0 ? balance : 0.0,
-                          totalPaid: balance < 0 ? -balance : 0.0,
-                          db: db,
-                          context: context,
-                          lastPurchaseDate: DateTime.now().subtract(
-                            Duration(days: index * 2),
-                          ),
-                          getSupplierPurchases: _getSupplierPurchases,
-                        );
-                      },
-                    );
-                  },
+                  ),
                 );
-              },
-            ),
+              }
+
+              return ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: suppliers.length,
+                itemBuilder: (context, index) {
+                  final supplier = suppliers[index];
+                  return FutureBuilder<double>(
+                    future: db.ledgerDao.getSupplierBalance(supplier.id),
+                    builder: (context, balanceSnapshot) {
+                      final balance = balanceSnapshot.data ?? 0.0;
+                      return _SupplierCard(
+                        supplier: supplier,
+                        totalPurchases: balance > 0 ? balance : 0.0,
+                        totalPaid: balance < 0 ? -balance : 0.0,
+                        db: db,
+                        context: context,
+                        lastPurchaseDate: DateTime.now().subtract(
+                          Duration(days: index * 2),
+                        ),
+                        getSupplierPurchases: _getSupplierPurchases,
+                      );
+                    },
+                  );
+                },
+              );
+            },
           ),
         ],
       ),
@@ -251,9 +448,9 @@ class SuppliersWidget extends ConsumerWidget {
             '''
         SELECT id, date, description, debit, credit, origin, payment_method, receipt_number
         FROM ledger_transactions
-        WHERE entity_type = 'Supplier' AND ref_id = ? AND (origin = 'payment' OR origin = 'reversal')
+        WHERE entity_type = 'Supplier' AND ref_id = ? AND (debit > 0 OR origin = 'payment' OR origin = 'reversal')
         ORDER BY date DESC
-        LIMIT 30
+        LIMIT 100
         ''',
             variables: [Variable.withString(supplierId)],
           )
@@ -452,28 +649,53 @@ class _SupplierSummaryItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 24),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(icon, color: color, size: 14),
+              ),
+              const Gap(8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontSize: 11.5,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.7),
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
           const Gap(8),
           Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: color),
-          ),
-          const Gap(4),
-          Text(
             value,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            style: TextStyle(
+              fontFamily: 'NotoSansArabic',
               color: color,
-              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.2,
             ),
           ),
         ],
@@ -505,65 +727,135 @@ class _SupplierCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final remainingDebt = totalPurchases - totalPaid;
+    final isCreditor = remainingDebt > 0.001;
+    final isDebtor = remainingDebt < -0.001;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: ExpansionTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.purple.withValues(alpha: 0.1),
-          child: Icon(Icons.business, color: Colors.purple),
+    final badgeColor = isCreditor
+        ? const Color(0xFFF85149)
+        : (isDebtor ? const Color(0xFF388BFD) : const Color(0xFF238636));
+
+    final badgeLabel = isCreditor
+        ? AppLocalizations.of(context).debtor
+        : (isDebtor ? AppLocalizations.of(context).entitled : 'خالص الحساب');
+
+    final badgeAmount = isCreditor
+        ? '${remainingDebt.toStringAsFixed(2)} ${AppLocalizations.of(context).currency}'
+        : (isDebtor
+            ? '${(-remainingDebt).toStringAsFixed(2)} ${AppLocalizations.of(context).currency}'
+            : '0.00 ${AppLocalizations.of(context).currency}');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
         ),
-        title: Text(
-          supplier.name,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (supplier.phone != null)
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          shape: const Border(),
+          collapsedShape: const Border(),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          leading: Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: Colors.purple.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Center(
+              child:
+                  Icon(Icons.business_rounded, color: Colors.purple, size: 20),
+            ),
+          ),
+          title: Text(
+            supplier.name,
+            style: const TextStyle(
+              fontFamily: 'NotoSansArabic',
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+            ),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (supplier.phone != null && supplier.phone!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.phone_rounded,
+                        size: 13,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.5),
+                      ),
+                      const Gap(4),
+                      Text(
+                        supplier.phone!,
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 12.5,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const Gap(2),
               Text(
-                supplier.phone ?? '',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.7),
+                '${AppLocalizations.of(context).last_purchase_colon} ${lastPurchaseDate.day}/${lastPurchaseDate.month}/${lastPurchaseDate.year}',
+                style: TextStyle(
+                  fontFamily: 'NotoSansArabic',
+                  fontSize: 11.5,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.5),
                 ),
               ),
-            const Gap(4),
-            Text(
-              '${AppLocalizations.of(context).last_purchase_colon} ${lastPurchaseDate.day}/${lastPurchaseDate.month}/${lastPurchaseDate.year}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
+            ],
+          ),
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: badgeColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
             ),
-          ],
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              '${remainingDebt.toStringAsFixed(2)} ${AppLocalizations.of(context).currency}',
-              style: TextStyle(
-                color: remainingDebt > 0 ? Colors.red : Colors.green,
-                fontWeight: FontWeight.bold,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  badgeLabel,
+                  style: TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    color: badgeColor,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  badgeAmount,
+                  style: TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    color: badgeColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
-            Text(
-              remainingDebt > 0
-                  ? AppLocalizations.of(context).debtor
-                  : AppLocalizations.of(context).entitled,
-              style: TextStyle(
-                color: remainingDebt > 0 ? Colors.red : Colors.green,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
+          ),
         children: [
           Padding(
             padding: const EdgeInsets.all(20),
@@ -1024,53 +1316,73 @@ class _SupplierCard extends ConsumerWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: ElevatedButton.icon(
+                      child: FilledButton.icon(
                         onPressed: () async {
                           await _showPaymentDialog(supplier);
                           if (context.mounted) {
                             (context as Element).markNeedsBuild();
                           }
                         },
-                        icon: const Icon(Icons.payment),
+                        icon: const Icon(Icons.payments_rounded, size: 17),
                         label: Text(
                           AppLocalizations.of(context).settle_payment,
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                     ),
-                    const Gap(16),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          _showEditSupplierDialog(supplier);
-                        },
-                        icon: const Icon(Icons.edit),
-                        label: Text('تعديل'),
-                      ),
-                    ),
-                    const Gap(16),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          _showDeleteSupplierDialog(supplier);
-                        },
-                        icon: const Icon(Icons.delete),
-                        label: Text('حذف'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                        ),
-                      ),
-                    ),
-                    const Gap(16),
+                    const Gap(10),
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () {
                           _exportSupplierReport(supplier);
                         },
-                        icon: const Icon(Icons.picture_as_pdf),
-                        label: Text(AppLocalizations.of(context).export),
+                        icon: const Icon(Icons.picture_as_pdf_outlined, size: 17),
+                        label: const Text('كشف حساب PDF'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Gap(10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          _showEditSupplierDialog(supplier);
+                        },
+                        icon: const Icon(Icons.edit_outlined, size: 17),
+                        label: const Text('تعديل البيانات'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Gap(10),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        _showDeleteSupplierDialog(supplier);
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded, size: 17),
+                      label: const Text('حذف'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFF85149),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                     ),
                   ],
@@ -1079,6 +1391,7 @@ class _SupplierCard extends ConsumerWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
