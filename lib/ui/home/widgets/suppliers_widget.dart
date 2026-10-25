@@ -9,6 +9,7 @@ import 'package:pos_offline_desktop/core/utils/app_utils.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/ui/purchase/widgets/purchase_detail_dialog.dart';
 import 'package:pos_offline_desktop/ui/purchase/widgets/void_purchase_dialog.dart';
+import 'package:pos_offline_desktop/ui/supplier/widgets/edit_supplier_transaction_dialog.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 
 /// List filter for the suppliers screen. Defaults to active only so that
@@ -213,7 +214,7 @@ class SuppliersWidget extends ConsumerWidget {
     String supplierId,
   ) async {
     try {
-      final result = await db
+      final purchasesResult = await db
           .customSelect(
             '''
         SELECT p.id, p.invoice_number, p.purchase_date, p.total_amount, 
@@ -221,27 +222,71 @@ class SuppliersWidget extends ConsumerWidget {
         FROM purchases p
         WHERE p.supplier_id = ?
         ORDER BY p.purchase_date DESC
-        LIMIT 20
+        LIMIT 30
         ''',
             variables: [Variable.withString(supplierId)],
           )
           .get();
 
-      return result.map((row) {
+      final purchaseItems = purchasesResult.map((row) {
         final d = row.data;
+        final pDate = parseDate(d['purchase_date']);
         return {
-          // Keep the TEXT purchase id verbatim (int.tryParse used to
-          // collapse every PUR- id to 0, breaking detail/edit/return).
           'id': d['id']?.toString() ?? '',
+          'type': 'purchase',
           'invoice_number': d['invoice_number']?.toString(),
-          'purchase_date': parseDate(d['purchase_date']).toIso8601String(),
+          'purchase_date': pDate.toIso8601String(),
+          'date': pDate,
           'total_amount': (d['total_amount'] as num?)?.toDouble() ?? 0.0,
           'paid_amount': (d['paid_amount'] as num?)?.toDouble() ?? 0.0,
           'payment_method': d['payment_method']?.toString() ?? 'cash',
           'status': d['status']?.toString() ?? 'pending',
           'is_deleted': d['is_deleted'] == 1 || d['is_deleted'] == true,
+          'description': 'فاتورة ${d['invoice_number'] ?? 'غير محدد'}',
         };
       }).toList();
+
+      final paymentsResult = await db
+          .customSelect(
+            '''
+        SELECT id, date, description, debit, credit, origin, payment_method, receipt_number
+        FROM ledger_transactions
+        WHERE entity_type = 'Supplier' AND ref_id = ? AND (origin = 'payment' OR origin = 'reversal')
+        ORDER BY date DESC
+        LIMIT 30
+        ''',
+            variables: [Variable.withString(supplierId)],
+          )
+          .get();
+
+      final paymentItems = paymentsResult.map((row) {
+        final d = row.data;
+        final debit = (d['debit'] as num?)?.toDouble() ?? 0.0;
+        final credit = (d['credit'] as num?)?.toDouble() ?? 0.0;
+        final amount = debit > 0 ? debit : credit;
+        final pDate = parseDate(d['date']);
+        final desc = (d['description']?.toString().isNotEmpty ?? false)
+            ? d['description'].toString()
+            : 'سداد دفعة للمورد';
+
+        return {
+          'id': d['id']?.toString() ?? '',
+          'type': 'payment',
+          'invoice_number': d['receipt_number']?.toString(),
+          'purchase_date': pDate.toIso8601String(),
+          'date': pDate,
+          'total_amount': amount,
+          'paid_amount': amount,
+          'payment_method': d['payment_method']?.toString() ?? 'cash',
+          'status': 'paid',
+          'is_deleted': false,
+          'description': desc,
+        };
+      }).toList();
+
+      final combined = [...purchaseItems, ...paymentItems];
+      combined.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+      return combined;
     } catch (e) {
       debugPrint('Error fetching supplier purchases: $e');
       return [];
@@ -666,6 +711,7 @@ class _SupplierCard extends ConsumerWidget {
                             ),
                           ),
                           ...purchases.map((purchase) {
+                            final isPayment = purchase['type'] == 'payment';
                             final date = DateTime.parse(
                               purchase['purchase_date'],
                             );
@@ -677,21 +723,42 @@ class _SupplierCard extends ConsumerWidget {
                             final isVoided = purchase['status'] == 'Voided' ||
                                 purchase['is_deleted'] == 1 ||
                                 purchase['is_deleted'] == true;
-                            // Tap opens the purchase detail (عرض/تعديل/
-                            // استرجاع), mirroring customer invoices. The
-                            // subtree rebuild on close refreshes balances.
                             return InkWell(
                               onTap: () async {
-                                await showDialog(
-                                  context: context,
-                                  builder: (_) => PurchaseDetailDialog(
-                                    db: db,
-                                    purchaseId:
-                                        purchase['id']?.toString() ?? '',
-                                  ),
-                                );
-                                if (context.mounted) {
-                                  (context as Element).markNeedsBuild();
+                                if (isPayment) {
+                                  final ledgerTx = await db.ledgerDao
+                                      .getTransactionById(purchase['id']);
+                                  if (ledgerTx != null && context.mounted) {
+                                    final updated = await showDialog<bool>(
+                                      context: context,
+                                      builder: (_) =>
+                                          EditSupplierTransactionDialog(
+                                        db: db,
+                                        transaction: ledgerTx,
+                                        onSaved: () {
+                                          if (context.mounted) {
+                                            (context as Element)
+                                                .markNeedsBuild();
+                                          }
+                                        },
+                                      ),
+                                    );
+                                    if (updated == true && context.mounted) {
+                                      (context as Element).markNeedsBuild();
+                                    }
+                                  }
+                                } else {
+                                  await showDialog(
+                                    context: context,
+                                    builder: (_) => PurchaseDetailDialog(
+                                      db: db,
+                                      purchaseId:
+                                          purchase['id']?.toString() ?? '',
+                                    ),
+                                  );
+                                  if (context.mounted) {
+                                    (context as Element).markNeedsBuild();
+                                  }
                                 }
                               },
                               child: Container(
@@ -718,8 +785,14 @@ class _SupplierCard extends ConsumerWidget {
                                       children: [
                                         Row(
                                           children: [
-                                            Text(
-                                              'فاتورة ${purchase['invoice_number'] ?? 'غير محدد'}',
+                                            Expanded(
+                                              child: Text(
+                                                isPayment
+                                                    ? (purchase['description'] ??
+                                                        'سداد دفعة')
+                                                    : 'فاتورة ${purchase['invoice_number'] ?? 'غير محدد'}',
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ),
                                             if (isVoided) ...[
                                               const Gap(4),
@@ -756,16 +829,22 @@ class _SupplierCard extends ConsumerWidget {
                                             vertical: 2,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.blue.withValues(
-                                              alpha: 0.1,
-                                            ),
+                                            color: isPayment
+                                                ? Colors.green.withValues(
+                                                    alpha: 0.15,
+                                                  )
+                                                : Colors.blue.withValues(
+                                                    alpha: 0.1,
+                                                  ),
                                             borderRadius:
                                                 BorderRadius.circular(8),
                                           ),
-                                          child: const Text(
-                                            'شراء',
+                                          child: Text(
+                                            isPayment ? 'سداد' : 'شراء',
                                             style: TextStyle(
-                                              color: Colors.blue,
+                                              color: isPayment
+                                                  ? Colors.green
+                                                  : Colors.blue,
                                               fontSize: 10,
                                               fontWeight: FontWeight.w600,
                                             ),
@@ -777,6 +856,12 @@ class _SupplierCard extends ConsumerWidget {
                                   Expanded(
                                     child: Text(
                                       '${amount.toStringAsFixed(2)} ${AppLocalizations.of(context).currency}',
+                                      style: TextStyle(
+                                        color: isPayment ? Colors.green : null,
+                                        fontWeight: isPayment
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                      ),
                                     ),
                                   ),
                                   Expanded(
@@ -786,32 +871,41 @@ class _SupplierCard extends ConsumerWidget {
                                         vertical: 2,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: isVoided
-                                            ? Colors.grey
-                                                .withValues(alpha: 0.1)
-                                            : (isPaid
-                                                ? Colors.green.withValues(
+                                        color: isPayment
+                                            ? Colors.green.withValues(
+                                                alpha: 0.15,
+                                              )
+                                            : (isVoided
+                                                ? Colors.grey.withValues(
                                                     alpha: 0.1,
                                                   )
-                                                : Colors.orange.withValues(
-                                                    alpha: 0.1,
-                                                  )),
+                                                : (isPaid
+                                                    ? Colors.green.withValues(
+                                                        alpha: 0.1,
+                                                      )
+                                                    : Colors.orange.withValues(
+                                                        alpha: 0.1,
+                                                      ))),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Text(
-                                        isVoided
-                                            ? 'ملغاة'
-                                            : (isPaid
-                                                ? AppLocalizations.of(
-                                                    context,
-                                                  ).paid_status
-                                                : 'متبقي ${remaining.toStringAsFixed(2)}'),
+                                        isPayment
+                                            ? 'سند صرف'
+                                            : (isVoided
+                                                ? 'ملغاة'
+                                                : (isPaid
+                                                    ? AppLocalizations.of(
+                                                        context,
+                                                      ).paid_status
+                                                    : 'متبقي ${remaining.toStringAsFixed(2)}')),
                                         style: TextStyle(
-                                          color: isVoided
-                                              ? Colors.grey
-                                              : (isPaid
-                                                  ? Colors.green
-                                                  : Colors.orange),
+                                          color: isPayment
+                                              ? Colors.green
+                                              : (isVoided
+                                                  ? Colors.grey
+                                                  : (isPaid
+                                                      ? Colors.green
+                                                      : Colors.orange)),
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -828,28 +922,84 @@ class _SupplierCard extends ConsumerWidget {
                                               color: Colors.red,
                                               size: 20,
                                             ),
-                                            tooltip: 'حذف الفاتورة',
+                                            tooltip: isPayment
+                                                ? 'حذف سند السداد'
+                                                : 'حذف الفاتورة',
                                             onPressed: () async {
-                                              final username = ref
-                                                      .read(authProvider)
-                                                      ?.username ??
-                                                  'admin';
-                                              final done =
-                                                  await showDialog<bool>(
-                                                context: context,
-                                                builder: (_) =>
-                                                    VoidPurchaseDialog(
-                                                  db: db,
-                                                  purchaseId: purchase['id']
-                                                          ?.toString() ??
-                                                      '',
-                                                  voidedBy: username,
-                                                ),
-                                              );
-                                              if (done == true &&
-                                                  context.mounted) {
-                                                (context as Element)
-                                                    .markNeedsBuild();
+                                              if (isPayment) {
+                                                final confirm =
+                                                    await showDialog<bool>(
+                                                  context: context,
+                                                  builder: (ctx) => AlertDialog(
+                                                    title: const Text(
+                                                        'تأكيد حذف سند السداد'),
+                                                    content: Text(
+                                                      'هل أنت متأكد من حذف حركة السداد بمبلغ ${amount.toStringAsFixed(2)} ج.م؟\nسيتم استرجاع المبلغ لمديونية المورد.',
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                                ctx, false),
+                                                        child: const Text('إلغاء'),
+                                                      ),
+                                                      ElevatedButton(
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                                ctx, true),
+                                                        style:
+                                                            ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              Colors.red,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                        ),
+                                                        child: const Text(
+                                                            'تأكيد الحذف'),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                                if (confirm == true) {
+                                                  await db.ledgerDao
+                                                      .deleteTransaction(
+                                                          purchase['id']);
+                                                  if (context.mounted) {
+                                                    (context as Element)
+                                                        .markNeedsBuild();
+                                                    ScaffoldMessenger.of(context)
+                                                        .showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                            'تم حذف حركة السداد واسترجاع الرصيد بنجاح'),
+                                                        backgroundColor:
+                                                            Colors.green,
+                                                      ),
+                                                    );
+                                                  }
+                                                }
+                                              } else {
+                                                final username = ref
+                                                        .read(authProvider)
+                                                        ?.username ??
+                                                    'admin';
+                                                final done =
+                                                    await showDialog<bool>(
+                                                  context: context,
+                                                  builder: (_) =>
+                                                      VoidPurchaseDialog(
+                                                    db: db,
+                                                    purchaseId: purchase['id']
+                                                            ?.toString() ??
+                                                        '',
+                                                    voidedBy: username,
+                                                  ),
+                                                );
+                                                if (done == true &&
+                                                    context.mounted) {
+                                                  (context as Element)
+                                                      .markNeedsBuild();
+                                                }
                                               }
                                             },
                                           ),
@@ -875,8 +1025,11 @@ class _SupplierCard extends ConsumerWidget {
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () {
-                          _showPaymentDialog(supplier);
+                        onPressed: () async {
+                          await _showPaymentDialog(supplier);
+                          if (context.mounted) {
+                            (context as Element).markNeedsBuild();
+                          }
                         },
                         icon: const Icon(Icons.payment),
                         label: Text(
@@ -1119,11 +1272,11 @@ class _SupplierCard extends ConsumerWidget {
     );
   }
 
-  void _showPaymentDialog(Supplier supplier) {
+  Future<void> _showPaymentDialog(Supplier supplier) async {
     final amountController = TextEditingController();
     final descriptionController = TextEditingController();
 
-    showDialog(
+    await showDialog(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
