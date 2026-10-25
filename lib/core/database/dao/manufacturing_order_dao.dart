@@ -8,6 +8,9 @@ import 'package:pos_offline_desktop/core/database/tables/inventory_movements_tab
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_cost_components_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_stages_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/product_variants_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/product_table.dart';
 
 part 'manufacturing_order_dao.g.dart';
@@ -45,6 +48,10 @@ bool isCustomerOwnedBomLine({
     CustomerStockBalances,
     CustomerStockMovements,
     Customers,
+    ManufacturingStages,
+    ManufacturingStageOutputs,
+    ManufacturingScraps,
+    ProductVariants,
   ],
 )
 class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
@@ -98,7 +105,10 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
   static void _requireLicense(String operation) => LicenseEntitlement.instance
       .require('manufacturing', operation: operation);
 
-  Future<int> createOrder(ManufacturingOrdersCompanion entry) async {
+  Future<int> createOrder(
+    ManufacturingOrdersCompanion entry, {
+    String? initialStageName,
+  }) async {
     _requireLicense('إنشاء أمر تصنيع');
     // Basic validation
     if (!entry.bomId.present || entry.bomId.value == 0) {
@@ -111,13 +121,34 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
       throw ArgumentError('plannedQuantity must be > 0');
     }
     // Auto-generate orderNumber if not provided
-    final companion = entry.orderNumber.present
+    var companion = entry.orderNumber.present
         ? entry
         : entry.copyWith(
             orderNumber: Value('MO-${DateTime.now().millisecondsSinceEpoch}'),
           );
 
-    return into(manufacturingOrders).insert(companion);
+    if (initialStageName != null && initialStageName.trim().isNotEmpty) {
+      companion = companion.copyWith(
+        currentStageName: Value(initialStageName.trim()),
+      );
+    }
+
+    return transaction(() async {
+      final orderId = await into(manufacturingOrders).insert(companion);
+      if (initialStageName != null && initialStageName.trim().isNotEmpty) {
+        await into(db.manufacturingStages).insert(
+          ManufacturingStagesCompanion.insert(
+            manufacturingOrderId: orderId,
+            stageName: initialStageName.trim(),
+            stageOrder: const Value(1),
+            status: const Value(ManufacturingStageStatus.inProgress),
+            inputQuantity: Value(planned),
+            startedAt: Value(DateTime.now()),
+          ),
+        );
+      }
+      return orderId;
+    });
   }
 
   // ── Update (header fields only, not status via this path) ──
@@ -156,6 +187,8 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
     double? pieceUnitValue,
     double? serviceUnitPrice,
     String? notes,
+    String? initialStageName,
+    double? targetMarginPercent,
   }) async {
     _requireLicense('إنشاء أمر عمل تصنيع');
     if (bomId == null && (inputProductId == null || inputQuantity == null)) {
@@ -175,7 +208,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         throw ArgumentError('finished product cannot be resolved');
       }
 
-      return into(manufacturingOrders).insert(
+      final orderId = await into(manufacturingOrders).insert(
         ManufacturingOrdersCompanion.insert(
           orderNumber: orderNumber,
           orderType: Value(orderType),
@@ -187,6 +220,12 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           pricingMode: pricingMode == null
               ? const Value.absent()
               : Value(pricingMode),
+          targetMarginPercent: targetMarginPercent == null
+              ? const Value.absent()
+              : Value(targetMarginPercent),
+          currentStageName: (initialStageName != null && initialStageName.trim().isNotEmpty)
+              ? Value(initialStageName.trim())
+              : const Value.absent(),
           scrapPolicy: scrapPolicy == null
               ? const Value.absent()
               : Value(scrapPolicy),
@@ -203,6 +242,19 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           inputSize: Value(inputSize),
         ),
       );
+      if (initialStageName != null && initialStageName.trim().isNotEmpty) {
+        await into(db.manufacturingStages).insert(
+          ManufacturingStagesCompanion.insert(
+            manufacturingOrderId: orderId,
+            stageName: initialStageName.trim(),
+            stageOrder: const Value(1),
+            status: const Value(ManufacturingStageStatus.inProgress),
+            inputQuantity: Value(plannedQuantity ?? inputQuantity ?? 0),
+            startedAt: Value(DateTime.now()),
+          ),
+        );
+      }
+      return orderId;
     });
   }
 
@@ -552,19 +604,61 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         );
       }
 
-      // 6. Increment finished product + output movement
+      // 6. Increment finished product (or variants) + output movement
       final finishedProduct = await (select(
         db.products,
       )..where((p) => p.id.equals(mo.finishedProductId))).getSingleOrNull();
       if (finishedProduct == null)
         throw StateError('Finished product #${mo.finishedProductId} not found');
       final prevFinished = finishedProduct.quantity;
-      final nextFinished = prevFinished + producedInt;
-      await (update(
-        db.products,
-      )..where((t) => t.id.equals(finishedProduct.id))).write(
-        ProductsCompanion(quantity: Value(nextFinished), updatedAt: Value(now)),
-      );
+
+      final stageOutputs = await (select(db.manufacturingStageOutputs)
+            ..where((o) =>
+                o.manufacturingOrderId.equals(orderId) & o.variantId.isNotNull()))
+          .get();
+
+      int nextFinished;
+      if (stageOutputs.isNotEmpty) {
+        final Map<int, double> variantProduced = {};
+        for (final out in stageOutputs) {
+          if (out.variantId != null && out.producedQuantity > 0) {
+            variantProduced[out.variantId!] =
+                (variantProduced[out.variantId!] ?? 0.0) + out.producedQuantity;
+          }
+        }
+        for (final entry in variantProduced.entries) {
+          final varRow = await (select(db.productVariants)
+                ..where((v) => v.id.equals(entry.key)))
+              .getSingleOrNull();
+          if (varRow != null) {
+            final newVarQty = varRow.quantity + entry.value.round();
+            await (update(db.productVariants)
+                  ..where((v) => v.id.equals(entry.key)))
+                .write(
+              ProductVariantsCompanion(
+                quantity: Value(newVarQty),
+                updatedAt: Value(now),
+              ),
+            );
+          }
+        }
+        final totalVariantsQty = await db.productVariantDao
+            .getTotalQuantityByProduct(finishedProduct.id);
+        nextFinished = totalVariantsQty;
+        await (update(
+          db.products,
+        )..where((t) => t.id.equals(finishedProduct.id))).write(
+          ProductsCompanion(quantity: Value(nextFinished), updatedAt: Value(now)),
+        );
+      } else {
+        nextFinished = prevFinished + producedInt;
+        await (update(
+          db.products,
+        )..where((t) => t.id.equals(finishedProduct.id))).write(
+          ProductsCompanion(quantity: Value(nextFinished), updatedAt: Value(now)),
+        );
+      }
+
       await into(db.inventoryMovements).insert(
         InventoryMovementsCompanion.insert(
           productId: finishedProduct.id,
@@ -583,6 +677,47 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           updatedAt: now,
         ),
       );
+
+      // 6b. Recover sellable scrap (second-choice / remnants) into inventory
+      final sellableScraps = await (select(db.manufacturingScraps)
+            ..where((s) =>
+                s.manufacturingOrderId.equals(orderId) &
+                s.isSellable.equals(true) &
+                s.scrapProductId.isNotNull()))
+          .get();
+      for (final sc in sellableScraps) {
+        final scProduct = await (select(db.products)
+              ..where((p) => p.id.equals(sc.scrapProductId!)))
+            .getSingleOrNull();
+        if (scProduct != null) {
+          final scQty = sc.quantity.round();
+          final prevSc = scProduct.quantity;
+          final nextSc = prevSc + scQty;
+          await (update(db.products)..where((p) => p.id.equals(scProduct.id)))
+              .write(
+            ProductsCompanion(quantity: Value(nextSc), updatedAt: Value(now)),
+          );
+          await into(db.inventoryMovements).insert(
+            InventoryMovementsCompanion.insert(
+              productId: scProduct.id,
+              movementType: 'manufacturing_scrap_recovery',
+              quantity: scQty,
+              unitCost: sc.estimatedSellPrice ?? 0.0,
+              totalValue: scQty * (sc.estimatedSellPrice ?? 0.0),
+              movementDate: now,
+              reference: mo.orderNumber,
+              referenceType: 'manufacturing_scrap_recovery',
+              previousQuantity: prevSc,
+              newQuantity: nextSc,
+              performedBy: Value(performedBy),
+              notes: Value(
+                  'استرداد هالك قابل للبيع (فرز ثاني) من أمر ${mo.orderNumber}'),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+        }
+      }
 
       // 7. Freeze computedAmount on cost components
       for (var i = 0; i < components.length; i++) {

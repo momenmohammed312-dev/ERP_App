@@ -35,6 +35,8 @@ class _MoFormDialogState extends State<MoFormDialog> {
   final _notesCtrl = TextEditingController();
   final _pieceUnitValueCtrl = TextEditingController(text: '0');
   final _serviceUnitPriceCtrl = TextEditingController(text: '0');
+  final _stageNameCtrl = TextEditingController(text: 'القص والتفصيل');
+  final _targetMarginCtrl = TextEditingController(text: '20');
 
   String _orderType = 'internal';
   String? _customerId;
@@ -78,13 +80,15 @@ class _MoFormDialogState extends State<MoFormDialog> {
       _scrapPolicy = o.scrapPolicy ?? 'customer_bears';
       _pieceUnitValueCtrl.text = (o.pieceUnitValue ?? 0.0).toString();
       _serviceUnitPriceCtrl.text = (o.serviceUnitPrice ?? 0.0).toString();
+      _stageNameCtrl.text = o.currentStageName ?? 'القص والتفصيل';
+      _targetMarginCtrl.text = (o.targetMarginPercent ?? 20.0).toString();
     } else {
       _orderNumberCtrl.text =
           'MO-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
       _plannedQtyCtrl.text = '1';
       _plannedDate = DateTime.now();
       _orderType = 'internal';
-      _pricingMode = 'inclusive';
+      _pricingMode = 'actual_cost_plus_margin';
       _scrapPolicy = 'customer_bears';
       _pieceUnitValueCtrl.text = '0';
       _serviceUnitPriceCtrl.text = '0';
@@ -517,7 +521,8 @@ class _MoFormDialogState extends State<MoFormDialog> {
             plannedDate: Value(_plannedDate),
             orderType: Value(_orderType),
             customerId: Value(_orderType == 'internal' ? null : _customerId),
-            pricingMode: Value(_orderType == 'internal' ? null : _pricingMode),
+            pricingMode: Value(_pricingMode),
+            targetMarginPercent: Value(double.tryParse(_targetMarginCtrl.text.trim())),
             scrapPolicy: Value(_orderType == 'internal' ? null : _scrapPolicy),
             pieceUnitValue: Value(_orderType == 'internal' ? 0.0 : pieceVal),
             serviceUnitPrice: Value(
@@ -528,7 +533,12 @@ class _MoFormDialogState extends State<MoFormDialog> {
             ),
             status: const Value(ManufacturingOrderStatus.planned),
           );
-          await widget.db.manufacturingOrderDao.createOrder(companion);
+          await widget.db.manufacturingOrderDao.createOrder(
+            companion,
+            initialStageName: _stageNameCtrl.text.trim().isNotEmpty
+                ? _stageNameCtrl.text.trim()
+                : null,
+          );
         } else {
           // Recipe-based for-others order: real BOM + finished product from
           // the recipe. Direct-input fields stay null so completion goes
@@ -549,6 +559,10 @@ class _MoFormDialogState extends State<MoFormDialog> {
             notes: _notesCtrl.text.trim().isEmpty
                 ? null
                 : _notesCtrl.text.trim(),
+            initialStageName: _stageNameCtrl.text.trim().isNotEmpty
+                ? _stageNameCtrl.text.trim()
+                : null,
+            targetMarginPercent: double.tryParse(_targetMarginCtrl.text.trim()),
           );
         }
       } else {
@@ -566,7 +580,11 @@ class _MoFormDialogState extends State<MoFormDialog> {
           plannedDate: Value(_plannedDate),
           orderType: Value(saveType),
           customerId: Value(_orderType == 'internal' ? null : _customerId),
-          pricingMode: Value(_orderType == 'internal' ? null : _pricingMode),
+          pricingMode: Value(_pricingMode),
+          targetMarginPercent: Value(double.tryParse(_targetMarginCtrl.text.trim())),
+          currentStageName: Value(_stageNameCtrl.text.trim().isNotEmpty
+              ? _stageNameCtrl.text.trim()
+              : widget.order!.currentStageName),
           scrapPolicy: Value(_orderType == 'internal' ? null : _scrapPolicy),
           pieceUnitValue: Value(_orderType == 'internal' ? 0.0 : pieceVal),
           serviceUnitPrice: Value(
@@ -595,6 +613,8 @@ class _MoFormDialogState extends State<MoFormDialog> {
     _notesCtrl.dispose();
     _pieceUnitValueCtrl.dispose();
     _serviceUnitPriceCtrl.dispose();
+    _stageNameCtrl.dispose();
+    _targetMarginCtrl.dispose();
     super.dispose();
   }
 
@@ -730,6 +750,9 @@ class _MoFormDialogState extends State<MoFormDialog> {
                     onChanged: canEdit
                         ? (v) => setState(() {
                             _orderType = v ?? 'internal';
+                            _pricingMode = _orderType == 'internal'
+                                ? 'actual_cost_plus_margin'
+                                : 'inclusive';
                             _selectedBomId = null;
                             _selectedBom = null;
                             _selectedBomLines = [];
@@ -744,38 +767,54 @@ class _MoFormDialogState extends State<MoFormDialog> {
                         : null,
                   ),
                   const Gap(16),
-                  if (_orderType == 'internal')
-                    DropdownButtonFormField<int>(
-                      value: _selectedBomId,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'الوصفة (BOM) *',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _activeBoms
-                          .map(
-                            (b) => DropdownMenuItem(
-                              value: b.id,
-                              child: Text(
-                                '${b.name} (${_productMap[b.finishedProductId]?.name ?? b.finishedProductId})',
-                              ),
+                  if (_orderType == 'internal') ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            value: _selectedBomId,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'الوصفة (BOM) *',
+                              border: OutlineInputBorder(),
                             ),
-                          )
-                          .toList(),
-                      onChanged: canEdit
-                          ? (v) {
-                              setState(() {
-                                _selectedBomId = v;
-                                final m = _activeBoms.where((bb) => bb.id == v);
-                                _selectedBom = m.isNotEmpty ? m.first : null;
-                                _finishedProduct = _selectedBom != null
-                                    ? _productMap[_selectedBom!
-                                          .finishedProductId]
-                                    : null;
-                              });
-                            }
-                          : null,
-                    )
+                            items: _activeBoms
+                                .map(
+                                  (b) => DropdownMenuItem(
+                                    value: b.id,
+                                    child: Text(
+                                      '${b.name} (${_productMap[b.finishedProductId]?.name ?? b.finishedProductId})',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: canEdit
+                                ? (v) {
+                                    setState(() {
+                                      _selectedBomId = v;
+                                      final m = _activeBoms.where((bb) => bb.id == v);
+                                      _selectedBom = m.isNotEmpty ? m.first : null;
+                                      _finishedProduct = _selectedBom != null
+                                          ? _productMap[_selectedBom!.finishedProductId]
+                                          : null;
+                                    });
+                                  }
+                                : null,
+                          ),
+                        ),
+                        if (canEdit) ...[
+                          const Gap(8),
+                          FilledButton.tonalIcon(
+                            onPressed: _createRecipeInline,
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('وصفة جديدة'),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ]
                   else ...[
                     // Step 1 — pick the customer receipt first.
                     ReceiptPickerField(
@@ -918,28 +957,107 @@ class _MoFormDialogState extends State<MoFormDialog> {
                     ),
                   ],
                   const Gap(16),
+                  // المرحلة الأولية
+                  TextFormField(
+                    controller: _stageNameCtrl,
+                    enabled: canEdit,
+                    decoration: const InputDecoration(
+                      labelText: 'اسم المرحلة الأولى / الحالية *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.layers_outlined),
+                      helperText: 'يمكنك اختيار مرحلة سريعة أو كتابة مرحلة مخصصة',
+                    ),
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'اسم المرحلة مطلوب' : null,
+                  ),
+                  const Gap(6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      'القص والتفصيل',
+                      'الخياطة والتجميع',
+                      'التشطيب والكي',
+                      'التعبئة والتغليف',
+                      'مرحلة أولى',
+                    ].map((stg) => ActionChip(
+                          avatar: const Icon(Icons.subdirectory_arrow_left, size: 14),
+                          label: Text(stg, style: const TextStyle(fontSize: 12)),
+                          onPressed: canEdit
+                              ? () => setState(() => _stageNameCtrl.text = stg)
+                              : null,
+                        )).toList(),
+                  ),
+                  const Gap(16),
                   DropdownButtonFormField<String>(
-                    initialValue: _pricingMode,
-
+                    value: _pricingMode,
                     decoration: const InputDecoration(
                       labelText: 'نظام التسعير *',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.request_quote_outlined),
                     ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'inclusive',
-                        child: Text('شامل (سعر مصنعية للوحدة التامة)'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'separate',
-                        child: Text('منفصل (أجر تشغيل + تكلفة خامات المصنع)'),
-                      ),
-                    ],
+                    items: _orderType == 'internal'
+                        ? const [
+                            DropdownMenuItem(
+                              value: 'actual_cost_plus_margin',
+                              child: Text('التكلفة الفعلية + هامش ربح مستهدف'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'per_stage_or_size',
+                              child: Text('تسعير حسب المرحلة / المقاس'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'standard_cost',
+                              child: Text('تكلفة معيارية قياسية'),
+                            ),
+                          ]
+                        : const [
+                            DropdownMenuItem(
+                              value: 'inclusive',
+                              child: Text('شامل (سعر مصنعية للوحدة التامة)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'separate',
+                              child: Text('منفصل (أجر تشغيل + تكلفة خامات المصنع)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'per_stage',
+                              child: Text('حسب أجر كل مرحلة إنتاجية'),
+                            ),
+                          ],
                     onChanged: canEdit
-                        ? (v) => setState(() => _pricingMode = v ?? 'inclusive')
+                        ? (v) => setState(() => _pricingMode = v ??
+                            (_orderType == 'internal'
+                                ? 'actual_cost_plus_margin'
+                                : 'inclusive'))
                         : null,
                   ),
+                  if (_orderType == 'internal' &&
+                      _pricingMode == 'actual_cost_plus_margin') ...[
+                    const Gap(16),
+                    TextFormField(
+                      controller: _targetMarginCtrl,
+                      enabled: canEdit,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'نسبة هامش الربح المستهدف % *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.trending_up),
+                        suffixText: '%',
+                        helperText:
+                            'تستخدم لاحتساب سعر البيع المقترح بناءً على التكلفة الفعلية',
+                      ),
+                      validator: (v) {
+                        final val = double.tryParse(v ?? '');
+                        if (val == null || val < 0) {
+                          return 'أدخل نسبة مئوية صحيحة >= 0';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
                   const Gap(16),
                   TextFormField(
                     controller: _serviceUnitPriceCtrl,

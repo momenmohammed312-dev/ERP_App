@@ -80,6 +80,8 @@ import 'package:pos_offline_desktop/core/database/tables/customer_material_recei
 import 'package:pos_offline_desktop/core/database/dao/customer_material_receipt_dao.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_deliveries_table.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_delivery_dao.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_stages_table.dart';
+import 'package:pos_offline_desktop/core/database/dao/manufacturing_stage_dao.dart';
 import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
 import 'supplier_ledger_backfill.dart';
@@ -172,6 +174,8 @@ part 'app_database.g.dart';
     ManufacturingDeliveries,
     ManufacturingDeliveryItems,
     ProductVariants,
+    ManufacturingStages,
+    ManufacturingStageOutputs,
     Accounts,
     JournalEntries,
     JournalLines,
@@ -218,6 +222,7 @@ part 'app_database.g.dart';
     JournalDao,
     EquityDao,
     ProductVariantDao,
+    ManufacturingStageDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -228,7 +233,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 80;
+  int get schemaVersion => 81;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -239,6 +244,7 @@ class AppDatabase extends _$AppDatabase {
       await _ensureAttendanceV59BackupTable();
       await _ensureAttendanceUniqueIndex();
       await _ensureV80IndexesAndSeed();
+      await _ensureV81Indexes();
     },
     onUpgrade: (Migrator m, int from, int to) async {
       log('Migration: from $from to $to');
@@ -435,6 +441,11 @@ class AppDatabase extends _$AppDatabase {
       // and Historical Attendance Summary. 100% Idempotent.
       if (from < 80) {
         await _runV80UnifiedFoundation(m);
+      }
+
+      // Schema v81 — Manufacturing stages, multi-variant outputs, sellable scrap
+      if (from < 81) {
+        await _runV81ManufacturingStagesAndVariants(m);
       }
 
       // 6. Special data fixes
@@ -4067,5 +4078,101 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
-}
 
+  Future<void> _runV81ManufacturingStagesAndVariants(Migrator m) async {
+    await _logMigrationStep(81, 'v81_manufacturing_stages_variants', 'started');
+    try {
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS manufacturing_stages (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          manufacturing_order_id INTEGER NOT NULL REFERENCES manufacturing_orders(id) ON DELETE CASCADE,
+          stage_name TEXT NOT NULL,
+          stage_order INTEGER NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'pending',
+          input_quantity REAL NOT NULL DEFAULT 0.0,
+          output_quantity REAL NOT NULL DEFAULT 0.0,
+          scrap_quantity REAL NOT NULL DEFAULT 0.0,
+          stage_cost REAL NOT NULL DEFAULT 0.0,
+          assigned_to TEXT,
+          notes TEXT,
+          started_at INTEGER,
+          completed_at INTEGER,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS manufacturing_stage_outputs (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          stage_id INTEGER NOT NULL REFERENCES manufacturing_stages(id) ON DELETE CASCADE,
+          manufacturing_order_id INTEGER NOT NULL REFERENCES manufacturing_orders(id) ON DELETE CASCADE,
+          product_id INTEGER NOT NULL REFERENCES products(id),
+          variant_id INTEGER REFERENCES product_variants(id) ON DELETE SET NULL,
+          variant_name TEXT,
+          planned_quantity REAL NOT NULL DEFAULT 0.0,
+          produced_quantity REAL NOT NULL DEFAULT 0.0,
+          scrap_quantity REAL NOT NULL DEFAULT 0.0,
+          unit_cost_override REAL,
+          selling_price_override REAL,
+          notes TEXT,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      Future<void> safeAddColumn(String table, String column, String typeDef) async {
+        try {
+          final pragma = await customSelect('PRAGMA table_info($table)').get();
+          final exists = pragma.any((col) => col.data['name'] == column);
+          if (!exists) {
+            await customStatement('ALTER TABLE $table ADD COLUMN $column $typeDef;');
+          }
+        } catch (e) {
+          log('v81: safeAddColumn ($table.$column) error: $e');
+        }
+      }
+
+      await safeAddColumn('manufacturing_orders', 'current_stage_name', 'TEXT');
+      await safeAddColumn('manufacturing_orders', 'target_margin_percent', 'REAL DEFAULT 0.0');
+
+      await safeAddColumn('manufacturing_scrap', 'stage_id', 'INTEGER');
+      await safeAddColumn('manufacturing_scrap', 'variant_id', 'INTEGER');
+      await safeAddColumn('manufacturing_scrap', 'variant_name', 'TEXT');
+      await safeAddColumn('manufacturing_scrap', 'is_sellable', 'INTEGER DEFAULT 0');
+      await safeAddColumn('manufacturing_scrap', 'estimated_sell_price', 'REAL DEFAULT 0.0');
+      await safeAddColumn('manufacturing_scrap', 'scrap_product_id', 'INTEGER REFERENCES products(id) ON DELETE SET NULL');
+
+      await _ensureV81Indexes();
+
+      await _logMigrationStep(81, 'v81_manufacturing_stages_variants', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        81,
+        'v81_manufacturing_stages_variants',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> _ensureV81Indexes() async {
+    try {
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_stages_order 
+        ON manufacturing_stages(manufacturing_order_id);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_stage_outputs_stage 
+        ON manufacturing_stage_outputs(stage_id);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_stage_outputs_order 
+        ON manufacturing_stage_outputs(manufacturing_order_id);
+      ''');
+    } catch (e) {
+      log('v81: _ensureV81Indexes warning: $e');
+    }
+  }
+
+}

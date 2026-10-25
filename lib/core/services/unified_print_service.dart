@@ -345,6 +345,36 @@ class UnifiedPrintService {
           data,
           additionalData,
         );
+
+      case DocumentType.manufacturingReport:
+        return await _buildManufacturingReportContent(
+          pdf,
+          arabicFont,
+          arabicFontBold,
+          documentType,
+          data,
+          additionalData,
+        );
+
+      case DocumentType.bomRecipeCard:
+        return await _buildBomRecipeCardContent(
+          pdf,
+          arabicFont,
+          arabicFontBold,
+          documentType,
+          data,
+          additionalData,
+        );
+
+      case DocumentType.customerMaterialReceiptCard:
+        return await _buildCustomerReceiptCardContent(
+          pdf,
+          arabicFont,
+          arabicFontBold,
+          documentType,
+          data,
+          additionalData,
+        );
     }
   }
 
@@ -1251,7 +1281,250 @@ class UnifiedPrintService {
         return 'سند قبض';
       case DocumentType.manufacturingCard:
         return 'بطاقة الإنتاج/الصرف';
+      case DocumentType.manufacturingReport:
+        return 'تقرير التصنيع';
+      case DocumentType.bomRecipeCard:
+        return 'بطاقة وصفة التصنيع';
+      case DocumentType.customerMaterialReceiptCard:
+        return 'إذن استلام خامات العميل';
     }
+  }
+
+
+  /// FEAT-026: Manufacturing Report PDF Generator
+  static Future<List<pw.Widget>> _buildManufacturingReportContent(
+    pw.Document pdf,
+    pw.Font arabicFont,
+    pw.Font arabicFontBold,
+    DocumentType documentType,
+    dynamic data,
+    Map<String, dynamic>? additionalData,
+  ) async {
+    final reportData = data as Map<String, dynamic>;
+    final title = reportData['title']?.toString() ?? 'تقرير التصنيع';
+    final dateRange = reportData['dateRange']?.toString() ?? '';
+    final summaryCards = (reportData['summaryCards'] as List<Map<String, dynamic>>?) ?? [];
+    final columns = (reportData['columns'] as List<String>?) ?? [];
+    final rows = (reportData['rows'] as List<List<String>>?) ?? [];
+
+    return [
+      pw.Container(
+        padding: const pw.EdgeInsets.all(10),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey400),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        ),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              title,
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                font: arabicFontBold,
+              ),
+            ),
+            if (dateRange.isNotEmpty)
+              pw.Text(
+                'الفترة: $dateRange',
+                style: pw.TextStyle(fontSize: 10, font: arabicFont),
+              ),
+          ],
+        ),
+      ),
+      pw.SizedBox(height: 10),
+      if (summaryCards.isNotEmpty) ...[
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: summaryCards.map((card) {
+            return pw.Expanded(
+              child: pw.Container(
+                margin: const pw.EdgeInsets.symmetric(horizontal: 4),
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Column(
+                  children: [
+                    pw.Text(
+                      card['label']?.toString() ?? '',
+                      style: pw.TextStyle(fontSize: 9, font: arabicFont, color: PdfColors.grey700),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      card['value']?.toString() ?? '',
+                      style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, font: arabicFontBold),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        pw.SizedBox(height: 12),
+      ],
+      if (columns.isNotEmpty && rows.isNotEmpty)
+        pw.TableHelper.fromTextArray(
+          headers: columns,
+          data: rows,
+          border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+          headerStyle: pw.TextStyle(
+            fontSize: 9,
+            fontWeight: pw.FontWeight.bold,
+            font: arabicFontBold,
+          ),
+          headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+          cellStyle: pw.TextStyle(fontSize: 8.5, font: arabicFont),
+          cellAlignment: pw.Alignment.center,
+          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+        ),
+    ];
+  }
+
+  /// FEAT-026: BOM Recipe Specification Card PDF
+  static Future<List<pw.Widget>> _buildBomRecipeCardContent(
+    pw.Document pdf,
+    pw.Font arabicFont,
+    pw.Font arabicFontBold,
+    DocumentType documentType,
+    dynamic data,
+    Map<String, dynamic>? additionalData,
+  ) async {
+    final bom = data as Map<String, dynamic>;
+    final items = (additionalData?['items'] as List<Map<String, dynamic>>?) ?? [];
+
+    return [
+      pw.Container(
+        padding: const pw.EdgeInsets.all(10),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey400),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            pw.Text(
+              'بطاقة وصفة التصنيع: ${bom['name'] ?? ''}',
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                font: arabicFontBold,
+              ),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('المنتج النهائي: ${bom['productName'] ?? '—'}', style: pw.TextStyle(fontSize: 10, font: arabicFont)),
+                pw.Text('الكود: ${bom['code'] ?? '—'}', style: pw.TextStyle(fontSize: 10, font: arabicFont)),
+                pw.Text('العائد: ${bom['yieldQuantity'] ?? 1} وحدة', style: pw.TextStyle(fontSize: 10, font: arabicFont)),
+                pw.Text('نسبة الهدر: ${bom['wastePercentage'] ?? 0}%', style: pw.TextStyle(fontSize: 10, font: arabicFont)),
+              ],
+            ),
+          ],
+        ),
+      ),
+      pw.SizedBox(height: 12),
+      pw.Text('المكونات والخامات المطلوبة:', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, font: arabicFontBold)),
+      pw.SizedBox(height: 6),
+      pw.TableHelper.fromTextArray(
+        headers: ['#', 'المادة الخام', 'الكمية المطلوبة', 'الوحدة', 'هدر خاص %', 'تكلفة الوحدة', 'إجمالي التكلفة'],
+        data: items.asMap().entries.map((entry) {
+          final it = entry.value;
+          return [
+            (entry.key + 1).toString(),
+            it['productName']?.toString() ?? '',
+            it['quantity']?.toString() ?? '',
+            it['unit']?.toString() ?? '—',
+            it['waste']?.toString() ?? '—',
+            it['unitCost']?.toString() ?? '—',
+            it['lineCost']?.toString() ?? '—',
+          ];
+        }).toList(),
+        border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+        headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, font: arabicFontBold),
+        headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+        cellStyle: pw.TextStyle(fontSize: 8.5, font: arabicFont),
+        cellAlignment: pw.Alignment.center,
+        cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+      ),
+    ];
+  }
+
+  /// FEAT-026: Customer Material Receipt Note PDF
+  static Future<List<pw.Widget>> _buildCustomerReceiptCardContent(
+    pw.Document pdf,
+    pw.Font arabicFont,
+    pw.Font arabicFontBold,
+    DocumentType documentType,
+    dynamic data,
+    Map<String, dynamic>? additionalData,
+  ) async {
+    final receipt = data as Map<String, dynamic>;
+    final items = (additionalData?['items'] as List<Map<String, dynamic>>?) ?? [];
+
+    return [
+      pw.Container(
+        padding: const pw.EdgeInsets.all(10),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey400),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'إذن استلام خامات عميل (عهدة): ${receipt['receiptNumber'] ?? ''}',
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, font: arabicFontBold),
+                ),
+                pw.Text('التاريخ: ${receipt['date'] ?? ''}', style: pw.TextStyle(fontSize: 10, font: arabicFont)),
+              ],
+            ),
+            pw.SizedBox(height: 6),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('العميل: ${receipt['customerName'] ?? '—'}', style: pw.TextStyle(fontSize: 10, font: arabicFont)),
+                pw.Text('المستلم / الفاحص: ${receipt['receivedBy'] ?? '—'}', style: pw.TextStyle(fontSize: 10, font: arabicFont)),
+              ],
+            ),
+            if (receipt['notes'] != null && receipt['notes'].toString().isNotEmpty) ...[
+              pw.SizedBox(height: 4),
+              pw.Text('ملاحظات: ${receipt['notes']}', style: pw.TextStyle(fontSize: 9, font: arabicFont, color: PdfColors.grey700)),
+            ],
+          ],
+        ),
+      ),
+      pw.SizedBox(height: 12),
+      pw.Text('الأصناف المستلمة ونتائج الفحص:', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, font: arabicFontBold)),
+      pw.SizedBox(height: 6),
+      pw.TableHelper.fromTextArray(
+        headers: ['#', 'المنتج / الخامة', 'المستلم كلياً', 'معيب / مرفوض', 'المقبول للعهدة', 'ملاحظات / سبب الرفض'],
+        data: items.asMap().entries.map((entry) {
+          final it = entry.value;
+          return [
+            (entry.key + 1).toString(),
+            it['productName']?.toString() ?? '',
+            it['receivedQty']?.toString() ?? '0',
+            it['defectiveQty']?.toString() ?? '0',
+            it['acceptedQty']?.toString() ?? '0',
+            it['reason']?.toString() ?? '—',
+          ];
+        }).toList(),
+        border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+        headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, font: arabicFontBold),
+        headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+        cellStyle: pw.TextStyle(fontSize: 8.5, font: arabicFont),
+        cellAlignment: pw.Alignment.center,
+        cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+      ),
+    ];
   }
 
   /// Helper: Load Arabic font
@@ -1312,6 +1585,12 @@ enum DocumentType {
   receiptVoucher,
   /// FEAT-010: production/consumption documentation card per MO
   manufacturingCard,
+  /// FEAT-026: manufacturing reports (costs, stages & variants, consumption, scraps)
+  manufacturingReport,
+  /// FEAT-026: recipe specification card
+  bomRecipeCard,
+  /// FEAT-026: customer material receipt note
+  customerMaterialReceiptCard,
 }
 
 /// Enhanced Store Info Model (from StoreInfoTable)

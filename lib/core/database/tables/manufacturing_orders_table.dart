@@ -80,11 +80,16 @@ class ManufacturingOrders extends Table {
   TextColumn get notes => text().nullable()();
   TextColumn get createdBy => text().nullable()();
 
-  /// â”€â”€ Phase B1.5: Job Work (for_others) direct input tracking (v77) â”€â”€
+  /// ── Phase B1.5: Job Work (for_others) direct input tracking (v77) ──
   IntColumn get inputProductId => integer().nullable().references(Products, #id)();
   TextColumn get inputColor => text().nullable()();
   TextColumn get inputSize => text().nullable()();
   RealColumn get inputQuantity => real().nullable()();
+
+  /// ── FEAT-026: Multi-stage routing & pricing margins (v81) ──
+  TextColumn get currentStageName => text().nullable()();
+  RealColumn get targetMarginPercent =>
+      real().nullable().withDefault(const Constant(0.0))();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
