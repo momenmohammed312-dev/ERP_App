@@ -412,7 +412,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF121212) : Colors.grey.shade50;
-    final cardBg = isDark ? const Color(0xFF1E1E2C) : Colors.white;
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
     final subTextColor = isDark ? Colors.white70 : Colors.black54;
     final totalSales = _dailyData.fold<double>(
@@ -875,7 +875,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
   void _showDrillDown(BuildContext context, String metric, double total) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF121212) : Colors.grey.shade50;
-    final cardBg = isDark ? const Color(0xFF1E1E2C) : Colors.white;
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
 
     String title;

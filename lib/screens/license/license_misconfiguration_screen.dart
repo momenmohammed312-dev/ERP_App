@@ -11,7 +11,7 @@ class LicenseMisconfigurationApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
-        backgroundColor: const Color(0xFF1E1E2C),
+        backgroundColor: const Color(0xFF161B22),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),

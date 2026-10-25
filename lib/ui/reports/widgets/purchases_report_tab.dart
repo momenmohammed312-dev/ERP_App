@@ -347,7 +347,7 @@ class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text('تقارير المشتريات'),
-        backgroundColor: const Color(0xFF1E1E2C),
+        backgroundColor: const Color(0xFF161B22),
         elevation: 0,
       ),
       body: Padding(
@@ -355,7 +355,7 @@ class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
         child: Column(
           children: [
             Card(
-              color: const Color(0xFF1E1E2C),
+              color: const Color(0xFF161B22),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -368,7 +368,7 @@ class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
                         prefixIcon:
                             Icon(Icons.search, color: Colors.white54),
                         filled: true,
-                        fillColor: Color(0xFF252535),
+                        fillColor: Color(0xFF21262D),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.all(Radius.circular(8)),
                         ),
@@ -387,7 +387,7 @@ class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
                               decoration: BoxDecoration(
                                 border: Border.all(color: Colors.grey.shade600),
                                 borderRadius: BorderRadius.circular(8),
-                                color: const Color(0xFF252535),
+                                color: const Color(0xFF21262D),
                               ),
                               child: Row(
                                 children: [
@@ -448,7 +448,7 @@ class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
             Padding(
               padding: const EdgeInsets.all(16),
               child: Card(
-                color: const Color(0xFF1E1E2C),
+                color: const Color(0xFF161B22),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -493,7 +493,7 @@ class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
                                 p.totalAmount - p.paidAmount;
                             return Card(
                               margin: const EdgeInsets.only(bottom: 8),
-                              color: const Color(0xFF1E1E2C),
+                              color: const Color(0xFF161B22),
                               child: InkWell(
                                 onTap: () => _openDetail(p),
                                 borderRadius: BorderRadius.circular(8),

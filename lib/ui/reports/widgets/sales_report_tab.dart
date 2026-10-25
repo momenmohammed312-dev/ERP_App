@@ -529,7 +529,7 @@ class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text('تقارير المبيعات'),
-        backgroundColor: Color(0xFF1E1E2C), // Dark app bar
+        backgroundColor: Color(0xFF161B22), // Dark app bar
         elevation: 0,
       ),
       body: Padding(
@@ -538,7 +538,7 @@ class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
           children: [
             // Controls
             Card(
-              color: Color(0xFF1E1E2C), // Dark theme for controls
+              color: Color(0xFF161B22), // Dark theme for controls
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -551,7 +551,7 @@ class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
                         hintStyle: TextStyle(color: Colors.white54),
                         prefixIcon: Icon(Icons.search, color: Colors.white54),
                         filled: true,
-                        fillColor: Color(0xFF252535),
+                        fillColor: Color(0xFF21262D),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                           borderSide: BorderSide(color: Colors.grey.shade600),
@@ -580,7 +580,7 @@ class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
                               decoration: BoxDecoration(
                                 border: Border.all(color: Colors.grey.shade600),
                                 borderRadius: BorderRadius.circular(8),
-                                color: Color(0xFF252535),
+                                color: Color(0xFF21262D),
                               ),
                               child: Row(
                                 children: [
@@ -643,7 +643,7 @@ class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
             Padding(
               padding: const EdgeInsets.all(16),
               child: Card(
-                color: Color(0xFF1E1E2C), // Dark theme for total card
+                color: Color(0xFF161B22), // Dark theme for total card
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -780,7 +780,7 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      color: Color(0xFF1E1E2C), // Dark theme matching screenshot
+      color: Color(0xFF161B22), // Dark theme matching screenshot
       child: ExpansionTile(
         leading: CircleAvatar(
           backgroundColor: Colors.purple.withValues(alpha: 0.1),
@@ -905,7 +905,7 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Color(
-                  0xFF252535,
+                  0xFF21262D,
                 ), // Slightly lighter dark for expanded content
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(8),
