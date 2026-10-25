@@ -1,5 +1,10 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart' show PdfPageFormat;
+import 'package:printing/printing.dart';
+import 'package:pos_offline_desktop/core/services/unified_print_service.dart' as ups;
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/customer_material_receipt_dao.dart';
@@ -59,6 +64,87 @@ class _CustomerMaterialReceiptListScreenState
 
   /// Secondary entry to the for-others flow: opens the same manufacturing
   /// order form prefilled with this receipt (receipt → recipe → order).
+  Future<void> _printReceipt(CustomerMaterialReceipt r) async {
+    final customer = _customerMap[r.customerId];
+    final items = await widget.db.customerMaterialReceiptDao.getItemsForReceipt(r.id);
+    final products = await widget.db.productDao.getAllProducts();
+    final pMap = {for (var p in products) p.id: p};
+
+    final itemsData = items.map((it) {
+      final p = pMap[it.productId];
+      return {
+        'productName': p?.name ?? '#${it.productId}',
+        'received': it.quantityReceived,
+        'defective': it.quantityDefectiveAtReceipt,
+        'accepted': it.quantityAccepted,
+        'unit': p?.unit ?? 'وحدة',
+        'notes': it.rejectionReason ?? it.notes ?? '',
+      };
+    }).toList();
+
+    try {
+      final pdf = await ups.UnifiedPrintService.generateUnifiedDocument(
+        documentType: ups.DocumentType.customerMaterialReceiptCard,
+        data: {
+          'receiptNumber': r.receiptNumber,
+          'date': DateFormat('yyyy/MM/dd HH:mm').format(r.receivedDate),
+          'customerName': customer?.name ?? r.customerId,
+          'receivedBy': r.receivedBy ?? '—',
+          'notes': r.notes ?? '',
+        },
+        additionalData: {'items': itemsData},
+      );
+
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => Dialog(
+          insetPadding: const EdgeInsets.all(24),
+          child: SizedBox(
+            width: 900,
+            height: 750,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'إذن استلام خامات العميل — ${r.receiptNumber}',
+                          style: Theme.of(ctx).textTheme.titleMedium,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: PdfPreview(
+                    build: (format) => pdf.save(),
+                    allowPrinting: true,
+                    allowSharing: true,
+                    initialPageFormat: PdfPageFormat.a4,
+                    pdfFileName: 'receipt_${r.receiptNumber}.pdf',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل إنشاء إذن الاستلام PDF: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _openForOthersOrder(int receiptId) async {
     final res = await showDialog<bool>(
       context: context,
@@ -94,9 +180,47 @@ class _CustomerMaterialReceiptListScreenState
         icon: const Icon(Icons.add),
         label: const Text('إذن استلام جديد'),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : StreamBuilder<List<CustomerMaterialReceipt>>(
+      body: Column(
+        children: [
+          // Quick Navigation Strip
+          Container(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/manufacturing/orders'),
+                    icon: const Icon(Icons.precision_manufacturing, size: 18),
+                    label: const Text('أوامر التصنيع'),
+                  ),
+                  const Gap(8),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/manufacturing/bom'),
+                    icon: const Icon(Icons.playlist_add_check, size: 18),
+                    label: const Text('الوصفات (BOM)'),
+                  ),
+                  const Gap(8),
+                  FilledButton.tonalIcon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                    label: const Text('خامات العملاء'),
+                  ),
+                  const Gap(8),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/manufacturing/reports'),
+                    icon: const Icon(Icons.analytics_outlined, size: 18),
+                    label: const Text('تقارير التصنيع PDF'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : StreamBuilder<List<CustomerMaterialReceipt>>(
               stream: widget.db.customerMaterialReceiptDao.watchAllReceipts(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting &&
@@ -322,20 +446,21 @@ class _CustomerMaterialReceiptListScreenState
                                       Text('ملاحظات الإذن: ${r.notes}'),
                                     ],
                                     const Gap(12),
-                                    Align(
-                                      alignment:
-                                          AlignmentDirectional.centerStart,
-                                      child: FilledButton.tonalIcon(
-                                        onPressed: () =>
-                                            _openForOthersOrder(r.id),
-                                        icon: const Icon(
-                                          Icons.precision_manufacturing,
-                                        ),
-                                        label: const Text(
-                                          'إنشاء أمر تشغيل للغير',
-                                        ),
-                                      ),
-                                    ),
+                                    Row(
+                                       children: [
+                                         FilledButton.tonalIcon(
+                                           onPressed: () => _openForOthersOrder(r.id),
+                                           icon: const Icon(Icons.precision_manufacturing),
+                                           label: const Text('إنشاء أمر تشغيل للغير'),
+                                         ),
+                                         const Gap(12),
+                                         OutlinedButton.icon(
+                                           onPressed: () => _printReceipt(r),
+                                           icon: const Icon(Icons.picture_as_pdf),
+                                           label: const Text('طباعة إذن الاستلام PDF'),
+                                         ),
+                                       ],
+                                     ),
                                   ],
                                 ),
                               );
@@ -348,6 +473,9 @@ class _CustomerMaterialReceiptListScreenState
                 );
               },
             ),
+          ),
+        ],
+      ),
     );
   }
 }

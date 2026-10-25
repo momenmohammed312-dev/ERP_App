@@ -85,12 +85,57 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # ────────────────────────────────────────────────────────────────────────────
-# 3) Report
+# 3) Post-build verification & bundling (Release DLL + MSVC Runtimes)
 # ────────────────────────────────────────────────────────────────────────────
-$outputPath = Join-Path $ProjectRoot 'build\windows\x64\runner\Release\pos_offline_desktop.exe'
+$releaseDir = Join-Path $ProjectRoot 'build\windows\x64\runner\Release'
+$outputPath = Join-Path $releaseDir 'pos_offline_desktop.exe'
+
+# Locate Flutter SDK cache to guarantee Release AOT flutter_windows.dll
+$flutterCmd = Get-Command flutter -ErrorAction SilentlyContinue
+if ($flutterCmd) {
+    $flutterBin = Split-Path $flutterCmd.Source
+    $flutterRoot = Split-Path $flutterBin
+    $engineReleaseDll = Join-Path $flutterRoot 'bin\cache\artifacts\engine\windows-x64-release\flutter_windows.dll'
+    $targetDll = Join-Path $releaseDir 'flutter_windows.dll'
+
+    if (Test-Path $engineReleaseDll) {
+        $targetItem = Get-Item $targetDll -ErrorAction SilentlyContinue
+        # If the target DLL is the debug one (>30MB) or missing, overwrite with genuine release AOT DLL
+        if (-not $targetItem -or $targetItem.Length -gt 30MB) {
+            Write-Host "[POST-BUILD] Ensuring genuine Release AOT flutter_windows.dll..." -ForegroundColor Yellow
+            Copy-Item -LiteralPath $engineReleaseDll -Destination $targetDll -Force
+        }
+    }
+}
+
+# Copy MSVC C++ Redistributable DLLs so client machines never hit missing runtime DLLs
+$msvcDlls = @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
+foreach ($dll in $msvcDlls) {
+    $sysPath = Join-Path $env:windir "System32\$dll"
+    $destPath = Join-Path $releaseDir $dll
+    if (Test-Path $sysPath) {
+        Copy-Item -LiteralPath $sysPath -Destination $destPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Sanity smoke-test: verify binary launches cleanly and doesn't crash on start
+Write-Host "[POST-BUILD] Running sanity smoke-test on release binary..." -ForegroundColor Cyan
+$p = Start-Process -FilePath $outputPath -PassThru
+Start-Sleep -Seconds 2
+if ($p.HasExited) {
+    Write-Host "[FATAL] Release binary crashed immediately with exit code $($p.ExitCode)!" -ForegroundColor Red
+    exit 1
+}
+Stop-Process -Id $p.Id -Force
+Write-Host "[POST-BUILD] Sanity smoke-test passed! Application launches cleanly." -ForegroundColor Green
+
+# ────────────────────────────────────────────────────────────────────────────
+# 4) Report
+# ────────────────────────────────────────────────────────────────────────────
 Write-Host '' -ForegroundColor Green
-Write-Host "[DONE] Release build succeeded." -ForegroundColor Green
+Write-Host "[DONE] Release build succeeded and verified." -ForegroundColor Green
 Write-Host "[DONE] Version: $appVersion" -ForegroundColor Green
 Write-Host "[DONE] Output: $outputPath" -ForegroundColor Green
+Write-Host "[IMPORTANT] To deliver to client: Copy the ENTIRE folder 'build\windows\x64\runner\Release\' (including 'data/' and all .dll files), not just pos_offline_desktop.exe alone." -ForegroundColor Yellow
 Write-Host '' -ForegroundColor Green
 exit 0
