@@ -147,6 +147,17 @@ class EnhancedBackupService {
     _db = db;
   }
 
+  /// الحصول على مجلد النسخ الاحتياطي المحلي
+  Future<Directory> getBackupDirectory() async {
+    return _getBackupDirectory();
+  }
+
+  /// الحصول على المسار النصي لمجلد النسخ الاحتياطي المحلي
+  Future<String> getBackupDirectoryPath() async {
+    final dir = await _getBackupDirectory();
+    return dir.path;
+  }
+
   // ════════════════════════════════════════════════════════════════════
   // إنشاء نسخة احتياطية
   // ════════════════════════════════════════════════════════════════════

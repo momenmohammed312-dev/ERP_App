@@ -44,6 +44,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen>
   bool _isGoogleDriveConnected = false;
   String? _googleDriveEmail;
   String? _disasterRecoveryKey;
+  String? _backupDirectoryPath;
 
   @override
   void initState() {
@@ -99,6 +100,12 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen>
         recKey ??= await _encryptionService.getOrCreateLocalMasterKey();
       } catch (_) {}
 
+      // Load local backup directory path
+      String? localBackupPath;
+      try {
+        localBackupPath = await _backupService.getBackupDirectoryPath();
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _backups = backups;
@@ -107,6 +114,7 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen>
           _isGoogleDriveConnected = gdriveConnected;
           _googleDriveEmail = gdriveEmail;
           _disasterRecoveryKey = recKey;
+          _backupDirectoryPath = localBackupPath;
           _isLoading = false;
         });
       }
@@ -476,6 +484,19 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // بطاقة مسار مجلد النسخ الاحتياطي المحلي والتكامل مع Google Drive
+        _buildLocalBackupFolderCard(
+          cardBg: cardBg,
+          innerBg: innerBg,
+          textColor: textColor,
+          subTextColor: subTextColor,
+          borderColor: borderColor,
+          goldColor: goldColor,
+          blueColor: blueColor,
+          isDark: isDark,
+        ),
+        const Gap(16),
+
         // شريط الإجراءات السريعة
         Card(
           color: cardBg,
@@ -678,6 +699,152 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen>
     );
   }
 
+  Widget _buildLocalBackupFolderCard({
+    required Color cardBg,
+    required Color innerBg,
+    required Color textColor,
+    required Color subTextColor,
+    required Color borderColor,
+    required Color goldColor,
+    required Color blueColor,
+    required bool isDark,
+  }) {
+    final folderPath = _backupDirectoryPath ?? 'جاري تحديد المسار...';
+
+    return Card(
+      color: cardBg,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: borderColor),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: goldColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.folder_special_rounded, color: goldColor, size: 20),
+                ),
+                const Gap(10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'مسار مجلد النسخ الاحتياطي المحلي (Google Drive & Local Storage)',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                      const Gap(2),
+                      Text(
+                        'المجلد المعتمد لحفظ ملفات النسخ الاحتياطي (.posbackup) على هذا الجهاز',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: subTextColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Gap(14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: innerBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: borderColor),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.folder_outlined, color: subTextColor, size: 20),
+                  const Gap(10),
+                  Expanded(
+                    child: SelectableText(
+                      folderPath,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                      ),
+                    ),
+                  ),
+                  const Gap(10),
+                  OutlinedButton.icon(
+                    onPressed: _copyBackupPath,
+                    icon: const Icon(Icons.copy_rounded, size: 16),
+                    label: const Text('نسخ المسار'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: textColor,
+                      side: BorderSide(color: borderColor),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+                  const Gap(8),
+                  ElevatedButton.icon(
+                    onPressed: _openBackupFolder,
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: const Text('فتح المجلد'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF238636),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Gap(12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: blueColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: blueColor.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.cloud_upload_outlined, color: blueColor, size: 18),
+                  const Gap(10),
+                  Expanded(
+                    child: Text(
+                      '💡 لمزامنة النسخ الاحتياطية مع Google Drive: اضغط على "فتح المجلد" وانسخ ملفات النسخ (.posbackup) إلى مجلد Google Drive، أو حدد هذا المجلد داخل تطبيق Google Drive Desktop لمزامنته تلقائياً.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? const Color(0xFF58A6FF) : const Color(0xFF0969DA),
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildLocalBackupItem(EnhancedBackupInfo backup, bool isDark) {
     final textColor =
         isDark ? const Color(0xFFE6EDF3) : const Color(0xFF1F2328);
@@ -767,6 +934,9 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen>
             icon: Icon(Icons.more_vert, color: subTextColor),
             onSelected: (value) {
               switch (value) {
+                case 'show_in_folder':
+                  _openBackupFileInExplorer(backup);
+                  break;
                 case 'verify':
                   _verifyBackup(backup);
                   break;
@@ -783,6 +953,17 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen>
             },
             itemBuilder: (context) {
               final items = <PopupMenuEntry<String>>[
+                const PopupMenuItem(
+                  value: 'show_in_folder',
+                  child: Row(
+                    children: [
+                      Icon(Icons.folder_open_outlined,
+                          color: Color(0xFF2EA043), size: 18),
+                      Gap(8),
+                      Text('إظهار في مستكشف الملفات'),
+                    ],
+                  ),
+                ),
                 const PopupMenuItem(
                   value: 'verify',
                   child: Row(
@@ -1402,5 +1583,69 @@ class _EnhancedBackupScreenState extends State<EnhancedBackupScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _openBackupFolder() async {
+    final folderPath = _backupDirectoryPath;
+    if (folderPath == null || folderPath.isEmpty) return;
+
+    try {
+      final dir = Directory(folderPath);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+
+      if (Platform.isWindows) {
+        await Process.run('explorer.exe', [dir.path]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [dir.path]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [dir.path]);
+      }
+    } catch (e) {
+      _showErrorSnackBar('تعذر فتح المجلد في متصفح الملفات: $e');
+    }
+  }
+
+  Future<void> _copyBackupPath() async {
+    final folderPath = _backupDirectoryPath;
+    if (folderPath == null || folderPath.isEmpty) return;
+
+    await Clipboard.setData(ClipboardData(text: folderPath));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              Gap(8),
+              Expanded(
+                child: Text('تم نسخ مسار مجلد النسخ الاحتياطي إلى الحافظة بنجاح.'),
+              ),
+            ],
+          ),
+          backgroundColor: Color(0xFF2EA043),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openBackupFileInExplorer(EnhancedBackupInfo backup) async {
+    try {
+      final file = File(backup.filePath);
+      if (!await file.exists()) {
+        _showErrorSnackBar('ملف النسخة الاحتياطية غير موجود: ${backup.filename}');
+        return;
+      }
+      if (Platform.isWindows) {
+        await Process.run('explorer.exe', ['/select,', file.path]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', ['-R', file.path]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [file.parent.path]);
+      }
+    } catch (e) {
+      _showErrorSnackBar('تعذر تحديد موقع الملف: $e');
+    }
   }
 }
