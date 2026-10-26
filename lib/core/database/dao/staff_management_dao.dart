@@ -23,7 +23,9 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
 
   // STAFF MANAGEMENT
 
-  Future<List<Staff>> getAllStaff() => select(staffTable).get();
+  Future<List<Staff>> getAllStaff() => (select(
+    staffTable,
+  )..where((s) => s.status.equals('deleted').not())).get();
 
   Future<Staff?> getStaffById(String staffId) => (select(
     staffTable,
@@ -38,20 +40,45 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> updateStaff(Staff entry) => update(staffTable).replace(entry);
 
-  Future<void> deleteStaff(String staffId) =>
-      (delete(staffTable)..where((s) => s.staffId.equals(staffId))).go();
+  Future<void> deleteStaff(String staffId) async {
+    // 1. فحص العهد المالية المفتوحة لمنع فقدان وسقوط العهد النشطة
+    final openCustodies = await (select(db.cashCustodies)
+      ..where((c) => c.staffId.equals(staffId) & c.status.equals('open')))
+      .get();
+    if (openCustodies.isNotEmpty) {
+      throw Exception('لا يمكن حذف الموظف لوجود عهدة مالية مفتوحة مسجلة باسمه');
+    }
+
+    // 2. تطبيق الحذف الآمن (Soft Delete) وإلغاء ربط أجهزة البصمة ذرياً
+    await db.transaction(() async {
+      await (update(staffTable)..where((s) => s.staffId.equals(staffId))).write(
+        StaffTableCompanion(
+          status: const Value('deleted'),
+          isActive: const Value(false),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+      await (delete(db.staffBiometricMappings)
+        ..where((m) => m.staffId.equals(staffId))).go();
+    });
+  }
 
   Future<int> getStaffCount() async {
     final countExp = staffTable.id.count();
     final result = await (selectOnly(
       staffTable,
-    )..addColumns([countExp])).getSingle();
+    )
+      ..where(staffTable.status.equals('deleted').not())
+      ..addColumns([countExp])).getSingle();
     return result.read(countExp) ?? 0;
   }
 
   // WATCH STREAMS FOR REAL-TIME UPDATES
 
-  Stream<List<Staff>> watchAllStaff() => select(staffTable).watch();
+  Stream<List<Staff>> watchAllStaff() => (select(
+    staffTable,
+  )..where((s) => s.status.equals('deleted').not())).watch();
 
   Stream<List<Staff>> watchActiveStaff() => (select(
     staffTable,

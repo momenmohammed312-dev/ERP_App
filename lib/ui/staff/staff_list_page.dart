@@ -801,7 +801,7 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
                 value: 'terminate',
                 child: Row(
                   children: [
-                    Icon(Icons.block, color: Colors.redAccent),
+                    Icon(Icons.block, color: Colors.orangeAccent),
                     const SizedBox(width: 8),
                     Text('إنهاء الخدمة', style: TextStyle(color: textColor)),
                   ],
@@ -819,6 +819,17 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
                 ),
               ),
             ],
+            const PopupMenuDivider(),
+            PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: const [
+                  Icon(Icons.delete_forever, color: Colors.redAccent),
+                  SizedBox(width: 8),
+                  Text('حذف الموظف', style: TextStyle(color: Colors.redAccent)),
+                ],
+              ),
+            ),
           ],
         ),
         onTap: () => _viewStaffDetails(staff),
@@ -852,6 +863,9 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
       case 'activate':
         _activateStaff(staff);
         break;
+      case 'delete':
+        _deleteStaff(staff);
+        break;
     }
   }
 
@@ -865,11 +879,99 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
     }
   }
 
-  void _viewStaffDetails(Staff staff) {
-    Navigator.push(
+  void _viewStaffDetails(Staff staff) async {
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => StaffDetailsPage(staff: staff)),
     );
+    if (result == true) {
+      _loadStaff();
+    }
+  }
+
+  void _deleteStaff(Staff staff) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.redAccent, width: 1.5),
+        ),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+            SizedBox(width: 8),
+            Text(
+              'تأكيد حذف الموظف',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'هل أنت متأكد من حذف الموظف "${staff.name}" نهائياً؟',
+              style: const TextStyle(color: Color(0xFFE6EDF3), fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+              ),
+              child: const Text(
+                'ملاحظة: سيتم استبعاد الموظف من القوائم وأجهزة البصمة، مع الحفاظ على الأثر المحاسبي لسجلات الرواتب السابقة.',
+                style: TextStyle(color: Colors.redAccent, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء', style: TextStyle(color: Color(0xFFC9A84C))),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.delete_forever, size: 18),
+            label: const Text('تأكيد الحذف'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final user = ref.read(authProvider);
+        await _service.deleteStaff(user, staff.staffId);
+        await _loadStaff();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم حذف الموظف "${staff.name}" بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        final errorMsg = e.toString().replaceAll('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _editStaff(Staff staff) async {

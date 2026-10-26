@@ -10,6 +10,9 @@ import 'advances_page.dart';
 import 'payroll_page.dart';
 import 'performance_page.dart';
 import 'staff_form_page.dart';
+import '../../core/database/dao/staff_management_dao.dart';
+import '../../services/staff_management_service.dart';
+import '../../core/provider/auth_provider.dart';
 
 class StaffDetailsPage extends ConsumerStatefulWidget {
   final Staff staff;
@@ -73,6 +76,11 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
             icon: const Icon(Icons.edit),
             onPressed: _editStaff,
             tooltip: 'تعديل',
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            onPressed: _deleteStaff,
+            tooltip: 'حذف الموظف',
           ),
         ],
       ),
@@ -377,6 +385,94 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
     if (result == true) {
       if (!mounted) return;
       Navigator.pop(context, true);
+    }
+  }
+
+  void _deleteStaff() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.redAccent, width: 1.5),
+        ),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+            SizedBox(width: 8),
+            Text(
+              'تأكيد حذف الموظف',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'هل أنت متأكد من حذف الموظف "${widget.staff.name}" نهائياً؟',
+              style: const TextStyle(color: Color(0xFFE6EDF3), fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+              ),
+              child: const Text(
+                'ملاحظة: سيتم استبعاد الموظف من القوائم وأجهزة البصمة، مع الحفاظ على الأثر المحاسبي لسجلات الرواتب السابقة.',
+                style: TextStyle(color: Colors.redAccent, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء', style: TextStyle(color: Color(0xFFC9A84C))),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.delete_forever, size: 18),
+            label: const Text('تأكيد الحذف'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final db = ref.read(appDatabaseProvider);
+        final dao = StaffManagementDao(db);
+        final service = StaffManagementService(dao, db);
+        final user = ref.read(authProvider);
+        await service.deleteStaff(user, widget.staff.staffId);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم حذف الموظف "${widget.staff.name}" بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      } catch (e) {
+        if (!mounted) return;
+        final errorMsg = e.toString().replaceAll('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

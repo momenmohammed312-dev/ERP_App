@@ -166,6 +166,11 @@ class StaffManagementService {
     await updateStaffInfo(user, staffId: staffId, status: 'terminated');
   }
 
+  Future<void> deleteStaff(User? user, String staffId) async {
+    PermissionValidator.requirePermission(user, Permission.deleteEmployee, 'حذف موظف');
+    await _dao.deleteStaff(staffId);
+  }
+
   // ATTENDANCE MANAGEMENT
 
   /// Restored old rule: worked + overtime hours are always derived from the
