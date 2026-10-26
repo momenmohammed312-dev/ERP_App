@@ -7,6 +7,7 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart'
     show isCustomerOwnedBomLine;
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
+import 'package:pos_offline_desktop/ui/customer/add_edit_customer_page.dart';
 import 'bom_form_dialog.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/receipt_picker_field.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/searchable_product_picker.dart';
@@ -60,6 +61,7 @@ class _MoFormDialogState extends State<MoFormDialog> {
   List<Customer> _customers = [];
   bool _loadingBoms = true;
   bool _isSubmitting = false;
+  List<String> _distinctStageNames = [];
   String? _errorMessage;
   DateTime? _plannedDate;
 
@@ -94,6 +96,9 @@ class _MoFormDialogState extends State<MoFormDialog> {
       _serviceUnitPriceCtrl.text = '0';
     }
     _loadBoms();
+    widget.db.manufacturingStageDao.getDistinctStageNames().then((names) {
+      if (mounted) setState(() => _distinctStageNames = names);
+    }).catchError((_) {});
     // Secondary entry: a receipt was chosen first (receipt → recipe flow).
     if (widget.initialReceiptId != null && widget.order == null) {
       _orderType = 'for_others';
@@ -307,6 +312,9 @@ class _MoFormDialogState extends State<MoFormDialog> {
       _finishedProduct = _selectedBom != null
           ? _productMap[_selectedBom!.finishedProductId]
           : null;
+      if (_selectedBom != null && widget.order == null) {
+        _plannedQtyCtrl.text = _selectedBom!.yieldQuantity.toString();
+      }
       if (_selectedBom != null &&
           !_compatibleBoms.any((b) => b.id == createdId)) {
         _showAllBoms = true;
@@ -799,6 +807,9 @@ class _MoFormDialogState extends State<MoFormDialog> {
                                       _finishedProduct = _selectedBom != null
                                           ? _productMap[_selectedBom!.finishedProductId]
                                           : null;
+                                      if (_selectedBom != null && widget.order == null) {
+                                        _plannedQtyCtrl.text = _selectedBom!.yieldQuantity.toString();
+                                      }
                                     });
                                   }
                                 : null,
@@ -887,27 +898,55 @@ class _MoFormDialogState extends State<MoFormDialog> {
                     if (_selectedBom != null && _selectedBomLines.isNotEmpty)
                       _buildBomOwnershipSplit(),
                     const Gap(8),
-                    DropdownButtonFormField<String>(
-                      value: _customerId,
-                      decoration: const InputDecoration(
-                        labelText: 'العميل *',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _customers
-                          .map(
-                            (c) => DropdownMenuItem(
-                              value: c.id,
-                              child: Text(c.name),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _customerId,
+                            decoration: const InputDecoration(
+                              labelText: 'العميل *',
+                              border: OutlineInputBorder(),
                             ),
-                          )
-                          .toList(),
-                      // The customer is fixed by the chosen receipt.
-                      onChanged: (canEdit && _selectedReceipt == null)
-                          ? (v) {
-                              setState(() => _customerId = v);
-                              _loadCustomerBalances(v);
-                            }
-                          : null,
+                            items: _customers
+                                .map(
+                                  (c) => DropdownMenuItem(
+                                    value: c.id,
+                                    child: Text(c.name),
+                                  ),
+                                )
+                                .toList(),
+                            // The customer is fixed by the chosen receipt.
+                            onChanged: (canEdit && _selectedReceipt == null)
+                                ? (v) {
+                                    setState(() => _customerId = v);
+                                    _loadCustomerBalances(v);
+                                  }
+                                : null,
+                          ),
+                        ),
+                        if (canEdit && _selectedReceipt == null) ...[
+                          const Gap(8),
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.person_add_alt_1),
+                            tooltip: 'إضافة عميل جديد',
+                            onPressed: () async {
+                              final newCustId = await Navigator.of(context).push<String?>(
+                                MaterialPageRoute(
+                                  builder: (context) => const AddEditCustomerPage(),
+                                ),
+                              );
+                              if (newCustId != null && mounted) {
+                                final customers = await widget.db.customerDao.getAllCustomers();
+                                setState(() {
+                                  _customers = customers;
+                                  _customerId = newCustId;
+                                });
+                                _loadCustomerBalances(newCustId);
+                              }
+                            },
+                          ),
+                        ],
+                      ],
                     ),
                     const Gap(16),
                     DropdownButtonFormField<int>(
@@ -974,13 +1013,16 @@ class _MoFormDialogState extends State<MoFormDialog> {
                   Wrap(
                     spacing: 8,
                     runSpacing: 4,
-                    children: [
-                      'القص والتفصيل',
-                      'الخياطة والتجميع',
-                      'التشطيب والكي',
-                      'التعبئة والتغليف',
+                    children: {
                       'مرحلة أولى',
-                    ].map((stg) => ActionChip(
+                      'القص والتفصيل',
+                      'تجميع ونجارة',
+                      'صنفرة ودهان',
+                      'الخياطة والتجميع',
+                      'تعبئة وتغليف',
+                      'فحص الجودة',
+                      ..._distinctStageNames,
+                    }.take(10).map((stg) => ActionChip(
                           avatar: const Icon(Icons.subdirectory_arrow_left, size: 14),
                           label: Text(stg, style: const TextStyle(fontSize: 12)),
                           onPressed: canEdit
@@ -1058,85 +1100,87 @@ class _MoFormDialogState extends State<MoFormDialog> {
                       },
                     ),
                   ],
-                  const Gap(16),
-                  TextFormField(
-                    controller: _serviceUnitPriceCtrl,
-                    enabled: canEdit,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'سعر أجر التشغيل للوحدة (ج.م) *',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.attach_money),
-                      helperText: 'أجر تصنيع الوحدة الواحدة لصالح العميل',
-                    ),
-                    validator: (v) {
-                      if (_orderType != 'internal') {
-                        final p = double.tryParse(v ?? '');
-                        if (p == null || p < 0)
-                          return 'أدخل سعر تشغيل صحيح >= 0';
-                      }
-                      return null;
-                    },
-                  ),
-                  const Gap(16),
-                  DropdownButtonFormField<String>(
-                    initialValue: _scrapPolicy,
-                    decoration: const InputDecoration(
-                      labelText: 'سياسة الهالك المتفق عليها *',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.policy_outlined),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'customer_bears',
-                        child: Text('العميل يتحمل الهالك (بدون تعويض)'),
+                  if (_orderType != 'internal') ...[
+                    const Gap(16),
+                    TextFormField(
+                      controller: _serviceUnitPriceCtrl,
+                      enabled: canEdit,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
                       ),
-                      DropdownMenuItem(
-                        value: 'factory_pays_piece_value',
-                        child: Text(
-                          'المصنع يعوض قيمة القطعة (يخصم من الفاتورة)',
+                      decoration: const InputDecoration(
+                        labelText: 'سعر أجر التشغيل للوحدة (ج.م) *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.attach_money),
+                        helperText: 'أجر تصنيع الوحدة الواحدة لصالح العميل',
+                      ),
+                      validator: (v) {
+                        if (_orderType != 'internal') {
+                          final p = double.tryParse(v ?? '');
+                          if (p == null || p < 0)
+                            return 'أدخل سعر تشغيل صحيح >= 0';
+                        }
+                        return null;
+                      },
+                    ),
+                    const Gap(16),
+                    DropdownButtonFormField<String>(
+                      initialValue: _scrapPolicy,
+                      decoration: const InputDecoration(
+                        labelText: 'سياسة الهالك المتفق عليها *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.policy_outlined),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'customer_bears',
+                          child: Text('العميل يتحمل الهالك (بدون تعويض)'),
                         ),
-                      ),
-                      DropdownMenuItem(
-                        value: 'factory_bears_labour_only',
-                        child: Text('المصنع يتنازل عن أجر التشغيل فقط'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'factory_replaces_piece',
-                        child: Text('المصنع يستبدل القطعة التالفة من مخزونه'),
-                      ),
-                    ],
-                    onChanged: canEdit
-                        ? (v) => setState(
-                            () => _scrapPolicy = v ?? 'customer_bears',
-                          )
-                        : null,
-                  ),
-                  const Gap(16),
-                  TextFormField(
-                    controller: _pieceUnitValueCtrl,
-                    enabled: canEdit,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+                        DropdownMenuItem(
+                          value: 'factory_pays_piece_value',
+                          child: Text(
+                            'المصنع يعوض قيمة القطعة (يخصم من الفاتورة)',
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'factory_bears_labour_only',
+                          child: Text('المصنع يتنازل عن أجر التشغيل فقط'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'factory_replaces_piece',
+                          child: Text('المصنع يستبدل القطعة التالفة من مخزونه'),
+                        ),
+                      ],
+                      onChanged: canEdit
+                          ? (v) => setState(
+                              () => _scrapPolicy = v ?? 'customer_bears',
+                            )
+                          : null,
                     ),
-                    decoration: const InputDecoration(
-                      labelText: 'القيمة التقديرية للقطعة (للتعويض) ج.م',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.price_check),
-                      helperText: 'تستخدم لحساب قيمة التعويض عند خطأ المصنع',
+                    const Gap(16),
+                    TextFormField(
+                      controller: _pieceUnitValueCtrl,
+                      enabled: canEdit,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'القيمة التقديرية للقطعة (للتعويض) ج.م',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.price_check),
+                        helperText: 'تستخدم لحساب قيمة التعويض عند خطأ المصنع',
+                      ),
+                      validator: (v) {
+                        if (_orderType != 'internal' &&
+                            _scrapPolicy == 'factory_pays_piece_value') {
+                          final val = double.tryParse(v ?? '');
+                          if (val == null || val < 0)
+                            return 'أدخل قيمة قطعة صحيحة';
+                        }
+                        return null;
+                      },
                     ),
-                    validator: (v) {
-                      if (_orderType != 'internal' &&
-                          _scrapPolicy == 'factory_pays_piece_value') {
-                        final val = double.tryParse(v ?? '');
-                        if (val == null || val < 0)
-                          return 'أدخل قيمة قطعة صحيحة';
-                      }
-                      return null;
-                    },
-                  ),
+                  ],
                   const Gap(16),
                 ],
                 TextFormField(

@@ -12,6 +12,7 @@ import 'package:pos_offline_desktop/core/database/tables/manufacturing_stages_ta
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/cost_component_editor.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/widgets/searchable_product_picker.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/mo_form_dialog.dart';
 import 'package:printing/printing.dart';
 
@@ -246,6 +247,25 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         },
     ];
 
+    final cardStages = await widget.db.manufacturingStageDao.getStagesForOrder(mo.id);
+    final stagesData = <Map<String, dynamic>>[];
+    for (final s in cardStages) {
+      final outputs = await widget.db.manufacturingStageDao.getOutputsForStage(s.id);
+      stagesData.add({
+        'stageName': s.stageName,
+        'status': s.status,
+        'inputQuantity': s.inputQuantity,
+        'outputQuantity': s.outputQuantity,
+        'scrapQuantity': s.scrapQuantity,
+        'stageCost': s.stageCost,
+        'outputs': outputs.map((o) => {
+          'variantName': o.variantName ?? 'قياسي',
+          'producedQuantity': o.producedQuantity,
+          'scrapQuantity': o.scrapQuantity,
+        }).toList(),
+      });
+    }
+
     try {
       final pdf = await ups.UnifiedPrintService.generateUnifiedDocument(
         documentType: ups.DocumentType.manufacturingCard,
@@ -275,6 +295,20 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
           'movements': movementRows,
           'balances': balanceRows,
           'scraps': scrapRows,
+          'materials': _bomItems.map((entry) {
+            final (item, prod) = entry;
+            final bomYield = _bom?.yieldQuantity ?? 1;
+            final factor = bomYield > 0 ? mo.plannedQuantity / bomYield : mo.plannedQuantity;
+            final waste = item.wastePercentageOverride ?? _bom?.wastePercentage ?? 0;
+            final req = item.quantityRequired * factor * (1 + waste / 100);
+            return {
+              'name': prod.name,
+              'quantityRequired': req,
+              'unit': prod.unit ?? 'قطعة',
+              'available': prod.quantity,
+            };
+          }).toList(),
+          'stages': stagesData,
         },
       );
       if (!mounted) return;
@@ -378,6 +412,19 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         additionalData: <String, dynamic>{
           'stages': stagesData,
           'scraps': scrapRows,
+          'materials': _bomItems.map((entry) {
+            final (item, prod) = entry;
+            final bomYield = _bom?.yieldQuantity ?? 1;
+            final factor = bomYield > 0 ? mo.plannedQuantity / bomYield : mo.plannedQuantity;
+            final waste = item.wastePercentageOverride ?? _bom?.wastePercentage ?? 0;
+            final req = item.quantityRequired * factor * (1 + waste / 100);
+            return {
+              'name': prod.name,
+              'quantityRequired': req,
+              'unit': prod.unit ?? 'قطعة',
+              'available': prod.quantity,
+            };
+          }).toList(),
         },
       );
 
@@ -431,11 +478,441 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     }
   }
 
+  Future<void> _openEditStageDialog(ManufacturingStage stage) async {
+    final nameCtrl = TextEditingController(text: stage.stageName);
+    final qtyCtrl = TextEditingController(text: stage.inputQuantity.toString());
+    final noteCtrl = TextEditingController(text: stage.notes ?? '');
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.edit, color: Colors.blue),
+            Gap(8),
+            Text('تعديل المرحلة'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'اسم المرحلة *',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.layers_outlined),
+                ),
+              ),
+              const Gap(8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  'مرحلة أولى',
+                  'القص والتفصيل',
+                  'تجميع ونجارة',
+                  'صنفرة ودهان',
+                  'الخياطة والتجميع',
+                  'تعبئة وتغليف',
+                  'فحص الجودة',
+                ].map((s) => ActionChip(
+                  label: Text(s, style: const TextStyle(fontSize: 11)),
+                  onPressed: () => nameCtrl.text = s,
+                )).toList(),
+              ),
+              const Gap(16),
+              TextField(
+                controller: qtyCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'الكمية الداخلة للمرحلة *',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.numbers),
+                ),
+              ),
+              const Gap(16),
+              TextField(
+                controller: noteCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'ملاحظات المرحلة (اختياري)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.note_alt_outlined),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (nameCtrl.text.trim().isEmpty) return;
+              final qty = double.tryParse(qtyCtrl.text.trim()) ?? stage.inputQuantity;
+              try {
+                await widget.db.manufacturingStageDao.updateStage(
+                  stageId: stage.id,
+                  stageName: nameCtrl.text.trim(),
+                  inputQuantity: qty,
+                  notes: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+                );
+                if (stage.stageName == _order?.currentStageName) {
+                  await widget.db.manufacturingOrderDao.updateOrder(
+                    _order!.copyWith(currentStageName: Value(nameCtrl.text.trim())),
+                  );
+                }
+                if (c.mounted) Navigator.pop(c, true);
+              } catch (e) {
+                if (c.mounted) {
+                  ScaffoldMessenger.of(c).showSnackBar(
+                    SnackBar(content: Text('فشل تعديل المرحلة: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text('حفظ التعديلات'),
+          ),
+        ],
+      ),
+    );
+
+    nameCtrl.dispose();
+    qtyCtrl.dispose();
+    noteCtrl.dispose();
+
+    if (saved == true && mounted) {
+      _loadData();
+    }
+  }
+
+  Future<void> _confirmDeleteStage(ManufacturingStage stage) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('تأكيد حذف المرحلة'),
+        content: Text('هل أنت متأكد من حذف مرحلة "${stage.stageName}" ومخرجاتها؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('حذف المرحلة'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await widget.db.manufacturingStageDao.deleteStage(stage.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم حذف المرحلة بنجاح'), backgroundColor: Colors.green),
+          );
+          _loadData();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('فشل حذف المرحلة: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _openEditStageOutputDialog(ManufacturingStage stage, ManufacturingStageOutput out) async {
+    final nameCtrl = TextEditingController(text: out.variantName ?? '');
+    final prodCtrl = TextEditingController(text: out.producedQuantity.toString());
+    final scrapCtrl = TextEditingController(text: out.scrapQuantity.toString());
+    final priceCtrl = TextEditingController(text: out.sellingPriceOverride?.toString() ?? '0');
+    final noteCtrl = TextEditingController(text: out.notes ?? '');
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('تعديل مخرج: ${out.variantName ?? "قياسي"}'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'المواصفة / المقاس / الجزء المجمّع *',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const Gap(12),
+              TextField(
+                controller: prodCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'الكمية المنتجة السليمة *',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.check_circle_outline, color: Colors.green),
+                ),
+              ),
+              const Gap(12),
+              TextField(
+                controller: scrapCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'كمية الهالك التالف',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.delete_outline, color: Colors.red),
+                ),
+              ),
+              const Gap(12),
+              TextField(
+                controller: priceCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'سعر البيع المقترح (ج.م)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.attach_money, color: Colors.teal),
+                ),
+              ),
+              const Gap(12),
+              TextField(
+                controller: noteCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'ملاحظات (اختياري)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final prod = double.tryParse(prodCtrl.text.trim()) ?? out.producedQuantity;
+              final scr = double.tryParse(scrapCtrl.text.trim()) ?? 0.0;
+              final price = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
+              try {
+                await widget.db.manufacturingStageDao.upsertStageOutput(
+                  stageId: stage.id,
+                  orderId: _order!.id,
+                  productId: _order!.finishedProductId,
+                  variantId: out.variantId,
+                  variantName: nameCtrl.text.trim().isNotEmpty ? nameCtrl.text.trim() : out.variantName,
+                  plannedQuantity: prod,
+                  producedQuantity: prod,
+                  scrapQuantity: scr,
+                  sellingPriceOverride: price > 0 ? price : null,
+                  notes: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+                );
+                if (c.mounted) Navigator.pop(c, true);
+              } catch (e) {
+                if (c.mounted) {
+                  ScaffoldMessenger.of(c).showSnackBar(
+                    SnackBar(content: Text('فشل تعديل المخرج: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+
+    nameCtrl.dispose();
+    prodCtrl.dispose();
+    scrapCtrl.dispose();
+    priceCtrl.dispose();
+    noteCtrl.dispose();
+
+    if (saved == true && mounted) {
+      _loadData();
+    }
+  }
+
+  Future<void> _confirmDeleteStageOutput(ManufacturingStageOutput out) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('تأكيد حذف المخرج'),
+        content: Text('هل أنت متأكد من حذف المخرج "${out.variantName ?? 'قياسي'}"؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await (widget.db.delete(widget.db.manufacturingStageOutputs)
+              ..where((t) => t.id.equals(out.id)))
+            .go();
+        final outs = await widget.db.manufacturingStageDao.getOutputsForStage(out.stageId);
+        final totalGood = outs.fold<double>(0.0, (acc, x) => acc + x.producedQuantity);
+        final totalScrap = outs.fold<double>(0.0, (acc, x) => acc + x.scrapQuantity);
+        final stage = await widget.db.manufacturingStageDao.getStageById(out.stageId);
+        if (stage != null) {
+          await widget.db.manufacturingStageDao.updateStageStatus(
+            stageId: stage.id,
+            status: stage.status,
+            outputQuantity: totalGood,
+            scrapQuantity: totalScrap,
+          );
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم حذف المخرج'), backgroundColor: Colors.green),
+          );
+          _loadData();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('فشل الحذف: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _openAddMaterialDialog() async {
+    final mo = _order;
+    if (mo == null) return;
+    Product? selectedProd;
+    final qtyCtrl = TextEditingController();
+    final wasteCtrl = TextEditingController(text: '0');
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setDlg) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.add_shopping_cart, color: Colors.blue),
+              Gap(8),
+              Text('إضافة مادة خام للأمر / الوصفة'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SearchableProductPicker(
+                  db: widget.db,
+                  label: 'المادة الخام *',
+                  productTypeHint: 'raw_material',
+                  onChanged: (p) => setDlg(() => selectedProd = p),
+                ),
+                const Gap(16),
+                TextField(
+                  controller: qtyCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'الكمية القياسية المطلوبة للوصفة *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.numbers),
+                  ),
+                ),
+                const Gap(16),
+                TextField(
+                  controller: wasteCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'نسبة الهدر %',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.percent),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (selectedProd == null) {
+                  ScaffoldMessenger.of(c).showSnackBar(
+                    const SnackBar(content: Text('يرجى اختيار مادة خام'), backgroundColor: Colors.orange),
+                  );
+                  return;
+                }
+                final qty = double.tryParse(qtyCtrl.text.trim()) ?? 0.0;
+                if (qty <= 0) {
+                  ScaffoldMessenger.of(c).showSnackBar(
+                    const SnackBar(content: Text('أدخل كمية صحيحة > 0'), backgroundColor: Colors.orange),
+                  );
+                  return;
+                }
+                final waste = double.tryParse(wasteCtrl.text.trim()) ?? 0.0;
+                try {
+                  await widget.db.bomDao.insertBomItem(
+                    BomItemsCompanion.insert(
+                      bomId: mo.bomId,
+                      rawMaterialProductId: selectedProd!.id,
+                      quantityRequired: qty,
+                      wastePercentageOverride: Value(waste > 0 ? waste : null),
+                    ),
+                  );
+                  if (c.mounted) Navigator.pop(c, true);
+                } catch (e) {
+                  if (c.mounted) {
+                    ScaffoldMessenger.of(c).showSnackBar(
+                      SnackBar(content: Text('فشل إضافة المادة: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              child: const Text('إضافة المادة'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    qtyCtrl.dispose();
+    wasteCtrl.dispose();
+
+    if (saved == true && mounted) {
+      _loadData();
+    }
+  }
+
   Future<void> _openAddStageDialog() async {
     final mo = _order;
     if (mo == null) return;
-    final nameCtrl = TextEditingController(text: 'الخياطة والتجميع');
-    final qtyCtrl = TextEditingController(text: mo.plannedQuantity.toString());
+    final existingStages = await widget.db.manufacturingStageDao.getStagesForOrder(mo.id);
+    double suggestedQty = mo.plannedQuantity;
+    if (existingStages.isNotEmpty) {
+      final prevStage = existingStages.last;
+      if (prevStage.outputQuantity > 0) {
+        suggestedQty = prevStage.outputQuantity;
+      }
+    }
+    final nameCtrl = TextEditingController(text: existingStages.isEmpty ? 'مرحلة أولى' : 'مرحلة ${existingStages.length + 1}');
+    final qtyCtrl = TextEditingController(text: suggestedQty.toString());
     final noteCtrl = TextEditingController();
 
     final saved = await showDialog<bool>(
@@ -466,11 +943,14 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                 spacing: 6,
                 runSpacing: 4,
                 children: [
+                  'مرحلة أولى',
                   'القص والتفصيل',
+                  'تجميع ونجارة',
+                  'صنفرة ودهان',
                   'الخياطة والتجميع',
                   'الكي والتغليف',
                   'التشطيب والجودة',
-                  'تطريز وطباعة',
+                  'فحص وتعبئة',
                 ].map((s) => ActionChip(
                   label: Text(s, style: const TextStyle(fontSize: 11)),
                   onPressed: () => nameCtrl.text = s,
@@ -695,7 +1175,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     final mo = _order;
     if (mo == null) return;
 
-    final nameCtrl = TextEditingController(text: 'مقاس L');
+    final nameCtrl = TextEditingController(text: 'قياسي');
     final producedCtrl = TextEditingController(text: '10');
     final sellableScrapCtrl = TextEditingController(text: '0');
     final sellablePriceCtrl = TextEditingController(text: '0');
@@ -707,7 +1187,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
           children: [
             Icon(Icons.style, color: Colors.blue),
             Gap(8),
-            Text('إضافة مقاس / متغير جديد للمنتج'),
+            Text('إضافة مواصفة / جزء / مقاس جديد للمنتج'),
           ],
         ),
         content: SingleChildScrollView(
@@ -718,7 +1198,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
               TextField(
                 controller: nameCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'اسم المقاس / المتغير *',
+                  labelText: 'اسم المواصفة / الجزء المجمّع / المقاس *',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.straighten),
                 ),
@@ -727,7 +1207,24 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
               Wrap(
                 spacing: 6,
                 runSpacing: 4,
-                children: ['S', 'M', 'L', 'XL', '2XL', '3XL', 'حر'].map((sz) => ActionChip(
+                children: [
+                  'قياسي',
+                  'صغير',
+                  'متوسط',
+                  'كبير',
+                  'S',
+                  'M',
+                  'L',
+                  'XL',
+                  '2XL',
+                  'طول 120 سم',
+                  'طول 160 سم',
+                  'طول 180 سم',
+                  'قاعدة خشبية',
+                  'هيكل مجمّع',
+                  'عبوة 500جم',
+                  'عبوة 1كجم',
+                ].map((sz) => ActionChip(
                   label: Text('مقاس $sz', style: const TextStyle(fontSize: 11)),
                   onPressed: () => nameCtrl.text = 'مقاس $sz',
                 )).toList(),
@@ -991,6 +1488,18 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                                   ),
                                 ),
                               ),
+                              if (!isCompleted && mo.status != ManufacturingOrderStatus.cancelled) ...[
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined, size: 18),
+                                  tooltip: 'تعديل المرحلة',
+                                  onPressed: () => _openEditStageDialog(stage),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                  tooltip: 'حذف المرحلة',
+                                  onPressed: () => _confirmDeleteStage(stage),
+                                ),
+                              ],
                               Chip(
                                 label: Text(
                                   isCompleted
@@ -1053,9 +1562,10 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                                   ),
                                   columnWidths: const {
                                     0: FlexColumnWidth(2.5),
-                                    1: FlexColumnWidth(1.5),
-                                    2: FlexColumnWidth(1.5),
-                                    3: FlexColumnWidth(2),
+                                    1: FlexColumnWidth(1.4),
+                                    2: FlexColumnWidth(1.2),
+                                    3: FlexColumnWidth(1.8),
+                                    4: FlexColumnWidth(1.4),
                                   },
                                   children: [
                                     TableRow(
@@ -1063,10 +1573,11 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                                         color: theme.colorScheme.surfaceContainerHighest,
                                       ),
                                       children: const [
-                                        Padding(padding: EdgeInsets.all(6), child: Text('المقاس / المتغير', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                                        Padding(padding: EdgeInsets.all(6), child: Text('المواصفة / المقاس', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                                         Padding(padding: EdgeInsets.all(6), child: Text('الكمية المنتجة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                                         Padding(padding: EdgeInsets.all(6), child: Text('الهالك', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                                         Padding(padding: EdgeInsets.all(6), child: Text('سعر البيع المقترح', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                                        Padding(padding: EdgeInsets.all(6), child: Text('إجراءات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                                       ],
                                     ),
                                     for (final out in outputs)
@@ -1076,6 +1587,26 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                                           Padding(padding: const EdgeInsets.all(6), child: Text('${out.producedQuantity}', style: const TextStyle(fontSize: 12, color: Colors.green))),
                                           Padding(padding: const EdgeInsets.all(6), child: Text('${out.scrapQuantity}', style: const TextStyle(fontSize: 12, color: Colors.red))),
                                           Padding(padding: const EdgeInsets.all(6), child: Text(out.sellingPriceOverride != null ? '${out.sellingPriceOverride} ج.م' : '—', style: const TextStyle(fontSize: 12, color: Colors.teal))),
+                                          Padding(
+                                            padding: const EdgeInsets.all(2),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                if (!isCompleted && mo.status != ManufacturingOrderStatus.cancelled) ...[
+                                                  IconButton(
+                                                    icon: const Icon(Icons.edit, size: 16),
+                                                    tooltip: 'تعديل',
+                                                    onPressed: () => _openEditStageOutputDialog(stage, out),
+                                                  ),
+                                                  IconButton(
+                                                    icon: const Icon(Icons.delete, size: 16, color: Colors.red),
+                                                    tooltip: 'حذف',
+                                                    onPressed: () => _confirmDeleteStageOutput(out),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
                                         ],
                                       ),
                                   ],
@@ -3102,11 +3633,23 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
               _buildReconciliationCard(),
               const Gap(24),
             ],
-            Text(
-              'مكونات الوصفة المطلوبة (للكمية المخططة)',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                Text(
+                  'مكونات الوصفة المطلوبة (للكمية المخططة)',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                if (mo.status != ManufacturingOrderStatus.completed &&
+                    mo.status != ManufacturingOrderStatus.cancelled)
+                  FilledButton.tonalIcon(
+                    onPressed: _openAddMaterialDialog,
+                    icon: const Icon(Icons.add_shopping_cart, size: 16),
+                    label: const Text('إضافة مادة خام للطلب'),
+                  ),
+              ],
             ),
             const Gap(12),
             if (_bomItems.isEmpty)

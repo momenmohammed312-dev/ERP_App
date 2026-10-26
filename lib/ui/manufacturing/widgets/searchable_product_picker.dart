@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/ui/product/widgets/product_form.dart';
 
 /// Searchable product picker for manufacturing dialogs.
 ///
@@ -20,6 +21,8 @@ class SearchableProductPicker extends StatefulWidget {
   final String? Function(Product?)? validator;
   final bool enabled;
   final String? helperText;
+  final String? productTypeHint;
+  final bool showAddButton;
 
   const SearchableProductPicker({
     super.key,
@@ -30,6 +33,8 @@ class SearchableProductPicker extends StatefulWidget {
     this.validator,
     this.enabled = true,
     this.helperText,
+    this.productTypeHint,
+    this.showAddButton = true,
   });
 
   @override
@@ -118,6 +123,22 @@ class _SearchableProductPickerState extends State<SearchableProductPicker> {
     widget.onChanged(null);
   }
 
+  Future<void> _openAddProductScreen(FormFieldState<Product?> field) async {
+    final nameCandidate = _searchCtrl.text.trim();
+    final result = await Navigator.of(context).push<Product?>(
+      MaterialPageRoute(
+        builder: (context) => ProductForm(
+          db: widget.db,
+          initialName: nameCandidate.isNotEmpty ? nameCandidate : null,
+          initialProductType: widget.productTypeHint,
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      _select(field, result);
+    }
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
@@ -168,8 +189,11 @@ class _SearchableProductPickerState extends State<SearchableProductPicker> {
                   prefixIcon: const Icon(Icons.search),
                   helperText: widget.helperText,
                   errorText: field.errorText,
-                  suffixIcon: _loading
-                      ? const Padding(
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_loading)
+                        const Padding(
                           padding: EdgeInsets.all(12),
                           child: SizedBox(
                             width: 16,
@@ -177,8 +201,15 @@ class _SearchableProductPickerState extends State<SearchableProductPicker> {
                             child:
                                 CircularProgressIndicator(strokeWidth: 2),
                           ),
-                        )
-                      : null,
+                        ),
+                      if (widget.showAddButton && widget.enabled)
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline, color: Colors.purple),
+                          tooltip: 'إضافة في شاشة المنتجات',
+                          onPressed: () => _openAddProductScreen(field),
+                        ),
+                    ],
+                  ),
                 ),
                 onChanged: _search,
                 onTap: () {
@@ -199,17 +230,50 @@ class _SearchableProductPickerState extends State<SearchableProductPicker> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: _results.isEmpty && !_loading
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text('لا توجد نتائج مطابقة',
-                              textAlign: TextAlign.center),
+                      ? Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('لا توجد نتائج مطابقة',
+                                  textAlign: TextAlign.center),
+                              if (widget.showAddButton) ...[
+                                const Gap(8),
+                                FilledButton.tonalIcon(
+                                  onPressed: () => _openAddProductScreen(field),
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: Text(
+                                    _searchCtrl.text.trim().isNotEmpty
+                                        ? 'إضافة "${_searchCtrl.text.trim()}" في شاشة المنتجات'
+                                        : 'إضافة منتج جديد في شاشة المنتجات',
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         )
                       : ListView.separated(
                           shrinkWrap: true,
-                          itemCount: _results.length,
+                          itemCount: _results.length + (widget.showAddButton ? 1 : 0),
                           separatorBuilder: (_, _) =>
                               const Divider(height: 1),
                           itemBuilder: (_, i) {
+                            if (i == _results.length) {
+                              return ListTile(
+                                dense: true,
+                                leading: const Icon(Icons.add_circle_outline, color: Colors.purple),
+                                title: Text(
+                                  _searchCtrl.text.trim().isNotEmpty
+                                      ? 'إضافة "${_searchCtrl.text.trim()}" كمنتج جديد...'
+                                      : 'إضافة منتج جديد في شاشة المنتجات...',
+                                  style: const TextStyle(
+                                    color: Colors.purple,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onTap: () => _openAddProductScreen(field),
+                              );
+                            }
                             final p = _results[i];
                             return ListTile(
                               dense: true,

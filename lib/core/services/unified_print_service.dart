@@ -628,6 +628,15 @@ class UnifiedPrintService {
     final delivered = numOf('deliveredQuantity');
     final produced = numOf('producedQuantity');
     final remaining = produced - delivered;
+    final isInternal = order['orderType'] == 'تصنيع داخلي' ||
+        order['orderType'] == 'internal' ||
+        (movements.isEmpty && balances.isEmpty);
+    final materials =
+        (additionalData?['materials'] as List<Map<String, dynamic>>?) ??
+            const <Map<String, dynamic>>[];
+    final stages =
+        (additionalData?['stages'] as List<Map<String, dynamic>>?) ??
+            const <Map<String, dynamic>>[];
 
     return [
       /// Order info box
@@ -686,162 +695,170 @@ class UnifiedPrintService {
             'مخطط: ${numOf('plannedQuantity').toStringAsFixed(1)}',
             style: pw.TextStyle(font: arabicFont, fontSize: 10),
           ),
-          pw.Text(
-            'المستهلك من العهدة: ${numOf('consumedQuantity').toStringAsFixed(1)}',
-            style: pw.TextStyle(font: arabicFont, fontSize: 10),
-          ),
-          pw.Text(
-            'رصيد العهدة بالمخزن: ${numOf('custodyOnHand').toStringAsFixed(1)}',
-            style: pw.TextStyle(font: arabicFont, fontSize: 10),
-          ),
+          if (isInternal) ...[
+            pw.Text(
+              'المنجز السليم: ${produced.toStringAsFixed(1)}',
+              style: pw.TextStyle(font: arabicFontBold, fontSize: 10, color: PdfColors.green800),
+            ),
+            pw.Text(
+              'المسلّم: ${delivered.toStringAsFixed(1)}',
+              style: pw.TextStyle(font: arabicFont, fontSize: 10),
+            ),
+          ] else ...[
+            pw.Text(
+              'المستهلك من العهدة: ${numOf('consumedQuantity').toStringAsFixed(1)}',
+              style: pw.TextStyle(font: arabicFont, fontSize: 10),
+            ),
+            pw.Text(
+              'رصيد العهدة بالمخزن: ${numOf('custodyOnHand').toStringAsFixed(1)}',
+              style: pw.TextStyle(font: arabicFont, fontSize: 10),
+            ),
+          ],
         ],
       ),
       pw.SizedBox(height: 12),
 
-      /// Custody movements table
-      pw.Table(
-        border: pw.TableBorder.all(color: PdfColors.grey400),
-        columnWidths: {
-          0: const pw.FlexColumnWidth(1.2), // Date
-          1: const pw.FlexColumnWidth(1.4), // Movement
-          2: const pw.FlexColumnWidth(2.2), // Product
-          3: const pw.FlexColumnWidth(0.9), // Qty
-          4: const pw.FlexColumnWidth(1.8), // Reference
-        },
-        children: [
-          pw.TableRow(
-            decoration: pw.BoxDecoration(color: PdfColors.grey300),
-            children: [
-              _buildTableCell('التاريخ', isHeader: true, font: arabicFontBold),
-              _buildTableCell(
-                'النوع',
-                isHeader: true,
-                font: arabicFontBold,
-              ),
-              _buildTableCell('الصنف', isHeader: true, font: arabicFontBold),
-              _buildTableCell('الكمية', isHeader: true, font: arabicFontBold),
-              _buildTableCell(
-                'المرجع',
-                isHeader: true,
-                font: arabicFontBold,
-              ),
-            ],
+      if (isInternal) ...[
+        if (materials.isNotEmpty) ...[
+          pw.Text('المواد الخام المطلوبة للطلب:', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, font: arabicFontBold)),
+          pw.SizedBox(height: 4),
+          pw.TableHelper.fromTextArray(
+            headers: ['المادة الخام', 'الكمية المطلوبة', 'الوحدة', 'المتاح بالمخزن'],
+            data: materials.map((m) => [
+              m['name']?.toString() ?? '—',
+              '${m['quantityRequired'] ?? 0}',
+              m['unit']?.toString() ?? '—',
+              '${m['available'] ?? 0}',
+            ]).toList(),
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, font: arabicFontBold),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            cellStyle: pw.TextStyle(fontSize: 8.5, font: arabicFont),
+            cellAlignment: pw.Alignment.center,
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           ),
-          ...movements.map((m) {
-            final qty = (m['quantity'] as num?)?.toDouble() ?? 0.0;
-            return pw.TableRow(
-              children: [
-                _buildTableCell(
-                  m['date']?.toString() ?? '—',
-                  font: arabicFont,
-                ),
-                _buildTableCell(
-                  m['movementType']?.toString() ?? '—',
-                  font: arabicFont,
-                ),
-                _buildTableCell(
-                  m['productName']?.toString() ?? '—',
-                  font: arabicFont,
-                ),
-                _buildTableCell(
-                  qty.toStringAsFixed(qty.truncateToDouble() == qty ? 1 : 2),
-                  isBold: true,
-                  font: arabicFont,
-                ),
-                _buildTableCell(
-                  m['reference']?.toString() ?? '—',
-                  font: arabicFont,
-                ),
-              ],
-            );
-          }),
+          pw.SizedBox(height: 10),
         ],
-      ),
-      if (movements.isEmpty)
-        pw.Container(
-          padding: const pw.EdgeInsets.all(10),
-          child: pw.Text(
-            'لم يتم تسجيل حركات عهدة على هذا الأمر بعد',
-            style: pw.TextStyle(fontSize: 10, font: arabicFont),
-            textAlign: pw.TextAlign.center,
+        if (stages.isNotEmpty) ...[
+          pw.Text('مراحل الإنتاج والمخرجات:', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, font: arabicFontBold)),
+          pw.SizedBox(height: 4),
+          pw.TableHelper.fromTextArray(
+            headers: ['المرحلة', 'الكمية الداخلة', 'المنجز السليم', 'الهالك', 'الحالة'],
+            data: stages.map((s) => [
+              s['stageName']?.toString() ?? '—',
+              '${s['inputQuantity'] ?? 0}',
+              '${s['outputQuantity'] ?? 0}',
+              '${s['scrapQuantity'] ?? 0}',
+              s['status'] == 'completed' ? 'مكتملة' : 'جارية',
+            ]).toList(),
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, font: arabicFontBold),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            cellStyle: pw.TextStyle(fontSize: 8.5, font: arabicFont),
+            cellAlignment: pw.Alignment.center,
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           ),
+          pw.SizedBox(height: 10),
+        ],
+      ] else ...[
+        /// Custody movements table
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColors.grey400),
+          columnWidths: {
+            0: const pw.FlexColumnWidth(1.2), // Date
+            1: const pw.FlexColumnWidth(1.4), // Movement
+            2: const pw.FlexColumnWidth(2.2), // Product
+            3: const pw.FlexColumnWidth(0.9), // Qty
+            4: const pw.FlexColumnWidth(1.8), // Reference
+          },
+          children: [
+            pw.TableRow(
+              decoration: pw.BoxDecoration(color: PdfColors.grey300),
+              children: [
+                _buildTableCell('التاريخ', isHeader: true, font: arabicFontBold),
+                _buildTableCell('النوع', isHeader: true, font: arabicFontBold),
+                _buildTableCell('الصنف', isHeader: true, font: arabicFontBold),
+                _buildTableCell('الكمية', isHeader: true, font: arabicFontBold),
+                _buildTableCell('المرجع', isHeader: true, font: arabicFontBold),
+              ],
+            ),
+            ...movements.map((m) {
+              final qty = (m['quantity'] as num?)?.toDouble() ?? 0.0;
+              return pw.TableRow(
+                children: [
+                  _buildTableCell(m['date']?.toString() ?? '—', font: arabicFont),
+                  _buildTableCell(m['movementType']?.toString() ?? '—', font: arabicFont),
+                  _buildTableCell(m['productName']?.toString() ?? '—', font: arabicFont),
+                  _buildTableCell(qty.toStringAsFixed(qty.truncateToDouble() == qty ? 1 : 2), isBold: true, font: arabicFont),
+                  _buildTableCell(m['reference']?.toString() ?? '—', font: arabicFont),
+                ],
+              );
+            }),
+          ],
         ),
-      pw.SizedBox(height: 14),
+        if (movements.isEmpty)
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            child: pw.Text(
+              'لم يتم تسجيل حركات عهدة على هذا الأمر بعد',
+              style: pw.TextStyle(fontSize: 10, font: arabicFont),
+              textAlign: pw.TextAlign.center,
+            ),
+          ),
+        pw.SizedBox(height: 14),
 
-      /// Remaining custody balances table
-      pw.Text(
-        'باقي رصيد العهدة بالمخزن:',
-        style: pw.TextStyle(
-          fontSize: 11,
-          fontWeight: pw.FontWeight.bold,
-          font: arabicFontBold,
-        ),
-      ),
-      pw.SizedBox(height: 6),
-      pw.Table(
-        border: pw.TableBorder.all(color: PdfColors.grey400),
-        columnWidths: {
-          0: const pw.FlexColumnWidth(2.2),
-          1: const pw.FlexColumnWidth(1.2),
-          2: const pw.FlexColumnWidth(1),
-          3: const pw.FlexColumnWidth(1.4),
-        },
-        children: [
-          pw.TableRow(
-            decoration: pw.BoxDecoration(color: PdfColors.grey300),
-            children: [
-              _buildTableCell('الصنف', isHeader: true, font: arabicFontBold),
-              _buildTableCell(
-                'الرصيد المتاح',
-                isHeader: true,
-                font: arabicFontBold,
-              ),
-              _buildTableCell('المحجوز', isHeader: true, font: arabicFontBold),
-              _buildTableCell(
-                'اللون / المقاس',
-                isHeader: true,
-                font: arabicFontBold,
-              ),
-            ],
+        /// Remaining custody balances table
+        pw.Text(
+          'باقي رصيد العهدة بالمخزن:',
+          style: pw.TextStyle(
+            fontSize: 11,
+            fontWeight: pw.FontWeight.bold,
+            font: arabicFontBold,
           ),
-          ...balances.map((b) {
-            final onHand = (b['quantityOnHand'] as num?)?.toDouble() ?? 0.0;
-            final allocated =
-                (b['quantityAllocated'] as num?)?.toDouble() ?? 0.0;
-            return pw.TableRow(
+        ),
+        pw.SizedBox(height: 6),
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColors.grey400),
+          columnWidths: {
+            0: const pw.FlexColumnWidth(2.2),
+            1: const pw.FlexColumnWidth(1.2),
+            2: const pw.FlexColumnWidth(1),
+            3: const pw.FlexColumnWidth(1.4),
+          },
+          children: [
+            pw.TableRow(
+              decoration: pw.BoxDecoration(color: PdfColors.grey300),
               children: [
-                _buildTableCell(
-                  b['productName']?.toString() ?? '—',
-                  font: arabicFont,
-                ),
-                _buildTableCell(
-                  onHand.toStringAsFixed(1),
-                  isBold: true,
-                  color: PdfColors.green700,
-                  font: arabicFont,
-                ),
-                _buildTableCell(
-                  allocated.toStringAsFixed(1),
-                  font: arabicFont,
-                ),
-                _buildTableCell(
-                  b['colorSize']?.toString() ?? '—',
-                  font: arabicFont,
-                ),
+                _buildTableCell('الصنف', isHeader: true, font: arabicFontBold),
+                _buildTableCell('الرصيد المتاح', isHeader: true, font: arabicFontBold),
+                _buildTableCell('المحجوز', isHeader: true, font: arabicFontBold),
+                _buildTableCell('اللون / المقاس', isHeader: true, font: arabicFontBold),
               ],
-            );
-          }),
-        ],
-      ),
-      if (balances.isEmpty)
-        pw.Container(
-          padding: const pw.EdgeInsets.all(10),
-          child: pw.Text(
-            'لا توجد أرصدة عهدة باقية للعميل',
-            style: pw.TextStyle(fontSize: 10, font: arabicFont),
-            textAlign: pw.TextAlign.center,
-          ),
+            ),
+            ...balances.map((b) {
+              final onHand = (b['quantityOnHand'] as num?)?.toDouble() ?? 0.0;
+              final allocated = (b['quantityAllocated'] as num?)?.toDouble() ?? 0.0;
+              return pw.TableRow(
+                children: [
+                  _buildTableCell(b['productName']?.toString() ?? '—', font: arabicFont),
+                  _buildTableCell(onHand.toStringAsFixed(1), isBold: true, color: PdfColors.green700, font: arabicFont),
+                  _buildTableCell(allocated.toStringAsFixed(1), font: arabicFont),
+                  _buildTableCell(b['colorSize']?.toString() ?? '—', font: arabicFont),
+                ],
+              );
+            }),
+          ],
         ),
+        if (balances.isEmpty)
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            child: pw.Text(
+              'لا توجد أرصدة عهدة باقية للعميل',
+              style: pw.TextStyle(fontSize: 10, font: arabicFont),
+              textAlign: pw.TextAlign.center,
+            ),
+          ),
+      ],
       pw.SizedBox(height: 14),
       pw.Container(
         padding: const pw.EdgeInsets.all(8),
@@ -1301,6 +1318,192 @@ class UnifiedPrintService {
     Map<String, dynamic>? additionalData,
   ) async {
     final reportData = data as Map<String, dynamic>;
+    if (reportData['orderNumber'] != null) {
+      final orderNo = reportData['orderNumber']?.toString() ?? '—';
+      final status = reportData['status']?.toString() ?? '—';
+      final orderType = reportData['orderType']?.toString() ?? '—';
+      final prodName = reportData['finishedProductName']?.toString() ?? '—';
+      final bomName = reportData['bomName']?.toString() ?? '—';
+      final customerName = reportData['customerName']?.toString() ?? '—';
+      final currentStage = reportData['currentStage']?.toString() ?? '—';
+      final createdDate = reportData['createdDate']?.toString() ?? '—';
+
+      final plannedQty = (reportData['plannedQuantity'] as num?)?.toDouble() ?? 0.0;
+      final producedQty = (reportData['producedQuantity'] as num?)?.toDouble() ?? 0.0;
+      final deliveredQty = (reportData['deliveredQuantity'] as num?)?.toDouble() ?? 0.0;
+
+      final stages = (additionalData?['stages'] as List<Map<String, dynamic>>?) ?? [];
+      final scraps = (additionalData?['scraps'] as List<Map<String, dynamic>>?) ?? [];
+      final materials = (additionalData?['materials'] as List<Map<String, dynamic>>?) ?? [];
+
+      return [
+        pw.Container(
+          padding: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: PdfColors.grey400),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'تقرير أمر التصنيع: $orderNo ($status)',
+                    style: pw.TextStyle(
+                      fontSize: 14,
+                      fontWeight: pw.FontWeight.bold,
+                      font: arabicFontBold,
+                    ),
+                  ),
+                  pw.Text(
+                    'النوع: $orderType',
+                    style: pw.TextStyle(fontSize: 10, font: arabicFont),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 6),
+              pw.Text(
+                'المنتج: $prodName    الوصفة: $bomName    العميل: $customerName',
+                style: pw.TextStyle(fontSize: 10, font: arabicFont),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('تاريخ الإنشاء: $createdDate', style: pw.TextStyle(fontSize: 9.5, font: arabicFont)),
+                  pw.Text('المرحلة الحالية: $currentStage', style: pw.TextStyle(fontSize: 9.5, font: arabicFontBold)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        pw.SizedBox(height: 10),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Expanded(
+              child: pw.Container(
+                margin: const pw.EdgeInsets.symmetric(horizontal: 4),
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue50,
+                  border: pw.Border.all(color: PdfColors.blue200),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Column(
+                  children: [
+                    pw.Text('الكمية المخططة', style: pw.TextStyle(fontSize: 9, font: arabicFont)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('$plannedQty', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, font: arabicFontBold)),
+                  ],
+                ),
+              ),
+            ),
+            pw.Expanded(
+              child: pw.Container(
+                margin: const pw.EdgeInsets.symmetric(horizontal: 4),
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.green50,
+                  border: pw.Border.all(color: PdfColors.green200),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Column(
+                  children: [
+                    pw.Text('المنجز السليم', style: pw.TextStyle(fontSize: 9, font: arabicFont)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('$producedQty', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, font: arabicFontBold)),
+                  ],
+                ),
+              ),
+            ),
+            pw.Expanded(
+              child: pw.Container(
+                margin: const pw.EdgeInsets.symmetric(horizontal: 4),
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.purple50,
+                  border: pw.Border.all(color: PdfColors.purple200),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Column(
+                  children: [
+                    pw.Text('الكمية المسلّمة', style: pw.TextStyle(fontSize: 9, font: arabicFont)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('$deliveredQty', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, font: arabicFontBold)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 12),
+        if (stages.isNotEmpty) ...[
+          pw.Text('مراحل خط الإنتاج', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, font: arabicFontBold)),
+          pw.SizedBox(height: 4),
+          pw.TableHelper.fromTextArray(
+            headers: ['المرحلة', 'الكمية الداخلة', 'المنجز السليم', 'الهالك', 'التكلفة', 'الحالة'],
+            data: stages.map((s) => [
+              s['stageName']?.toString() ?? '—',
+              '${s['inputQuantity'] ?? 0}',
+              '${s['outputQuantity'] ?? 0}',
+              '${s['scrapQuantity'] ?? 0}',
+              '${(s['stageCost'] as num?)?.toStringAsFixed(2) ?? "0.00"} ج.م',
+              s['status'] == 'completed' ? 'مكتملة' : 'جارية',
+            ]).toList(),
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, font: arabicFontBold),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            cellStyle: pw.TextStyle(fontSize: 8.5, font: arabicFont),
+            cellAlignment: pw.Alignment.center,
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          ),
+          pw.SizedBox(height: 10),
+        ],
+        if (materials.isNotEmpty) ...[
+          pw.Text('المواد الخام المطلوبة', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, font: arabicFontBold)),
+          pw.SizedBox(height: 4),
+          pw.TableHelper.fromTextArray(
+            headers: ['المادة الخام', 'الكمية المطلوبة', 'الوحدة', 'المتاح بالمخزن'],
+            data: materials.map((m) => [
+              m['name']?.toString() ?? '—',
+              '${m['quantityRequired'] ?? 0}',
+              m['unit']?.toString() ?? '—',
+              '${m['available'] ?? 0}',
+            ]).toList(),
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, font: arabicFontBold),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            cellStyle: pw.TextStyle(fontSize: 8.5, font: arabicFont),
+            cellAlignment: pw.Alignment.center,
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          ),
+          pw.SizedBox(height: 10),
+        ],
+        if (scraps.isNotEmpty) ...[
+          pw.Text('سجل الهالك', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, font: arabicFontBold)),
+          pw.SizedBox(height: 4),
+          pw.TableHelper.fromTextArray(
+            headers: ['التاريخ', 'الصنف', 'الكمية', 'السبب', 'المسؤول'],
+            data: scraps.map((sc) => [
+              sc['date']?.toString() ?? '—',
+              sc['productName']?.toString() ?? '—',
+              '${sc['quantity'] ?? 0}',
+              sc['reason']?.toString() ?? '—',
+              sc['faultParty']?.toString() ?? '—',
+            ]).toList(),
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, font: arabicFontBold),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            cellStyle: pw.TextStyle(fontSize: 8.5, font: arabicFont),
+            cellAlignment: pw.Alignment.center,
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          ),
+        ],
+      ];
+    }
     final title = reportData['title']?.toString() ?? 'تقرير التصنيع';
     final dateRange = reportData['dateRange']?.toString() ?? '';
     final summaryCards = (reportData['summaryCards'] as List<Map<String, dynamic>>?) ?? [];

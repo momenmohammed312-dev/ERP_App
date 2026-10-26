@@ -153,9 +153,27 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
 
   // ── Update (header fields only, not status via this path) ──
 
-  Future<bool> updateOrder(ManufacturingOrder order) {
+  Future<bool> updateOrder(ManufacturingOrder order) async {
     _requireLicense('تعديل أمر تصنيع');
-    return update(manufacturingOrders).replace(order);
+    return transaction(() async {
+      final old = await getById(order.id);
+      final ok = await update(manufacturingOrders).replace(order);
+      if (ok && old != null && old.plannedQuantity != order.plannedQuantity) {
+        final stages = await db.manufacturingStageDao.getStagesForOrder(order.id);
+        if (stages.isNotEmpty) {
+          final firstStage = stages.first;
+          if (firstStage.outputQuantity == 0.0) {
+            await (update(db.manufacturingStages)..where((s) => s.id.equals(firstStage.id))).write(
+              ManufacturingStagesCompanion(
+                inputQuantity: Value(order.plannedQuantity),
+                updatedAt: Value(DateTime.now()),
+              ),
+            );
+          }
+        }
+      }
+      return ok;
+    });
   }
 
   // ── Status transitions ──

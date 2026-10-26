@@ -9,8 +9,9 @@ import 'package:uuid/uuid.dart';
 
 class AddEditCustomerPage extends ConsumerStatefulWidget {
   final Customer? customer;
+  final String? initialName;
 
-  const AddEditCustomerPage({super.key, this.customer});
+  const AddEditCustomerPage({super.key, this.customer, this.initialName});
 
   @override
   ConsumerState<AddEditCustomerPage> createState() =>
@@ -38,7 +39,7 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.customer?.name ?? '');
+    _nameController = TextEditingController(text: widget.customer?.name ?? widget.initialName ?? '');
     _phoneController = TextEditingController(
       text: widget.customer?.phone ?? '',
     );
@@ -524,7 +525,7 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
               backgroundColor: Colors.green,
             ),
           );
-          Navigator.pop(context, true);
+          Navigator.pop(context, uuid);
         }
       }
     } catch (e) {

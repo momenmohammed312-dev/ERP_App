@@ -288,5 +288,186 @@ void main() {
       final allScraps = await db.manufacturingScrapDao.getForOrder(orderId);
       expect(allScraps.length, 2);
     });
+
+    test('FEAT-028: updateStage and deleteStage work correctly', () async {
+      final pId = await db.productDao.insertProduct(
+        ProductsCompanion.insert(name: 'طاولة خشبية', quantity: 0, price: 500.0),
+      );
+      final rawId = await db.productDao.insertProduct(
+        ProductsCompanion.insert(name: 'لوح خشب زان', quantity: 10, price: 200.0),
+      );
+      final bomId = await createTestBom(
+        name: 'وصفة طاولة خشب',
+        finishedProductId: pId,
+        rawMaterialId: rawId,
+        yieldQuantity: 1.0,
+      );
+      final orderId = await db.manufacturingOrderDao.createOrder(
+        ManufacturingOrdersCompanion(
+          orderNumber: const Value('MO-STAGE-UPD'),
+          bomId: Value(bomId),
+          finishedProductId: Value(pId),
+          plannedQuantity: const Value(10.0),
+        ),
+        initialStageName: 'تقطيع أخشاب',
+      );
+
+      final stages = await db.manufacturingStageDao.getStagesForOrder(orderId);
+      expect(stages.length, 1);
+      final stage = stages.first;
+
+      // Update stage
+      await db.manufacturingStageDao.updateStage(
+        stageId: stage.id,
+        stageName: 'تقطيع وتجهيز أخشاب',
+        inputQuantity: 12.0,
+        notes: 'تم تعديل الكمية الداخلة',
+      );
+      final updated = await db.manufacturingStageDao.getStageById(stage.id);
+      expect(updated!.stageName, 'تقطيع وتجهيز أخشاب');
+      expect(updated.inputQuantity, 12.0);
+      expect(updated.notes, 'تم تعديل الكمية الداخلة');
+
+      // Test getDistinctStageNames
+      final distinctNames = await db.manufacturingStageDao.getDistinctStageNames();
+      expect(distinctNames.contains('تقطيع وتجهيز أخشاب'), isTrue);
+
+      // Add output then delete stage
+      await db.manufacturingStageDao.upsertStageOutput(
+        stageId: stage.id,
+        orderId: orderId,
+        productId: pId,
+        variantName: 'طاولة 120سم',
+        plannedQuantity: 5.0,
+        producedQuantity: 5.0,
+      );
+      var outputs = await db.manufacturingStageDao.getOutputsForStage(stage.id);
+      expect(outputs.length, 1);
+
+      // Delete stage and verify cascading deletion of outputs
+      await db.manufacturingStageDao.deleteStage(stage.id);
+      final remainingStages = await db.manufacturingStageDao.getStagesForOrder(orderId);
+      expect(remainingStages.isEmpty, isTrue);
+      outputs = await db.manufacturingStageDao.getOutputsForStage(stage.id);
+      expect(outputs.isEmpty, isTrue);
+    });
+
+    test('FEAT-028: upsertStageOutput prevents duplicates and producedQuantity defaults to plannedQuantity', () async {
+      final pId = await db.productDao.insertProduct(
+        ProductsCompanion.insert(name: 'كرسي سفرة', quantity: 0, price: 300.0),
+      );
+      final rawId = await db.productDao.insertProduct(
+        ProductsCompanion.insert(name: 'خشب سويد', quantity: 20, price: 100.0),
+      );
+      final bomId = await createTestBom(
+        name: 'وصفة كرسي',
+        finishedProductId: pId,
+        rawMaterialId: rawId,
+        yieldQuantity: 1.0,
+      );
+      final orderId = await db.manufacturingOrderDao.createOrder(
+        ManufacturingOrdersCompanion(
+          orderNumber: const Value('MO-DEDUP-001'),
+          bomId: Value(bomId),
+          finishedProductId: Value(pId),
+          plannedQuantity: const Value(8.0),
+        ),
+        initialStageName: 'نجارة وتجميع',
+      );
+      final stages = await db.manufacturingStageDao.getStagesForOrder(orderId);
+      final stageId = stages.first.id;
+
+      // 1. Create output without explicit producedQuantity -> must NOT be 0.0, defaults to plannedQuantity
+      await db.manufacturingStageDao.upsertStageOutput(
+        stageId: stageId,
+        orderId: orderId,
+        productId: pId,
+        variantName: 'كرسي بني',
+        plannedQuantity: 4.0,
+      );
+
+      var outs = await db.manufacturingStageDao.getOutputsForStage(stageId);
+      expect(outs.length, 1);
+      expect(outs.first.producedQuantity, 4.0);
+
+      // 2. Upsert same variantName -> must update existing row without duplicating
+      await db.manufacturingStageDao.upsertStageOutput(
+        stageId: stageId,
+        orderId: orderId,
+        productId: pId,
+        variantName: 'كرسي بني',
+        plannedQuantity: 6.0,
+        producedQuantity: 6.0,
+        scrapQuantity: 1.0,
+      );
+
+      outs = await db.manufacturingStageDao.getOutputsForStage(stageId);
+      expect(outs.length, 1);
+      expect(outs.first.producedQuantity, 6.0);
+      expect(outs.first.scrapQuantity, 1.0);
+    });
+
+    test('FEAT-028: custody_only products are excluded from store but included in custody methods', () async {
+      // Standard product
+      await db.productDao.insertProduct(
+        ProductsCompanion.insert(name: 'منتج عادي بالمحل', quantity: 15, price: 50.0),
+      );
+
+      // Third-party custody product
+      final custodyId = await db.productDao.insertProduct(
+        ProductsCompanion.insert(
+          name: 'قماش عميل أمانة',
+          quantity: 0,
+          price: 0.0,
+          productType: const Value('custody_only'),
+          status: const Value('Custody'),
+        ),
+      );
+
+      final normalProducts = await db.productDao.getAllProducts();
+      expect(normalProducts.any((p) => p.id == custodyId), isFalse);
+
+      final searchResults = await db.productDao.searchProducts('قماش عميل');
+      expect(searchResults.any((p) => p.id == custodyId), isFalse);
+
+      final allIncludingCustody = await db.productDao.getAllProductsIncludingCustody();
+      expect(allIncludingCustody.any((p) => p.id == custodyId), isTrue);
+    });
+
+    test('FEAT-028: updateOrder plannedQuantity automatically syncs Stage 1 inputQuantity', () async {
+      final pId = await db.productDao.insertProduct(
+        ProductsCompanion.insert(name: 'قميص أكسفورد', quantity: 0, price: 200.0),
+      );
+      final rawId = await db.productDao.insertProduct(
+        ProductsCompanion.insert(name: 'قماش أكسفورد', quantity: 50, price: 90.0),
+      );
+      final bomId = await createTestBom(
+        name: 'وصفة قميص',
+        finishedProductId: pId,
+        rawMaterialId: rawId,
+        yieldQuantity: 1.0,
+      );
+      final orderId = await db.manufacturingOrderDao.createOrder(
+        ManufacturingOrdersCompanion(
+          orderNumber: const Value('MO-SYNC-QTY'),
+          bomId: Value(bomId),
+          finishedProductId: Value(pId),
+          plannedQuantity: const Value(100.0),
+        ),
+        initialStageName: 'مرحلة 1: قص',
+      );
+
+      var stages = await db.manufacturingStageDao.getStagesForOrder(orderId);
+      expect(stages.first.inputQuantity, 100.0);
+
+      // Update order plannedQuantity from 100 to 500
+      final order = await db.manufacturingOrderDao.getById(orderId);
+      await db.manufacturingOrderDao.updateOrder(
+        order!.copyWith(plannedQuantity: 500.0),
+      );
+
+      stages = await db.manufacturingStageDao.getStagesForOrder(orderId);
+      expect(stages.first.inputQuantity, 500.0);
+    });
   });
 }

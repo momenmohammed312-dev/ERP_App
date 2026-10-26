@@ -514,7 +514,7 @@ class _CustomerMaterialReceiptDialogState
   Future<void> _loadData() async {
     try {
       final custs = await widget.db.customerDao.getCustomersForManufacturing();
-      final prods = await widget.db.productDao.getAllProducts();
+      final prods = await widget.db.productDao.getAllProductsIncludingCustody();
       setState(() {
         _customers = custs;
         _products = prods;
@@ -611,7 +611,8 @@ class _CustomerMaterialReceiptDialogState
                             ? null
                             : unitCtrl.text.trim(),
                       ),
-                      productType: const Value('raw_material'),
+                      productType: const Value('custody_only'),
+                      status: const Value('Custody'),
                     ),
                   );
                   if (ctx.mounted) Navigator.pop(ctx, id);
@@ -626,7 +627,7 @@ class _CustomerMaterialReceiptDialogState
       ),
     );
     if (created == null || !mounted) return;
-    final prods = await widget.db.productDao.getAllProducts();
+    final prods = await widget.db.productDao.getAllProductsIncludingCustody();
     if (!mounted) return;
     setState(() {
       _products = prods;

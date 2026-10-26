@@ -115,6 +115,49 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// تعديل بيانات مرحلة تصنيع (الاسم، الكمية الداخلة، التكلفة، الملاحظات)
+  Future<void> updateStage({
+    required int stageId,
+    required String stageName,
+    double? inputQuantity,
+    double? stageCost,
+    String? notes,
+  }) async {
+    _requireLicense('تعديل مرحلة تصنيع');
+    final stage = await getStageById(stageId);
+    if (stage == null) return;
+
+    await (update(manufacturingStages)..where((s) => s.id.equals(stageId))).write(
+      ManufacturingStagesCompanion(
+        stageName: Value(stageName),
+        inputQuantity: inputQuantity != null ? Value(inputQuantity) : const Value.absent(),
+        stageCost: stageCost != null ? Value(stageCost) : const Value.absent(),
+        notes: Value(notes),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+
+    // إذا تم تعديل اسم المرحلة وكانت هي المرحلة الحالية للأمر، نحدثها على الأمر
+    final mo = await (select(manufacturingOrders)..where((o) => o.id.equals(stage.manufacturingOrderId))).getSingleOrNull();
+    if (mo != null && mo.currentStageName == stage.stageName) {
+      await (update(manufacturingOrders)..where((o) => o.id.equals(stage.manufacturingOrderId))).write(
+        ManufacturingOrdersCompanion(
+          currentStageName: Value(stageName),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+    }
+  }
+
+  /// حذف مرحلة تصنيع ومخرجاتها
+  Future<void> deleteStage(int stageId) async {
+    _requireLicense('حذف مرحلة تصنيع');
+    await transaction(() async {
+      await (delete(manufacturingStageOutputs)..where((o) => o.stageId.equals(stageId))).go();
+      await (delete(manufacturingStages)..where((s) => s.id.equals(stageId))).go();
+    });
+  }
+
   /// تحديث حالة المرحلة
   Future<void> updateStageStatus({
     required int stageId,
@@ -137,7 +180,7 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  /// إضافة أو تحديث سطر مخرجات مقاس داخل مرحلة
+  /// إضافة أو تحديث سطر مخرجات (مواصفة / جزء / مقاس) داخل مرحلة مع منع التكرار
   Future<int> upsertStageOutput({
     int? id,
     required int stageId,
@@ -146,13 +189,14 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
     int? variantId,
     String? variantName,
     required double plannedQuantity,
-    double producedQuantity = 0.0,
+    double? producedQuantity,
     double scrapQuantity = 0.0,
     double? unitCostOverride,
     double? sellingPriceOverride,
     String? notes,
   }) async {
-    _requireLicense('تسجيل مخرجات المقاسات');
+    _requireLicense('تسجيل مخرجات المرحلة');
+    final effectiveProduced = producedQuantity ?? plannedQuantity;
     return transaction(() async {
       int effectiveVariantId = variantId ?? 0;
       String? effectiveVariantName = variantName;
@@ -165,13 +209,26 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
         }
       }
 
-      if (id != null && id > 0) {
-        await (update(manufacturingStageOutputs)..where((o) => o.id.equals(id))).write(
+      int? targetId = id;
+      // منع التكرار: إذا لم يُمرر id نبحث عن سطر موجود لنفس المقاس/المواصفة في نفس المرحلة لتحديثه
+      if (targetId == null || targetId <= 0) {
+        final existingOutputs = await getOutputsForStage(stageId);
+        final match = existingOutputs.where((o) =>
+          (variantId != null && variantId > 0 && o.variantId == variantId) ||
+          (effectiveVariantName != null && effectiveVariantName.trim().isNotEmpty && o.variantName?.trim() == effectiveVariantName.trim())
+        ).firstOrNull;
+        if (match != null) {
+          targetId = match.id;
+        }
+      }
+
+      if (targetId != null && targetId > 0) {
+        await (update(manufacturingStageOutputs)..where((o) => o.id.equals(targetId!))).write(
           ManufacturingStageOutputsCompanion(
             variantId: Value(variantId),
             variantName: Value(effectiveVariantName),
             plannedQuantity: Value(plannedQuantity),
-            producedQuantity: Value(producedQuantity),
+            producedQuantity: Value(effectiveProduced),
             scrapQuantity: Value(scrapQuantity),
             unitCostOverride: Value(unitCostOverride),
             sellingPriceOverride: Value(sellingPriceOverride),
@@ -179,7 +236,7 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
           ),
         );
         await _recalcStageTotals(stageId);
-        return id;
+        return targetId!;
       } else {
         final newId = await into(manufacturingStageOutputs).insert(
           ManufacturingStageOutputsCompanion.insert(
@@ -189,7 +246,7 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
             variantId: Value(variantId),
             variantName: Value(effectiveVariantName),
             plannedQuantity: Value(plannedQuantity),
-            producedQuantity: Value(producedQuantity),
+            producedQuantity: Value(effectiveProduced),
             scrapQuantity: Value(scrapQuantity),
             unitCostOverride: Value(unitCostOverride),
             sellingPriceOverride: Value(sellingPriceOverride),
@@ -203,35 +260,46 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// إنشاء مقاس/صنف جديد للمنتج الأب فوراً من داخل المرحلة وإضافته للمخرجات
+  /// إنشاء مواصفة / جزء / مقاس جديد للمنتج الأب فوراً من داخل المرحلة وإضافته للمخرجات
   Future<int> createVariantAndAddToStage({
     required int stageId,
     required int orderId,
     required int productId,
     required String variantName,
     required double plannedQuantity,
+    double? producedQuantity,
     double? sellingPrice,
   }) async {
-    _requireLicense('إضافة مقاس جديد للمنتج');
+    _requireLicense('إضافة مواصفة/مقاس جديد للمنتج');
     return transaction(() async {
-      // 1. إنشاء المقاس في product_variants
-      final variantId = await db.productVariantDao.insertVariant(
-        ProductVariantsCompanion.insert(
-          productId: productId,
-          name: variantName,
-          quantity: const Value(0),
-          price: Value(sellingPrice),
-        ),
-      );
+      // 1. إنشاء المقاس في product_variants لو مش موجود
+      final existingVariant = await (select(productVariants)
+            ..where((v) => v.productId.equals(productId) & v.name.equals(variantName.trim())))
+          .getSingleOrNull();
 
-      // 2. إضافته في مخرجات المرحلة
+      final int variantId;
+      if (existingVariant != null) {
+        variantId = existingVariant.id;
+      } else {
+        variantId = await db.productVariantDao.insertVariant(
+          ProductVariantsCompanion.insert(
+            productId: productId,
+            name: variantName.trim(),
+            quantity: const Value(0),
+            price: Value(sellingPrice),
+          ),
+        );
+      }
+
+      // 2. إضافته في مخرجات المرحلة مع حفظ الكمية في plannedQuantity و producedQuantity
       return upsertStageOutput(
         stageId: stageId,
         orderId: orderId,
         productId: productId,
         variantId: variantId,
-        variantName: variantName,
+        variantName: variantName.trim(),
         plannedQuantity: plannedQuantity,
+        producedQuantity: producedQuantity ?? plannedQuantity,
         sellingPriceOverride: sellingPrice,
       );
     });
@@ -241,6 +309,30 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
     _requireLicense('حذف مخرج من المرحلة');
     await (delete(manufacturingStageOutputs)..where((o) => o.id.equals(outputId))).go();
     await _recalcStageTotals(stageId);
+  }
+
+  /// استرجاع كل مسميات المراحل المسجلة مسبقاً لاقتراحها كأزرار سريعة
+  Future<List<String>> getDistinctStageNames() async {
+    try {
+      final q = selectOnly(manufacturingStages, distinct: true)
+        ..addColumns([manufacturingStages.stageName]);
+      final rows = await q.map((r) => r.read(manufacturingStages.stageName)!).get();
+      return rows.where((name) => name.trim().isNotEmpty).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// استرجاع كل مسميات المخرجات/المواصفات المسجلة مسبقاً لاقتراحها كأزرار سريعة
+  Future<List<String>> getDistinctOutputNames() async {
+    try {
+      final q = selectOnly(manufacturingStageOutputs, distinct: true)
+        ..addColumns([manufacturingStageOutputs.variantName]);
+      final rows = await q.map((r) => r.read(manufacturingStageOutputs.variantName)).get();
+      return rows.whereType<String>().where((name) => name.trim().isNotEmpty).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   /// إعادة حساب إجمالي مخرجات المرحلة وهالكها تلقائياً من سطور المقاسات
