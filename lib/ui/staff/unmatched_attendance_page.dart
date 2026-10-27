@@ -215,47 +215,14 @@ class _UnmatchedAttendancePageState
     if (result != null) {
       final assignedStaff = result;
       try {
-        final dao = ref.read(attendanceDeviceDaoProvider);
-        final db = ref.read(appDatabaseProvider);
-
-        await db.transaction(() async {
-          final existingMapping = await dao.getMappingRecordByExternalId(
-            event.deviceId,
-            event.externalUserId,
-          );
-          final now = DateTime.now();
-          if (existingMapping != null) {
-            await dao.updateMapping(
-              existingMapping.copyWith(
-                staffId: assignedStaff.staffId,
-                enrollmentStatus: 'enrolled',
-                enrolledAt: Value(now),
-                updatedAt: now,
-              ),
-            );
-          } else {
-            await dao.addMapping(
-              StaffBiometricMappingsCompanion.insert(
-                staffId: assignedStaff.staffId,
-                deviceId: event.deviceId,
-                externalUserId: event.externalUserId,
-                enrollmentStatus: 'enrolled',
-                enrolledAt: Value(now),
-                createdAt: now,
-                updatedAt: now,
-              ),
-            );
-          }
-
-          await dao.requeueUnmatchedEventsForExternalId(
-            event.deviceId,
-            event.externalUserId,
-          );
-        });
-
         await ref
             .read(attendanceSyncServiceProvider)
-            .processPendingEvents(event.deviceId);
+            .reconcileAndLinkBiometricId(
+              staffId: assignedStaff.staffId,
+              externalUserId: event.externalUserId,
+              staffNameOnDevice: assignedStaff.name,
+              preferredDeviceId: event.deviceId,
+            );
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

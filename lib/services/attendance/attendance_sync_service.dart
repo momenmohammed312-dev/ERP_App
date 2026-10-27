@@ -89,7 +89,7 @@ class AttendanceSyncService {
 
   /// كيرسور مخزن أبعد من الآن بهذا القدر يُعتبر مسموماً (قفزة ساعة سابقة)
   /// ويُتجاهل لصالح سحب كامل — وإلا حجب كل البصمات الحقيقية للأبد.
-  static const _futureCursorTolerance = Duration(hours: 1);
+  static const _futureCursorTolerance = Duration(minutes: 2);
 
   final AttendanceDeviceDao _deviceDao;
   final StaffManagementDao _staffDao;
@@ -286,14 +286,18 @@ class AttendanceSyncService {
         // minutes — skew shifts every event timestamp, which then falls
         // outside the `since` filter and the import silently misses
         // check-ins/check-outs.
+        bool clockAdjusted = false;
+        DateTime? reportedDeviceTime;
         try {
           if (source is ZKTecoTcpAttendanceSource) {
             final tcpSource = source;
             final info = await tcpSource.getDeviceInfo();
+            reportedDeviceTime = info.deviceTime;
             if (info.deviceTime != null) {
               final drift = DateTime.now().difference(info.deviceTime!).abs();
               if (drift > const Duration(minutes: 2)) {
                 await tcpSource.setDeviceTime(DateTime.now());
+                clockAdjusted = true;
               }
             }
           }
@@ -305,8 +309,12 @@ class AttendanceSyncService {
         // فوراً ونسحب سحباً كاملاً آمناً (منع التكرار بالـhash)، مع تسجيل تحذير.
         DateTime? effectiveSinceBase = lastSyncAt;
         if (lastSyncAt != null &&
-            lastSyncAt.isAfter(
-                DateTime.now().add(_futureCursorTolerance))) {
+            (clockAdjusted ||
+                lastSyncAt.isAfter(
+                    DateTime.now().add(_futureCursorTolerance)) ||
+                (reportedDeviceTime != null &&
+                    lastSyncAt.isAfter(
+                        reportedDeviceTime.add(_futureCursorTolerance))))) {
           notes.add(
             'تم تصفير كيرسور مستقبلي مسموم '
             '(${_fmtShort(lastSyncAt)}) — سيُعاد السحب الكامل',
@@ -482,6 +490,294 @@ class AttendanceSyncService {
     }
   }
 
+  bool _isAutoCreatedPlaceholder(Staff? staff, String externalUserId) {
+    if (staff == null) return false;
+    final cleanName = staff.name.trim();
+    return staff.basicSalary == 0 &&
+        (cleanName == 'موظف $externalUserId' ||
+            cleanName == 'موظف ${externalUserId.trim()}' ||
+            (staff.notes != null &&
+                staff.notes!.contains('أُنشئ تلقائياً من جهاز البصمة')));
+  }
+
+  Future<void> _mergeStaffAttendanceRecords({
+    required String fromStaffId,
+    required String toStaffId,
+  }) async {
+    final db = _deviceDao.attachedDatabase;
+    final oldRows = await _staffDao.getAttendanceByStaff(fromStaffId);
+    for (final oldRow in oldRows) {
+      final targetRows =
+          await _staffDao.getAttendanceOnDate(toStaffId, oldRow.date);
+      if (targetRows.isEmpty) {
+        await (db.update(db.attendanceTable)
+              ..where((t) => t.id.equals(oldRow.id)))
+            .write(
+          AttendanceTableCompanion(
+            staffId: Value(toStaffId),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+      } else {
+        final target = targetRows.first;
+        DateTime? mergedCheckIn;
+        if (target.checkInTime == null) {
+          mergedCheckIn = oldRow.checkInTime;
+        } else if (oldRow.checkInTime == null) {
+          mergedCheckIn = target.checkInTime;
+        } else {
+          mergedCheckIn = target.checkInTime!.isBefore(oldRow.checkInTime!)
+              ? target.checkInTime
+              : oldRow.checkInTime;
+        }
+
+        DateTime? mergedCheckOut;
+        if (target.checkOutTime == null) {
+          mergedCheckOut = oldRow.checkOutTime;
+        } else if (oldRow.checkOutTime == null) {
+          mergedCheckOut = target.checkOutTime;
+        } else {
+          mergedCheckOut = target.checkOutTime!.isAfter(oldRow.checkOutTime!)
+              ? target.checkOutTime
+              : oldRow.checkOutTime;
+        }
+
+        double? workingHours;
+        if (mergedCheckIn != null && mergedCheckOut != null) {
+          final diff =
+              mergedCheckOut.difference(mergedCheckIn).inMinutes / 60.0;
+          if (diff > 0) workingHours = double.parse(diff.toStringAsFixed(2));
+        }
+
+        await (db.update(db.attendanceTable)
+              ..where((t) => t.id.equals(target.id)))
+            .write(
+          AttendanceTableCompanion(
+            checkInTime: Value(mergedCheckIn),
+            checkOutTime: Value(mergedCheckOut),
+            status: target.status == 'absent' && mergedCheckIn != null
+                ? const Value('present')
+                : const Value.absent(),
+            workingHours: workingHours != null
+                ? Value(workingHours)
+                : const Value.absent(),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+
+        await (db.delete(db.attendanceTable)
+              ..where((t) => t.id.equals(oldRow.id)))
+            .go();
+      }
+    }
+  }
+
+  /// يربط رقم بصمة بالموظف ذرياً على جميع الأجهزة النشطة وينقل أي حضور أو أحداث معلقة
+  Future<void> reconcileAndLinkBiometricId({
+    required String staffId,
+    required String externalUserId,
+    String? staffNameOnDevice,
+    String? cardNumber,
+    int? preferredDeviceId,
+  }) async {
+    final cleanExtId = externalUserId.trim();
+    if (cleanExtId.isEmpty) return;
+
+    final db = _deviceDao.attachedDatabase;
+    final targetDeviceIds = <int>{};
+
+    await db.transaction(() async {
+      var devices = await _deviceDao.getAllDevices();
+      if (devices.isEmpty) {
+        await _deviceDao.addDevice(
+          BiometricDevicesCompanion.insert(
+            deviceCode: 'FILE-IMPORT',
+            name: 'استيراد ملفات',
+            connectionType: 'file_import',
+            isActive: const Value(false),
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+        devices = await _deviceDao.getAllDevices();
+      }
+
+      final activeTcpDevices = devices
+          .where((d) => d.isActive && d.connectionType == 'tcp_ip')
+          .toList();
+      final activeNonFileDevices = devices
+          .where((d) => d.isActive && d.connectionType != 'file_import')
+          .toList();
+      final realDevices =
+          activeTcpDevices.isNotEmpty ? activeTcpDevices : activeNonFileDevices;
+
+      for (final d in realDevices) {
+        targetDeviceIds.add(d.id);
+      }
+
+      if (preferredDeviceId != null) {
+        final prefDevice = devices.firstWhere(
+          (d) => d.id == preferredDeviceId,
+          orElse: () => devices.first,
+        );
+        final isPrefFileImport = prefDevice.connectionType == 'file_import';
+        final hasRealDevices = realDevices.isNotEmpty;
+
+        if (!isPrefFileImport || !hasRealDevices) {
+          targetDeviceIds.add(preferredDeviceId);
+        } else {
+          final existingPrefMapping = await (db.select(db.staffBiometricMappings)
+                ..where((t) =>
+                    t.deviceId.equals(preferredDeviceId) &
+                    t.staffId.equals(staffId)))
+              .getSingleOrNull();
+          if (existingPrefMapping != null) {
+            targetDeviceIds.add(preferredDeviceId);
+          }
+        }
+      }
+
+      final mappingsWithExtId = await (db.select(db.staffBiometricMappings)
+            ..where((t) => t.externalUserId.equals(cleanExtId)))
+          .get();
+      for (final m in mappingsWithExtId) {
+        targetDeviceIds.add(m.deviceId);
+      }
+
+      final mappingsWithStaffId = await (db.select(db.staffBiometricMappings)
+            ..where((t) => t.staffId.equals(staffId)))
+          .get();
+      for (final m in mappingsWithStaffId) {
+        targetDeviceIds.add(m.deviceId);
+      }
+
+      if (targetDeviceIds.isEmpty) {
+        final fallback = devices.firstWhere(
+          (d) => d.isActive,
+          orElse: () => devices.first,
+        );
+        targetDeviceIds.add(fallback.id);
+      }
+
+      final processedOldStaffIds = <String>{};
+      for (final row in mappingsWithExtId) {
+        if (row.staffId == staffId) continue;
+        final oldStaffId = row.staffId;
+        if (processedOldStaffIds.contains(oldStaffId)) continue;
+        processedOldStaffIds.add(oldStaffId);
+
+        final oldStaff = await _staffDao.getStaffById(oldStaffId);
+        final isPlaceholder = _isAutoCreatedPlaceholder(oldStaff, cleanExtId);
+        final isInactiveOrDeleted =
+            oldStaff == null || !oldStaff.isActive || oldStaff.status != 'active';
+
+        if (isPlaceholder || isInactiveOrDeleted) {
+          await _mergeStaffAttendanceRecords(
+            fromStaffId: oldStaffId,
+            toStaffId: staffId,
+          );
+
+          await (db.update(db.attendanceRawEvents)
+                ..where((t) =>
+                    t.externalUserId.equals(cleanExtId) &
+                    t.matchedStaffId.equals(oldStaffId)))
+              .write(
+            AttendanceRawEventsCompanion(
+              matchedStaffId: Value(staffId),
+              status: const Value('pending'),
+              processedAt: const Value(null),
+              errorMessage: const Value(null),
+            ),
+          );
+
+          await (db.delete(db.staffBiometricMappings)
+                ..where((t) =>
+                    t.staffId.equals(oldStaffId) &
+                    t.externalUserId.equals(cleanExtId)))
+              .go();
+
+          if (isPlaceholder) {
+            await _staffDao.deleteStaff(oldStaffId);
+          }
+        }
+      }
+
+      final now = DateTime.now();
+      for (final devId in targetDeviceIds) {
+        final existingByExt =
+            await _deviceDao.getMappingRecordByExternalId(devId, cleanExtId);
+        final existingForStaff = await (db.select(db.staffBiometricMappings)
+              ..where((t) => t.deviceId.equals(devId) & t.staffId.equals(staffId)))
+            .get();
+
+        if (existingByExt != null) {
+          await (db.update(db.staffBiometricMappings)
+                ..where((t) => t.id.equals(existingByExt.id)))
+              .write(
+            StaffBiometricMappingsCompanion(
+              staffId: Value(staffId),
+              enrollmentStatus: const Value('enrolled'),
+              deviceUserName: staffNameOnDevice != null
+                  ? Value(staffNameOnDevice)
+                  : const Value.absent(),
+              cardNumber: cardNumber != null
+                  ? Value(cardNumber)
+                  : const Value.absent(),
+              updatedAt: Value(now),
+            ),
+          );
+
+          for (final other in existingForStaff) {
+            if (other.id != existingByExt.id) {
+              await _deviceDao.deleteMapping(other.id);
+            }
+          }
+        } else if (existingForStaff.isNotEmpty) {
+          final firstStaffMap = existingForStaff.first;
+          await (db.update(db.staffBiometricMappings)
+                ..where((t) => t.id.equals(firstStaffMap.id)))
+              .write(
+            StaffBiometricMappingsCompanion(
+              externalUserId: Value(cleanExtId),
+              enrollmentStatus: const Value('enrolled'),
+              deviceUserName: staffNameOnDevice != null
+                  ? Value(staffNameOnDevice)
+                  : const Value.absent(),
+              cardNumber: cardNumber != null
+                  ? Value(cardNumber)
+                  : const Value.absent(),
+              updatedAt: Value(now),
+            ),
+          );
+
+          for (int i = 1; i < existingForStaff.length; i++) {
+            await _deviceDao.deleteMapping(existingForStaff[i].id);
+          }
+        } else {
+          await _deviceDao.addMapping(
+            StaffBiometricMappingsCompanion.insert(
+              staffId: staffId,
+              deviceId: devId,
+              externalUserId: cleanExtId,
+              deviceUserName: Value(staffNameOnDevice),
+              cardNumber: Value(cardNumber),
+              enrollmentStatus: 'enrolled',
+              enrolledAt: Value(now),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+        }
+
+        await _deviceDao.requeueUnmatchedEventsForExternalId(devId, cleanExtId);
+      }
+    });
+
+    for (final devId in targetDeviceIds) {
+      await processPendingEvents(devId);
+    }
+  }
+
   /// Processes raw events for a specific device, matches them to staff, and creates attendance records.
   Future<SyncResult> processPendingEvents(int deviceId) async {
     final retryableEvents = await _deviceDao.getRetryableEventsForDevice(
@@ -508,16 +804,46 @@ class AttendanceSyncService {
 
       if (mapping == null) {
         try {
-          await _autoCreateStaffForExternalId(
-            deviceId,
+          final anyMapping =
+              await _deviceDao.getEnrolledMappingByExternalIdAnyDevice(
             rawEvent.externalUserId,
           );
-          mapping = await _deviceDao.getMappingRecordByExternalId(
-            deviceId,
-            rawEvent.externalUserId,
-          );
+          if (anyMapping != null) {
+            final candidateStaff =
+                await _staffDao.getStaffById(anyMapping.staffId);
+            if (candidateStaff != null &&
+                candidateStaff.isActive &&
+                candidateStaff.status == 'active') {
+              final now = DateTime.now();
+              await _deviceDao.addMapping(
+                StaffBiometricMappingsCompanion.insert(
+                  staffId: candidateStaff.staffId,
+                  deviceId: deviceId,
+                  externalUserId: rawEvent.externalUserId,
+                  enrollmentStatus: 'enrolled',
+                  enrolledAt: Value(now),
+                  createdAt: now,
+                  updatedAt: now,
+                ),
+              );
+              mapping = await _deviceDao.getMappingRecordByExternalId(
+                deviceId,
+                rawEvent.externalUserId,
+              );
+            }
+          }
           if (mapping == null) {
-            throw StateError('mapping not created');
+            await _autoCreateStaffForExternalId(
+              deviceId,
+              rawEvent.externalUserId,
+            );
+            mapping = await _deviceDao.getMappingRecordByExternalId(
+              deviceId,
+              rawEvent.externalUserId,
+            );
+            if (mapping == null) {
+              throw StateError('mapping not created');
+            }
           }
         } catch (error) {
           await _markRetryError(rawEvent, error);
@@ -536,9 +862,109 @@ class AttendanceSyncService {
         continue;
       }
 
-      final staffId = mapping.staffId;
+      var staffId = mapping.staffId;
       try {
-        final staff = await _staffDao.getStaffById(staffId);
+        var staff = await _staffDao.getStaffById(staffId);
+        if (staff == null || !staff.isActive || staff.status != 'active') {
+          final allMaps = await (_deviceDao.attachedDatabase.select(
+                  _deviceDao.attachedDatabase.staffBiometricMappings)
+                ..where((t) =>
+                    t.externalUserId.equals(rawEvent.externalUserId) &
+                    t.enrollmentStatus.equals('enrolled')))
+              .get();
+          Staff? activeStaffCandidate;
+          for (final m in allMaps) {
+            if (m.staffId != staffId) {
+              final s = await _staffDao.getStaffById(m.staffId);
+              if (s != null && s.isActive && s.status == 'active') {
+                activeStaffCandidate = s;
+                break;
+              }
+            }
+          }
+
+          if (activeStaffCandidate != null) {
+            staff = activeStaffCandidate;
+            staffId = staff.staffId;
+            final now = DateTime.now();
+            await _deviceDao.updateMapping(
+              mapping.copyWith(
+                staffId: staffId,
+                updatedAt: now,
+              ),
+            );
+            mapping = await _deviceDao.getMappingRecordByExternalId(
+              deviceId,
+              rawEvent.externalUserId,
+            );
+          } else if (staff == null || staff.status == 'deleted') {
+            await _deviceDao.deleteMapping(mapping.id);
+            staffId = await _autoCreateStaffForExternalId(
+              deviceId,
+              rawEvent.externalUserId,
+            );
+            mapping = await _deviceDao.getMappingRecordByExternalId(
+              deviceId,
+              rawEvent.externalUserId,
+            );
+            staff = await _staffDao.getStaffById(staffId);
+          }
+        }
+
+        if (staff != null &&
+            _isAutoCreatedPlaceholder(staff, rawEvent.externalUserId)) {
+          final allMaps = await (_deviceDao.attachedDatabase.select(
+                  _deviceDao.attachedDatabase.staffBiometricMappings)
+                ..where((t) =>
+                    t.externalUserId.equals(rawEvent.externalUserId) &
+                    t.enrollmentStatus.equals('enrolled')))
+              .get();
+          Staff? namedStaffCandidate;
+          for (final m in allMaps) {
+            if (m.staffId != staffId) {
+              final s = await _staffDao.getStaffById(m.staffId);
+              if (s != null &&
+                  s.isActive &&
+                  s.status == 'active' &&
+                  !_isAutoCreatedPlaceholder(s, rawEvent.externalUserId)) {
+                namedStaffCandidate = s;
+                break;
+              }
+            }
+          }
+
+          if (namedStaffCandidate != null) {
+            final oldPlaceholderId = staffId;
+            staff = namedStaffCandidate;
+            staffId = staff.staffId;
+            await _mergeStaffAttendanceRecords(
+              fromStaffId: oldPlaceholderId,
+              toStaffId: staffId,
+            );
+            await (_deviceDao.attachedDatabase.update(
+                    _deviceDao.attachedDatabase.attendanceRawEvents)
+                  ..where((t) =>
+                      t.externalUserId.equals(rawEvent.externalUserId) &
+                      t.matchedStaffId.equals(oldPlaceholderId)))
+                .write(
+              AttendanceRawEventsCompanion(
+                matchedStaffId: Value(staffId),
+              ),
+            );
+            await _deviceDao.updateMapping(
+              mapping!.copyWith(
+                staffId: staffId,
+                updatedAt: DateTime.now(),
+              ),
+            );
+            mapping = await _deviceDao.getMappingRecordByExternalId(
+              deviceId,
+              rawEvent.externalUserId,
+            );
+            await _staffDao.deleteStaff(oldPlaceholderId);
+          }
+        }
+
         if (staff == null || !staff.isActive || staff.status != 'active') {
           await _markUnmatched(
             rawEvent,

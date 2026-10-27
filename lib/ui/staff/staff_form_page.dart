@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
@@ -67,7 +66,17 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       final deviceDao = ref.read(attendanceDeviceDaoProvider);
       final mappings = await deviceDao.getMappingsForStaff(widget.staff!.staffId);
       if (mappings.isNotEmpty) {
-        _currentBiometricMapping = mappings.first;
+        final devices = await deviceDao.getAllDevices();
+        final devMap = {for (final d in devices) d.id: d};
+        _currentBiometricMapping = mappings.firstWhere(
+          (m) =>
+              devMap[m.deviceId]?.connectionType != 'file_import' &&
+              m.externalUserId.isNotEmpty,
+          orElse: () => mappings.firstWhere(
+            (m) => m.externalUserId.isNotEmpty,
+            orElse: () => mappings.first,
+          ),
+        );
         _biometricIdController.text = _currentBiometricMapping!.externalUserId;
         if (mounted) setState(() {});
       }
@@ -817,49 +826,17 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
       // Save or update Biometric ID mapping
       final enteredBiometricId = _biometricIdController.text.trim();
-      final deviceDao = ref.read(attendanceDeviceDaoProvider);
 
       if (enteredBiometricId.isNotEmpty) {
-        final devices = await deviceDao.getAllDevices();
-        int deviceId = 1;
-        if (devices.isNotEmpty) {
-          deviceId = devices.first.id;
-        } else {
-          deviceId = await deviceDao.addDevice(
-            BiometricDevicesCompanion.insert(
-              deviceCode: 'BIO-001',
-              name: 'جهاز البصمة الرئيسي',
-              connectionType: 'tcp_ip',
-              ipAddress: const Value('192.168.1.201'),
-              port: const Value(4370),
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            ),
-          );
-        }
-
-        if (_currentBiometricMapping != null) {
-          await deviceDao.updateMapping(
-            _currentBiometricMapping!.copyWith(
-              externalUserId: enteredBiometricId,
-              deviceId: deviceId,
-              enrollmentStatus: 'enrolled',
-              updatedAt: DateTime.now(),
-            ),
-          );
-        } else {
-          await deviceDao.addMapping(
-            StaffBiometricMappingsCompanion.insert(
-              staffId: effectiveStaffId,
-              deviceId: deviceId,
-              externalUserId: enteredBiometricId,
-              enrollmentStatus: 'enrolled',
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            ),
-          );
-        }
+        final syncService = ref.read(attendanceSyncServiceProvider);
+        await syncService.reconcileAndLinkBiometricId(
+          staffId: effectiveStaffId,
+          externalUserId: enteredBiometricId,
+          staffNameOnDevice: _nameController.text.trim(),
+          preferredDeviceId: _currentBiometricMapping?.deviceId,
+        );
       } else if (_currentBiometricMapping != null && enteredBiometricId.isEmpty) {
+        final deviceDao = ref.read(attendanceDeviceDaoProvider);
         await deviceDao.deleteMapping(_currentBiometricMapping!.id);
       }
 
