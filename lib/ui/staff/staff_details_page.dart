@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/utils/currency_helper.dart';
+import '../../core/theme/madar_colors.dart';
 import 'attendance_page.dart';
 import 'biometric_enrollment_page.dart';
 import 'vacations_page.dart';
@@ -54,13 +55,15 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: MadarColors.bgDark,
       appBar: AppBar(
         title: const Text('تفاصيل الموظف'),
-        backgroundColor: Colors.blue[700],
-        foregroundColor: Colors.white,
+        backgroundColor: MadarColors.bgDark,
+        foregroundColor: MadarColors.textLight,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.fingerprint),
+            icon: const Icon(Icons.fingerprint, color: MadarColors.info),
             onPressed: () async {
               await Navigator.push(
                 context,
@@ -73,12 +76,12 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
             tooltip: 'ربط البصمة',
           ),
           IconButton(
-            icon: const Icon(Icons.edit),
+            icon: const Icon(Icons.edit, color: MadarColors.gold),
             onPressed: _editStaff,
             tooltip: 'تعديل',
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            icon: const Icon(Icons.delete_outline, color: MadarColors.error),
             onPressed: _deleteStaff,
             tooltip: 'حذف الموظف',
           ),
@@ -108,17 +111,27 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
 
   Widget _buildStaffHeader() {
     final isActive = widget.staff.status == 'active' && widget.staff.isActive;
-    final statusColor = isActive ? Colors.green : Colors.red;
+    final statusColor = isActive ? MadarColors.success : MadarColors.error;
     final statusText = isActive ? 'نشط' : 'غير نشط';
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(18.0),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.blue[700]!, Colors.blue[500]!],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        color: MadarColors.bgCard,
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+        border: Border.all(color: MadarColors.border.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        gradient: const LinearGradient(
+          colors: [MadarColors.bgCard, Color(0xFF1E2836)],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
         ),
       ),
       child: Column(
@@ -126,10 +139,22 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 30,
-                backgroundColor: Colors.white,
-                child: Icon(Icons.person, size: 40, color: Colors.blue[700]),
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: MadarColors.gold.withValues(alpha: 0.15),
+                  border: Border.all(
+                    color: MadarColors.gold.withValues(alpha: 0.4),
+                    width: 2,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.person,
+                  size: 34,
+                  color: MadarColors.gold,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -139,16 +164,19 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
                     Text(
                       widget.staff.name,
                       style: const TextStyle(
-                        fontSize: 24,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: MadarColors.textLight,
                       ),
                     ),
+                    const SizedBox(height: 4),
                     Text(
-                      widget.staff.position,
+                      widget.staff.position.isNotEmpty
+                          ? widget.staff.position
+                          : 'موظف',
                       style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.white70,
+                        fontSize: 14,
+                        color: MadarColors.textSecondary,
                       ),
                     ),
                   ],
@@ -156,53 +184,58 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
+                  horizontal: 14,
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.2),
+                  color: statusColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: statusColor),
                 ),
-                child: Text(
-                  statusText,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: statusColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      statusText,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
             children: [
-              Icon(Icons.badge, color: Colors.white70, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                widget.staff.staffId,
-                style: const TextStyle(color: Colors.white70),
+              _buildHeaderChip(Icons.badge_outlined, widget.staff.staffId),
+              _buildHeaderChip(
+                Icons.phone_outlined,
+                widget.staff.phone ?? 'لا يوجد هاتف',
               ),
-              const SizedBox(width: 24),
-              Icon(Icons.phone, color: Colors.white70, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                widget.staff.phone ?? 'لا يوجد',
-                style: const TextStyle(color: Colors.white70),
-              ),
-              const SizedBox(width: 24),
-              Icon(Icons.attach_money, color: Colors.white70, size: 20),
-              const SizedBox(width: 8),
-              Text(
+              _buildHeaderChip(
+                Icons.attach_money,
                 CurrencyHelper.formatCurrency(widget.staff.basicSalary),
-                style: const TextStyle(color: Colors.white70),
+                color: MadarColors.gold,
               ),
-              const SizedBox(width: 24),
-              Icon(Icons.fingerprint, color: Colors.white70, size: 20),
-              const SizedBox(width: 8),
-              Text(
+              _buildHeaderChip(
+                Icons.fingerprint,
                 _biometricId != null ? 'بصمة: $_biometricId' : 'بدون بصمة',
-                style: const TextStyle(color: Colors.white70),
+                color: _biometricId != null ? MadarColors.info : MadarColors.textMuted,
               ),
             ],
           ),
@@ -211,21 +244,50 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
     );
   }
 
+  Widget _buildHeaderChip(IconData icon, String label, {Color? color}) {
+    final chipColor = color ?? MadarColors.textSecondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: MadarColors.bgDark.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: chipColor.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: chipColor),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: chipColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTabBar() {
     return Container(
-      color: Colors.white,
+      color: MadarColors.bgDark,
       child: TabBar(
         controller: _tabController,
-        labelColor: Colors.blue[700],
-        unselectedLabelColor: Colors.grey[600],
-        indicatorColor: Colors.blue[700],
+        labelColor: MadarColors.gold,
+        unselectedLabelColor: MadarColors.textMuted,
+        indicatorColor: MadarColors.gold,
+        indicatorWeight: 3,
+        dividerColor: MadarColors.border,
         tabs: const [
-          Tab(icon: Icon(Icons.info), text: 'المعلومات'),
-          Tab(icon: Icon(Icons.schedule), text: 'الحضور'),
-          Tab(icon: Icon(Icons.beach_access), text: 'الإجازات'),
-          Tab(icon: Icon(Icons.money), text: 'السلف'),
-          Tab(icon: Icon(Icons.payment), text: 'المرتبات'),
-          Tab(icon: Icon(Icons.star), text: 'التقييم'),
+          Tab(icon: Icon(Icons.info_outline), text: 'المعلومات'),
+          Tab(icon: Icon(Icons.schedule_outlined), text: 'الحضور'),
+          Tab(icon: Icon(Icons.beach_access_outlined), text: 'الإجازات'),
+          Tab(icon: Icon(Icons.payments_outlined), text: 'السلف'),
+          Tab(icon: Icon(Icons.receipt_long_outlined), text: 'المرتبات'),
+          Tab(icon: Icon(Icons.star_outline), text: 'التقييم'),
         ],
       ),
     );
@@ -314,20 +376,40 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
   }
 
   Widget _buildInfoSection(String title, List<Widget> children) {
-    return Card(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: MadarColors.bgCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MadarColors.border),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[700],
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                Container(
+                  width: 4,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: MadarColors.gold,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: MadarColors.gold,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             ...children,
           ],
         ),
@@ -337,23 +419,31 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
 
   Widget _buildInfoRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: 140,
             child: Text(
               label,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: MadarColors.textMuted,
+                fontSize: 13,
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(value, style: TextStyle(color: Colors.grey[800])),
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: MadarColors.textLight,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
           ),
         ],
       ),

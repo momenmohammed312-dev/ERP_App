@@ -18,6 +18,7 @@ import 'package:pos_offline_desktop/ui/invoice/widgets/order_line_item.dart';
 import 'package:pos_offline_desktop/ui/invoice/models/product_entry.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import 'product_quick_add_dialog.dart';
 
 // Payment method enum
@@ -652,6 +653,7 @@ class _EnhancedPurchaseInvoicePageState
     }
 
     return Scaffold(
+      backgroundColor: MadarColors.bgDark,
       appBar: AppBar(
         title: Text(
           widget.purchaseId != null
@@ -659,6 +661,7 @@ class _EnhancedPurchaseInvoicePageState
               : (_invoiceNumber == null
                   ? 'فاتورة مشتريات جديدة'
                   : 'فاتورة مشتريات جديدة #$_invoiceNumber'),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -667,7 +670,7 @@ class _EnhancedPurchaseInvoicePageState
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.save),
+            icon: const Icon(Icons.save_outlined),
             onPressed: _savePurchaseInvoice,
             tooltip: 'حفظ الفاتورة',
           ),
@@ -677,339 +680,18 @@ class _EnhancedPurchaseInvoicePageState
         key: _formKey,
         child: Row(
           children: [
-            // Left side - Invoice details
+            // Products Panel (5/8 width - displayed on start/right in RTL)
             Expanded(
-              flex: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Invoice header
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'فاتورة مشتريات',
-                            style: Theme.of(context).textTheme.headlineSmall
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                          const Gap(8),
-                          Text(
-                            // Assigned at save; '...' while unposted.
-                            'رقم الفاتورة: ${_invoiceNumber ?? '...'}',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onPrimaryContainer,
-                                ),
-                          ),
-                          Text(
-                            'التاريخ: ${DateFormat('yyyy/MM/dd HH:mm').format(_purchaseDate)}',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onPrimaryContainer,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const Gap(16),
-
-                    // Supplier selection and Purchase Date
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: DropdownButtonFormField<Supplier>(
-                            initialValue: _selectedSupplier,
-                            decoration: const InputDecoration(
-                              labelText: 'اختر المورد',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.person),
-                            ),
-                            items: _suppliers.map((supplier) {
-                              return DropdownMenuItem(
-                                value: supplier,
-                                child: Text(supplier.name),
-                              );
-                            }).toList(),
-                            onChanged: widget.purchaseId != null
-                                ? null
-                                : (supplier) {
-                                    setState(() {
-                                      _selectedSupplier = supplier;
-                                    });
-                                  },
-                          ),
-                        ),
-                        const Gap(12),
-                        Expanded(
-                          flex: 2,
-                          child: InkWell(
-                            onTap: _pickPurchaseDate,
-                            child: InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'تاريخ الفاتورة',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.calendar_today, size: 20),
-                                suffixIcon: Icon(Icons.edit_calendar, size: 16),
-                              ),
-                              child: Text(
-                                DateFormat('yyyy/MM/dd HH:mm').format(_purchaseDate),
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const Gap(8),
-
-                    // Add new supplier button
-                    TextButton.icon(
-                      onPressed: () {
-                        // Navigate to add supplier page
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('سيتم إضافة صفحة إضافة مورد'),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.add),
-                      label: const Text('إضافة مورد جديد'),
-                    ),
-
-                    const Gap(16),
-
-                    // Product entries
-                    Expanded(
-                      child: _productEntries.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'لا توجد منتجات مضافة',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: _productEntries.length,
-                              itemBuilder: (context, index) {
-                                final entry = _productEntries[index];
-                                return OrderLineItem(
-                                  entry: entry,
-                                  index: index,
-                                  onEdit: (updatedEntry) =>
-                                      _updateProductEntry(index, updatedEntry),
-                                  onDelete: () => _removeProductEntry(index),
-                                );
-                              },
-                            ),
-                    ),
-
-                    // Totals
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildTotalRow(
-                            'الإجمالي الفرعي:',
-                            _subtotal.toStringAsFixed(2),
-                          ),
-                          _buildTotalRow(
-                            'المدفوع:',
-                            _paidAmountController.text.isEmpty
-                                ? '0.00'
-                                : _paidAmountController.text,
-                          ),
-                          _buildTotalRow(
-                            'المتبقي:',
-                            _remainingAmount.toStringAsFixed(2),
-                            isBold: true,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const Gap(16),
-
-                    // Payment method
-                    DropdownButtonFormField<PaymentMethod>(
-                      initialValue: _paymentMethod,
-                      decoration: const InputDecoration(
-                        labelText: 'طريقة الدفع',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: PaymentMethod.cash,
-                          child: Text('كاش'),
-                        ),
-                        DropdownMenuItem(
-                          value: PaymentMethod.visa,
-                          child: Text('فيزا'),
-                        ),
-                        DropdownMenuItem(
-                          value: PaymentMethod.transfer,
-                          child: Text('تحويل بنكي'),
-                        ),
-                      ],
-                      onChanged: (method) {
-                        setState(() {
-                          _paymentMethod = method!;
-                        });
-                      },
-                    ),
-
-                    const Gap(16),
-
-                    // Paid amount field (only for non-cash)
-                    if (_paymentMethod != PaymentMethod.cash) ...[
-                      TextFormField(
-                        controller: _paidAmountController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'المدفوع',
-                          border: OutlineInputBorder(),
-                          prefixText: 'ج.م ',
-                        ),
-                      ),
-                      const Gap(16),
-                    ],
-
-                    // Notes
-                    TextFormField(
-                      controller: _notesController,
-                      decoration: const InputDecoration(
-                        labelText: 'ملاحظات',
-                        border: OutlineInputBorder(),
-                      ),
-                      maxLines: 2,
-                    ),
-
-                    const Gap(16),
-
-                    // Action buttons
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _savePurchaseInvoice,
-                            icon: const Icon(Icons.save),
-                            label: const Text('حفظ والطباعة'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                          ),
-                        ),
-                        const Gap(8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _resetForm,
-                            icon: const Icon(Icons.clear),
-                            label: const Text('مسح'),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+              flex: 5,
+              child: _buildProductsPanel(),
             ),
 
-            const VerticalDivider(width: 1),
+            const VerticalDivider(width: 1, color: MadarColors.border),
 
-            // Right side - Product selection
+            // Invoice Details Panel (3/8 width - displayed on end/left in RTL)
             Expanded(
-              flex: 1,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Search bar with quick add button
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            decoration: const InputDecoration(
-                              labelText: 'البحث عن المنتجات...',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.search),
-                            ),
-                          ),
-                        ),
-                        const Gap(8),
-                        ElevatedButton.icon(
-                          onPressed: _showQuickAddProduct,
-                          icon: const Icon(Icons.add),
-                          label: const Text('منتج جديد'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.purple,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 18,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const Gap(16),
-
-                    // Products grid
-                    Expanded(
-                      child: _filteredProducts.isEmpty
-                          ? const Center(child: Text('لا توجد منتجات'))
-                          : GridView.builder(
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 3,
-                                    childAspectRatio: 0.8,
-                                    crossAxisSpacing: 8,
-                                    mainAxisSpacing: 8,
-                                  ),
-                              itemCount: _filteredProducts.length,
-                              itemBuilder: (context, index) {
-                                final product = _filteredProducts[index];
-                                return ProductCard(
-                                  product: product,
-                                  onTap: () =>
-                                      _showProductSelectionModal(product),
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-              ),
+              flex: 3,
+              child: _buildDetailsPanel(),
             ),
           ],
         ),
@@ -1017,23 +699,646 @@ class _EnhancedPurchaseInvoicePageState
     );
   }
 
-  Widget _buildTotalRow(String label, String value, {bool isBold = false}) {
+  Widget _buildProductsPanel() {
+    return Container(
+      color: MadarColors.bgDark,
+      child: Column(
+        children: [
+          // Search bar with quick add button
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 46,
+                    child: TextField(
+                      controller: _searchController,
+                      style: const TextStyle(color: MadarColors.textLight, fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: 'البحث عن المنتجات (الاسم، الباركود)...',
+                        hintStyle: const TextStyle(color: MadarColors.textMuted, fontSize: 13),
+                        prefixIcon: const Icon(Icons.search, color: MadarColors.textSecondary, size: 20),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18, color: MadarColors.textMuted),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _applyFilters();
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: MadarColors.bgCard,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: MadarColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: MadarColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: MadarColors.gold, width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const Gap(10),
+                ElevatedButton.icon(
+                  onPressed: _showQuickAddProduct,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text(
+                    'منتج جديد',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: MadarColors.gold,
+                    foregroundColor: Colors.black,
+                    elevation: 2,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 13,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Products grid
+          Expanded(
+            child: _filteredProducts.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.inventory_2_outlined,
+                          size: 48,
+                          color: MadarColors.textMuted.withValues(alpha: 0.5),
+                        ),
+                        const Gap(12),
+                        const Text(
+                          'لا توجد منتجات مطابقة للبحث',
+                          style: TextStyle(
+                            color: MadarColors.textSecondary,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : GridView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 4,
+                      childAspectRatio: 1.15,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                    ),
+                    itemCount: _filteredProducts.length,
+                    itemBuilder: (context, index) {
+                      final product = _filteredProducts[index];
+                      return ProductCard(
+                        product: product,
+                        onTap: () => _showProductSelectionModal(product),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailsPanel() {
+    return Container(
+      color: MadarColors.bgCard,
+      child: Column(
+        children: [
+          // Invoice header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: MadarColors.bgSurface.withValues(alpha: 0.4),
+              border: const Border(
+                bottom: BorderSide(color: MadarColors.border),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.purchaseId != null
+                          ? 'تعديل فاتورة مشتريات'
+                          : 'فاتورة مشتريات جديدة',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: MadarColors.textLight,
+                      ),
+                    ),
+                    const Gap(2),
+                    Row(
+                      children: [
+                        Text(
+                          'رقم الفاتورة: ${_invoiceNumber ?? '...'}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: MadarColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '•  ${DateFormat('yyyy/MM/dd HH:mm').format(_purchaseDate)}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: MadarColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: MadarColors.gold.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: MadarColors.gold.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.shopping_bag_outlined, size: 14, color: MadarColors.gold),
+                      SizedBox(width: 4),
+                      Text(
+                        'مشتريات',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: MadarColors.gold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Supplier selection and Purchase Date
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: SizedBox(
+                        height: 44,
+                        child: DropdownButtonFormField<Supplier>(
+                          initialValue: _selectedSupplier,
+                          dropdownColor: MadarColors.bgCard,
+                          isDense: true,
+                          decoration: InputDecoration(
+                            labelText: 'اختر المورد',
+                            labelStyle: const TextStyle(color: MadarColors.textSecondary, fontSize: 12),
+                            filled: true,
+                            fillColor: MadarColors.bgDark.withValues(alpha: 0.6),
+                            prefixIcon: const Icon(Icons.business_outlined, color: MadarColors.gold, size: 18),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(color: MadarColors.border),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(color: MadarColors.border),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(color: MadarColors.gold, width: 1.5),
+                            ),
+                          ),
+                          items: _suppliers.map((supplier) {
+                            return DropdownMenuItem(
+                              value: supplier,
+                              child: Text(
+                                supplier.name,
+                                style: const TextStyle(color: MadarColors.textLight, fontSize: 13),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: widget.purchaseId != null
+                              ? null
+                              : (supplier) {
+                                  setState(() {
+                                    _selectedSupplier = supplier;
+                                  });
+                                },
+                        ),
+                      ),
+                    ),
+                    const Gap(8),
+                    Expanded(
+                      flex: 2,
+                      child: InkWell(
+                        onTap: _pickPurchaseDate,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          height: 44,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: MadarColors.bgDark.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: MadarColors.border),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calendar_today_outlined, size: 16, color: MadarColors.gold),
+                              const Gap(6),
+                              Expanded(
+                                child: Text(
+                                  DateFormat('yyyy/MM/dd HH:mm').format(_purchaseDate),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                    color: MadarColors.textLight,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const Icon(Icons.edit_calendar_outlined, size: 14, color: MadarColors.textMuted),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Gap(4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: InkWell(
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('سيتم إضافة صفحة إضافة مورد'),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add_circle_outline, size: 14, color: MadarColors.gold),
+                          SizedBox(width: 4),
+                          Text(
+                            'إضافة مورد جديد',
+                            style: TextStyle(color: MadarColors.gold, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const Divider(height: 1, color: MadarColors.border),
+
+          // Order lines
+          Expanded(
+            child: _productEntries.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.shopping_cart_outlined,
+                          size: 44,
+                          color: MadarColors.textMuted.withValues(alpha: 0.35),
+                        ),
+                        const Gap(8),
+                        const Text(
+                          'لا توجد منتجات مضافة في الفاتورة',
+                          style: TextStyle(
+                            color: MadarColors.textMuted,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const Gap(4),
+                        const Text(
+                          'اختر المنتجات من القائمة المجاورة لإضافتها',
+                          style: TextStyle(
+                            color: MadarColors.textSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    itemCount: _productEntries.length,
+                    itemBuilder: (context, index) {
+                      final entry = _productEntries[index];
+                      return OrderLineItem(
+                        entry: entry,
+                        index: index,
+                        onEdit: (updatedEntry) =>
+                            _updateProductEntry(index, updatedEntry),
+                        onDelete: () => _removeProductEntry(index),
+                      );
+                    },
+                  ),
+          ),
+
+          // Bottom docked totals and actions section
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: MadarColors.bgDark.withValues(alpha: 0.8),
+              border: const Border(
+                top: BorderSide(color: MadarColors.border),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 6,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Totals box
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: MadarColors.bgCard,
+                    border: Border.all(color: MadarColors.border),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildTotalRow(
+                        'الإجمالي الفرعي:',
+                        _subtotal.toStringAsFixed(2),
+                      ),
+                      const Divider(color: MadarColors.border, height: 10),
+                      _buildTotalRow(
+                        'المدفوع:',
+                        _paidAmountController.text.isEmpty
+                            ? '0.00'
+                            : _paidAmountController.text,
+                      ),
+                      const Divider(color: MadarColors.border, height: 10),
+                      _buildTotalRow(
+                        'المتبقي:',
+                        _remainingAmount.toStringAsFixed(2),
+                        isBold: true,
+                        color: _remainingAmount > 0 ? MadarColors.warning : MadarColors.success,
+                      ),
+                    ],
+                  ),
+                ),
+
+                const Gap(10),
+
+                // Payment method & notes row
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 4,
+                      child: SizedBox(
+                        height: 42,
+                        child: DropdownButtonFormField<PaymentMethod>(
+                          initialValue: _paymentMethod,
+                          dropdownColor: MadarColors.bgCard,
+                          isDense: true,
+                          decoration: InputDecoration(
+                            labelText: 'طريقة الدفع',
+                            labelStyle: const TextStyle(color: MadarColors.textSecondary, fontSize: 11),
+                            filled: true,
+                            fillColor: MadarColors.bgCard,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(color: MadarColors.border),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(color: MadarColors.border),
+                            ),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: PaymentMethod.cash,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.payments_outlined, size: 16, color: MadarColors.success),
+                                  SizedBox(width: 6),
+                                  Text('كاش', style: TextStyle(color: MadarColors.textLight, fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: PaymentMethod.visa,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.credit_card_outlined, size: 16, color: MadarColors.info),
+                                  SizedBox(width: 6),
+                                  Text('فيزا', style: TextStyle(color: MadarColors.textLight, fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: PaymentMethod.transfer,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.account_balance_outlined, size: 16, color: MadarColors.warning),
+                                  SizedBox(width: 6),
+                                  Text('تحويل بنكي', style: TextStyle(color: MadarColors.textLight, fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                          ],
+                          onChanged: (method) {
+                            setState(() {
+                              _paymentMethod = method!;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    if (_paymentMethod != PaymentMethod.cash) ...[
+                      const Gap(8),
+                      Expanded(
+                        flex: 3,
+                        child: SizedBox(
+                          height: 42,
+                          child: TextFormField(
+                            controller: _paidAmountController,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(color: MadarColors.textLight, fontSize: 12),
+                            decoration: InputDecoration(
+                              labelText: 'المدفوع',
+                              labelStyle: const TextStyle(color: MadarColors.textSecondary, fontSize: 11),
+                              filled: true,
+                              fillColor: MadarColors.bgCard,
+                              prefixText: 'ج.م ',
+                              prefixStyle: const TextStyle(color: MadarColors.gold, fontSize: 11),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: MadarColors.border),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: MadarColors.border),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+
+                const Gap(8),
+
+                // Notes
+                SizedBox(
+                  height: 38,
+                  child: TextFormField(
+                    controller: _notesController,
+                    style: const TextStyle(color: MadarColors.textLight, fontSize: 12),
+                    decoration: InputDecoration(
+                      labelText: 'ملاحظات',
+                      labelStyle: const TextStyle(color: MadarColors.textSecondary, fontSize: 11),
+                      hintText: 'ملاحظات الفاتورة...',
+                      hintStyle: const TextStyle(color: MadarColors.textMuted, fontSize: 11),
+                      filled: true,
+                      fillColor: MadarColors.bgCard,
+                      prefixIcon: const Icon(Icons.note_alt_outlined, color: MadarColors.textMuted, size: 16),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: MadarColors.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: MadarColors.border),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const Gap(10),
+
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: ElevatedButton.icon(
+                        onPressed: _savePurchaseInvoice,
+                        icon: const Icon(Icons.save_outlined, size: 18),
+                        label: const Text(
+                          'حفظ والطباعة',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: MadarColors.success,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Gap(8),
+                    Expanded(
+                      flex: 2,
+                      child: OutlinedButton.icon(
+                        onPressed: _resetForm,
+                        icon: const Icon(Icons.clear, size: 18, color: MadarColors.error),
+                        label: const Text(
+                          'مسح',
+                          style: TextStyle(
+                            color: MadarColors.error,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: MadarColors.error.withValues(alpha: 0.5)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTotalRow(String label, String value, {bool isBold = false, Color? color}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
             style: TextStyle(
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              fontSize: isBold ? 13 : 12,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+              color: isBold ? MadarColors.textLight : MadarColors.textSecondary,
             ),
           ),
           Text(
             '$value ج.م',
             style: TextStyle(
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-              color: isBold ? Theme.of(context).colorScheme.primary : null,
+              fontSize: isBold ? 14 : 12,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+              color: color ?? (isBold ? MadarColors.goldLight : MadarColors.textLight),
             ),
           ),
         ],

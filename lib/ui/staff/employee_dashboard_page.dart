@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' as drift;
 import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
+import '../../core/theme/madar_colors.dart';
 import 'staff_list_page.dart';
 import 'staff_form_page.dart';
 import 'device_management_page.dart';
@@ -138,7 +139,7 @@ class _EmployeeDashboardPageState
     final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
     final textColor = isDark ? const Color(0xFFE6EDF3) : Colors.black87;
     final subTextColor = isDark ? const Color(0xFF8B949E) : Colors.black54;
-    final goldColor = const Color(0xFFC9A84C);
+    final goldColor = MadarColors.gold;
     final borderColor =
         isDark ? const Color(0xFF30363D) : Colors.grey.shade300;
 
@@ -188,14 +189,26 @@ class _EmployeeDashboardPageState
   Widget _buildSectionHeader(Color textColor, String title, IconData icon) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: textColor.withValues(alpha: 0.7)),
-        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: MadarColors.gold.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: MadarColors.gold.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Icon(icon, size: 18, color: MadarColors.gold),
+        ),
+        const SizedBox(width: 10),
         Text(
           title,
           style: TextStyle(
-            fontSize: 18,
+            fontSize: 17,
             fontWeight: FontWeight.bold,
             color: textColor,
+            letterSpacing: 0.2,
           ),
         ),
       ],
@@ -214,7 +227,7 @@ class _EmployeeDashboardPageState
                 Icons.person, cardBg, borderColor,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: _buildMetricCard(
                 '$_pendingVacations', 'إجازات معلقة', Colors.orange,
@@ -223,7 +236,7 @@ class _EmployeeDashboardPageState
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
@@ -233,7 +246,7 @@ class _EmployeeDashboardPageState
                 Icons.money_off, cardBg, borderColor,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: _buildMetricCard(
                 '${_totalSalary.toStringAsFixed(0)} ج.م',
@@ -253,36 +266,90 @@ class _EmployeeDashboardPageState
   ) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 600),
-      curve: Curves.elasticOut,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOutCubic,
       builder: (context, scale, child) {
         return Transform.scale(scale: scale, child: child);
       },
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: cardBg,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor.withValues(alpha: 0.3)),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.25), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              cardBg,
+              Color.alphaBlend(color.withValues(alpha: 0.04), cardBg),
+            ],
+          ),
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: color.withValues(alpha: 0.25),
+                      width: 1,
+                    ),
+                  ),
+                  child: Icon(icon, color: color, size: 22),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
             Text(
               value,
-              style: TextStyle(
-                fontSize: 20,
+              style: const TextStyle(
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: color.withValues(alpha: 0.8),
+                color: Colors.white,
+                letterSpacing: 0.3,
               ),
             ),
           ],
@@ -293,46 +360,67 @@ class _EmployeeDashboardPageState
 
   Widget _buildAttendanceCards(Color cardBg, Color borderColor) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: borderColor.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          _buildAttendanceStat('$_presentToday', 'حاضر', Colors.green),
+          _buildAttendanceStat('$_presentToday', 'حاضر', const Color(0xFF238636), Icons.check_circle_outline),
           const SizedBox(width: 8),
-          _buildAttendanceStat('$_absentToday', 'غائب', Colors.red),
+          _buildAttendanceStat('$_absentToday', 'غائب', const Color(0xFFF85149), Icons.cancel_outlined),
           const SizedBox(width: 8),
-          _buildAttendanceStat('$_lateToday', 'متأخر', Colors.orange),
+          _buildAttendanceStat('$_lateToday', 'متأخر', const Color(0xFFD29922), Icons.access_time),
           const SizedBox(width: 8),
-          _buildAttendanceStat('$_excusedToday', 'إذن', Colors.teal),
+          _buildAttendanceStat('$_excusedToday', 'إذن', const Color(0xFF10B981), Icons.assignment_outlined),
           const SizedBox(width: 8),
-          _buildAttendanceStat('$_onLeaveToday', 'إجازة', Colors.blue),
+          _buildAttendanceStat('$_onLeaveToday', 'إجازة', const Color(0xFF388BFD), Icons.beach_access_outlined),
         ],
       ),
     );
   }
 
-  Widget _buildAttendanceStat(String count, String label, Color color) {
+  Widget _buildAttendanceStat(String count, String label, Color color, IconData icon) {
     return Expanded(
-      child: Column(
-        children: [
-          Text(
-            count,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: color,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(height: 6),
+            Text(
+              count,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8)),
-          ),
-        ],
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color.withValues(alpha: 0.9),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -343,8 +431,15 @@ class _EmployeeDashboardPageState
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: borderColor.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -353,7 +448,7 @@ class _EmployeeDashboardPageState
               Expanded(
                 child: _buildActionBtn(
                   'الموظفين',
-                  Icons.people,
+                  Icons.people_alt_outlined,
                   goldColor,
                   () => Navigator.push(
                     context,
@@ -363,12 +458,12 @@ class _EmployeeDashboardPageState
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: _buildActionBtn(
                   'إضافة موظف',
-                  Icons.person_add,
-                  Colors.green,
+                  Icons.person_add_alt_1_outlined,
+                  const Color(0xFF238636),
                   () async {
                     final result = await Navigator.push<bool>(
                       context,
@@ -382,36 +477,36 @@ class _EmployeeDashboardPageState
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
                 child: _buildActionBtn(
                   'الإجازات ($_pendingVacations)',
-                  Icons.beach_access,
-                  Colors.orange,
+                  Icons.beach_access_outlined,
+                  const Color(0xFFD29922),
                   () => _showSectionList('إجازات معلقة', 'vacations'),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: _buildActionBtn(
                   'السلف',
-                  Icons.money_off,
-                  Colors.redAccent,
+                  Icons.payments_outlined,
+                  const Color(0xFFF85149),
                   () => _showSectionList('سلف معلقة', 'advances'),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
                 child: _buildActionBtn(
                   'أجهزة الحضور',
-                  Icons.device_hub,
-                  Colors.blue,
+                  Icons.fingerprint_rounded,
+                  const Color(0xFF388BFD),
                   () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -420,7 +515,7 @@ class _EmployeeDashboardPageState
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: _buildActionBtn(
                   'حركات معلقة',
@@ -436,14 +531,14 @@ class _EmployeeDashboardPageState
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
                 child: _buildActionBtn(
                   'إعدادات الحضور',
-                  Icons.settings,
-                  Colors.teal,
+                  Icons.settings_outlined,
+                  const Color(0xFF10B981),
                   () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -452,12 +547,12 @@ class _EmployeeDashboardPageState
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: _buildActionBtn(
                   'المرتبات المجمعة',
-                  Icons.payments,
-                  Colors.green,
+                  Icons.receipt_long_outlined,
+                  const Color(0xFF8B5CF6),
                   () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -479,25 +574,36 @@ class _EmployeeDashboardPageState
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
+            color: color.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
           ),
-          child: Column(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: color,
-                  fontWeight: FontWeight.bold,
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
                 ),
-                textAlign: TextAlign.center,
+                child: Icon(icon, color: color, size: 18),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),

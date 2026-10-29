@@ -8,6 +8,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/services/attendance/zkteco_tcp_attendance_source.dart';
 import 'device_user_import_page.dart';
+import '../../core/theme/madar_colors.dart';
 
 class DeviceManagementPage extends ConsumerStatefulWidget {
   const DeviceManagementPage({super.key});
@@ -410,131 +411,294 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
     return PermissionGuard(
       permission: Permission.manageAttendanceDevices,
       child: Scaffold(
+        backgroundColor: MadarColors.bgDark,
         appBar: AppBar(
           title: const Text('إدارة أجهزة الحضور'),
+          backgroundColor: MadarColors.bgDark,
+          foregroundColor: MadarColors.textLight,
+          elevation: 0,
           actions: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.autorenew, size: 18),
-                Switch(value: _autoSync, onChanged: _toggleAutoSync),
-              ],
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: MadarColors.bgCard,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: MadarColors.border),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('مزامنة تلقائية', style: TextStyle(fontSize: 12, color: MadarColors.textSecondary)),
+                  const SizedBox(width: 6),
+                  Switch(
+                    value: _autoSync,
+                    onChanged: _toggleAutoSync,
+                    activeColor: MadarColors.gold,
+                  ),
+                ],
+              ),
             ),
+            const SizedBox(width: 6),
             IconButton(
               icon: _syncingAll
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: MadarColors.gold),
                     )
-                  : const Icon(Icons.sync),
+                  : const Icon(Icons.sync, color: MadarColors.gold),
               onPressed: _syncingAll ? null : _syncAllDevices,
               tooltip: 'مزامنة كل الأجهزة الآن',
             ),
             IconButton(
-              icon: const Icon(Icons.add),
+              icon: const Icon(Icons.add_circle_outline, color: MadarColors.success),
               onPressed: _showAddDeviceDialog,
               tooltip: 'إضافة جهاز',
             ),
+            const SizedBox(width: 8),
           ],
         ),
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator(color: MadarColors.gold))
             : _devices.isEmpty
             ? const Center(
-                child: Text('لا توجد أجهزة مضافة. اضغط + لإضافة جهاز.'),
+                child: Text(
+                  'لا توجد أجهزة مضافة. اضغط + لإضافة جهاز.',
+                  style: TextStyle(color: MadarColors.textSecondary),
+                ),
               )
             : ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 itemCount: _devices.length,
                 itemBuilder: (context, index) {
-                  final device = _devices[index];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
+                  return _buildDeviceCard(_devices[index]);
+                },
+              ),
+      ),
+    );
+  }
+
+  Widget _buildDeviceCard(BiometricDevice device) {
+    final isTcp = device.connectionType == 'tcp_ip';
+    final isSuccess = device.lastSyncStatus == 'success';
+    final isPartial = device.lastSyncStatus == 'partial';
+    final isUnsynced = device.lastSyncStatus == null;
+
+    final statusColor = isSuccess
+        ? MadarColors.success
+        : isPartial
+            ? MadarColors.warning
+            : isUnsynced
+                ? MadarColors.textMuted
+                : MadarColors.error;
+
+    final statusText = isSuccess
+        ? 'متصل'
+        : isPartial
+            ? 'جزئي — راجع غير المطابق'
+            : isUnsynced
+                ? 'لم يتم المزامنة'
+                : 'مفصول/خطأ';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: MadarColors.bgCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSuccess ? MadarColors.border : statusColor.withValues(alpha: 0.3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: (isTcp ? MadarColors.info : MadarColors.gold).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: (isTcp ? MadarColors.info : MadarColors.gold).withValues(alpha: 0.25),
                     ),
-                    child: ListTile(
-                      leading: const Icon(Icons.device_hub),
-                      title: Text(device.name),
-                      subtitle: Text(
-                        '${device.connectionType} - ${device.ipAddress ?? "N/A"}',
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
+                  ),
+                  child: Icon(
+                    isTcp ? Icons.router_outlined : Icons.description_outlined,
+                    color: isTcp ? MadarColors.info : MadarColors.gold,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Text(
-                            device.lastSyncStatus == null
-                                ? 'لم يتم المزامنة'
-                                : device.lastSyncStatus == 'success'
-                                ? 'متصل'
-                                : device.lastSyncStatus == 'partial'
-                                ? 'جزئي — راجع غير المطابق'
-                                : 'مفصول/خطأ',
-                            style: TextStyle(
-                              color: device.lastSyncStatus == null
-                                  ? Colors.grey
-                                  : device.lastSyncStatus == 'success'
-                                  ? Colors.green
-                                  : device.lastSyncStatus == 'partial'
-                                  ? Colors.orange
-                                  : Colors.red,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.wifi_find,
-                              color: Colors.teal,
-                            ),
-                            onPressed: () => _testDeviceConnection(device),
-                            tooltip: 'اختبار الاتصال',
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.group_add,
-                              color: Colors.blue,
-                            ),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      DeviceUserImportPage(device: device),
-                                ),
-                              );
-                            },
-                            tooltip: 'استيراد ومطابقة المستخدمين',
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.sync),
-                            onPressed: () => _syncDevice(device),
-                            tooltip: 'مزامنة الآن',
-                          ),
-                          if (device.connectionType == 'tcp_ip')
-                            IconButton(
-                              icon: const Icon(
-                                Icons.restore_page,
-                                color: Colors.purple,
+                          Expanded(
+                            child: Text(
+                              device.name,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: MadarColors.textLight,
                               ),
-                              onPressed: () => _resyncDevice(device),
-                              tooltip: 'إعادة سحب كامل (تصفير الكيرسور)',
                             ),
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.orange),
-                            onPressed: () => _showEditDeviceDialog(device),
-                            tooltip: 'تعديل البيانات',
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _confirmDeleteDevice(device),
-                            tooltip: 'حذف الجهاز',
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: statusColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  statusText,
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          _buildDeviceBadge(
+                            isTcp ? 'TCP/IP' : 'استيراد ملف',
+                            Icons.settings_ethernet,
+                          ),
+                          if (device.ipAddress != null)
+                            _buildDeviceBadge(
+                              '${device.ipAddress}:${device.port ?? 4370}',
+                              Icons.network_check,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: MadarColors.border),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: () => _syncDevice(device),
+                  icon: const Icon(Icons.sync, size: 16),
+                  label: const Text('مزامنة', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: MadarColors.info.withValues(alpha: 0.15),
+                    foregroundColor: MadarColors.info,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(color: MadarColors.info.withValues(alpha: 0.3)),
                     ),
-                  );
-                },
-              ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DeviceUserImportPage(device: device),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.group_add_outlined, size: 16),
+                  label: const Text('المستخدمين', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: MadarColors.textLight,
+                    side: const BorderSide(color: MadarColors.border),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.wifi_find, size: 20, color: Colors.tealAccent),
+                  onPressed: () => _testDeviceConnection(device),
+                  tooltip: 'اختبار الاتصال',
+                ),
+                if (isTcp)
+                  IconButton(
+                    icon: const Icon(Icons.restore_page, size: 20, color: Colors.purpleAccent),
+                    onPressed: () => _resyncDevice(device),
+                    tooltip: 'إعادة سحب كامل (تصفير الكيرسور)',
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 20, color: MadarColors.gold),
+                  onPressed: () => _showEditDeviceDialog(device),
+                  tooltip: 'تعديل البيانات',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 20, color: MadarColors.error),
+                  onPressed: () => _confirmDeleteDevice(device),
+                  tooltip: 'حذف الجهاز',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeviceBadge(String label, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: MadarColors.bgDark.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: MadarColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: MadarColors.textSecondary),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              color: MadarColors.textSecondary,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ],
       ),
     );
   }

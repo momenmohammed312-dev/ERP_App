@@ -5,6 +5,7 @@ import '../../core/provider/app_database_provider.dart';
 import '../../core/provider/auth_provider.dart';
 import '../../core/database/dao/staff_management_dao.dart';
 import '../../services/staff_management_service.dart';
+import '../../core/theme/madar_colors.dart';
 
 class StaffFormPage extends ConsumerStatefulWidget {
   final Staff? staff;
@@ -161,26 +162,40 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF2D2D2D),
+      backgroundColor: MadarColors.bgDark,
       appBar: AppBar(
         title: Text(
           widget.staff == null ? 'إضافة موظف جديد' : 'تعديل بيانات الموظف',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.blue[700],
-        foregroundColor: Colors.white,
+        backgroundColor: MadarColors.bgDark,
+        foregroundColor: MadarColors.textLight,
+        elevation: 0,
         actions: [
-          TextButton(
-            onPressed: _isLoading ? null : _saveForm,
-            child: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Text('حفظ', style: TextStyle(color: Colors.white)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: ElevatedButton.icon(
+              onPressed: _isLoading ? null : _saveForm,
+              icon: _isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.check, size: 18),
+              label: const Text('حفظ البيانات'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: MadarColors.success,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+            ),
           ),
         ],
       ),
@@ -211,444 +226,472 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     );
   }
 
-  Widget _buildBasicInfo() {
-    return Card(
-      color: const Color(0xFF3A3A3A),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'المعلومات الأساسية',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[400],
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _nameController,
-              style: const TextStyle(color: Colors.white),
-              decoration: _buildInputDecoration('الاسم الكامل', Icons.person),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'هذا الحقل مطلوب';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _positionController,
-              style: const TextStyle(color: Colors.white),
-              decoration: _buildInputDecoration('المنصب (اختياري)', Icons.work),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _biometricIdController,
-              style: const TextStyle(color: Colors.white),
-              keyboardType: TextInputType.text,
-              decoration: _buildInputDecoration(
-                'رقم البصمة بالجهاز (ID في جهاز البصمة)',
-                Icons.fingerprint,
-              ),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: _selectedEmploymentType,
-              decoration: _buildInputDecoration(
-                'نوع التوظيف والراتب',
-                Icons.work_outline,
-              ),
-              items: const [
-                DropdownMenuItem(value: 'full_time', child: Text('دوام كامل (راتب شهري)')),
-                DropdownMenuItem(value: 'weekly', child: Text('راتب أسبوعي')),
-                DropdownMenuItem(value: 'daily', child: Text('يومية (راتب يومي)')),
-                DropdownMenuItem(value: 'part_time', child: Text('دوام جزئي (بالساعة)')),
-                DropdownMenuItem(value: 'contract', child: Text('عقد عمل')),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _selectedEmploymentType = value;
-                  });
-                }
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _basicSalaryController,
-              keyboardType: TextInputType.number,
-              decoration: _buildInputDecoration(
-                _selectedEmploymentType == 'weekly'
-                    ? 'الراتب الأسبوعي'
-                    : _selectedEmploymentType == 'daily'
-                        ? 'اليومية (الراتب اليومي)'
-                        : _selectedEmploymentType == 'full_time'
-                            ? 'الراتب الشهري الأساسي'
-                            : 'الراتب الأساسي',
-                Icons.attach_money,
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'هذا الحقل مطلوب';
-                }
-                if (double.tryParse(value) == null) {
-                  return 'يرجى إدخال رقم صحيح';
-                }
-                return null;
-              },
-            ),
-            // الراتب = 0 يخلي كل بنود خصومات الحضور صفرى دون أي تنبيه
-            if ((double.tryParse(_basicSalaryController.text.trim()) ?? 0) <= 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 6, right: 4),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      size: 16,
-                      color: Colors.amber,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'راتب صفر: لن يتم احتساب خصومات التأخير ولا الانصراف المبكر ولا الغياب لهذا الموظف (سعر الساعة = 0).',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.amber.shade700,
-                        ),
-                      ),
-                    ),
-                  ],
+  Widget _buildFormCard({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: MadarColors.bgCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MadarColors.border),
+      ),
+      padding: const EdgeInsets.all(18.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: MadarColors.gold.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: MadarColors.gold.withValues(alpha: 0.3),
+                  ),
                 ),
+                child: Icon(icon, size: 18, color: MadarColors.gold),
               ),
-            if (_selectedEmploymentType == 'part_time') ...[
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _hourlyRateController,
-                keyboardType: TextInputType.number,
-                decoration: _buildInputDecoration(
-                  'الساعة بالساعة',
-                  Icons.schedule,
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: MadarColors.textLight,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'هذا الحقل مطلوب';
-                  }
-                  if (double.tryParse(value) == null) {
-                    return 'يرجى إدخال رقم صحيح';
-                  }
-                  return null;
-                },
               ),
             ],
-          ],
-        ),
+          ),
+          const SizedBox(height: 16),
+          ...children,
+        ],
       ),
+    );
+  }
+
+  Widget _buildBasicInfo() {
+    return _buildFormCard(
+      title: 'المعلومات الأساسية',
+      icon: Icons.person_outline,
+      children: [
+        TextFormField(
+          controller: _nameController,
+          style: const TextStyle(color: MadarColors.textLight),
+          decoration: _buildInputDecoration('الاسم الكامل *', Icons.person),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'هذا الحقل مطلوب';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _positionController,
+          style: const TextStyle(color: MadarColors.textLight),
+          decoration: _buildInputDecoration('المنصب (اختياري)', Icons.work_outline),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _biometricIdController,
+          style: const TextStyle(color: MadarColors.textLight),
+          keyboardType: TextInputType.text,
+          decoration: _buildInputDecoration(
+            'رقم البصمة بالجهاز (ID في جهاز البصمة)',
+            Icons.fingerprint,
+          ),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          value: _selectedEmploymentType,
+          dropdownColor: MadarColors.bgCard,
+          style: const TextStyle(color: MadarColors.textLight, fontSize: 14),
+          decoration: _buildInputDecoration(
+            'نوع التوظيف والراتب',
+            Icons.badge_outlined,
+          ),
+          items: const [
+            DropdownMenuItem(value: 'full_time', child: Text('دوام كامل (راتب شهري)')),
+            DropdownMenuItem(value: 'weekly', child: Text('راتب أسبوعي')),
+            DropdownMenuItem(value: 'daily', child: Text('يومية (راتب يومي)')),
+            DropdownMenuItem(value: 'part_time', child: Text('دوام جزئي (بالساعة)')),
+            DropdownMenuItem(value: 'contract', child: Text('عقد عمل')),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              setState(() {
+                _selectedEmploymentType = value;
+              });
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _basicSalaryController,
+          style: const TextStyle(color: MadarColors.textLight),
+          keyboardType: TextInputType.number,
+          decoration: _buildInputDecoration(
+            _selectedEmploymentType == 'weekly'
+                ? 'الراتب الأسبوعي'
+                : _selectedEmploymentType == 'daily'
+                    ? 'اليومية (الراتب اليومي)'
+                    : _selectedEmploymentType == 'full_time'
+                        ? 'الراتب الشهري الأساسي'
+                        : 'الراتب الأساسي',
+            Icons.attach_money,
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'هذا الحقل مطلوب';
+            }
+            if (double.tryParse(value) == null) {
+              return 'يرجى إدخال رقم صحيح';
+            }
+            return null;
+          },
+        ),
+        if ((double.tryParse(_basicSalaryController.text.trim()) ?? 0) <= 0)
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 18,
+                  color: Colors.amber,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'راتب صفر: لن يتم احتساب خصومات التأخير ولا الانصراف المبكر ولا الغياب لهذا الموظف (سعر الساعة = 0).',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.amber.shade300,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (_selectedEmploymentType == 'part_time') ...[
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _hourlyRateController,
+            style: const TextStyle(color: MadarColors.textLight),
+            keyboardType: TextInputType.number,
+            decoration: _buildInputDecoration(
+              'السعر بالساعة',
+              Icons.schedule,
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'هذا الحقل مطلوب';
+              }
+              if (double.tryParse(value) == null) {
+                return 'يرجى إدخال رقم صحيح';
+              }
+              return null;
+            },
+          ),
+        ],
+      ],
     );
   }
 
   Widget _buildEmploymentInfo() {
-    return Card(
-      color: const Color(0xFF3A3A3A),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'معلومات التوظيف',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[400],
+    return _buildFormCard(
+      title: 'معلومات التوظيف',
+      icon: Icons.work_outline,
+      children: [
+        TextFormField(
+          controller: _departmentController,
+          style: const TextStyle(color: MadarColors.textLight),
+          decoration: _buildInputDecoration('القسم', Icons.business_outlined),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: MadarColors.bgDark.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: MadarColors.border),
+          ),
+          child: ListTile(
+            leading: const Icon(Icons.calendar_today, color: MadarColors.gold, size: 20),
+            title: const Text('تاريخ التعيين', style: TextStyle(color: MadarColors.textLight, fontSize: 13)),
+            subtitle: Text(
+              _hireDate != null
+                  ? '${_hireDate!.day}/${_hireDate!.month}/${_hireDate!.year}'
+                  : 'اختر تاريخ',
+              style: TextStyle(
+                color: _hireDate != null ? MadarColors.gold : MadarColors.textMuted,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _departmentController,
-              decoration: _buildInputDecoration('القسم', Icons.business),
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              title: const Text('تاريخ التعيين'),
-              subtitle: Text(
-                _hireDate != null
-                    ? '${_hireDate!.day}/${_hireDate!.month}/${_hireDate!.year}'
-                    : 'اختر تاريخ',
-              ),
-              trailing: IconButton(
-                icon: const Icon(Icons.calendar_today),
-                onPressed: _selectHireDate,
-              ),
-            ),
-            if (_selectedEmploymentType == 'contract') ...[
-              const SizedBox(height: 12),
-              ListTile(
-                title: const Text('تاريخ نهاية العقد'),
-                subtitle: Text(
-                  _contractEndDate != null
-                      ? '${_contractEndDate!.day}/${_contractEndDate!.month}/${_contractEndDate!.year}'
-                      : 'اختر تاريخ',
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.event),
-                  onPressed: _selectContractEndDate,
-                ),
-              ),
-            ],
-          ],
+            trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: MadarColors.textMuted),
+            onTap: _selectHireDate,
+          ),
         ),
-      ),
+        if (_selectedEmploymentType == 'contract') ...[
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: MadarColors.bgDark.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: MadarColors.border),
+            ),
+            child: ListTile(
+              leading: const Icon(Icons.event_outlined, color: MadarColors.gold, size: 20),
+              title: const Text('تاريخ نهاية العقد', style: TextStyle(color: MadarColors.textLight, fontSize: 13)),
+              subtitle: Text(
+                _contractEndDate != null
+                    ? '${_contractEndDate!.day}/${_contractEndDate!.month}/${_contractEndDate!.year}'
+                    : 'اختر تاريخ',
+                style: TextStyle(
+                  color: _contractEndDate != null ? MadarColors.gold : MadarColors.textMuted,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: MadarColors.textMuted),
+              onTap: _selectContractEndDate,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
   Widget _buildContactInfo() {
-    return Card(
-      color: const Color(0xFF3A3A3A),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'معلومات الاتصال',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[400],
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _nationalIdController,
-              decoration: _buildInputDecoration('الرقم القومي', Icons.badge),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: _buildInputDecoration('رقم الهاتف', Icons.phone),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: _buildInputDecoration(
-                'البريد الإلكتروني',
-                Icons.email,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _addressController,
-              maxLines: 3,
-              decoration: _buildInputDecoration('العنوان', Icons.home),
-            ),
-          ],
+    return _buildFormCard(
+      title: 'معلومات الاتصال',
+      icon: Icons.contact_phone_outlined,
+      children: [
+        TextFormField(
+          controller: _nationalIdController,
+          style: const TextStyle(color: MadarColors.textLight),
+          decoration: _buildInputDecoration('الرقم القومي', Icons.badge_outlined),
         ),
-      ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _phoneController,
+          style: const TextStyle(color: MadarColors.textLight),
+          keyboardType: TextInputType.phone,
+          decoration: _buildInputDecoration('رقم الهاتف', Icons.phone_outlined),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _emailController,
+          style: const TextStyle(color: MadarColors.textLight),
+          keyboardType: TextInputType.emailAddress,
+          decoration: _buildInputDecoration(
+            'البريد الإلكتروني',
+            Icons.email_outlined,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _addressController,
+          style: const TextStyle(color: MadarColors.textLight),
+          maxLines: 2,
+          decoration: _buildInputDecoration('العنوان', Icons.home_outlined),
+        ),
+      ],
     );
   }
 
   Widget _buildBankInfo() {
-    return Card(
-      color: const Color(0xFF3A3A3A),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'معلومات البنك',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[400],
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _bankNameController,
-              decoration: _buildInputDecoration(
-                'اسم البنك',
-                Icons.account_balance,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _bankAccountController,
-              decoration: _buildInputDecoration(
-                'رقم الحساب',
-                Icons.credit_card,
-              ),
-            ),
-          ],
+    return _buildFormCard(
+      title: 'معلومات الحساب البنكي',
+      icon: Icons.account_balance_outlined,
+      children: [
+        TextFormField(
+          controller: _bankNameController,
+          style: const TextStyle(color: MadarColors.textLight),
+          decoration: _buildInputDecoration(
+            'اسم البنك',
+            Icons.account_balance,
+          ),
         ),
-      ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _bankAccountController,
+          style: const TextStyle(color: MadarColors.textLight),
+          decoration: _buildInputDecoration(
+            'رقم الحساب البنكي',
+            Icons.credit_card,
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildEmergencyContact() {
-    return Card(
-      color: const Color(0xFF3A3A3A),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'معلومات الطوارئ',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[400],
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _emergencyContactController,
-              decoration: _buildInputDecoration(
-                'اسم الشخص للطوارئ',
-                Icons.contact_phone,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _emergencyPhoneController,
-              keyboardType: TextInputType.phone,
-              decoration: _buildInputDecoration(
-                'رقم هاتف الطوارئ',
-                Icons.phone_in_talk,
-              ),
-            ),
-          ],
+    return _buildFormCard(
+      title: 'جهة الاتصال في حالات الطوارئ',
+      icon: Icons.emergency_outlined,
+      children: [
+        TextFormField(
+          controller: _emergencyContactController,
+          style: const TextStyle(color: MadarColors.textLight),
+          decoration: _buildInputDecoration(
+            'اسم شخص الطوارئ',
+            Icons.person_outline,
+          ),
         ),
-      ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _emergencyPhoneController,
+          style: const TextStyle(color: MadarColors.textLight),
+          keyboardType: TextInputType.phone,
+          decoration: _buildInputDecoration(
+            'رقم هاتف الطوارئ',
+            Icons.phone_in_talk_outlined,
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildNotes() {
-    return Card(
-      color: const Color(0xFF3A3A3A),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'ملاحظات',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[400],
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _notesController,
-              maxLines: 4,
-              style: const TextStyle(color: Colors.white),
-              decoration: _buildInputDecoration('ملاحظات إضافية', Icons.note),
-            ),
-          ],
+    return _buildFormCard(
+      title: 'ملاحظات إضافية',
+      icon: Icons.note_alt_outlined,
+      children: [
+        TextFormField(
+          controller: _notesController,
+          maxLines: 3,
+          style: const TextStyle(color: MadarColors.textLight),
+          decoration: _buildInputDecoration('ملاحظات عن الموظف', Icons.notes),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildWorkScheduleSection() {
-    return Card(
-      color: const Color(0xFF3A3A3A),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'جدول العمل',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[400],
-                fontWeight: FontWeight.bold,
-              ),
+    return _buildFormCard(
+      title: 'جدول مواعيد العمل',
+      icon: Icons.schedule_outlined,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: MadarColors.bgDark.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: MadarColors.border),
+          ),
+          child: SwitchListTile(
+            title: const Text(
+              'استخدام جدول العمل الافتراضي',
+              style: TextStyle(color: MadarColors.textLight, fontWeight: FontWeight.bold, fontSize: 14),
             ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              title: const Text(
-                'استخدام الجدول الافتراضي',
-                style: TextStyle(color: Colors.white),
-              ),
-              subtitle: Text(
-                _useDefaultSchedule ? 'من إعدادات الحضور العامة' : 'جدول مخصص لهذا الموظف',
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-              value: _useDefaultSchedule,
-              onChanged: (v) => setState(() => _useDefaultSchedule = v),
-              activeColor: Colors.blue[400],
+            subtitle: Text(
+              _useDefaultSchedule ? 'مطبق من إعدادات الحضور العامة' : 'جدول مخصص لهذا الموظف',
+              style: const TextStyle(color: MadarColors.textMuted, fontSize: 12),
             ),
-            if (!_useDefaultSchedule) ...[
-              const Divider(color: Colors.white24),
-              ListTile(
-                title: const Text('وقت بدء العمل', style: TextStyle(color: Colors.white)),
-                subtitle: Text(_formatTime(_workScheduleStart), style: const TextStyle(color: Colors.white70)),
-                trailing: const Icon(Icons.access_time, color: Colors.blue),
-                onTap: () async {
-                  final picked = await showTimePicker(
-                    context: context,
-                    initialTime: _workScheduleStart,
-                  );
-                  if (picked != null) setState(() => _workScheduleStart = picked);
-                },
-              ),
-              ListTile(
-                title: const Text('وقت نهاية العمل', style: TextStyle(color: Colors.white)),
-                subtitle: Text(_formatTime(_workScheduleEnd), style: const TextStyle(color: Colors.white70)),
-                trailing: const Icon(Icons.access_time, color: Colors.blue),
-                onTap: () async {
-                  final picked = await showTimePicker(
-                    context: context,
-                    initialTime: _workScheduleEnd,
-                  );
-                  if (picked != null) setState(() => _workScheduleEnd = picked);
-                },
-              ),
-              const SizedBox(height: 8),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Text('أيام العمل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  _buildScheduleDayChip('sun', 'الأحد'),
-                  _buildScheduleDayChip('mon', 'الاثنين'),
-                  _buildScheduleDayChip('tue', 'الثلاثاء'),
-                  _buildScheduleDayChip('wed', 'الأربعاء'),
-                  _buildScheduleDayChip('thu', 'الخميس'),
-                  _buildScheduleDayChip('fri', 'الجمعة'),
-                  _buildScheduleDayChip('sat', 'السبت'),
-                ],
-              ),
-            ],
-          ],
+            value: _useDefaultSchedule,
+            onChanged: (v) => setState(() => _useDefaultSchedule = v),
+            activeColor: MadarColors.gold,
+          ),
         ),
-      ),
+        if (!_useDefaultSchedule) ...[
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: MadarColors.bgDark.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: MadarColors.border),
+            ),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.login, color: MadarColors.success, size: 20),
+                  title: const Text('وقت بدء العمل', style: TextStyle(color: MadarColors.textLight, fontSize: 13)),
+                  subtitle: Text(_formatTime(_workScheduleStart), style: const TextStyle(color: MadarColors.gold, fontWeight: FontWeight.bold)),
+                  trailing: const Icon(Icons.access_time, color: MadarColors.textMuted),
+                  onTap: () async {
+                    final picked = await showTimePicker(
+                      context: context,
+                      initialTime: _workScheduleStart,
+                    );
+                    if (picked != null) setState(() => _workScheduleStart = picked);
+                  },
+                ),
+                const Divider(height: 1, color: MadarColors.border),
+                ListTile(
+                  leading: const Icon(Icons.logout, color: MadarColors.error, size: 20),
+                  title: const Text('وقت نهاية العمل', style: TextStyle(color: MadarColors.textLight, fontSize: 13)),
+                  subtitle: Text(_formatTime(_workScheduleEnd), style: const TextStyle(color: MadarColors.gold, fontWeight: FontWeight.bold)),
+                  trailing: const Icon(Icons.access_time, color: MadarColors.textMuted),
+                  onTap: () async {
+                    final picked = await showTimePicker(
+                      context: context,
+                      initialTime: _workScheduleEnd,
+                    );
+                    if (picked != null) setState(() => _workScheduleEnd = picked);
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              'أيام العمل الأسبوعية',
+              style: TextStyle(
+                color: MadarColors.textLight,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _buildScheduleDayChip('sun', 'الأحد'),
+              _buildScheduleDayChip('mon', 'الاثنين'),
+              _buildScheduleDayChip('tue', 'الثلاثاء'),
+              _buildScheduleDayChip('wed', 'الأربعاء'),
+              _buildScheduleDayChip('thu', 'الخميس'),
+              _buildScheduleDayChip('fri', 'الجمعة'),
+              _buildScheduleDayChip('sat', 'السبت'),
+            ],
+          ),
+        ],
+      ],
     );
   }
 
   Widget _buildScheduleDayChip(String key, String label) {
     final selected = _workDays[key] ?? false;
     return FilterChip(
-      label: Text(label, style: TextStyle(color: selected ? Colors.white : Colors.white70)),
+      label: Text(
+        label,
+        style: TextStyle(
+          color: selected ? Colors.white : MadarColors.textMuted,
+          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+          fontSize: 12,
+        ),
+      ),
       selected: selected,
-      selectedColor: Colors.green.withValues(alpha: 0.3),
-      checkmarkColor: Colors.green,
+      selectedColor: MadarColors.success.withValues(alpha: 0.25),
+      checkmarkColor: MadarColors.success,
+      backgroundColor: MadarColors.bgDark.withValues(alpha: 0.5),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: selected ? MadarColors.success : MadarColors.border,
+        ),
+      ),
       onSelected: (val) => setState(() => _workDays[key] = val),
     );
   }
@@ -656,18 +699,23 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   InputDecoration _buildInputDecoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.white70),
-      prefixIcon: Icon(icon, color: Colors.blue[400]),
+      labelStyle: const TextStyle(color: MadarColors.textSecondary, fontSize: 13),
+      prefixIcon: Icon(icon, color: MadarColors.gold, size: 20),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey[300]!),
+        borderSide: const BorderSide(color: MadarColors.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: MadarColors.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.blue[700]!),
+        borderSide: const BorderSide(color: MadarColors.gold, width: 1.5),
       ),
       filled: true,
-      fillColor: const Color(0xFF4A4A4A),
+      fillColor: MadarColors.bgDark.withValues(alpha: 0.6),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );
   }
 

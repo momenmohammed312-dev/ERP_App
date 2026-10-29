@@ -1,4 +1,5 @@
 import 'dart:developer' as developer;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
@@ -840,8 +841,20 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
   Map<int, String> _variantNames = {};
   bool _isLoadingItems = false;
 
-  Future<void> _loadInvoiceItems() async {
-    if (_isExpanded && _invoiceItems.isEmpty) {
+  String _formatCustomerName(String? name) {
+    if (name == null || name.trim().isEmpty) return 'عميل نقدي';
+    final trimmed = name.trim();
+    if (trimmed.startsWith('__SYNC_CUST_') ||
+        trimmed.startsWith('TEMP_') ||
+        trimmed.startsWith('CUST_') ||
+        trimmed == 'null') {
+      return 'عميل نقدي';
+    }
+    return trimmed;
+  }
+
+  Future<void> _loadInvoiceItems({bool force = false}) async {
+    if ((_isExpanded || force) && _invoiceItems.isEmpty) {
       setState(() => _isLoadingItems = true);
       try {
         final items = await widget.db.invoiceDao.getItemsWithProductsByInvoice(
@@ -867,13 +880,286 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error loading invoice items: $e'),
+              content: Text('خطأ في تحميل عناصر الفاتورة: $e'),
               backgroundColor: Colors.red,
             ),
           );
         }
       }
     }
+  }
+
+  Future<void> _showInvoiceDetailsDialog(BuildContext modalContext) async {
+    if (_invoiceItems.isEmpty) {
+      await _loadInvoiceItems(force: true);
+    }
+    if (!mounted || !modalContext.mounted) return;
+
+    final remaining = widget.invoice.totalAmount - widget.invoice.paidAmount;
+    final isFullyPaid = remaining <= 0.001;
+    final formattedNumber = displayInvoiceNumber(widget.invoice.invoiceNumber, widget.invoice.id) ?? '';
+
+    await showDialog(
+      context: modalContext,
+      builder: (dialogCtx) => Directionality(
+        textDirection: ui.TextDirection.rtl,
+        child: Dialog(
+          backgroundColor: const Color(0xFF1E222B),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.1),
+            ),
+          ),
+          child: Container(
+            width: 620,
+            constraints: const BoxConstraints(maxHeight: 700),
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Dialog Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: MadarColors.gold.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.receipt_long_rounded,
+                            color: MadarColors.gold,
+                            size: 24,
+                          ),
+                        ),
+                        const Gap(12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'تفاصيل الفاتورة #$formattedNumber',
+                              style: const TextStyle(
+                                fontFamily: 'NotoSansArabic',
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              DateFormat('yyyy-MM-dd HH:mm').format(widget.invoice.date.toLocal()),
+                              style: TextStyle(
+                                fontFamily: 'NotoSansArabic',
+                                fontSize: 12,
+                                color: Colors.white.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                      onPressed: () => Navigator.of(dialogCtx).pop(),
+                    ),
+                  ],
+                ),
+                const Gap(16),
+
+                // Info Badges
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161B22),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildInfoItem('العميل', _formatCustomerName(widget.invoice.customerName), Icons.person_outline),
+                      _buildInfoItem(
+                        'حالة السداد',
+                        isFullyPaid ? 'مدفوعة بالكامل' : 'متبقي ${remaining.toStringAsFixed(2)} ج.م',
+                        isFullyPaid ? Icons.check_circle_outline : Icons.pending_outlined,
+                        color: isFullyPaid ? Colors.greenAccent : Colors.orangeAccent,
+                      ),
+                      if (widget.hasReturn)
+                        _buildInfoItem('المرتجع', 'يوجد مرتجع', Icons.undo_rounded, color: Colors.redAccent),
+                    ],
+                  ),
+                ),
+                const Gap(16),
+
+                // Items list / table
+                const Text(
+                  'المنتجات والبنود',
+                  style: TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const Gap(8),
+                Flexible(
+                  child: _isLoadingItems
+                      ? const Center(child: CircularProgressIndicator())
+                      : _invoiceItems.isEmpty
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(20),
+                                child: Text('لا توجد منتجات مسجلة في الفاتورة', style: TextStyle(color: Colors.white60)),
+                              ),
+                            )
+                          : Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: SingleChildScrollView(
+                                  child: DataTable(
+                                    headingRowColor: WidgetStateProperty.all(const Color(0xFF161B22)),
+                                    dataRowColor: WidgetStateProperty.all(Colors.transparent),
+                                    columns: const [
+                                      DataColumn(label: Text('المنتج', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                                      DataColumn(label: Text('الكمية', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                                      DataColumn(label: Text('سعر الوحدة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                                      DataColumn(label: Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                                    ],
+                                    rows: _invoiceItems.map((itemWithProduct) {
+                                      final item = itemWithProduct.$1;
+                                      final product = itemWithProduct.$2;
+                                      final unitPrice = item.quantity > 0 ? item.price / item.quantity : 0.0;
+                                      final baseName = product?.name ?? 'منتج ${item.productId}';
+                                      final vName = item.variantId != null ? _variantNames[item.variantId] : null;
+                                      final fullName = (vName != null && !baseName.endsWith('— $vName')) ? '$baseName — $vName' : baseName;
+
+                                      return DataRow(
+                                        cells: [
+                                          DataCell(Text(fullName, style: const TextStyle(color: Colors.white70))),
+                                          DataCell(Text('${item.quantity}', style: const TextStyle(color: Colors.white70))),
+                                          DataCell(Text('${unitPrice.toStringAsFixed(2)} ج.م', style: const TextStyle(color: Colors.white70))),
+                                          DataCell(Text('${item.price.toStringAsFixed(2)} ج.م', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent))),
+                                        ],
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                              ),
+                            ),
+                ),
+                const Gap(16),
+
+                // Financial Footer Summary
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161B22),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: MadarColors.gold.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('المدفوع: ${widget.invoice.paidAmount.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'NotoSansArabic', color: Colors.white70, fontSize: 13)),
+                          if (remaining > 0.001)
+                            Text('المتبقي: ${remaining.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'NotoSansArabic', color: Colors.orangeAccent, fontSize: 13, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Text('الإجمالي الكلي: ', style: TextStyle(fontFamily: 'NotoSansArabic', color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                          Text('${widget.invoice.totalAmount.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'NotoSansArabic', color: Color(0xFF10B981), fontSize: 18, fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Gap(18),
+
+                // Action Buttons in Dialog
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => Navigator.of(dialogCtx).pop(),
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white70),
+                      child: const Text('إغلاق', style: TextStyle(fontFamily: 'NotoSansArabic')),
+                    ),
+                    const SizedBox(width: 8),
+                    if (!widget.isVoided && widget.onEditInvoice != null)
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(dialogCtx).pop();
+                          widget.onEditInvoice?.call();
+                        },
+                        icon: const Icon(Icons.edit_note, size: 18),
+                        label: const Text('تعديل الفاتورة', style: TextStyle(fontFamily: 'NotoSansArabic')),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
+                      ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(dialogCtx).pop();
+                        widget.onPrint();
+                      },
+                      icon: const Icon(Icons.print, size: 18),
+                      label: const Text('طباعة', style: TextStyle(fontFamily: 'NotoSansArabic')),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoItem(String title, String value, IconData icon, {Color? color}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color ?? Colors.white54),
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontFamily: 'NotoSansArabic',
+                fontSize: 10.5,
+                color: Colors.white.withValues(alpha: 0.5),
+              ),
+            ),
+            Text(
+              value,
+              style: TextStyle(
+                fontFamily: 'NotoSansArabic',
+                fontSize: 12.5,
+                fontWeight: FontWeight.bold,
+                color: color ?? Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   @override
@@ -941,13 +1227,21 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.invoice.customerName ?? 'عميل غير محدد',
-              style: const TextStyle(color: Colors.white70),
+              _formatCustomerName(widget.invoice.customerName),
+              style: const TextStyle(
+                fontFamily: 'NotoSansArabic',
+                color: Colors.white70,
+                fontSize: 13,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               DateFormat('yyyy-MM-dd HH:mm').format(widget.invoice.date.toLocal()),
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: const TextStyle(
+                fontFamily: 'NotoSansArabic',
+                color: Colors.white54,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -961,19 +1255,37 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
                 Text(
                   '${widget.invoice.totalAmount.toStringAsFixed(2)} ج.م',
                   style: const TextStyle(
+                    fontFamily: 'NotoSansArabic',
                     fontWeight: FontWeight.bold,
-                    color: Colors.greenAccent, // Green accent for dark theme
+                    color: Colors.greenAccent,
                   ),
                 ),
                 Text(
                   '${widget.invoice.paidAmount.toStringAsFixed(2)} ج.م',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  style: const TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
             const SizedBox(width: 8),
+            // Eye icon for quick view/preview modal
             IconButton(
-              icon: const Icon(Icons.print, size: 20, color: Colors.orange),
+              icon: const Icon(Icons.visibility_outlined, size: 20, color: Color(0xFF388BFD)),
+              onPressed: () => _showInvoiceDetailsDialog(context),
+              tooltip: 'معاينة تفاصيل الفاتورة',
+            ),
+            // Direct edit invoice button
+            if (!widget.isVoided && widget.onEditInvoice != null)
+              IconButton(
+                icon: const Icon(Icons.edit_note_rounded, size: 22, color: Colors.amberAccent),
+                onPressed: widget.onEditInvoice,
+                tooltip: 'تعديل الفاتورة',
+              ),
+            IconButton(
+              icon: const Icon(Icons.print_outlined, size: 20, color: Colors.orangeAccent),
               onPressed: widget.onPrint,
               tooltip: 'طباعة الفاتورة',
             ),
@@ -984,7 +1296,7 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
             ),
             if (!widget.isVoided && widget.onEditDate != null)
               IconButton(
-                icon: const Icon(Icons.edit_calendar, size: 20, color: Colors.blueAccent),
+                icon: const Icon(Icons.edit_calendar_outlined, size: 20, color: Colors.tealAccent),
                 onPressed: widget.onEditDate,
                 tooltip: 'تعديل تاريخ الفاتورة',
               ),

@@ -6,7 +6,12 @@
 # never ship a build with sync or licensing silently broken.
 #
 # Usage (from repo root):
-#   .\build_release.ps1
+#   .\build_release.ps1               # Standard licensed build (requires activation)
+#   .\build_release.ps1 -FreeVersion  # Free/Pre-activated build (bypasses activation screen)
+
+param(
+    [switch]$FreeVersion
+)
 
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Get-Location).Path
@@ -66,11 +71,20 @@ $appVersion = ($versionLine.Line -replace '^version:\s*', '').Trim()
 # 2) Build
 # ────────────────────────────────────────────────────────────────────────────
 Write-Host "=== Building release v$appVersion ===" -ForegroundColor Cyan
-# LICENSE_PUBLIC_KEY is not secret, but it IS mandatory: it is compiled into the
-# binary and is the only thing that can verify an RS256 lease offline. Escape
-# the literal newlines because --dart-define cannot carry real ones; the app
-# side (LicenseConfig.normalizePem) converts them back.
-$publicKeyPem = ($secrets.LICENSE_PUBLIC_KEY -replace "`r`n", '\n' -replace "`n", '\n')
+
+# Robust defensive extraction for LICENSE_PUBLIC_KEY
+$rawKey = if ($secrets.LICENSE_PUBLIC_KEY.value) {
+    [string]$secrets.LICENSE_PUBLIC_KEY.value
+} else {
+    [string]$secrets.LICENSE_PUBLIC_KEY
+}
+$publicKeyPem = ($rawKey -replace "`r`n", '\n' -replace "`n", '\n').Trim()
+
+if (-not $publicKeyPem.StartsWith('-----BEGIN PUBLIC KEY-----')) {
+    Write-Host "[ABORT] LICENSE_PUBLIC_KEY is invalid or malformed! Must start with '-----BEGIN PUBLIC KEY-----'." -ForegroundColor Red
+    exit 1
+}
+
 $buildArgs = @(
     'build', 'windows', '--release',
     "--dart-define=SUPABASE_URL=$($secrets.SUPABASE_URL)",
@@ -78,6 +92,15 @@ $buildArgs = @(
     "--dart-define=LICENSE_SECRET_KEY=$($secrets.LICENSE_SECRET_KEY)",
     "--dart-define=LICENSE_PUBLIC_KEY=$publicKeyPem"
 )
+
+if ($FreeVersion) {
+    Write-Host ">>> [MODE] FREE VERSION ACTIVATED (--dart-define=FREE_VERSION=true) <<<" -ForegroundColor Yellow
+    Write-Host ">>> Application will run completely unlocked without requiring client activation." -ForegroundColor Yellow
+    $buildArgs += "--dart-define=FREE_VERSION=true"
+} else {
+    Write-Host "[MODE] Standard Licensed Version (requires client activation via .madarlicense or cloud key)." -ForegroundColor Cyan
+}
+
 & flutter @buildArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ABORT] flutter build windows --release failed." -ForegroundColor Red
@@ -135,6 +158,11 @@ Write-Host "[POST-BUILD] Sanity smoke-test passed! Application launches cleanly.
 Write-Host '' -ForegroundColor Green
 Write-Host "[DONE] Release build succeeded and verified." -ForegroundColor Green
 Write-Host "[DONE] Version: $appVersion" -ForegroundColor Green
+if ($FreeVersion) {
+    Write-Host "[DONE] License Mode: FREE VERSION (Unlocked - No activation needed)" -ForegroundColor Yellow
+} else {
+    Write-Host "[DONE] License Mode: STANDARD LICENSED (Client activation required)" -ForegroundColor Cyan
+}
 Write-Host "[DONE] Output: $outputPath" -ForegroundColor Green
 Write-Host "[IMPORTANT] To deliver to client: Copy the ENTIRE folder 'build\windows\x64\runner\Release\' (including 'data/' and all .dll files), not just pos_offline_desktop.exe alone." -ForegroundColor Yellow
 Write-Host '' -ForegroundColor Green

@@ -14,7 +14,6 @@ import 'staff_form_page.dart';
 import 'staff_details_page.dart';
 import 'attendance_page.dart';
 import 'biometric_enrollment_page.dart';
-import 'employee_dashboard_page.dart';
 
 class StaffListPage extends ConsumerStatefulWidget {
   const StaffListPage({super.key});
@@ -457,18 +456,6 @@ class _StaffListPageState extends ConsumerState<StaffListPage> {
                 ? null
                 : _importAttendance,
             tooltip: 'مزامنة الحضور من أجهزة البصمة',
-          ),
-          IconButton(
-            icon: const Icon(Icons.dashboard),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const EmployeeDashboardPage(),
-                ),
-              );
-            },
-            tooltip: 'لوحة الموظفين',
           ),
           IconButton(
             icon: const Icon(Icons.refresh),

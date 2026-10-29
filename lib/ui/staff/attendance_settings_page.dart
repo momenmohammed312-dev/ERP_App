@@ -5,6 +5,7 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/services/attendance/attendance_calculation_engine.dart';
 import 'package:pos_offline_desktop/widgets/permission_guard.dart';
+import '../../core/theme/madar_colors.dart';
 
 class AttendanceSettingsPage extends ConsumerStatefulWidget {
   const AttendanceSettingsPage({super.key});
@@ -219,18 +220,42 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
     return PermissionGuard(
       permission: Permission.manageAttendance,
       child: Scaffold(
+        backgroundColor: MadarColors.bgDark,
         appBar: AppBar(
           title: const Text('إعدادات الحضور والانصراف'),
+          backgroundColor: MadarColors.bgDark,
+          foregroundColor: MadarColors.textLight,
+          elevation: 0,
           actions: [
-            IconButton(
-              icon: const Icon(Icons.save),
-              onPressed: _isSaving ? null : _saveSettings,
-              tooltip: 'حفظ',
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: ElevatedButton.icon(
+                onPressed: _isSaving ? null : _saveSettings,
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.check, size: 18),
+                label: const Text('حفظ الإعدادات'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: MadarColors.success,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+              ),
             ),
           ],
         ),
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator(color: MadarColors.gold))
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -254,9 +279,10 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
       icon: Icons.schedule,
       children: [
         ListTile(
-          title: const Text('وقت بدء العمل'),
-          subtitle: Text(_formatTime(_workStart)),
-          trailing: const Icon(Icons.access_time),
+          leading: const Icon(Icons.login, color: MadarColors.success, size: 20),
+          title: const Text('وقت بدء العمل', style: TextStyle(color: MadarColors.textLight, fontSize: 14)),
+          subtitle: Text(_formatTime(_workStart), style: const TextStyle(color: MadarColors.gold, fontWeight: FontWeight.bold)),
+          trailing: const Icon(Icons.access_time, color: MadarColors.textMuted),
           onTap: () async {
             final picked = await showTimePicker(
               context: context,
@@ -265,11 +291,12 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (picked != null) setState(() => _workStart = picked);
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
-          title: const Text('وقت نهاية العمل'),
-          subtitle: Text(_formatTime(_workEnd)),
-          trailing: const Icon(Icons.access_time),
+          leading: const Icon(Icons.logout, color: MadarColors.error, size: 20),
+          title: const Text('وقت نهاية العمل', style: TextStyle(color: MadarColors.textLight, fontSize: 14)),
+          subtitle: Text(_formatTime(_workEnd), style: const TextStyle(color: MadarColors.gold, fontWeight: FontWeight.bold)),
+          trailing: const Icon(Icons.access_time, color: MadarColors.textMuted),
           onTap: () async {
             final picked = await showTimePicker(
               context: context,
@@ -278,29 +305,41 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (picked != null) setState(() => _workEnd = picked);
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         const Padding(
           padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Text('أيام العمل', style: TextStyle(fontWeight: FontWeight.bold)),
+          child: Text(
+            'أيام العمل الأسبوعية',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: MadarColors.textLight,
+              fontSize: 13,
+            ),
+          ),
         ),
-        Wrap(
-          spacing: 8,
-          children: [
-            _buildDayChip('sun', 'الأحد'),
-            _buildDayChip('mon', 'الاثنين'),
-            _buildDayChip('tue', 'الثلاثاء'),
-            _buildDayChip('wed', 'الأربعاء'),
-            _buildDayChip('thu', 'الخميس'),
-            _buildDayChip('fri', 'الجمعة'),
-            _buildDayChip('sat', 'السبت'),
-          ],
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _buildDayChip('sun', 'الأحد'),
+              _buildDayChip('mon', 'الاثنين'),
+              _buildDayChip('tue', 'الثلاثاء'),
+              _buildDayChip('wed', 'الأربعاء'),
+              _buildDayChip('thu', 'الخميس'),
+              _buildDayChip('fri', 'الجمعة'),
+              _buildDayChip('sat', 'السبت'),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
-          title: const Text('ساعات العمل اليومية'),
-          subtitle: Text('${_overtimeThresholdHours.toStringAsFixed(1)} ساعة'),
-          trailing: const Icon(Icons.timer),
+          leading: const Icon(Icons.timer_outlined, color: MadarColors.info, size: 20),
+          title: const Text('ساعات العمل اليومية', style: TextStyle(color: MadarColors.textLight, fontSize: 14)),
+          subtitle: Text('${_overtimeThresholdHours.toStringAsFixed(1)} ساعة', style: const TextStyle(color: MadarColors.gold, fontWeight: FontWeight.bold)),
+          trailing: const Icon(Icons.edit_outlined, size: 18, color: MadarColors.textMuted),
           onTap: () async {
             final controller = TextEditingController(
               text: _overtimeThresholdHours.toString(),
@@ -339,10 +378,24 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
   Widget _buildDayChip(String key, String label) {
     final selected = _workDays[key] ?? false;
     return FilterChip(
-      label: Text(label),
+      label: Text(
+        label,
+        style: TextStyle(
+          color: selected ? Colors.white : MadarColors.textMuted,
+          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+          fontSize: 12,
+        ),
+      ),
       selected: selected,
-      selectedColor: Colors.green.withValues(alpha: 0.2),
-      checkmarkColor: Colors.green,
+      selectedColor: MadarColors.success.withValues(alpha: 0.25),
+      checkmarkColor: MadarColors.success,
+      backgroundColor: MadarColors.bgDark.withValues(alpha: 0.5),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: selected ? MadarColors.success : MadarColors.border,
+        ),
+      ),
       onSelected: (val) => setState(() => _workDays[key] = val),
     );
   }
@@ -382,7 +435,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (result != null) setState(() => _gracePeriodMinutes = result);
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
           title: const Text('مضاعف خصم التأخير'),
           subtitle: Text(
@@ -445,7 +498,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             }
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
           title: const Text('خصم الغياب (اليوم بيوم)'),
           subtitle: Text(
@@ -527,7 +580,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             }
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
           title: const Text('مضاعف خصم يوم الغياب'),
           subtitle: Text('اليوم الغائب يُخصم بمعدل ${_absencePenaltyDaysMultiplier.toStringAsFixed(1)} يوم'),
@@ -546,7 +599,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             },
           ),
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
           title: const Text('مضاعف العمل الإضافي'),
           subtitle: Text('x${_overtimeRateMultiplier.toStringAsFixed(1)}'),
@@ -594,7 +647,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (result != null) setState(() => _overtimeRateMultiplier = result);
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
           title: const Text('مهلة بداية الإضافي'),
           subtitle: Text(
@@ -637,7 +690,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             }
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
           title: const Text('مكافأة الحضور الكامل (الانتظام)'),
           subtitle: Text(
@@ -680,14 +733,14 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             }
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         SwitchListTile(
           title: const Text('تفعيل مكافأة الانتظام'),
           subtitle: const Text('إضافة مكافأة الحضور الكامل تلقائياً عند احتساب المرتب'),
           value: _perfectAttendanceEnabled,
           onChanged: (val) => setState(() => _perfectAttendanceEnabled = val),
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         SwitchListTile(
           title: const Text('تطبيق المكافأة على الموظفين بالأسبوع'),
           subtitle: const Text('افتراضياً غير مفعلة لموظفي الأسبوعي لمنع تكرار صرفها أسبوعياً'),
@@ -720,7 +773,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
           ),
         ),
         if (_absencesGenerated > 0) ...[
-          const Divider(height: 1),
+          const Divider(height: 1, color: MadarColors.border),
           ListTile(
             leading: const Icon(Icons.check_circle, color: Colors.green),
             title: Text('تم توليد $_absencesGenerated سجل غياب'),
@@ -735,27 +788,48 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
     required IconData icon,
     required List<Widget> children,
   }) {
-    return Card(
+    return Container(
+      decoration: BoxDecoration(
+        color: MadarColors.bgCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MadarColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             child: Row(
               children: [
-                Icon(icon, size: 20, color: Colors.blue[700]),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: MadarColors.gold.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: MadarColors.gold.withValues(alpha: 0.3)),
+                  ),
+                  child: Icon(icon, size: 18, color: MadarColors.gold),
+                ),
+                const SizedBox(width: 10),
                 Text(
                   title,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue[700],
+                    color: MadarColors.textLight,
                   ),
                 ),
               ],
             ),
           ),
+          const Divider(height: 1, color: MadarColors.border),
           ...children,
         ],
       ),
