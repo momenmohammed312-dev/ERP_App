@@ -306,6 +306,25 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
   Future<void> addAdvance(StaffAdvancesCompanion entry) =>
       into(staffAdvances).insert(entry);
 
+  Future<void> approveAdvance(int advanceId, [String? approvedBy]) =>
+      (update(staffAdvances)..where((a) => a.id.equals(advanceId))).write(
+        StaffAdvancesCompanion(
+          status: const Value('approved'),
+          approvedBy: Value(approvedBy),
+          approvedAt: Value(DateTime.now()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Future<void> rejectAdvance(int advanceId, [String? reason]) =>
+      (update(staffAdvances)..where((a) => a.id.equals(advanceId))).write(
+        StaffAdvancesCompanion(
+          status: const Value('rejected'),
+          rejectionReason: Value(reason),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
   // PAYROLL MANAGEMENT
 
   Future<void> addPayroll(PayrollTableCompanion entry) =>

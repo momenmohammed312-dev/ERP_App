@@ -19,9 +19,40 @@ class AdvancesPage extends ConsumerStatefulWidget {
 }
 
 class _AdvancesPageState extends ConsumerState<AdvancesPage> {
+  static const _arabicMonthNames = [
+    'يناير (1)',
+    'فبراير (2)',
+    'مارس (3)',
+    'أبريل (4)',
+    'مايو (5)',
+    'يونيو (6)',
+    'يوليو (7)',
+    'أغسطس (8)',
+    'سبتمبر (9)',
+    'أكتوبر (10)',
+    'نوفمبر (11)',
+    'ديسمبر (12)',
+  ];
+
   late StaffManagementDao _dao;
   List<StaffAdvance> _advances = [];
   bool _isLoading = true;
+
+  String _formatPeriodLabel(String? period) {
+    if (period == null || period.trim().isEmpty) return 'غير محدد';
+    final parts = period.trim().split('-');
+    if (parts.length >= 2) {
+      final y = parts[0];
+      final m = int.tryParse(parts[1]);
+      if (m != null && m >= 1 && m <= 12) {
+        if (parts.length > 2 && parts[2].startsWith('W')) {
+          return 'أسبوع ${parts[2].substring(1)} - ${_arabicMonthNames[m - 1]} $y';
+        }
+        return '${_arabicMonthNames[m - 1]} $y';
+      }
+    }
+    return period;
+  }
 
   @override
   void initState() {
@@ -98,126 +129,180 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  CurrencyHelper.formatCurrency(advance.amount),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: Colors.teal[700],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          if (advance.status == 'pending') {
+            _approveAdvance(advance);
+          } else if (advance.status == 'approved') {
+            _payAdvance(advance);
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    CurrencyHelper.formatCurrency(advance.amount),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Colors.teal[700],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: statusColor),
+                    ),
+                    child: Text(
+                      _getStatusText(advance.status),
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+              Row(
+                children: [
+                  _buildInfoColumn(
+                    'تاريخ الطلب',
+                    DateFormat('yyyy/MM/dd').format(advance.requestDate),
+                  ),
+                  const Spacer(),
+                  _buildInfoColumn(
+                    advance.installmentMonths != null && advance.installmentMonths! > 1
+                        ? 'بدء الخصم'
+                        : 'شهر الخصم',
+                    _formatPeriodLabel(advance.deductOnPeriod ??
+                        DateFormat('yyyy-MM').format(advance.paymentDate ?? advance.requestDate)),
+                  ),
+                  if (advance.installmentMonths != null) ...[
+                    const Spacer(),
+                    _buildInfoColumn(
+                      'الأقساط',
+                      '${advance.installmentMonths} شهر',
+                    ),
+                  ],
+                  if (advance.monthlyDeduction != null) ...[
+                    const Spacer(),
+                    _buildInfoColumn(
+                      'القسط الشهري',
+                      CurrencyHelper.formatCurrency(advance.monthlyDeduction!),
+                    ),
+                  ],
+                ],
+              ),
+              if (advance.reason != null && advance.reason!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'السبب: ${advance.reason}',
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: statusColor),
-                  ),
+              ],
+              if (advance.paymentDate != null) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
                   child: Text(
-                    _getStatusText(advance.status),
-                    style: TextStyle(
-                      color: statusColor,
+                    'تاريخ الصرف: ${DateFormat('yyyy/MM/dd').format(advance.paymentDate!)}',
+                    style: const TextStyle(
                       fontSize: 12,
+                      color: Colors.green,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
               ],
-            ),
-            const Divider(height: 24),
-            Row(
-              children: [
-                _buildInfoColumn(
-                  'تاريخ الطلب',
-                  DateFormat('yyyy/MM/dd').format(advance.requestDate),
-                ),
-                const Spacer(),
-                if (advance.installmentMonths != null)
-                  _buildInfoColumn(
-                    'الأقساط',
-                    '${advance.installmentMonths} شهر',
-                  ),
-                const Spacer(),
-                if (advance.monthlyDeduction != null)
-                  _buildInfoColumn(
-                    'القسط الشهري',
-                    CurrencyHelper.formatCurrency(advance.monthlyDeduction!),
-                  ),
-              ],
-            ),
-            if (advance.reason != null && advance.reason!.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  'السبب: ${advance.reason}',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                ),
-              ),
-            ],
-            if (advance.paymentDate != null) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  'تاريخ الصرف: ${DateFormat('yyyy/MM/dd').format(advance.paymentDate!)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.green,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-            const Divider(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () => _deleteAdvance(advance),
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    size: 18,
-                    color: Colors.red,
-                  ),
-                  label: const Text(
-                    'مسح',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.red),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
+              const Divider(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _deleteAdvance(advance),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: Colors.red,
+                    ),
+                    label: const Text(
+                      'مسح',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                     ),
                   ),
-                ),
-                if (advance.status == 'approved')
-                  ElevatedButton.icon(
-                    onPressed: () => _payAdvance(advance),
-                    icon: const Icon(Icons.payments, size: 18),
-                    label: const Text('صرف السلفة'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
+                  if (advance.status == 'pending')
+                    ElevatedButton.icon(
+                      onPressed: () => _approveAdvance(advance),
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: const Text('اعتماد واحتساب'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
-                  ),
-              ],
-            ),
-          ],
+                  if (advance.status == 'approved')
+                    ElevatedButton.icon(
+                      onPressed: () => _payAdvance(advance),
+                      icon: const Icon(Icons.payments, size: 18),
+                      label: const Text('صرف السلفة'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _approveAdvance(StaffAdvance advance) async {
+    try {
+      final user = ref.read(authProvider);
+      final approver = user?.fullName ?? user?.username ?? 'الإدارة';
+      await _dao.approveAdvance(advance.id, approver);
+      await _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم اعتماد السلفة واحتسابها بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في اعتماد السلفة: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
   }
 
   Future<void> _deleteAdvance(StaffAdvance advance) async {
@@ -320,6 +405,10 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
     int? installmentMonths;
     final installmentCtrl = TextEditingController();
 
+    final now = DateTime.now();
+    int selectedYear = now.year;
+    int selectedMonth = now.month;
+
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) {
@@ -333,6 +422,7 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     TextFormField(
                       controller: amountCtrl,
@@ -365,10 +455,78 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                           (v == null || v.trim().isEmpty) ? 'السبب مطلوب' : null,
                     ),
                     const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: DropdownButtonFormField<int>(
+                            value: selectedMonth,
+                            decoration: const InputDecoration(
+                              labelText: 'شهر الخصم',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 12,
+                              ),
+                            ),
+                            items: List.generate(12, (i) => i + 1).map((m) {
+                              return DropdownMenuItem<int>(
+                                value: m,
+                                child: Text(
+                                  _arabicMonthNames[m - 1],
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (v) {
+                              if (v != null) {
+                                setDialogState(() => selectedMonth = v);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: DropdownButtonFormField<int>(
+                            value: selectedYear,
+                            decoration: const InputDecoration(
+                              labelText: 'السنة',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 12,
+                              ),
+                            ),
+                            items: [
+                              now.year - 1,
+                              now.year,
+                              now.year + 1,
+                              now.year + 2,
+                            ].map((y) {
+                              return DropdownMenuItem<int>(
+                                value: y,
+                                child: Text(
+                                  '$y',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (v) {
+                              if (v != null) {
+                                setDialogState(() => selectedYear = v);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
                     TextFormField(
                       controller: installmentCtrl,
                       decoration: const InputDecoration(
                         labelText: 'عدد الأقساط (اختياري)',
+                        helperText: 'اتركه فارغاً إذا كان الخصم دفعة واحدة',
                         border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
@@ -377,13 +535,47 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                         setDialogState(() => instMonths = parsed);
                       },
                     ),
-                    if (instMonths != null && instMonths! > 0) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'القسط الشهري: ${((double.tryParse(amountCtrl.text.trim()) ?? 0) / instMonths!).toStringAsFixed(2)} ج.م',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.teal,
+                    const SizedBox(height: 8),
+                    if (instMonths != null && instMonths! > 1) ...[
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.teal.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'القسط الشهري: ${((double.tryParse(amountCtrl.text.trim()) ?? 0) / instMonths!).toStringAsFixed(2)} ج.م',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'يبدأ الخصم من مرتب: ${_arabicMonthNames[selectedMonth - 1]} $selectedYear ولمدة $instMonths أشهر',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.teal[800],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          'سيتم خصم السلفة في مرتب: ${_arabicMonthNames[selectedMonth - 1]} $selectedYear',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.teal[700],
+                          ),
                         ),
                       ),
                     ],
@@ -401,10 +593,13 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                   if (formKey.currentState!.validate()) {
                     final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
                     final inst = int.tryParse(installmentCtrl.text.trim());
+                    final deductOnPeriod =
+                        '$selectedYear-${selectedMonth.toString().padLeft(2, '0')}';
                     Navigator.pop(ctx, {
                       'amount': amount,
                       'reason': reasonCtrl.text.trim(),
                       'installments': inst,
+                      'deductOnPeriod': deductOnPeriod,
                     });
                   }
                 },
@@ -425,6 +620,10 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
         final amount = result['amount'] as double;
         final reason = result['reason'] as String;
         final inst = result['installments'] as int?;
+        final deductOnPeriod = result['deductOnPeriod'] as String?;
+
+        final user = ref.read(authProvider);
+        final approver = user?.fullName ?? user?.username ?? 'الإدارة';
 
         await _dao.addAdvance(
           StaffAdvancesCompanion.insert(
@@ -434,12 +633,17 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                 ? drift.Value(reason)
                 : const drift.Value.absent(),
             requestDate: DateTime.now(),
-            status: 'pending',
+            status: 'approved',
+            approvedBy: drift.Value(approver),
+            approvedAt: drift.Value(DateTime.now()),
             installmentMonths: inst != null && inst > 0
                 ? drift.Value(inst)
                 : const drift.Value.absent(),
             monthlyDeduction: inst != null && inst > 0
                 ? drift.Value(amount / inst)
+                : const drift.Value.absent(),
+            deductOnPeriod: deductOnPeriod != null
+                ? drift.Value(deductOnPeriod)
                 : const drift.Value.absent(),
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
@@ -449,7 +653,7 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('تم إرسال طلب السلفة'),
+              content: Text('تم تسجيل السلفة واعتمادها واحتسابها بنجاح'),
               backgroundColor: Colors.green,
             ),
           );
