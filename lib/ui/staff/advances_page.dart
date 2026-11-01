@@ -303,7 +303,6 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
       }
     }
   }
-  }
 
   Future<void> _deleteAdvance(StaffAdvance advance) async {
     final confirmed = await showDialog<bool>(
@@ -460,7 +459,7 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                         Expanded(
                           flex: 3,
                           child: DropdownButtonFormField<int>(
-                            value: selectedMonth,
+                            initialValue: selectedMonth,
                             decoration: const InputDecoration(
                               labelText: 'شهر الخصم',
                               border: OutlineInputBorder(),
@@ -489,7 +488,7 @@ class _AdvancesPageState extends ConsumerState<AdvancesPage> {
                         Expanded(
                           flex: 2,
                           child: DropdownButtonFormField<int>(
-                            value: selectedYear,
+                            initialValue: selectedYear,
                             decoration: const InputDecoration(
                               labelText: 'السنة',
                               border: OutlineInputBorder(),
