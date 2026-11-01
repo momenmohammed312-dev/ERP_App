@@ -346,20 +346,24 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         spacing: 12,
         runSpacing: 10,
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.date_range_rounded, size: 18, color: MadarColors.gold),
-              const SizedBox(width: 8),
-              Text(
-                'الفترة المحددة: ${dateFormat.format(_startDate)}  ←  ${dateFormat.format(_endDate)}',
-                style: const TextStyle(
-                  fontFamily: 'NotoSansArabic',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.date_range_rounded, size: 18, color: MadarColors.gold),
+                const SizedBox(width: 8),
+                Text(
+                  'الفترة المحددة: ${dateFormat.format(_startDate)}  ←  ${dateFormat.format(_endDate)}',
+                  style: const TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           Wrap(
             spacing: 8,
@@ -414,7 +418,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth >= 1080 ? 4 : (constraints.maxWidth >= 600 ? 2 : 1);
+        final crossAxisCount = constraints.maxWidth >= 900 ? 4 : 2;
 
         final cards = [
           // Card 1: Total Sales

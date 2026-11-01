@@ -37,8 +37,12 @@ class _CustomerTransactionsWidgetState
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.symmetric(
+        horizontal: isNarrow ? 12 : 20,
+        vertical: isNarrow ? 12 : 20,
+      ),
       child: StreamBuilder<List<Customer>>(
         stream: widget.db.customerDao.watchActiveCustomers(),
         builder: (context, snapshot) {
@@ -95,7 +99,7 @@ class _CustomerTransactionsWidgetState
                       ),
                     ),
                   ),
-                  const Gap(12),
+                  const Gap(10),
                   FilledButton.icon(
                     onPressed: () {
                       Navigator.push(
@@ -114,8 +118,8 @@ class _CustomerTransactionsWidgetState
                       ),
                     ),
                     style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isNarrow ? 12 : 18,
                         vertical: 14,
                       ),
                       shape: RoundedRectangleBorder(

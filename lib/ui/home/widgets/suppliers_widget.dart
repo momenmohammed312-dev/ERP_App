@@ -218,54 +218,53 @@ class SuppliersWidget extends ConsumerWidget {
           const Gap(16),
 
           // Search and Actions Bar
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .outline
-                          .withValues(alpha: 0.15),
-                    ),
+          Builder(
+            builder: (ctx) {
+              final isNarrow = MediaQuery.of(ctx).size.width < 650;
+              final searchField = Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(ctx)
+                        .colorScheme
+                        .outline
+                        .withValues(alpha: 0.15),
                   ),
-                  child: TextField(
-                    onChanged: (val) => ref
-                        .read(supplierSearchQueryProvider.notifier)
-                        .state = val,
-                    decoration: InputDecoration(
-                      hintText: l10n.search_supplier_hint,
-                      hintStyle: TextStyle(
-                        fontFamily: 'NotoSansArabic',
-                        fontSize: 13,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.5),
-                      ),
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+                ),
+                child: TextField(
+                  onChanged: (val) => ref
+                      .read(supplierSearchQueryProvider.notifier)
+                      .state = val,
+                  decoration: InputDecoration(
+                    hintText: l10n.search_supplier_hint,
+                    hintStyle: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontSize: 13,
+                      color: Theme.of(ctx)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.5),
+                    ),
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
                     ),
                   ),
                 ),
-              ),
-              const Gap(12),
-              Container(
+              );
+
+              final filterDropdown = Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
+                  color: Theme.of(ctx).colorScheme.surface,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: Theme.of(context)
+                    color: Theme.of(ctx)
                         .colorScheme
                         .outline
                         .withValues(alpha: 0.15),
@@ -298,11 +297,11 @@ class SuppliersWidget extends ConsumerWidget {
                     },
                   ),
                 ),
-              ),
-              const Gap(12),
-              FilledButton.icon(
+              );
+
+              final addButton = FilledButton.icon(
                 onPressed: () {
-                  _showAddSupplierDialog(context);
+                  _showAddSupplierDialog(ctx);
                 },
                 icon: const Icon(Icons.add_business_rounded, size: 18),
                 label: Text(
@@ -314,15 +313,41 @@ class SuppliersWidget extends ConsumerWidget {
                 ),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
+                    horizontal: 16,
                     vertical: 14,
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-              ),
-            ],
+              );
+
+              if (isNarrow) {
+                return Column(
+                  children: [
+                    searchField,
+                    const Gap(8),
+                    Row(
+                      children: [
+                        Expanded(child: filterDropdown),
+                        const Gap(8),
+                        addButton,
+                      ],
+                    ),
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: searchField),
+                  const Gap(12),
+                  filterDropdown,
+                  const Gap(12),
+                  addButton,
+                ],
+              );
+            },
           ),
 
           const Gap(16),
@@ -503,9 +528,10 @@ class SuppliersWidget extends ConsumerWidget {
         final l10n = AppLocalizations.of(dialogContext);
         return AlertDialog(
           title: Text(l10n.add_new_supplier),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               TextField(
                 controller: nameController,
                 decoration: InputDecoration(
@@ -550,6 +576,7 @@ class SuppliersWidget extends ConsumerWidget {
                 keyboardType: TextInputType.number,
               ),
             ],
+          ),
           ),
           actions: [
             TextButton(

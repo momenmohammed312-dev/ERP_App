@@ -392,54 +392,66 @@ class _CashierPageState extends ConsumerState<CashierPage> {
               children: [
                 // Top Header Strip if embedded
                 if (!canPop)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: MadarColors.gold.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.point_of_sale_rounded,
-                            size: 18,
-                            color: MadarColors.gold,
-                          ),
-                        ),
-                        const Gap(10),
-                        Text(
-                          l10n.cashier,
-                          style: const TextStyle(
-                            fontFamily: 'NotoSansArabic',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.refresh_rounded, size: 20),
-                          tooltip: 'تحديث البيانات',
-                          onPressed: _loadCurrentDay,
-                        ),
-                        const Gap(6),
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.assignment_outlined, size: 16),
-                          label: const Text('تقرير الوردية'),
-                          onPressed: _showShiftReportDialog,
-                          style: OutlinedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                  Builder(
+                    builder: (ctx) {
+                      final isNarrow = MediaQuery.of(ctx).size.width < 500;
+                      return Padding(
+                        padding: EdgeInsets.fromLTRB(isNarrow ? 12 : 20, 14, isNarrow ? 12 : 20, 8),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: MadarColors.gold.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.point_of_sale_rounded,
+                                size: 18,
+                                color: MadarColors.gold,
+                              ),
                             ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
+                            const Gap(8),
+                            Text(
+                              l10n.cashier,
+                              style: const TextStyle(
+                                fontFamily: 'NotoSansArabic',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                          ),
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.refresh_rounded, size: 20),
+                              tooltip: 'تحديث البيانات',
+                              onPressed: _loadCurrentDay,
+                            ),
+                            const Gap(4),
+                            if (isNarrow)
+                              IconButton.outlined(
+                                icon: const Icon(Icons.assignment_outlined, size: 18),
+                                tooltip: 'تقرير الوردية',
+                                onPressed: _showShiftReportDialog,
+                              )
+                            else
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.assignment_outlined, size: 16),
+                                label: const Text('تقرير الوردية'),
+                                onPressed: _showShiftReportDialog,
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
 
                 // Main Content
@@ -448,128 +460,199 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                 else
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: EdgeInsets.symmetric(horizontal: MediaQuery.of(context).size.width < 600 ? 12 : 20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           const Gap(12),
-                          // Open Status Banner
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outline
-                                    .withValues(alpha: 0.15),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF238636)
-                                        .withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: const Color(0xFF238636)
-                                          .withValues(alpha: 0.3),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                        width: 7,
-                                        height: 7,
-                                        decoration: const BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: Color(0xFF238636),
-                                        ),
-                                      ),
-                                      const Gap(6),
-                                      Text(
-                                        l10n.day_is_open,
-                                        style: const TextStyle(
-                                          fontFamily: 'NotoSansArabic',
-                                          color: Color(0xFF238636),
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
+                          // Open Status Banner (Responsive)
+                          Builder(
+                            builder: (ctx) {
+                              final isNarrow = MediaQuery.of(ctx).size.width < 550;
+                              final statusBadge = Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF238636).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: const Color(0xFF238636).withValues(alpha: 0.3),
                                   ),
                                 ),
-                                const Gap(12),
-                                if (_currentSession != null)
-                                  Expanded(
-                                    child: Text(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 7,
+                                      height: 7,
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Color(0xFF238636),
+                                      ),
+                                    ),
+                                    const Gap(6),
+                                    Text(
+                                      l10n.day_is_open,
+                                      style: const TextStyle(
+                                        fontFamily: 'NotoSansArabic',
+                                        color: Color(0xFF238636),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+
+                              final closeBtn = FilledButton.icon(
+                                onPressed: _closeDay,
+                                icon: const Icon(
+                                  Icons.lock_clock_rounded,
+                                  size: 16,
+                                ),
+                                label: Text(l10n.close_day),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFFF85149),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                ),
+                              );
+
+                              final dateText = _currentSession != null
+                                  ? Text(
                                       '${l10n.opening_date}: ${DateFormat('yyyy/MM/dd HH:mm').format(_currentSession!.openedAt)} (${_currentSession!.openedBy})',
                                       style: TextStyle(
                                         fontFamily: 'NotoSansArabic',
-                                        fontSize: 12.5,
-                                        color: Theme.of(context)
+                                        fontSize: 12,
+                                        color: Theme.of(ctx)
                                             .colorScheme
                                             .onSurface
                                             .withValues(alpha: 0.7),
                                       ),
                                       overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                FilledButton.icon(
-                                  onPressed: _closeDay,
-                                  icon: const Icon(
-                                    Icons.lock_clock_rounded,
-                                    size: 16,
-                                  ),
-                                  label: Text(l10n.close_day),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: const Color(0xFFF85149),
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 10,
-                                    ),
+                                    )
+                                  : null;
+
+                              return Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(ctx).colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: Theme.of(ctx)
+                                        .colorScheme
+                                        .outline
+                                        .withValues(alpha: 0.15),
                                   ),
                                 ),
-                              ],
-                            ),
+                                child: isNarrow
+                                    ? Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              statusBadge,
+                                              closeBtn,
+                                            ],
+                                          ),
+                                          if (dateText != null) ...[
+                                            const Gap(8),
+                                            dateText,
+                                          ],
+                                        ],
+                                      )
+                                    : Row(
+                                        children: [
+                                          statusBadge,
+                                          const Gap(12),
+                                          if (dateText != null) Expanded(child: dateText),
+                                          closeBtn,
+                                        ],
+                                      ),
+                              );
+                            },
                           ),
                           const Gap(16),
 
-                          // Drawer Stats Row
-                          Row(
-                            children: [
-                              _buildStatCard(
-                                l10n.opening_balance_drawer,
-                                _openingBalance,
-                                const Color(0xFF388BFD),
-                                Icons.account_balance_wallet_rounded,
-                              ),
-                              const Gap(12),
-                              _buildStatCard(
-                                l10n.total_revenue,
-                                _totalIncome,
-                                const Color(0xFF238636),
-                                Icons.trending_up_rounded,
-                              ),
-                              const Gap(12),
-                              _buildStatCard(
-                                l10n.current_balance_drawer,
-                                _closingBalance,
-                                MadarColors.gold,
-                                Icons.point_of_sale_rounded,
-                              ),
-                            ],
+                          // Drawer Stats Row (Responsive)
+                          Builder(
+                            builder: (ctx) {
+                              final isNarrow = MediaQuery.of(ctx).size.width < 600;
+                              if (isNarrow) {
+                                return Column(
+                                  children: [
+                                    _buildStatCard(
+                                      l10n.current_balance_drawer,
+                                      _closingBalance,
+                                      MadarColors.gold,
+                                      Icons.point_of_sale_rounded,
+                                    ),
+                                    const Gap(10),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildStatCard(
+                                            l10n.opening_balance_drawer,
+                                            _openingBalance,
+                                            const Color(0xFF388BFD),
+                                            Icons.account_balance_wallet_rounded,
+                                          ),
+                                        ),
+                                        const Gap(10),
+                                        Expanded(
+                                          child: _buildStatCard(
+                                            l10n.total_revenue,
+                                            _totalIncome,
+                                            const Color(0xFF238636),
+                                            Icons.trending_up_rounded,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                );
+                              }
+
+                              return Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      l10n.opening_balance_drawer,
+                                      _openingBalance,
+                                      const Color(0xFF388BFD),
+                                      Icons.account_balance_wallet_rounded,
+                                    ),
+                                  ),
+                                  const Gap(12),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      l10n.total_revenue,
+                                      _totalIncome,
+                                      const Color(0xFF238636),
+                                      Icons.trending_up_rounded,
+                                    ),
+                                  ),
+                                  const Gap(12),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      l10n.current_balance_drawer,
+                                      _closingBalance,
+                                      MadarColors.gold,
+                                      Icons.point_of_sale_rounded,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                           const Gap(20),
 
@@ -890,48 +973,50 @@ class _CashierPageState extends ConsumerState<CashierPage> {
     Color color,
     IconData icon,
   ) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(icon, color: color, size: 15),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                const Gap(8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontFamily: 'NotoSansArabic',
-                      fontSize: 12,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.7),
-                      fontWeight: FontWeight.w500,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                child: Icon(icon, color: color, size: 15),
+              ),
+              const Gap(8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontSize: 12,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.7),
+                    fontWeight: FontWeight.w500,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ],
-            ),
-            const Gap(10),
-            Text(
+              ),
+            ],
+          ),
+          const Gap(10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
               '${value.toStringAsFixed(2)} ج.م',
               style: TextStyle(
                 fontFamily: 'NotoSansArabic',
@@ -940,8 +1025,8 @@ class _CashierPageState extends ConsumerState<CashierPage> {
                 color: color,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

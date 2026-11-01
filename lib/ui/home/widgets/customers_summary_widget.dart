@@ -265,14 +265,18 @@ class _CustomerSummaryItem extends StatelessWidget {
             ],
           ),
           const Gap(8),
-          Text(
-            value,
-            style: TextStyle(
-              fontFamily: 'NotoSansArabic',
-              color: color,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.2,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontFamily: 'NotoSansArabic',
+                color: color,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.2,
+              ),
             ),
           ),
         ],

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:pos_offline_desktop/core/config/app_flavor.dart';
 
 /// Central platform checks for the mobile/desktop split.
 ///
@@ -14,6 +15,10 @@ class PlatformUtils {
   @visibleForTesting
   static bool? debugOverrideIsMobile;
 
+  /// Override flag for staff features visibility on mobile.
+  @visibleForTesting
+  static bool? debugOverrideHidesStaffFeaturesOnMobile;
+
   /// True on Android and iOS.
   static bool get isMobile =>
       debugOverrideIsMobile ?? (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
@@ -25,5 +30,20 @@ class PlatformUtils {
       (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
   /// Whether staff/admin management features should be hidden on mobile platforms.
-  static bool get hidesStaffFeaturesOnMobile => isMobile;
+  static bool get hidesStaffFeaturesOnMobile {
+    if (debugOverrideHidesStaffFeaturesOnMobile != null) {
+      return debugOverrideHidesStaffFeaturesOnMobile!;
+    }
+    const showStaff =
+        bool.fromEnvironment('SHOW_STAFF_ON_MOBILE', defaultValue: false);
+    const enableAll =
+        bool.fromEnvironment('ENABLE_ALL_FEATURES', defaultValue: false);
+    if (showStaff || enableAll) {
+      return false;
+    }
+    if (AppFlavor.isInitialized && AppFlavor.current == Flavor.all) {
+      return false;
+    }
+    return isMobile;
+  }
 }

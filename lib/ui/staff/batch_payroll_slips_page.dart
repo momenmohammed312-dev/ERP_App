@@ -477,41 +477,52 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
                     color: Colors.green.withValues(alpha: 0.4),
                   ),
                 ),
-                child: Text(
-                  'الإجمالي المحدد: ${_selectedTotal.toStringAsFixed(0)} ج.م (${selected.length} مرتب)',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: Colors.green,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'الإجمالي المحدد: ${_selectedTotal.toStringAsFixed(0)} ج.م (${selected.length} مرتب)',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: Colors.green,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
                 ),
               ),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: (missing.isEmpty || _calculating)
-                          ? null
-                          : _autoCalculateMissing,
-                      icon: const Icon(Icons.calculate),
-                      label: Text('حساب الناقص (${missing.length})'),
+              if (missing.isNotEmpty) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _calculating ? null : _autoCalculateMissing,
+                    icon: const Icon(Icons.calculate, size: 18),
+                    label: Text('حساب المرتبات الناقصة (${missing.length})'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.orange.shade800,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                ),
+                const SizedBox(height: 6),
+              ],
+              Row(
+                children: [
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: (selected.isEmpty || _calculating)
                           ? null
                           : _printVoucher,
-                      icon: const Icon(Icons.receipt_long, color: Colors.white, size: 18),
-                      label: const Text(
-                        'كشف الصرف',
-                        style: TextStyle(color: Colors.white, fontSize: 13),
+                      icon: const Icon(Icons.receipt_long, color: Colors.white, size: 16),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'كشف الصرف',
+                          style: TextStyle(color: Colors.white, fontSize: 12),
+                        ),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.indigo,
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                     ),
                   ),
@@ -521,14 +532,17 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
                       onPressed: (selected.isEmpty || _calculating)
                           ? null
                           : _printAll,
-                      icon: const Icon(Icons.table_chart, color: Colors.white, size: 18),
-                      label: const Text(
-                        'الكشف الإجمالي',
-                        style: TextStyle(color: Colors.white, fontSize: 13),
+                      icon: const Icon(Icons.table_chart, color: Colors.white, size: 16),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'الكشف الإجمالي',
+                          style: TextStyle(color: Colors.white, fontSize: 12),
+                        ),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blueGrey,
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                     ),
                   ),
@@ -538,14 +552,17 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
                       onPressed: (selected.isEmpty || _calculating)
                           ? null
                           : _printBatch,
-                      icon: const Icon(Icons.print, color: Colors.white, size: 18),
-                      label: const Text(
-                        '3 / صفحة',
-                        style: TextStyle(color: Colors.white, fontSize: 13),
+                      icon: const Icon(Icons.print, color: Colors.white, size: 16),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '3 / صفحة',
+                          style: TextStyle(color: Colors.white, fontSize: 12),
+                        ),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.teal,
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                     ),
                   ),
@@ -636,32 +653,35 @@ class _BatchPayrollSlipsPageState extends ConsumerState<BatchPayrollSlipsPage> {
   Widget _buildSummaryChips(int missingCount) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
-        children: [
-          Chip(
-            label: Text('محسوب: ${_payrolls.length}'),
-            backgroundColor: Colors.green.withValues(alpha: 0.15),
-          ),
-          const SizedBox(width: 8),
-          Chip(
-            label: Text('ناقص: $missingCount'),
-            backgroundColor: Colors.orange.withValues(alpha: 0.15),
-          ),
-          const SizedBox(width: 8),
-          Chip(label: Text('إجمالي: ${_activeStaff.length}')),
-          const Spacer(),
-          TextButton.icon(
-            onPressed: _payrolls.isEmpty ? null : _toggleSelectAll,
-            icon: Icon(
-              _allSelected ? Icons.deselect : Icons.select_all,
-              size: 18,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            Chip(
+              label: Text('محسوب: ${_payrolls.length}'),
+              backgroundColor: Colors.green.withValues(alpha: 0.15),
             ),
-            label: Text(
-              _allSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل',
-              style: const TextStyle(fontSize: 12),
+            const SizedBox(width: 8),
+            Chip(
+              label: Text('ناقص: $missingCount'),
+              backgroundColor: Colors.orange.withValues(alpha: 0.15),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Chip(label: Text('إجمالي: ${_activeStaff.length}')),
+            const SizedBox(width: 12),
+            TextButton.icon(
+              onPressed: _payrolls.isEmpty ? null : _toggleSelectAll,
+              icon: Icon(
+                _allSelected ? Icons.deselect : Icons.select_all,
+                size: 18,
+              ),
+              label: Text(
+                _allSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
