@@ -41,18 +41,21 @@ class MadarOrbitLogo extends StatelessWidget {
               ],
             ),
           ),
-          // اللوجو الرسمي لـ MADAR — نفس ملف أيقونة التطبيق.
-          // لو الصورة مالقتش، بنرجع للرسم بالكود كـfallback.
-          Image.asset(
-            'assets/logo/app_logo.png',
-            width: size,
-            height: size,
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.medium,
-            errorBuilder: (context, error, stackTrace) => CustomPaint(
-              size: Size(size, size),
-              painter: _MadarLogoPainter(orbitAngle: orbitAngle),
-            ),
+          Builder(
+            builder: (ctx) {
+              final isLight = Theme.of(ctx).brightness == Brightness.light;
+              return Image.asset(
+                isLight ? 'assets/logo/app_logo_light.png' : 'assets/logo/app_logo.png',
+                width: size,
+                height: size,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.medium,
+                errorBuilder: (context, error, stackTrace) => CustomPaint(
+                  size: Size(size, size),
+                  painter: _MadarLogoPainter(orbitAngle: orbitAngle),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -256,37 +259,75 @@ class MadarBrandLockup extends StatelessWidget {
       children: [
         MadarOrbitLogo(size: logoSize),
         const SizedBox(height: 18),
-        // Arabic Brand Name
-        ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(
-            colors: [Colors.white, MadarColors.goldLight, MadarColors.gold],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ).createShader(bounds),
-          child: const Text(
-            'مِدار',
-            style: TextStyle(
-              fontFamily: 'NotoSansArabic',
-              fontSize: 32,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: 1.5,
-              height: 1.2,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-        const SizedBox(height: 4),
-        // English Brand Name
-        const Text(
-          'MADAR',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            color: MadarColors.gold,
-            letterSpacing: 4.5,
-          ),
-          textAlign: TextAlign.center,
+        Builder(
+          builder: (ctx) {
+            final isLight = Theme.of(ctx).brightness == Brightness.light;
+            if (isLight) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Text(
+                    'مِدار',
+                    style: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                      color: MadarColors.lightDeepCobalt,
+                      letterSpacing: 1.5,
+                      height: 1.2,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'MADAR',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: MadarColors.lightPrimary,
+                      letterSpacing: 4.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              );
+            }
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Colors.white, MadarColors.goldLight, MadarColors.gold],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ).createShader(bounds),
+                  child: const Text(
+                    'مِدار',
+                    style: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: 1.5,
+                      height: 1.2,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'MADAR',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: MadarColors.gold,
+                    letterSpacing: 4.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            );
+          },
         ),
         if (showDescriptor) ...[
           const SizedBox(height: 8),

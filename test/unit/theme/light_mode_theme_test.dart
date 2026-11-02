@@ -70,5 +70,16 @@ void main() {
       await notifier.toggleTheme(true); // true = dark mode
       expect(container.read(themeModeProvider), equals(ThemeMode.dark));
     });
+
+    test('ThemeData.lerp between dark and light does not throw TextStyle inherit errors', () {
+      expect(
+        () => ThemeData.lerp(AppTheme.getDarkTheme(), AppTheme.getLightTheme(), 0.5),
+        returnsNormally,
+      );
+      expect(
+        () => ThemeData.lerp(PosApp.getDarkTheme(), PosApp.getLightTheme(), 0.5),
+        returnsNormally,
+      );
+    });
   });
 }

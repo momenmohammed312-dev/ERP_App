@@ -239,14 +239,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
     return Scaffold(
-      backgroundColor: _bgDark,
+      backgroundColor: isLight ? const Color(0xFFF1F5F9) : _bgDark,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF0D1117), Color(0xFF161B22), Color(0xFF0D1117)],
+            colors: isLight
+                ? const [Color(0xFFF8FAFC), Color(0xFFEDF2F7), Color(0xFFE2E8F0)]
+                : const [Color(0xFF0D1117), Color(0xFF161B22), Color(0xFF0D1117)],
           ),
         ),
         child: LayoutBuilder(
@@ -256,7 +259,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             return Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                child: isDesktop ? _buildDesktopSplitLayout() : _buildMobileLayout(),
+                child: isDesktop ? _buildDesktopSplitLayout(isLight) : _buildMobileLayout(isLight),
               ),
             );
           },
@@ -268,32 +271,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   /// Desktop Fiori Split Layout (Wide Screen):
   /// Right pane (in RTL): Login form starts immediately with "مرحبًا بعودتك"
   /// Left pane (in RTL): Authentic Madar orbital brand identity & status telemetry
-  Widget _buildDesktopSplitLayout() {
+  Widget _buildDesktopSplitLayout(bool isLight) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 960),
       child: Container(
         decoration: BoxDecoration(
-          color: _bgCard,
+          color: isLight ? Colors.white : _bgCard,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 40,
-              offset: const Offset(0, 16),
-            ),
-            BoxShadow(
-              color: _gold.withValues(alpha: 0.05),
-              blurRadius: 10,
-            ),
-          ],
+          border: Border.all(
+            color: isLight ? const Color(0xFFCBD5E1) : _border,
+          ),
+          boxShadow: isLight
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF0066FF).withValues(alpha: 0.08),
+                    blurRadius: 36,
+                    offset: const Offset(0, 14),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    blurRadius: 40,
+                    offset: const Offset(0, 16),
+                  ),
+                  BoxShadow(
+                    color: _gold.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                  ),
+                ],
         ),
         clipBehavior: Clip.antiAlias,
         child: IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Right Pane (Form): No logo/title above it, starts directly with welcome
+              // Right Pane (Form)
               Expanded(
                 flex: 11,
                 child: Padding(
@@ -309,31 +322,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text(
+                          Text(
                             'مرحبًا بعودتك',
                             style: TextStyle(
                               fontFamily: 'NotoSansArabic',
                               fontSize: 26,
                               fontWeight: FontWeight.w900,
-                              color: Colors.white,
+                              color: isLight ? MadarColors.lightDeepCobalt : Colors.white,
                               letterSpacing: 0.5,
                             ),
                             textAlign: TextAlign.start,
                           ),
                           const SizedBox(height: 6),
-                          const Text(
+                          Text(
                             'سجّل الدخول للمتابعة إلى منظومة إدارة الأعمال',
                             style: TextStyle(
                               fontFamily: 'NotoSansArabic',
                               fontSize: 13.5,
-                              color: _textMuted,
+                              color: isLight ? const Color(0xFF64748B) : _textMuted,
                             ),
                             textAlign: TextAlign.start,
                           ),
                           const SizedBox(height: 28),
-                          _buildFormContent(),
+                          _buildFormContent(isLight),
                           const SizedBox(height: 24),
-                          _buildFooterRow(),
+                          _buildFooterRow(isLight),
                         ],
                       ),
                     ),
@@ -346,13 +359,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 flex: 9,
                 child: Container(
                   decoration: BoxDecoration(
-                    gradient: const RadialGradient(
-                      center: Alignment(0, -0.2),
-                      radius: 1.1,
-                      colors: [Color(0xFF1E2A3A), Color(0xFF0D1117)],
-                    ),
+                    gradient: isLight
+                        ? const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Color(0xFFE2F0FD), Color(0xFFD3E7FA)],
+                          )
+                        : const RadialGradient(
+                            center: Alignment(0, -0.2),
+                            radius: 1.1,
+                            colors: [Color(0xFF1E2A3A), Color(0xFF0D1117)],
+                          ),
                     border: Border(
-                      right: BorderSide(color: _border.withValues(alpha: 0.8)),
+                      right: BorderSide(
+                        color: isLight ? const Color(0xFFBAE6FD) : _border.withValues(alpha: 0.8),
+                      ),
                     ),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
@@ -367,76 +388,90 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         ),
                       ),
                       const SizedBox(height: 18),
-                      ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: [
-                            Colors.white,
-                            MadarColors.goldLight,
-                            MadarColors.gold,
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ).createShader(bounds),
-                        child: const Text(
+                      if (isLight)
+                        const Text(
                           'مِدار',
                           style: TextStyle(
                             fontFamily: 'NotoSansArabic',
                             fontSize: 34,
                             fontWeight: FontWeight.w900,
-                            color: Colors.white,
+                            color: MadarColors.lightDeepCobalt,
                             letterSpacing: 1.5,
                           ),
+                        )
+                      else
+                        ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [
+                              Colors.white,
+                              MadarColors.goldLight,
+                              MadarColors.gold,
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ).createShader(bounds),
+                          child: const Text(
+                            'مِدار',
+                            style: TextStyle(
+                              fontFamily: 'NotoSansArabic',
+                              fontSize: 34,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
                         ),
-                      ),
                       const SizedBox(height: 2),
-                      const Text(
+                      Text(
                         'MADAR',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
-                          color: _gold,
+                          color: isLight ? MadarColors.lightPrimary : _gold,
                           letterSpacing: 4.5,
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'منظومة إدارة الأعمال',
                         style: TextStyle(
                           fontFamily: 'NotoSansArabic',
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white70,
+                          color: isLight ? const Color(0xFF334155) : Colors.white70,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
+                      Text(
                         'إدارة. تشغيل. نمو.',
                         style: TextStyle(
                           fontFamily: 'NotoSansArabic',
                           fontSize: 11.5,
                           fontWeight: FontWeight.w500,
-                          color: _textMuted,
+                          color: isLight ? const Color(0xFF64748B) : _textMuted,
                           letterSpacing: 1.2,
                         ),
                       ),
                       const SizedBox(height: 28),
-                      // Telemetry Pills
                       _buildTelemetryPill(
                         Icons.cloud_off_rounded,
                         'نظام سطح المكتب غير المتصل',
-                        Colors.blueGrey.shade300,
+                        isLight ? MadarColors.lightPrimary : Colors.blueGrey.shade300,
+                        isLight: isLight,
                       ),
                       const SizedBox(height: 8),
                       _buildTelemetryPill(
                         Icons.security_rounded,
                         'قاعدة بيانات محلية مشفرة',
-                        _gold,
+                        isLight ? const Color(0xFF0284C7) : _gold,
+                        isLight: isLight,
                       ),
                       const SizedBox(height: 8),
                       _buildTelemetryPill(
                         Icons.code_rounded,
                         'Developed by MO2',
-                        Colors.white60,
+                        isLight ? MadarColors.lightDeepCobalt : Colors.white60,
+                        isLight: isLight,
                       ),
                     ],
                   ),
@@ -450,17 +485,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   /// Mobile Compact Layout (< 840px)
-  Widget _buildMobileLayout() {
+  Widget _buildMobileLayout(bool isLight) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 440),
       child: Container(
         decoration: BoxDecoration(
-          color: _bgCard,
+          color: isLight ? Colors.white : _bgCard,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _border),
+          border: Border.all(color: isLight ? const Color(0xFFCBD5E1) : _border),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
+              color: isLight
+                  ? const Color(0xFF0066FF).withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.35),
               blurRadius: 30,
               offset: const Offset(0, 12),
             ),
@@ -481,76 +518,49 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ),
             ),
             const SizedBox(height: 12),
-            const Center(
+            Center(
               child: Text(
                 'مِدار MADAR',
                 style: TextStyle(
                   fontFamily: 'NotoSansArabic',
                   fontSize: 20,
                   fontWeight: FontWeight.w900,
-                  color: _gold,
+                  color: isLight ? MadarColors.lightDeepCobalt : _gold,
                 ),
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'مرحبًا بعودتك',
               style: TextStyle(
                 fontFamily: 'NotoSansArabic',
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: isLight ? MadarColors.lightDeepCobalt : Colors.white,
               ),
               textAlign: TextAlign.start,
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'سجّل الدخول للمتابعة',
               style: TextStyle(
                 fontFamily: 'NotoSansArabic',
                 fontSize: 12.5,
-                color: _textMuted,
+                color: isLight ? const Color(0xFF64748B) : _textMuted,
               ),
               textAlign: TextAlign.start,
             ),
             const SizedBox(height: 20),
-            _buildFormContent(),
+            _buildFormContent(isLight),
             const SizedBox(height: 20),
-            _buildFooterRow(),
+            _buildFooterRow(isLight),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTelemetryPill(IconData icon, String text, Color accent) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: accent),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: TextStyle(
-              fontFamily: 'NotoSansArabic',
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: Colors.white.withValues(alpha: 0.8),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFormContent() {
+  Widget _buildFormContent(bool isLight) {
     return Form(
       key: _formKey,
       child: Column(
@@ -559,17 +569,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           TextFormField(
             controller: _usernameCtrl,
             textDirection: TextDirection.ltr,
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
+            style: TextStyle(
+              color: isLight ? MadarColors.lightDeepCobalt : Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+            decoration: InputDecoration(
               labelText: 'اسم المستخدم',
-              labelStyle: TextStyle(fontFamily: 'NotoSansArabic', color: _textMuted),
-              prefixIcon: Icon(Icons.person_outline, color: _textMuted),
-              border: OutlineInputBorder(),
+              labelStyle: TextStyle(
+                fontFamily: 'NotoSansArabic',
+                color: isLight ? const Color(0xFF64748B) : _textMuted,
+              ),
+              prefixIcon: Icon(
+                Icons.person_outline,
+                color: isLight ? MadarColors.lightDeepCobalt : _textMuted,
+              ),
+              fillColor: isLight ? Colors.white : const Color(0xFF21262D),
+              filled: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: isLight ? const Color(0xFFCBD5E1) : _border,
+                ),
+              ),
               enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: _border),
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: isLight ? const Color(0xFFCBD5E1) : _border,
+                ),
               ),
               focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: _gold),
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: isLight ? MadarColors.lightPrimary : _gold,
+                  width: 2,
+                ),
               ),
             ),
             validator: (v) =>
@@ -580,22 +613,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             controller: _passwordCtrl,
             obscureText: _obscurePassword,
             textDirection: TextDirection.ltr,
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(
+              color: isLight ? MadarColors.lightDeepCobalt : Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
             decoration: InputDecoration(
               labelText: 'كلمة المرور',
-              labelStyle: const TextStyle(fontFamily: 'NotoSansArabic', color: _textMuted),
-              prefixIcon: const Icon(Icons.lock_outline, color: _textMuted),
-              border: const OutlineInputBorder(),
-              enabledBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: _border),
+              labelStyle: TextStyle(
+                fontFamily: 'NotoSansArabic',
+                color: isLight ? const Color(0xFF64748B) : _textMuted,
               ),
-              focusedBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: _gold),
+              prefixIcon: Icon(
+                Icons.lock_outline,
+                color: isLight ? MadarColors.lightDeepCobalt : _textMuted,
+              ),
+              fillColor: isLight ? Colors.white : const Color(0xFF21262D),
+              filled: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: isLight ? const Color(0xFFCBD5E1) : _border,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: isLight ? const Color(0xFFCBD5E1) : _border,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: isLight ? MadarColors.lightPrimary : _gold,
+                  width: 2,
+                ),
               ),
               suffixIcon: IconButton(
                 icon: Icon(
                   _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                  color: _textMuted,
+                  color: isLight ? const Color(0xFF64748B) : _textMuted,
                 ),
                 onPressed: () =>
                     setState(() => _obscurePassword = !_obscurePassword),
@@ -638,21 +694,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             child: ElevatedButton(
               onPressed: _isLoading ? null : _login,
               style: ElevatedButton.styleFrom(
-                backgroundColor: _gold,
-                foregroundColor: _bgDark,
-                disabledBackgroundColor: _gold.withValues(alpha: 0.4),
+                backgroundColor: isLight ? MadarColors.lightBabyBlueContainer : _gold,
+                foregroundColor: isLight ? MadarColors.lightDeepCobalt : _bgDark,
+                disabledBackgroundColor: (isLight ? MadarColors.lightBabyBlueContainer : _gold).withValues(alpha: 0.4),
+                side: isLight
+                    ? const BorderSide(color: MadarColors.lightDeepCobalt, width: 1.5)
+                    : BorderSide.none,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
                 elevation: 0,
               ),
               child: _isLoading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.5,
-                        color: _bgDark,
+                        color: isLight ? MadarColors.lightDeepCobalt : _bgDark,
                       ),
                     )
                   : const Text(
@@ -670,7 +729,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
-  Widget _buildFooterRow() {
+  Widget _buildFooterRow(bool isLight) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -680,24 +739,69 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             style: TextStyle(
               fontFamily: 'NotoSansArabic',
               fontSize: 11.5,
-              color: _textMuted.withValues(alpha: 0.8),
+              color: isLight ? const Color(0xFF64748B) : _textMuted.withValues(alpha: 0.8),
             ),
           ),
         ),
         TextButton.icon(
           onPressed: () => _openPreAuthUserManagement(),
-          icon: const Icon(Icons.admin_panel_settings, size: 16),
-          label: const Text(
+          icon: Icon(
+            Icons.admin_panel_settings,
+            size: 16,
+            color: isLight ? MadarColors.lightDeepCobalt : _gold,
+          ),
+          label: Text(
             'إدارة المستخدمين',
             style: TextStyle(
               fontFamily: 'NotoSansArabic',
               fontSize: 12.5,
               fontWeight: FontWeight.w700,
+              color: isLight ? MadarColors.lightDeepCobalt : _gold,
             ),
           ),
-          style: TextButton.styleFrom(foregroundColor: _gold),
+          style: TextButton.styleFrom(
+            foregroundColor: isLight ? MadarColors.lightDeepCobalt : _gold,
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _buildTelemetryPill(IconData icon, String text, Color accent, {bool isLight = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        color: isLight ? Colors.white.withValues(alpha: 0.9) : Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isLight ? const Color(0xFFBAE6FD) : Colors.white.withValues(alpha: 0.08),
+        ),
+        boxShadow: isLight
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF0066FF).withValues(alpha: 0.05),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: accent),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: TextStyle(
+              fontFamily: 'NotoSansArabic',
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isLight ? MadarColors.lightDeepCobalt : Colors.white.withValues(alpha: 0.8),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

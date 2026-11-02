@@ -602,30 +602,42 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   }
 
   Widget _buildSplineChartContainer() {
+    final isLight = Theme.of(context).brightness == Brightness.light;
     return Container(
       height: 340,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: isLight ? const Color(0xFFE0F2FE) : Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+          color: isLight ? Colors.white : Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+          width: isLight ? 2 : 1,
         ),
+        boxShadow: isLight
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF0066FF).withValues(alpha: 0.06),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(Icons.waterfall_chart_rounded, size: 18, color: MadarColors.gold),
+              Icon(Icons.waterfall_chart_rounded, size: 18, color: isLight ? MadarColors.lightPrimary : MadarColors.gold),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'منحنى التدفقات المالية (المبيعات vs المشتريات vs الأرباح)',
                   style: TextStyle(
                     fontFamily: 'NotoSansArabic',
                     fontSize: 13.5,
                     fontWeight: FontWeight.bold,
+                    color: isLight ? MadarColors.lightDeepCobalt : null,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -642,30 +654,42 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   }
 
   Widget _buildDonutChartContainer() {
+    final isLight = Theme.of(context).brightness == Brightness.light;
     return Container(
       height: 340,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: isLight ? const Color(0xFFE0F2FE) : Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+          color: isLight ? Colors.white : Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+          width: isLight ? 2 : 1,
         ),
+        boxShadow: isLight
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF0066FF).withValues(alpha: 0.06),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(Icons.pie_chart_outline_rounded, size: 18, color: Color(0xFF388BFD)),
+              Icon(Icons.pie_chart_outline_rounded, size: 18, color: isLight ? MadarColors.lightPrimary : const Color(0xFF388BFD)),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'توزيع المبيعات حسب الأصناف',
                   style: TextStyle(
                     fontFamily: 'NotoSansArabic',
                     fontSize: 13.5,
                     fontWeight: FontWeight.bold,
+                    color: isLight ? MadarColors.lightDeepCobalt : null,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),

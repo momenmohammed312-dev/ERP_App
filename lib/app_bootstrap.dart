@@ -220,6 +220,7 @@ class PosApp extends ConsumerWidget {
       theme: getLightTheme(),
       darkTheme: getDarkTheme(),
       themeMode: themeMode,
+      themeAnimationDuration: Duration.zero,
       supportedLocales: const [Locale('ar'), Locale('en')],
       locale: const Locale('ar'),
       routerConfig: isLicenseValid

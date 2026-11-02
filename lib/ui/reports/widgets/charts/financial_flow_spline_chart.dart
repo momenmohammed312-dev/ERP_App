@@ -64,6 +64,7 @@ class _FinancialFlowSplineChartState extends State<FinancialFlowSplineChart> {
     final activePurchases = (activeItem?['purchases'] as num?)?.toDouble() ?? 0.0;
     final activeNet = activeSales - activePurchases;
     final activeDate = activeItem?['date'] as String? ?? '';
+    final isLight = Theme.of(context).brightness == Brightness.light;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -72,9 +73,20 @@ class _FinancialFlowSplineChartState extends State<FinancialFlowSplineChart> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.03),
+            color: isLight ? Colors.white.withValues(alpha: 0.9) : Colors.white.withValues(alpha: 0.03),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+            border: Border.all(
+              color: isLight ? Colors.white : Colors.white.withValues(alpha: 0.06),
+            ),
+            boxShadow: isLight
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF0066FF).withValues(alpha: 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Wrap(
             alignment: WrapAlignment.spaceBetween,
@@ -85,15 +97,19 @@ class _FinancialFlowSplineChartState extends State<FinancialFlowSplineChart> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.calendar_today_rounded, size: 13, color: MadarColors.gold),
+                  Icon(
+                    Icons.calendar_today_rounded,
+                    size: 13,
+                    color: isLight ? MadarColors.lightPrimary : MadarColors.gold,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     activeDate.isNotEmpty ? activeDate : 'التدفق المالي',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'NotoSansArabic',
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: isLight ? MadarColors.lightDeepCobalt : Colors.white,
                     ),
                   ),
                 ],
@@ -166,9 +182,9 @@ class _FinancialFlowSplineChartState extends State<FinancialFlowSplineChart> {
                 show: true,
                 drawVerticalLine: false,
                 getDrawingHorizontalLine: (value) => FlLine(
-                  color: Colors.white.withValues(alpha: 0.06),
-                  strokeWidth: 1,
-                  dashArray: [4, 4],
+                  color: isLight ? Colors.white.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.06),
+                  strokeWidth: isLight ? 1.5 : 1,
+                  dashArray: isLight ? null : [4, 4],
                 ),
               ),
               titlesData: FlTitlesData(
@@ -213,7 +229,8 @@ class _FinancialFlowSplineChartState extends State<FinancialFlowSplineChart> {
                           label,
                           style: TextStyle(
                             fontSize: 10,
-                            color: Colors.white.withValues(alpha: 0.45),
+                            fontWeight: isLight ? FontWeight.w600 : FontWeight.normal,
+                            color: isLight ? MadarColors.lightDeepCobalt.withValues(alpha: 0.75) : Colors.white.withValues(alpha: 0.45),
                           ),
                         ),
                       );

@@ -157,6 +157,7 @@ class ModernHomeScreen extends ConsumerStatefulWidget {
 class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final Set<int> _loadedTabs = {0};
 
   int get _tabCount => ModernHomeScreen.tabCount;
   int get _cashierTabIndex => ModernHomeScreen.cashierTabIndex;
@@ -168,7 +169,18 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     super.initState();
     // Length MUST equal TabBar tabs count AND TabBarView children count
     _tabController = TabController(length: _tabCount, vsync: this);
+    _tabController.addListener(_handleTabSelection);
     _checkLicenseWarning();
+  }
+
+  void _handleTabSelection() {
+    if (!_loadedTabs.contains(_tabController.index)) {
+      setState(() {
+        _loadedTabs.add(_tabController.index);
+      });
+    } else {
+      setState(() {});
+    }
   }
 
   Future<void> _checkLicenseWarning() async {
@@ -269,9 +281,19 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: _buildUnifiedHeader(context, tabs, isDesktop),
-      body: TabBarView(
-        controller: _tabController,
-        children: tabViews,
+      body: AnimatedBuilder(
+        animation: _tabController,
+        builder: (context, _) {
+          return IndexedStack(
+            index: _tabController.index,
+            children: List.generate(tabViews.length, (i) {
+              if (_loadedTabs.contains(i) || _tabController.index == i) {
+                return tabViews[i];
+              }
+              return const SizedBox.shrink();
+            }),
+          );
+        },
       ),
     );
   }
@@ -320,41 +342,17 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                                           : MadarColors.border.withValues(alpha: 0.6),
                                     ),
                                   ),
-                                  child: isLight
-                                      ? ShaderMask(
-                                          shaderCallback: (bounds) => const LinearGradient(
-                                            begin: Alignment.bottomCenter,
-                                            end: Alignment.topCenter,
-                                            colors: [
-                                              Color(0xFF0A2540),
-                                              Color(0xFF0066FF),
-                                              Color(0xFF38BDF8),
-                                            ],
-                                          ).createShader(bounds),
-                                          blendMode: BlendMode.srcIn,
-                                          child: Image.asset(
-                                            'assets/logo/app_logo.png',
-                                            width: 28,
-                                            height: 28,
-                                            fit: BoxFit.contain,
-                                            errorBuilder: (c, err, st) => const Icon(
-                                              Icons.point_of_sale,
-                                              color: MadarColors.lightPrimary,
-                                              size: 24,
-                                            ),
-                                          ),
-                                        )
-                                      : Image.asset(
-                                          'assets/logo/app_logo.png',
-                                          width: 28,
-                                          height: 28,
-                                          fit: BoxFit.contain,
-                                          errorBuilder: (c, err, st) => const Icon(
-                                            Icons.point_of_sale,
-                                            color: MadarColors.gold,
-                                            size: 24,
-                                          ),
-                                        ),
+                                  child: Image.asset(
+                                    isLight ? 'assets/logo/app_logo_light.png' : 'assets/logo/app_logo.png',
+                                    width: 28,
+                                    height: 28,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (c, err, st) => Icon(
+                                      Icons.point_of_sale,
+                                      color: isLight ? MadarColors.lightPrimary : MadarColors.gold,
+                                      size: 24,
+                                    ),
+                                  ),
                                 );
                               },
                             ),
@@ -481,16 +479,21 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         child: Row(
                           children: [
-                            Image.asset(
-                              'assets/logo/app_logo.png',
-                              width: 26,
-                              height: 26,
-                              fit: BoxFit.contain,
-                              errorBuilder: (ctx, err, st) => const Icon(
-                                Icons.point_of_sale,
-                                color: MadarColors.gold,
-                                size: 22,
-                              ),
+                            Builder(
+                              builder: (ctx) {
+                                final isLight = Theme.of(ctx).brightness == Brightness.light;
+                                return Image.asset(
+                                  isLight ? 'assets/logo/app_logo_light.png' : 'assets/logo/app_logo.png',
+                                  width: 26,
+                                  height: 26,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (ctx, err, st) => Icon(
+                                    Icons.point_of_sale,
+                                    color: isLight ? MadarColors.lightPrimary : MadarColors.gold,
+                                    size: 22,
+                                  ),
+                                );
+                              },
                             ),
                             const SizedBox(width: 8),
                             const Text(

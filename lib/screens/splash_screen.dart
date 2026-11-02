@@ -328,8 +328,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
     return Scaffold(
-      backgroundColor: MadarColors.bgDark,
+      backgroundColor: isLight ? const Color(0xFFF4F8FC) : MadarColors.bgDark,
       body: Stack(
         children: [
           // ── Background ambient mesh & subtle orbital lines
@@ -363,24 +364,24 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       position: _lockupSlide,
                       child: Column(
                         children: [
-                          const Text(
+                          Text(
                             'منظومة إدارة الأعمال',
                             style: TextStyle(
                               fontFamily: 'NotoSansArabic',
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: MadarColors.textSecondary,
+                              color: isLight ? const Color(0xFF334155) : MadarColors.textSecondary,
                               letterSpacing: 0.8,
                             ),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                             'إدارة. تشغيل. نمو.',
                             style: TextStyle(
                               fontFamily: 'NotoSansArabic',
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: MadarColors.goldLight,
+                              color: isLight ? MadarColors.lightPrimary : MadarColors.goldLight,
                               letterSpacing: 1.5,
                             ),
                           ),
@@ -399,12 +400,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                             ),
                           ),
                           const SizedBox(height: 12),
-                          const Text(
+                          Text(
                             'Developed by MO2',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: MadarColors.textMuted,
+                              color: isLight ? const Color(0xFF64748B) : MadarColors.textMuted,
                               letterSpacing: 1.2,
                             ),
                           ),
@@ -432,11 +433,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
             right: 0,
             child: FadeTransition(
               opacity: _lockupFade,
-              child: const Text(
+              child: Text(
                 'MADAR ERP  ·  v2.3.0',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: MadarColors.textMuted,
+                  color: isLight ? const Color(0xFF64748B) : MadarColors.textMuted,
                   fontSize: 11,
                   letterSpacing: 1.5,
                   fontWeight: FontWeight.w500,

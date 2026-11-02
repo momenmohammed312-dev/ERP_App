@@ -79,6 +79,7 @@ class _ProductSalesPieChartState extends ConsumerState<ProductSalesPieChart> {
 
   @override
   Widget build(BuildContext context) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
     final currencyFormatter = NumberFormat.compact(locale: 'ar');
 
     return FutureBuilder<Map<String, double>>(
@@ -102,7 +103,7 @@ class _ProductSalesPieChartState extends ConsumerState<ProductSalesPieChart> {
               style: TextStyle(
                 fontFamily: 'NotoSansArabic',
                 fontSize: 13,
-                color: Colors.white.withValues(alpha: 0.5),
+                color: isLight ? MadarColors.lightDeepCobalt.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.5),
               ),
             ),
           );
@@ -125,7 +126,7 @@ class _ProductSalesPieChartState extends ConsumerState<ProductSalesPieChart> {
             ? topProducts[_touchedIndex]
             : null;
 
-        return Stack(
+        final donutWidget = Stack(
           alignment: Alignment.center,
           children: [
             PieChart(
@@ -147,23 +148,22 @@ class _ProductSalesPieChartState extends ConsumerState<ProductSalesPieChart> {
                 ),
                 borderData: FlBorderData(show: false),
                 sectionsSpace: 3,
-                centerSpaceRadius: 56,
+                centerSpaceRadius: 46,
                 sections: topProducts.asMap().entries.map((entry) {
                   final i = entry.key;
-                  final product = entry.value.key;
                   final value = entry.value.value;
                   final isTouched = i == _touchedIndex;
-                  final radius = isTouched ? 48.0 : 40.0;
+                  final radius = isTouched ? 40.0 : 32.0;
                   final pct = total > 0 ? (value / total * 100) : 0.0;
 
                   return PieChartSectionData(
                     color: _palette[i % _palette.length],
                     value: value,
-                    title: isTouched ? '${pct.toStringAsFixed(1)}%' : '',
+                    title: isTouched ? '%' : '',
                     radius: radius,
                     titleStyle: const TextStyle(
                       fontFamily: 'NotoSansArabic',
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
@@ -184,11 +184,11 @@ class _ProductSalesPieChartState extends ConsumerState<ProductSalesPieChart> {
                     activeEntry != null ? activeEntry.key : 'إجمالي المبيعات',
                     style: TextStyle(
                       fontFamily: 'NotoSansArabic',
-                      fontSize: activeEntry != null ? 12 : 11,
-                      fontWeight: FontWeight.w600,
+                      fontSize: activeEntry != null ? 11 : 10,
+                      fontWeight: FontWeight.w700,
                       color: activeEntry != null
                           ? _palette[_touchedIndex % _palette.length]
-                          : Colors.white.withValues(alpha: 0.65),
+                          : (isLight ? MadarColors.lightDeepCobalt : Colors.white70),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -196,19 +196,109 @@ class _ProductSalesPieChartState extends ConsumerState<ProductSalesPieChart> {
                   const SizedBox(height: 2),
                   Text(
                     activeEntry != null
-                        ? '${currencyFormatter.format(activeEntry.value)} ج.م'
-                        : '${currencyFormatter.format(total)} ج.م',
-                    style: const TextStyle(
+                        ? ' ج.م'
+                        : ' ج.م',
+                    style: TextStyle(
                       fontFamily: 'NotoSansArabic',
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w900,
-                      color: Colors.white,
+                      color: isLight ? MadarColors.lightDeepCobalt : Colors.white,
                     ),
                   ),
                 ],
               ),
             ),
           ],
+        );
+
+        final legendWidget = SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: topProducts.asMap().entries.map((entry) {
+              final i = entry.key;
+              final product = entry.value.key;
+              final value = entry.value.value;
+              final pct = total > 0 ? (value / total * 100) : 0.0;
+              final isTouched = i == _touchedIndex;
+
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    _touchedIndex = isTouched ? -1 : i;
+                  });
+                },
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    color: isTouched
+                        ? _palette[i % _palette.length].withValues(alpha: 0.15)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: _palette[i % _palette.length],
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          product,
+                          style: TextStyle(
+                            fontFamily: 'NotoSansArabic',
+                            fontSize: 11,
+                            fontWeight: isTouched ? FontWeight.bold : FontWeight.w500,
+                            color: isLight ? MadarColors.lightDeepCobalt : Colors.white.withValues(alpha: 0.85),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '%',
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: isLight ? MadarColors.lightDeepCobalt : Colors.white70,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth >= 320) {
+              return Row(
+                children: [
+                  Expanded(flex: 6, child: donutWidget),
+                  const SizedBox(width: 10),
+                  Expanded(flex: 5, child: legendWidget),
+                ],
+              );
+            } else {
+              return Column(
+                children: [
+                  Expanded(flex: 6, child: donutWidget),
+                  const SizedBox(height: 8),
+                  Expanded(flex: 4, child: legendWidget),
+                ],
+              );
+            }
+          },
         );
       },
     );
