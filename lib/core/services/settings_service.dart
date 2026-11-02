@@ -1,12 +1,34 @@
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum CalendarThemeMode { light, gray, dark }
 
 class SettingsService {
   static const _calendarThemeKey = 'calendar_theme_mode';
+  static const _appThemeModeKey = 'app_theme_mode';
   static const _defaultInvoiceTypeKey = 'default_invoice_type';
   static const _thermalPrinterKey = 'thermal_printer_name';
   static const _a4PrinterKey = 'a4_printer_name';
+
+  static Future<ThemeMode> getAppThemeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getString(_appThemeModeKey) ?? 'dark';
+    switch (v) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+      default:
+        return ThemeMode.dark;
+    }
+  }
+
+  static Future<void> setAppThemeMode(ThemeMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _appThemeModeKey,
+      mode == ThemeMode.light ? 'light' : 'dark',
+    );
+  }
 
   static Future<CalendarThemeMode> getCalendarTheme() async {
     final prefs = await SharedPreferences.getInstance();

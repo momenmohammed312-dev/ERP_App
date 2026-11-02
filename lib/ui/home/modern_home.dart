@@ -306,26 +306,57 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: MadarColors.bgDark,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: MadarColors.border.withValues(alpha: 0.6),
-                                ),
-                              ),
-                              child: Image.asset(
-                                'assets/logo/app_logo.png',
-                                width: 28,
-                                height: 28,
-                                fit: BoxFit.contain,
-                                errorBuilder: (ctx, err, st) => const Icon(
-                                  Icons.point_of_sale,
-                                  color: MadarColors.gold,
-                                  size: 24,
-                                ),
-                              ),
+                            Builder(
+                              builder: (ctx) {
+                                final isLight = Theme.of(ctx).brightness == Brightness.light;
+                                return Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: isLight ? MadarColors.lightBgCard : MadarColors.bgDark,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isLight
+                                          ? MadarColors.lightBorder
+                                          : MadarColors.border.withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                  child: isLight
+                                      ? ShaderMask(
+                                          shaderCallback: (bounds) => const LinearGradient(
+                                            begin: Alignment.bottomCenter,
+                                            end: Alignment.topCenter,
+                                            colors: [
+                                              Color(0xFF0A2540),
+                                              Color(0xFF0066FF),
+                                              Color(0xFF38BDF8),
+                                            ],
+                                          ).createShader(bounds),
+                                          blendMode: BlendMode.srcIn,
+                                          child: Image.asset(
+                                            'assets/logo/app_logo.png',
+                                            width: 28,
+                                            height: 28,
+                                            fit: BoxFit.contain,
+                                            errorBuilder: (c, err, st) => const Icon(
+                                              Icons.point_of_sale,
+                                              color: MadarColors.lightPrimary,
+                                              size: 24,
+                                            ),
+                                          ),
+                                        )
+                                      : Image.asset(
+                                          'assets/logo/app_logo.png',
+                                          width: 28,
+                                          height: 28,
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (c, err, st) => const Icon(
+                                            Icons.point_of_sale,
+                                            color: MadarColors.gold,
+                                            size: 24,
+                                          ),
+                                        ),
+                                );
+                              },
                             ),
                             const SizedBox(width: 10),
                             Column(

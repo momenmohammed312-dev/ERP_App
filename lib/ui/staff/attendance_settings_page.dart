@@ -217,14 +217,19 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final bgColor = context.bgCanvas;
+    final textColor = context.textPrimary;
+    final accentColor = context.primaryColor;
+
     return PermissionGuard(
       permission: Permission.manageAttendance,
       child: Scaffold(
-        backgroundColor: MadarColors.bgDark,
+        backgroundColor: bgColor,
         appBar: AppBar(
           title: const Text('إعدادات الحضور والانصراف'),
-          backgroundColor: MadarColors.bgDark,
-          foregroundColor: MadarColors.textLight,
+          backgroundColor: isDark ? MadarColors.bgDark : Colors.white,
+          foregroundColor: textColor,
           elevation: 0,
           actions: [
             Padding(
@@ -243,7 +248,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
                     : const Icon(Icons.check, size: 18),
                 label: const Text('حفظ الإعدادات'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: MadarColors.success,
+                  backgroundColor: isDark ? MadarColors.success : MadarColors.lightPrimary,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -255,7 +260,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
           ],
         ),
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: MadarColors.gold))
+            ? Center(child: CircularProgressIndicator(color: accentColor))
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -274,15 +279,17 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
   }
 
   Widget _buildWorkScheduleSection() {
+    final isDark = context.isDarkMode;
+
     return _buildSection(
       title: 'جدول العمل الافتراضي',
       icon: Icons.schedule,
       children: [
         ListTile(
           leading: const Icon(Icons.login, color: MadarColors.success, size: 20),
-          title: const Text('وقت بدء العمل', style: TextStyle(color: MadarColors.textLight, fontSize: 14)),
-          subtitle: Text(_formatTime(_workStart), style: const TextStyle(color: MadarColors.gold, fontWeight: FontWeight.bold)),
-          trailing: const Icon(Icons.access_time, color: MadarColors.textMuted),
+          title: Text('وقت بدء العمل', style: TextStyle(color: context.textPrimary, fontSize: 14)),
+          subtitle: Text(_formatTime(_workStart), style: TextStyle(color: context.primaryColor, fontWeight: FontWeight.bold)),
+          trailing: Icon(Icons.access_time, color: context.textMuted),
           onTap: () async {
             final picked = await showTimePicker(
               context: context,
@@ -291,12 +298,12 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (picked != null) setState(() => _workStart = picked);
           },
         ),
-        const Divider(height: 1, color: MadarColors.border),
+        Divider(height: 1, color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle),
         ListTile(
           leading: const Icon(Icons.logout, color: MadarColors.error, size: 20),
-          title: const Text('وقت نهاية العمل', style: TextStyle(color: MadarColors.textLight, fontSize: 14)),
-          subtitle: Text(_formatTime(_workEnd), style: const TextStyle(color: MadarColors.gold, fontWeight: FontWeight.bold)),
-          trailing: const Icon(Icons.access_time, color: MadarColors.textMuted),
+          title: Text('وقت نهاية العمل', style: TextStyle(color: context.textPrimary, fontSize: 14)),
+          subtitle: Text(_formatTime(_workEnd), style: TextStyle(color: context.primaryColor, fontWeight: FontWeight.bold)),
+          trailing: Icon(Icons.access_time, color: context.textMuted),
           onTap: () async {
             final picked = await showTimePicker(
               context: context,
@@ -305,14 +312,14 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (picked != null) setState(() => _workEnd = picked);
           },
         ),
-        const Divider(height: 1, color: MadarColors.border),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+        Divider(height: 1, color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Text(
             'أيام العمل الأسبوعية',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: MadarColors.textLight,
+              color: context.textPrimary,
               fontSize: 13,
             ),
           ),
@@ -334,12 +341,12 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
           ),
         ),
         const SizedBox(height: 12),
-        const Divider(height: 1, color: MadarColors.border),
+        Divider(height: 1, color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle),
         ListTile(
           leading: const Icon(Icons.timer_outlined, color: MadarColors.info, size: 20),
-          title: const Text('ساعات العمل اليومية', style: TextStyle(color: MadarColors.textLight, fontSize: 14)),
-          subtitle: Text('${_overtimeThresholdHours.toStringAsFixed(1)} ساعة', style: const TextStyle(color: MadarColors.gold, fontWeight: FontWeight.bold)),
-          trailing: const Icon(Icons.edit_outlined, size: 18, color: MadarColors.textMuted),
+          title: Text('ساعات العمل اليومية', style: TextStyle(color: context.textPrimary, fontSize: 14)),
+          subtitle: Text('${_overtimeThresholdHours.toStringAsFixed(1)} ساعة', style: TextStyle(color: context.primaryColor, fontWeight: FontWeight.bold)),
+          trailing: Icon(Icons.edit_outlined, size: 18, color: context.textMuted),
           onTap: () async {
             final controller = TextEditingController(
               text: _overtimeThresholdHours.toString(),
@@ -377,23 +384,32 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
 
   Widget _buildDayChip(String key, String label) {
     final selected = _workDays[key] ?? false;
+    final isDark = context.isDarkMode;
+    final activeColor = isDark ? MadarColors.success : MadarColors.lightPrimary;
+
     return FilterChip(
       label: Text(
         label,
         style: TextStyle(
-          color: selected ? Colors.white : MadarColors.textMuted,
+          color: selected
+              ? (isDark ? Colors.white : MadarColors.lightPrimary)
+              : context.textMuted,
           fontWeight: selected ? FontWeight.bold : FontWeight.normal,
           fontSize: 12,
         ),
       ),
       selected: selected,
-      selectedColor: MadarColors.success.withValues(alpha: 0.25),
-      checkmarkColor: MadarColors.success,
-      backgroundColor: MadarColors.bgDark.withValues(alpha: 0.5),
+      selectedColor: activeColor.withValues(alpha: isDark ? 0.25 : 0.12),
+      checkmarkColor: activeColor,
+      backgroundColor: isDark
+          ? MadarColors.bgDark.withValues(alpha: 0.5)
+          : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
         side: BorderSide(
-          color: selected ? MadarColors.success : MadarColors.border,
+          color: selected
+              ? activeColor
+              : (isDark ? MadarColors.border : MadarColors.lightBorder),
         ),
       ),
       onSelected: (val) => setState(() => _workDays[key] = val),
@@ -788,14 +804,22 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
     required IconData icon,
     required List<Widget> children,
   }) {
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
+
     return Container(
       decoration: BoxDecoration(
-        color: MadarColors.bgCard,
+        color: context.bgCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: MadarColors.border),
+        border: Border.all(
+          color: isDark ? MadarColors.border : MadarColors.lightBorder,
+          width: 1.2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.15)
+                : const Color(0x0A0066FF),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -811,25 +835,30 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
                 Container(
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: MadarColors.gold.withValues(alpha: 0.15),
+                    color: primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: MadarColors.gold.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: primary.withValues(alpha: 0.25),
+                    ),
                   ),
-                  child: Icon(icon, size: 18, color: MadarColors.gold),
+                  child: Icon(icon, size: 18, color: primary),
                 ),
                 const SizedBox(width: 10),
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: MadarColors.textLight,
+                    color: context.textPrimary,
                   ),
                 ),
               ],
             ),
           ),
-          const Divider(height: 1, color: MadarColors.border),
+          Divider(
+            height: 1,
+            color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle,
+          ),
           ...children,
         ],
       ),

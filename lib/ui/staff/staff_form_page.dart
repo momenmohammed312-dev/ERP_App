@@ -161,15 +161,17 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+
     return Scaffold(
-      backgroundColor: MadarColors.bgDark,
+      backgroundColor: context.bgCanvas,
       appBar: AppBar(
         title: Text(
           widget.staff == null ? 'إضافة موظف جديد' : 'تعديل بيانات الموظف',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: MadarColors.bgDark,
-        foregroundColor: MadarColors.textLight,
+        backgroundColor: isDark ? MadarColors.bgDark : Colors.white,
+        foregroundColor: context.textPrimary,
         elevation: 0,
         actions: [
           Padding(
@@ -188,7 +190,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
                   : const Icon(Icons.check, size: 18),
               label: const Text('حفظ البيانات'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: MadarColors.success,
+                backgroundColor: isDark ? MadarColors.success : MadarColors.lightPrimary,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -231,11 +233,26 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
     required IconData icon,
     required List<Widget> children,
   }) {
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
+
     return Container(
       decoration: BoxDecoration(
-        color: MadarColors.bgCard,
+        color: context.bgCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: MadarColors.border),
+        border: Border.all(
+          color: isDark ? MadarColors.border : MadarColors.lightBorder,
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.15)
+                : const Color(0x0A0066FF),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       padding: const EdgeInsets.all(18.0),
       child: Column(
@@ -246,19 +263,19 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
               Container(
                 padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
-                  color: MadarColors.gold.withValues(alpha: 0.15),
+                  color: primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: MadarColors.gold.withValues(alpha: 0.3),
+                    color: primary.withValues(alpha: 0.25),
                   ),
                 ),
-                child: Icon(icon, size: 18, color: MadarColors.gold),
+                child: Icon(icon, size: 18, color: primary),
               ),
               const SizedBox(width: 10),
               Text(
                 title,
-                style: const TextStyle(
-                  color: MadarColors.textLight,
+                style: TextStyle(
+                  color: context.textPrimary,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
@@ -279,7 +296,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       children: [
         TextFormField(
           controller: _nameController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           decoration: _buildInputDecoration('الاسم الكامل *', Icons.person),
           validator: (value) {
             if (value == null || value.isEmpty) {
@@ -291,13 +308,13 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         const SizedBox(height: 12),
         TextFormField(
           controller: _positionController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           decoration: _buildInputDecoration('المنصب (اختياري)', Icons.work_outline),
         ),
         const SizedBox(height: 12),
         TextFormField(
           controller: _biometricIdController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           keyboardType: TextInputType.text,
           decoration: _buildInputDecoration(
             'رقم البصمة بالجهاز (ID في جهاز البصمة)',
@@ -307,7 +324,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           value: _selectedEmploymentType,
-          dropdownColor: MadarColors.bgCard,
+          dropdownColor: context.bgCard,
           style: const TextStyle(color: MadarColors.textLight, fontSize: 14),
           decoration: _buildInputDecoration(
             'نوع التوظيف والراتب',
@@ -331,7 +348,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         const SizedBox(height: 12),
         TextFormField(
           controller: _basicSalaryController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           keyboardType: TextInputType.number,
           decoration: _buildInputDecoration(
             _selectedEmploymentType == 'weekly'
@@ -386,7 +403,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
           const SizedBox(height: 12),
           TextFormField(
             controller: _hourlyRateController,
-            style: const TextStyle(color: MadarColors.textLight),
+            style: TextStyle(color: context.textPrimary),
             keyboardType: TextInputType.number,
             decoration: _buildInputDecoration(
               'السعر بالساعة',
@@ -414,7 +431,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       children: [
         TextFormField(
           controller: _departmentController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           decoration: _buildInputDecoration('القسم', Icons.business_outlined),
         ),
         const SizedBox(height: 12),
@@ -476,20 +493,20 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       children: [
         TextFormField(
           controller: _nationalIdController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           decoration: _buildInputDecoration('الرقم القومي', Icons.badge_outlined),
         ),
         const SizedBox(height: 12),
         TextFormField(
           controller: _phoneController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           keyboardType: TextInputType.phone,
           decoration: _buildInputDecoration('رقم الهاتف', Icons.phone_outlined),
         ),
         const SizedBox(height: 12),
         TextFormField(
           controller: _emailController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           keyboardType: TextInputType.emailAddress,
           decoration: _buildInputDecoration(
             'البريد الإلكتروني',
@@ -499,7 +516,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         const SizedBox(height: 12),
         TextFormField(
           controller: _addressController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           maxLines: 2,
           decoration: _buildInputDecoration('العنوان', Icons.home_outlined),
         ),
@@ -514,7 +531,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       children: [
         TextFormField(
           controller: _bankNameController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           decoration: _buildInputDecoration(
             'اسم البنك',
             Icons.account_balance,
@@ -523,7 +540,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         const SizedBox(height: 12),
         TextFormField(
           controller: _bankAccountController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           decoration: _buildInputDecoration(
             'رقم الحساب البنكي',
             Icons.credit_card,
@@ -540,7 +557,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
       children: [
         TextFormField(
           controller: _emergencyContactController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           decoration: _buildInputDecoration(
             'اسم شخص الطوارئ',
             Icons.person_outline,
@@ -549,7 +566,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         const SizedBox(height: 12),
         TextFormField(
           controller: _emergencyPhoneController,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           keyboardType: TextInputType.phone,
           decoration: _buildInputDecoration(
             'رقم هاتف الطوارئ',
@@ -568,7 +585,7 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
         TextFormField(
           controller: _notesController,
           maxLines: 3,
-          style: const TextStyle(color: MadarColors.textLight),
+          style: TextStyle(color: context.textPrimary),
           decoration: _buildInputDecoration('ملاحظات عن الموظف', Icons.notes),
         ),
       ],
@@ -697,24 +714,34 @@ class _StaffFormPageState extends ConsumerState<StaffFormPage> {
   }
 
   InputDecoration _buildInputDecoration(String label, IconData icon) {
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
+
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: MadarColors.textSecondary, fontSize: 13),
-      prefixIcon: Icon(icon, color: MadarColors.gold, size: 20),
+      labelStyle: TextStyle(
+        color: isDark ? MadarColors.textSecondary : MadarColors.lightTextSecondary,
+        fontSize: 13,
+      ),
+      prefixIcon: Icon(icon, color: primary, size: 20),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: MadarColors.border),
+        borderSide: BorderSide(
+          color: isDark ? MadarColors.border : MadarColors.lightBorder,
+        ),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: MadarColors.border),
+        borderSide: BorderSide(
+          color: isDark ? MadarColors.border : MadarColors.lightBorder,
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: MadarColors.gold, width: 1.5),
+        borderSide: BorderSide(color: primary, width: 1.5),
       ),
       filled: true,
-      fillColor: MadarColors.bgDark.withValues(alpha: 0.6),
+      fillColor: isDark ? MadarColors.bgDark.withValues(alpha: 0.6) : Colors.white,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );
   }

@@ -9,6 +9,8 @@ import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/ui/user/user_management_page.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/services/auth_service.dart';
+import 'package:pos_offline_desktop/core/provider/theme_provider.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import '../backup/enhanced_backup_screen.dart';
 
 // ignore_for_file: deprecated_member_use
@@ -44,6 +46,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    SettingsService.getAppThemeMode().then((mode) {
+      if (mounted) setState(() => _darkModeEnabled = (mode == ThemeMode.dark));
+    });
     SettingsService.getCalendarTheme().then((mode) {
       setState(() => _calendarTheme = mode);
     });
@@ -119,14 +124,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF0D1117) : const Color(0xFFF6F8FA);
-    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
-    final innerBg = isDark ? const Color(0xFF21262D) : const Color(0xFFF0F2F5);
-    final textColor = isDark ? const Color(0xFFE6EDF3) : const Color(0xFF1F2328);
-    final subTextColor = isDark ? const Color(0xFF8B949E) : const Color(0xFF656D76);
-    final borderColor = isDark ? const Color(0xFF30363D) : const Color(0xFFD0D7DE);
-    final goldColor = const Color(0xFFC9A84C);
-    final blueColor = const Color(0xFF58A6FF);
+    final bgColor = isDark ? const Color(0xFF0D1117) : MadarColors.lightBgApp;
+    final cardBg = isDark ? const Color(0xFF161B22) : MadarColors.lightBgCard;
+    final innerBg = isDark ? const Color(0xFF21262D) : MadarColors.lightBgSurface;
+    final textColor = isDark ? const Color(0xFFE6EDF3) : MadarColors.lightTextPrimary;
+    final subTextColor = isDark ? const Color(0xFF8B949E) : MadarColors.lightTextSecondary;
+    final borderColor = isDark ? const Color(0xFF30363D) : MadarColors.lightBorder;
+    final goldColor = isDark ? const Color(0xFFC9A84C) : MadarColors.lightPrimary;
+    final blueColor = isDark ? const Color(0xFF58A6FF) : MadarColors.lightPrimary;
     final greenColor = const Color(0xFF2EA043);
 
     return Scaffold(
@@ -184,10 +189,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           Switch(
                             value: _darkModeEnabled,
                             activeColor: goldColor,
-                            onChanged: (value) {
+                            onChanged: (value) async {
                               setState(() {
                                 _darkModeEnabled = value;
                               });
+                              await ref
+                                  .read(themeModeProvider.notifier)
+                                  .toggleTheme(value);
                             },
                           ),
                         ],

@@ -14,6 +14,8 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/core/router/go_router.dart';
 import 'package:pos_offline_desktop/core/config/theme.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
+import 'package:pos_offline_desktop/core/provider/theme_provider.dart';
 import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
 import 'package:pos_offline_desktop/core/utils/logger.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
@@ -169,8 +171,8 @@ class PosApp extends ConsumerWidget {
       textTheme: textTheme.apply(
         fontSizeFactor: PlatformUtils.isMobile ? 0.85 : 1.0,
         fontFamily: 'NotoSansArabic',
-        bodyColor: Colors.white,
-        displayColor: Colors.white,
+        bodyColor: MadarColors.lightTextPrimary,
+        displayColor: MadarColors.lightTextPrimary,
       ),
     );
   }
@@ -198,6 +200,7 @@ class PosApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final licenseState = ref.watch(licenseStateProvider);
+    final themeMode = ref.watch(themeModeProvider);
 
     final isLicenseValid = licenseState.when(
       data: (valid) => valid,
@@ -216,7 +219,7 @@ class PosApp extends ConsumerWidget {
       ],
       theme: getLightTheme(),
       darkTheme: getDarkTheme(),
-      themeMode: ThemeMode.dark,
+      themeMode: themeMode,
       supportedLocales: const [Locale('ar'), Locale('en')],
       locale: const Locale('ar'),
       routerConfig: isLicenseValid

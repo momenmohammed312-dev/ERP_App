@@ -408,33 +408,44 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
+
     return PermissionGuard(
       permission: Permission.manageAttendanceDevices,
       child: Scaffold(
-        backgroundColor: MadarColors.bgDark,
+        backgroundColor: context.bgCanvas,
         appBar: AppBar(
           title: const Text('إدارة أجهزة الحضور'),
-          backgroundColor: MadarColors.bgDark,
-          foregroundColor: MadarColors.textLight,
+          backgroundColor: isDark ? MadarColors.bgDark : Colors.white,
+          foregroundColor: context.textPrimary,
           elevation: 0,
           actions: [
             Container(
               margin: const EdgeInsets.symmetric(vertical: 8),
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: MadarColors.bgCard,
+                color: isDark ? MadarColors.bgCard : MadarColors.lightBgSurface,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: MadarColors.border),
+                border: Border.all(
+                  color: isDark ? MadarColors.border : MadarColors.lightBorder,
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('مزامنة تلقائية', style: TextStyle(fontSize: 12, color: MadarColors.textSecondary)),
+                  Text(
+                    'مزامنة تلقائية',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.textSecondary,
+                    ),
+                  ),
                   const SizedBox(width: 6),
                   Switch(
                     value: _autoSync,
                     onChanged: _toggleAutoSync,
-                    activeColor: MadarColors.gold,
+                    activeColor: primary,
                   ),
                 ],
               ),
@@ -442,12 +453,12 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
             const SizedBox(width: 6),
             IconButton(
               icon: _syncingAll
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: MadarColors.gold),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: primary),
                     )
-                  : const Icon(Icons.sync, color: MadarColors.gold),
+                  : Icon(Icons.sync, color: primary),
               onPressed: _syncingAll ? null : _syncAllDevices,
               tooltip: 'مزامنة كل الأجهزة الآن',
             ),
@@ -460,12 +471,12 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
           ],
         ),
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: MadarColors.gold))
+            ? Center(child: CircularProgressIndicator(color: primary))
             : _devices.isEmpty
-            ? const Center(
+            ? Center(
                 child: Text(
                   'لا توجد أجهزة مضافة. اضغط + لإضافة جهاز.',
-                  style: TextStyle(color: MadarColors.textSecondary),
+                  style: TextStyle(color: context.textSecondary),
                 ),
               )
             : ListView.builder(
@@ -480,6 +491,7 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
   }
 
   Widget _buildDeviceCard(BiometricDevice device) {
+    final isDark = context.isDarkMode;
     final isTcp = device.connectionType == 'tcp_ip';
     final isSuccess = device.lastSyncStatus == 'success';
     final isPartial = device.lastSyncStatus == 'partial';
@@ -490,7 +502,7 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
         : isPartial
             ? MadarColors.warning
             : isUnsynced
-                ? MadarColors.textMuted
+                ? context.textMuted
                 : MadarColors.error;
 
     final statusText = isSuccess
@@ -504,14 +516,19 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: MadarColors.bgCard,
+        color: context.bgCard,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isSuccess ? MadarColors.border : statusColor.withValues(alpha: 0.3),
+          color: isSuccess
+              ? (isDark ? MadarColors.border : MadarColors.lightBorder)
+              : statusColor.withValues(alpha: 0.35),
+          width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.2)
+                : const Color(0x0A0066FF),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -527,15 +544,23 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: (isTcp ? MadarColors.info : MadarColors.gold).withValues(alpha: 0.12),
+                    color: (isTcp
+                            ? (isDark ? MadarColors.info : MadarColors.lightPrimary)
+                            : (isDark ? MadarColors.gold : MadarColors.lightPrimary))
+                        .withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: (isTcp ? MadarColors.info : MadarColors.gold).withValues(alpha: 0.25),
+                      color: (isTcp
+                              ? (isDark ? MadarColors.info : MadarColors.lightPrimary)
+                              : (isDark ? MadarColors.gold : MadarColors.lightPrimary))
+                          .withValues(alpha: 0.25),
                     ),
                   ),
                   child: Icon(
                     isTcp ? Icons.router_outlined : Icons.description_outlined,
-                    color: isTcp ? MadarColors.info : MadarColors.gold,
+                    color: isTcp
+                        ? (isDark ? MadarColors.info : MadarColors.lightPrimary)
+                        : (isDark ? MadarColors.gold : MadarColors.lightPrimary),
                     size: 26,
                   ),
                 ),
@@ -549,10 +574,10 @@ class _DeviceManagementPageState extends ConsumerState<DeviceManagementPage> {
                           Expanded(
                             child: Text(
                               device.name,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: MadarColors.textLight,
+                                color: context.textPrimary,
                               ),
                             ),
                           ),

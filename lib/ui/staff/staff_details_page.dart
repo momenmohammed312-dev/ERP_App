@@ -54,16 +54,19 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
+
     return Scaffold(
-      backgroundColor: MadarColors.bgDark,
+      backgroundColor: context.bgCanvas,
       appBar: AppBar(
         title: const Text('تفاصيل الموظف'),
-        backgroundColor: MadarColors.bgDark,
-        foregroundColor: MadarColors.textLight,
+        backgroundColor: isDark ? MadarColors.bgDark : Colors.white,
+        foregroundColor: context.textPrimary,
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.fingerprint, color: MadarColors.info),
+            icon: Icon(Icons.fingerprint, color: isDark ? MadarColors.info : MadarColors.lightPrimary),
             onPressed: () async {
               await Navigator.push(
                 context,
@@ -76,7 +79,7 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
             tooltip: 'ربط البصمة',
           ),
           IconButton(
-            icon: const Icon(Icons.edit, color: MadarColors.gold),
+            icon: Icon(Icons.edit_outlined, color: primary),
             onPressed: _editStaff,
             tooltip: 'تعديل',
           ),
@@ -113,23 +116,32 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
     final isActive = widget.staff.status == 'active' && widget.staff.isActive;
     final statusColor = isActive ? MadarColors.success : MadarColors.error;
     final statusText = isActive ? 'نشط' : 'غير نشط';
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18.0),
       decoration: BoxDecoration(
-        color: MadarColors.bgCard,
+        color: context.bgCard,
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-        border: Border.all(color: MadarColors.border.withValues(alpha: 0.6)),
+        border: Border.all(
+          color: isDark ? MadarColors.border.withValues(alpha: 0.6) : MadarColors.lightBorder,
+          width: 1.2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.25)
+                : const Color(0x0A0066FF),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
         ],
-        gradient: const LinearGradient(
-          colors: [MadarColors.bgCard, Color(0xFF1E2836)],
+        gradient: LinearGradient(
+          colors: isDark
+              ? const [MadarColors.bgCard, Color(0xFF1E2836)]
+              : const [Colors.white, Color(0xFFF0F6FC)],
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
         ),
@@ -144,16 +156,20 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
                 height: 60,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: MadarColors.gold.withValues(alpha: 0.15),
+                  color: isDark
+                      ? MadarColors.gold.withValues(alpha: 0.15)
+                      : MadarColors.lightBabyBlueContainer,
                   border: Border.all(
-                    color: MadarColors.gold.withValues(alpha: 0.4),
+                    color: isDark
+                        ? MadarColors.gold.withValues(alpha: 0.4)
+                        : MadarColors.lightBorder,
                     width: 2,
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.person,
                   size: 34,
-                  color: MadarColors.gold,
+                  color: primary,
                 ),
               ),
               const SizedBox(width: 16),
@@ -163,10 +179,10 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
                   children: [
                     Text(
                       widget.staff.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        color: MadarColors.textLight,
+                        color: context.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -174,9 +190,9 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
                       widget.staff.position.isNotEmpty
                           ? widget.staff.position
                           : 'موظف',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
-                        color: MadarColors.textSecondary,
+                        color: context.textSecondary,
                       ),
                     ),
                   ],
@@ -230,12 +246,14 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
               _buildHeaderChip(
                 Icons.attach_money,
                 CurrencyHelper.formatCurrency(widget.staff.basicSalary),
-                color: MadarColors.gold,
+                color: primary,
               ),
               _buildHeaderChip(
                 Icons.fingerprint,
                 _biometricId != null ? 'بصمة: $_biometricId' : 'بدون بصمة',
-                color: _biometricId != null ? MadarColors.info : MadarColors.textMuted,
+                color: _biometricId != null
+                    ? (isDark ? MadarColors.info : MadarColors.lightPrimary)
+                    : context.textMuted,
               ),
             ],
           ),
@@ -245,13 +263,20 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
   }
 
   Widget _buildHeaderChip(IconData icon, String label, {Color? color}) {
-    final chipColor = color ?? MadarColors.textSecondary;
+    final isDark = context.isDarkMode;
+    final chipColor = color ?? context.textSecondary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: MadarColors.bgDark.withValues(alpha: 0.5),
+        color: isDark
+            ? MadarColors.bgDark.withValues(alpha: 0.5)
+            : MadarColors.lightBgSurface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: chipColor.withValues(alpha: 0.25)),
+        border: Border.all(
+          color: isDark
+              ? chipColor.withValues(alpha: 0.25)
+              : MadarColors.lightBorder,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -272,15 +297,18 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
   }
 
   Widget _buildTabBar() {
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
+
     return Container(
-      color: MadarColors.bgDark,
+      color: isDark ? MadarColors.bgDark : Colors.white,
       child: TabBar(
         controller: _tabController,
-        labelColor: MadarColors.gold,
-        unselectedLabelColor: MadarColors.textMuted,
-        indicatorColor: MadarColors.gold,
+        labelColor: primary,
+        unselectedLabelColor: context.textMuted,
+        indicatorColor: primary,
         indicatorWeight: 3,
-        dividerColor: MadarColors.border,
+        dividerColor: isDark ? MadarColors.border : MadarColors.lightBorderSubtle,
         tabs: const [
           Tab(icon: Icon(Icons.info_outline), text: 'المعلومات'),
           Tab(icon: Icon(Icons.schedule_outlined), text: 'الحضور'),
@@ -376,12 +404,27 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
   }
 
   Widget _buildInfoSection(String title, List<Widget> children) {
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: MadarColors.bgCard,
+        color: context.bgCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: MadarColors.border),
+        border: Border.all(
+          color: isDark ? MadarColors.border : MadarColors.lightBorder,
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.15)
+                : const Color(0x0A0066FF),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -394,15 +437,15 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
                   width: 4,
                   height: 16,
                   decoration: BoxDecoration(
-                    color: MadarColors.gold,
+                    color: primary,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: MadarColors.gold,
+                  style: TextStyle(
+                    color: primary,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
@@ -427,9 +470,9 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
             width: 140,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: MadarColors.textMuted,
+                color: context.textMuted,
                 fontSize: 13,
               ),
             ),
@@ -438,8 +481,8 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                color: MadarColors.textLight,
+              style: TextStyle(
+                color: context.textPrimary,
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
               ),
