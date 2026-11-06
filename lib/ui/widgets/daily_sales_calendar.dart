@@ -329,10 +329,10 @@ class _DailySalesCalendarState extends ConsumerState<DailySalesCalendar> {
   Color _getDayColor(double salesAmount, bool isSelected, bool isToday) {
     switch (_calendarTheme) {
       case CalendarThemeMode.dark:
-        if (isSelected) return Colors.blueGrey.shade700;
-        if (isToday) return Colors.deepOrange.shade700;
-        if (salesAmount > 0) return Colors.green.shade700;
-        return Colors.grey.shade800;
+        if (isSelected) return const Color(0xFF1F6FEB); // Distinct vibrant blue
+        if (isToday) return const Color(0xFFD29922); // Warm golden amber
+        if (salesAmount > 0) return const Color(0xFF238636); // Crisp emerald green
+        return const Color(0xFF262C36); // Lighter, clean slate surface (not murky)
       case CalendarThemeMode.gray:
         if (isSelected) return Colors.blueGrey.shade200;
         if (isToday) return Colors.orange.shade200;
@@ -350,8 +350,8 @@ class _DailySalesCalendarState extends ConsumerState<DailySalesCalendar> {
     switch (_calendarTheme) {
       case CalendarThemeMode.dark:
         if (isSelected || isToday) return Colors.white;
-        if (salesAmount > 0) return Colors.green.shade200;
-        return Colors.grey.shade300;
+        if (salesAmount > 0) return Colors.white;
+        return const Color(0xFFE6EDF3); // High-contrast, bright text
       case CalendarThemeMode.gray:
         if (isSelected || isToday) return Colors.black;
         if (salesAmount > 0) return Colors.green.shade800;

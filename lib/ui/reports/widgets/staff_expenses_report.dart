@@ -209,6 +209,7 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF121212) : Colors.grey.shade50;
     final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
@@ -275,22 +276,22 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                           ),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(20),
+                          padding: EdgeInsets.all(isNarrow ? 12 : 20),
                           child: Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.all(12),
+                                padding: EdgeInsets.all(isNarrow ? 8 : 12),
                                 decoration: BoxDecoration(
                                   color: Colors.red.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.payments,
                                   color: Colors.red,
-                                  size: 28,
+                                  size: isNarrow ? 20 : 28,
                                 ),
                               ),
-                              const SizedBox(width: 16),
+                              SizedBox(width: isNarrow ? 10 : 16),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -300,16 +301,20 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                                       style: TextStyle(
                                         color: Colors.red.shade400,
                                         fontWeight: FontWeight.w600,
-                                        fontSize: 14,
+                                        fontSize: isNarrow ? 12 : 14,
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${_totalAdvances.toStringAsFixed(2)} ج.م',
-                                      style: TextStyle(
-                                        color: textColor,
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
+                                    const SizedBox(height: 2),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: AlignmentDirectional.centerStart,
+                                      child: Text(
+                                        '${_totalAdvances.toStringAsFixed(2)} ج.م',
+                                        style: TextStyle(
+                                          color: textColor,
+                                          fontSize: isNarrow ? 16 : 22,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -322,14 +327,14 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                                     'عدد السلف',
                                     style: TextStyle(
                                       color: textColor.withValues(alpha: 0.6),
-                                      fontSize: 12,
+                                      fontSize: isNarrow ? 10.5 : 12,
                                     ),
                                   ),
                                   Text(
                                     '${_advances.length}',
                                     style: TextStyle(
                                       color: textColor,
-                                      fontSize: 20,
+                                      fontSize: isNarrow ? 15 : 20,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -349,22 +354,22 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                           ),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(20),
+                          padding: EdgeInsets.all(isNarrow ? 12 : 20),
                           child: Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.all(12),
+                                padding: EdgeInsets.all(isNarrow ? 8 : 12),
                                 decoration: BoxDecoration(
                                   color: Colors.orange.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.receipt_long,
                                   color: Colors.orange,
-                                  size: 28,
+                                  size: isNarrow ? 20 : 28,
                                 ),
                               ),
-                              const SizedBox(width: 16),
+                              SizedBox(width: isNarrow ? 10 : 16),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -374,16 +379,20 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                                       style: TextStyle(
                                         color: Colors.orange.shade400,
                                         fontWeight: FontWeight.w600,
-                                        fontSize: 14,
+                                        fontSize: isNarrow ? 12 : 14,
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${_totalSalaries.toStringAsFixed(2)} ج.م',
-                                      style: TextStyle(
-                                        color: textColor,
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
+                                    const SizedBox(height: 2),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: AlignmentDirectional.centerStart,
+                                      child: Text(
+                                        '${_totalSalaries.toStringAsFixed(2)} ج.م',
+                                        style: TextStyle(
+                                          color: textColor,
+                                          fontSize: isNarrow ? 16 : 22,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -396,14 +405,14 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                                     'عدد المرتبات',
                                     style: TextStyle(
                                       color: textColor.withValues(alpha: 0.6),
-                                      fontSize: 12,
+                                      fontSize: isNarrow ? 10.5 : 12,
                                     ),
                                   ),
                                   Text(
                                     '${_salaryEntries.length}',
                                     style: TextStyle(
                                       color: textColor,
-                                      fontSize: 20,
+                                      fontSize: isNarrow ? 15 : 20,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -562,12 +571,16 @@ class _StaffExpensesReportState extends State<StaffExpensesReport> {
                                           trailing: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              IconButton(
-                                                icon: const Icon(Icons.print, size: 20, color: Colors.orange),
-                                                tooltip: 'طباعة المرتب',
-                                                onPressed: () => _printSalaries(single: entry),
+                                              if (!isNarrow)
+                                                IconButton(
+                                                  icon: const Icon(Icons.print, size: 20, color: Colors.orange),
+                                                  tooltip: 'طباعة المرتب',
+                                                  onPressed: () => _printSalaries(single: entry),
+                                                ),
+                                              Text(
+                                                '${entry.amount.toStringAsFixed(2)} ج.م',
+                                                style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: isNarrow ? 13 : 15),
                                               ),
-                                              Text('${entry.amount.toStringAsFixed(2)} ج.م', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 15)),
                                             ],
                                           ),
                                         ),

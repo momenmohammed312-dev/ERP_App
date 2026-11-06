@@ -335,6 +335,7 @@ class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
     final grandTotal = _filteredPurchases.fold<double>(
       0.0,
       (sum, p) => sum + p.totalAmount,
@@ -408,97 +409,188 @@ class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
                     ),
                   ),
                   const Gap(12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => _selectDateRange(context),
+                  if (isNarrow) ...[
+                    InkWell(
+                      onTap: () => _selectDateRange(context),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 11,
+                          border: Border.all(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .outline
+                                .withValues(alpha: 0.15),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.date_range_rounded,
+                              size: 18,
+                              color: MadarColors.gold,
                             ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outline
-                                    .withValues(alpha: 0.15),
+                            const Gap(8),
+                            Expanded(
+                              child: Text(
+                                '${DateFormat('yyyy/MM/dd').format(_startDate)} - ${DateFormat('yyyy/MM/dd').format(_endDate)}',
+                                style: const TextStyle(
+                                  fontFamily: 'NotoSansArabic',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12.5,
+                                ),
                               ),
                             ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.date_range_rounded,
-                                  size: 18,
-                                  color: MadarColors.gold,
-                                ),
-                                const Gap(8),
-                                Text(
-                                  '${DateFormat('yyyy/MM/dd').format(_startDate)} - ${DateFormat('yyyy/MM/dd').format(_endDate)}',
-                                  style: const TextStyle(
-                                    fontFamily: 'NotoSansArabic',
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Gap(8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _exportPDF,
+                            icon: const Icon(
+                              Icons.picture_as_pdf_outlined,
+                              size: 15,
+                            ),
+                            label: Text(context.l10n.pdf_label, style: const TextStyle(fontSize: 11)),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const Gap(10),
-                      OutlinedButton.icon(
-                        onPressed: _exportPDF,
-                        icon: const Icon(
-                          Icons.picture_as_pdf_outlined,
-                          size: 17,
-                        ),
-                        label: Text(context.l10n.pdf_label),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
+                        const Gap(6),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _printThermalSummary,
+                            icon: const Icon(Icons.print_outlined, size: 15),
+                            label: const Text('حراري', style: TextStyle(fontSize: 11)),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
                           ),
-                          shape: RoundedRectangleBorder(
+                        ),
+                        const Gap(6),
+                        Expanded(
+                          child: FilledButton.tonalIcon(
+                            onPressed: _exportExcel,
+                            icon: const Icon(Icons.table_chart_rounded, size: 15),
+                            label: Text(context.l10n.excel_label, style: const TextStyle(fontSize: 11)),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _selectDateRange(context),
                             borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 11,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outline
+                                      .withValues(alpha: 0.15),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.date_range_rounded,
+                                    size: 18,
+                                    color: MadarColors.gold,
+                                  ),
+                                  const Gap(8),
+                                  Text(
+                                    '${DateFormat('yyyy/MM/dd').format(_startDate)} - ${DateFormat('yyyy/MM/dd').format(_endDate)}',
+                                    style: const TextStyle(
+                                      fontFamily: 'NotoSansArabic',
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                      const Gap(8),
-                      OutlinedButton.icon(
-                        onPressed: _printThermalSummary,
-                        icon: const Icon(Icons.print_outlined, size: 17),
-                        label: const Text('طباعة حرارية'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
+                        const Gap(10),
+                        OutlinedButton.icon(
+                          onPressed: _exportPDF,
+                          icon: const Icon(
+                            Icons.picture_as_pdf_outlined,
+                            size: 17,
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                      const Gap(8),
-                      FilledButton.tonalIcon(
-                        onPressed: _exportExcel,
-                        icon: const Icon(Icons.table_chart_rounded, size: 17),
-                        label: Text(context.l10n.excel_label),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                          label: Text(context.l10n.pdf_label),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                        const Gap(8),
+                        OutlinedButton.icon(
+                          onPressed: _printThermalSummary,
+                          icon: const Icon(Icons.print_outlined, size: 17),
+                          label: const Text('طباعة حرارية'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const Gap(8),
+                        FilledButton.tonalIcon(
+                          onPressed: _exportExcel,
+                          icon: const Icon(Icons.table_chart_rounded, size: 17),
+                          label: Text(context.l10n.excel_label),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -555,13 +647,18 @@ class _PurchasesReportTabState extends ConsumerState<_PurchasesReportTab> {
                     ],
                   ),
                   const Spacer(),
-                  Text(
-                    '${grandTotal.toStringAsFixed(2)} جنيه',
-                    style: const TextStyle(
-                      fontFamily: 'NotoSansArabic',
-                      color: Color(0xFF388BFD),
-                      fontSize: 19,
-                      fontWeight: FontWeight.w800,
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '${grandTotal.toStringAsFixed(2)} جنيه',
+                        style: const TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          color: Color(0xFF388BFD),
+                          fontSize: 19,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
                   ),
                 ],

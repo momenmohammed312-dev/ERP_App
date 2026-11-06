@@ -385,10 +385,10 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
             ],
           ),
           const Gap(10),
-          Row(
-            children: [
-              // Date Range Button
-              InkWell(
+          LayoutBuilder(
+            builder: (context, c) {
+              final isNarrowControls = c.maxWidth < 500;
+              final dateButton = InkWell(
                 onTap: () async {
                   final picked = await showDateRangePicker(
                     context: context,
@@ -417,16 +417,20 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
                     ),
                   ),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisSize: isNarrowControls ? MainAxisSize.max : MainAxisSize.min,
                     children: [
                       const Icon(Icons.date_range_rounded, size: 16, color: MadarColors.gold),
                       const Gap(6),
-                      Text(
-                        'الفترة: ${DateFormat('yyyy/MM/dd').format(_reportStart)} - ${DateFormat('yyyy/MM/dd').format(_reportEnd)}',
-                        style: const TextStyle(
-                          fontFamily: 'NotoSansArabic',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                      Expanded(
+                        child: Text(
+                          'الفترة: ${DateFormat('yyyy/MM/dd').format(_reportStart)} - ${DateFormat('yyyy/MM/dd').format(_reportEnd)}',
+                          style: const TextStyle(
+                            fontFamily: 'NotoSansArabic',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const Gap(4),
@@ -434,11 +438,9 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
                     ],
                   ),
                 ),
-              ),
-              const Spacer(),
+              );
 
-              // Button: تقرير كامل مع الحركات
-              FilledButton.icon(
+              final reportButton = FilledButton.icon(
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -453,16 +455,35 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
                 icon: const Icon(Icons.analytics_outlined, size: 18),
                 label: const Text(
                   'تقرير كامل مع الحركات',
-                  style: TextStyle(fontFamily: 'NotoSansArabic', fontSize: 13),
+                  style: TextStyle(fontFamily: 'NotoSansArabic', fontSize: 12),
                 ),
                 style: FilledButton.styleFrom(
                   backgroundColor: MadarColors.gold,
                   foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-              ),
-            ],
+              );
+
+              if (isNarrowControls) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    dateButton,
+                    const Gap(8),
+                    reportButton,
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  dateButton,
+                  const Spacer(),
+                  reportButton,
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -621,36 +642,41 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
           ),
 
           // Balance Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: badgeColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  isDue
-                      ? Icons.arrow_outward_rounded
-                      : isCredit
-                          ? Icons.arrow_downward_rounded
-                          : Icons.check_circle_outline_rounded,
-                  size: 14,
-                  color: badgeColor,
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: badgeColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
+              ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isDue
+                          ? Icons.arrow_outward_rounded
+                          : isCredit
+                              ? Icons.arrow_downward_rounded
+                              : Icons.check_circle_outline_rounded,
+                      size: 14,
+                      color: badgeColor,
+                    ),
+                    const Gap(5),
+                    Text(
+                      badgeText,
+                      style: TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: badgeColor,
+                      ),
+                    ),
+                  ],
                 ),
-                const Gap(6),
-                Text(
-                  badgeText,
-                  style: TextStyle(
-                    fontFamily: 'NotoSansArabic',
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: badgeColor,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           const Gap(10),

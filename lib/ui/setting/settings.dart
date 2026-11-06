@@ -123,6 +123,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF0D1117) : MadarColors.lightBgApp;
     final cardBg = isDark ? const Color(0xFF161B22) : MadarColors.lightBgCard;
@@ -147,7 +148,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 960),
           child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            padding: EdgeInsets.symmetric(horizontal: isNarrow ? 12 : 20, vertical: isNarrow ? 14 : 24),
             children: [
               // 1. التفضيلات والمظهر
               _buildSectionCard(
@@ -210,7 +211,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     Row(
                       children: [
                         _buildCalendarThemeOption(
-                          label: 'فاتح (Light)',
+                          label: isNarrow ? 'فاتح' : 'فاتح (Light)',
                           mode: CalendarThemeMode.light,
                           textColor: textColor,
                           subTextColor: subTextColor,
@@ -218,9 +219,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           innerBg: innerBg,
                           goldColor: goldColor,
                         ),
-                        const Gap(10),
+                        const Gap(8),
                         _buildCalendarThemeOption(
-                          label: 'رمادي (Gray)',
+                          label: isNarrow ? 'رمادي' : 'رمادي (Gray)',
                           mode: CalendarThemeMode.gray,
                           textColor: textColor,
                           subTextColor: subTextColor,
@@ -228,9 +229,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           innerBg: innerBg,
                           goldColor: goldColor,
                         ),
-                        const Gap(10),
+                        const Gap(8),
                         _buildCalendarThemeOption(
-                          label: 'داكن (Dark)',
+                          label: isNarrow ? 'داكن' : 'داكن (Dark)',
                           mode: CalendarThemeMode.dark,
                           textColor: textColor,
                           subTextColor: subTextColor,
@@ -281,81 +282,145 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           children: [
                             Icon(Icons.info_outline, color: subTextColor, size: 20),
                             const Gap(10),
-                            Text(
-                              'لا توجد طابعات مثبتة على هذا الجهاز حالياً',
-                              style: TextStyle(color: subTextColor, fontSize: 13),
+                            Expanded(
+                              child: Text(
+                                'لا توجد طابعات مثبتة على هذا الجهاز حالياً',
+                                style: TextStyle(color: subTextColor, fontSize: 13),
+                              ),
                             ),
                           ],
                         ),
                       )
                     else ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              value: _selectedThermalPrinter,
-                              style: TextStyle(color: textColor, fontSize: 13),
-                              dropdownColor: cardBg,
-                              decoration: InputDecoration(
-                                labelText: 'طابعة الفواتير الحرارية الافتراضية (Thermal)',
-                                labelStyle: TextStyle(color: subTextColor, fontSize: 12),
-                                border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: blueColor)),
-                                prefixIcon: Icon(Icons.receipt_rounded, color: blueColor, size: 20),
-                                filled: true,
-                                fillColor: innerBg,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                              ),
-                              items: _printers
-                                  .where((p) => p['type'] == 'Thermal')
-                                  .map(
-                                    (p) => DropdownMenuItem<String>(
-                                      value: p['name'] as String,
-                                      child: Text(p['name'] as String),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (val) async {
-                                setState(() => _selectedThermalPrinter = val);
-                                await SettingsService.setThermalPrinter(val);
-                              },
-                            ),
+                      if (isNarrow) ...[
+                        DropdownButtonFormField<String>(
+                          value: _selectedThermalPrinter,
+                          style: TextStyle(color: textColor, fontSize: 13),
+                          dropdownColor: cardBg,
+                          decoration: InputDecoration(
+                            labelText: 'طابعة الفواتير الحرارية الافتراضية (Thermal)',
+                            labelStyle: TextStyle(color: subTextColor, fontSize: 12),
+                            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                            focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: blueColor)),
+                            prefixIcon: Icon(Icons.receipt_rounded, color: blueColor, size: 20),
+                            filled: true,
+                            fillColor: innerBg,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                           ),
-                          const Gap(14),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              value: _selectedA4Printer,
-                              style: TextStyle(color: textColor, fontSize: 13),
-                              dropdownColor: cardBg,
-                              decoration: InputDecoration(
-                                labelText: 'طابعة التقارير والفواتير الكبيرة (A4 / PDF)',
-                                labelStyle: TextStyle(color: subTextColor, fontSize: 12),
-                                border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: blueColor)),
-                                prefixIcon: Icon(Icons.description_outlined, color: blueColor, size: 20),
-                                filled: true,
-                                fillColor: innerBg,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                              ),
-                              items: _printers
-                                  .where((p) => p['type'] == 'A4' || p['type'] == 'PDF')
-                                  .map(
-                                    (p) => DropdownMenuItem<String>(
-                                      value: p['name'] as String,
-                                      child: Text(p['name'] as String),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (val) async {
-                                setState(() => _selectedA4Printer = val);
-                                await SettingsService.setA4Printer(val);
-                              },
-                            ),
+                          items: _printers
+                              .where((p) => p['type'] == 'Thermal')
+                              .map(
+                                (p) => DropdownMenuItem<String>(
+                                  value: p['name'] as String,
+                                  child: Text(p['name'] as String),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (val) async {
+                            setState(() => _selectedThermalPrinter = val);
+                            await SettingsService.setThermalPrinter(val);
+                          },
+                        ),
+                        const Gap(14),
+                        DropdownButtonFormField<String>(
+                          value: _selectedA4Printer,
+                          style: TextStyle(color: textColor, fontSize: 13),
+                          dropdownColor: cardBg,
+                          decoration: InputDecoration(
+                            labelText: 'طابعة التقارير والفواتير الكبيرة (A4 / PDF)',
+                            labelStyle: TextStyle(color: subTextColor, fontSize: 12),
+                            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                            focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: blueColor)),
+                            prefixIcon: Icon(Icons.description_outlined, color: blueColor, size: 20),
+                            filled: true,
+                            fillColor: innerBg,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                           ),
-                        ],
-                      ),
+                          items: _printers
+                              .where((p) => p['type'] == 'A4' || p['type'] == 'PDF')
+                              .map(
+                                (p) => DropdownMenuItem<String>(
+                                  value: p['name'] as String,
+                                  child: Text(p['name'] as String),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (val) async {
+                            setState(() => _selectedA4Printer = val);
+                            await SettingsService.setA4Printer(val);
+                          },
+                        ),
+                      ] else ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: _selectedThermalPrinter,
+                                style: TextStyle(color: textColor, fontSize: 13),
+                                dropdownColor: cardBg,
+                                decoration: InputDecoration(
+                                  labelText: 'طابعة الفواتير الحرارية الافتراضية (Thermal)',
+                                  labelStyle: TextStyle(color: subTextColor, fontSize: 12),
+                                  border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                  focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: blueColor)),
+                                  prefixIcon: Icon(Icons.receipt_rounded, color: blueColor, size: 20),
+                                  filled: true,
+                                  fillColor: innerBg,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                ),
+                                items: _printers
+                                    .where((p) => p['type'] == 'Thermal')
+                                    .map(
+                                      (p) => DropdownMenuItem<String>(
+                                        value: p['name'] as String,
+                                        child: Text(p['name'] as String),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (val) async {
+                                  setState(() => _selectedThermalPrinter = val);
+                                  await SettingsService.setThermalPrinter(val);
+                                },
+                              ),
+                            ),
+                            const Gap(14),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: _selectedA4Printer,
+                                style: TextStyle(color: textColor, fontSize: 13),
+                                dropdownColor: cardBg,
+                                decoration: InputDecoration(
+                                  labelText: 'طابعة التقارير والفواتير الكبيرة (A4 / PDF)',
+                                  labelStyle: TextStyle(color: subTextColor, fontSize: 12),
+                                  border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
+                                  focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: blueColor)),
+                                  prefixIcon: Icon(Icons.description_outlined, color: blueColor, size: 20),
+                                  filled: true,
+                                  fillColor: innerBg,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                ),
+                                items: _printers
+                                    .where((p) => p['type'] == 'A4' || p['type'] == 'PDF')
+                                    .map(
+                                      (p) => DropdownMenuItem<String>(
+                                        value: p['name'] as String,
+                                        child: Text(p['name'] as String),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (val) async {
+                                  setState(() => _selectedA4Printer = val);
+                                  await SettingsService.setA4Printer(val);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ],
                 ),
@@ -468,65 +533,111 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const Gap(16),
 
                     // حقول البيانات
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildTextField(
-                            controller: _nameController,
-                            label: 'اسم النشاط التجاري',
-                            icon: Icons.store,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
-                            innerBg: innerBg,
-                            borderColor: borderColor,
-                            focusColor: greenColor,
+                    if (isNarrow) ...[
+                      _buildTextField(
+                        controller: _nameController,
+                        label: 'اسم النشاط التجاري',
+                        icon: Icons.store,
+                        textColor: textColor,
+                        subTextColor: subTextColor,
+                        innerBg: innerBg,
+                        borderColor: borderColor,
+                        focusColor: greenColor,
+                      ),
+                      const Gap(12),
+                      _buildTextField(
+                        controller: _phoneController,
+                        label: 'رقم الهاتف',
+                        icon: Icons.phone_outlined,
+                        textColor: textColor,
+                        subTextColor: subTextColor,
+                        innerBg: innerBg,
+                        borderColor: borderColor,
+                        focusColor: greenColor,
+                      ),
+                      const Gap(12),
+                      _buildTextField(
+                        controller: _addressController,
+                        label: 'العنوان',
+                        icon: Icons.location_on_outlined,
+                        textColor: textColor,
+                        subTextColor: subTextColor,
+                        innerBg: innerBg,
+                        borderColor: borderColor,
+                        focusColor: greenColor,
+                      ),
+                      const Gap(12),
+                      _buildTextField(
+                        controller: _taxController,
+                        label: 'الرقم الضريبي (اختياري)',
+                        icon: Icons.receipt_long_outlined,
+                        textColor: textColor,
+                        subTextColor: subTextColor,
+                        innerBg: innerBg,
+                        borderColor: borderColor,
+                        focusColor: greenColor,
+                      ),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildTextField(
+                              controller: _nameController,
+                              label: 'اسم النشاط التجاري',
+                              icon: Icons.store,
+                              textColor: textColor,
+                              subTextColor: subTextColor,
+                              innerBg: innerBg,
+                              borderColor: borderColor,
+                              focusColor: greenColor,
+                            ),
                           ),
-                        ),
-                        const Gap(12),
-                        Expanded(
-                          child: _buildTextField(
-                            controller: _phoneController,
-                            label: 'رقم الهاتف',
-                            icon: Icons.phone_outlined,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
-                            innerBg: innerBg,
-                            borderColor: borderColor,
-                            focusColor: greenColor,
+                          const Gap(12),
+                          Expanded(
+                            child: _buildTextField(
+                              controller: _phoneController,
+                              label: 'رقم الهاتف',
+                              icon: Icons.phone_outlined,
+                              textColor: textColor,
+                              subTextColor: subTextColor,
+                              innerBg: innerBg,
+                              borderColor: borderColor,
+                              focusColor: greenColor,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const Gap(12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildTextField(
-                            controller: _addressController,
-                            label: 'العنوان',
-                            icon: Icons.location_on_outlined,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
-                            innerBg: innerBg,
-                            borderColor: borderColor,
-                            focusColor: greenColor,
+                        ],
+                      ),
+                      const Gap(12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildTextField(
+                              controller: _addressController,
+                              label: 'العنوان',
+                              icon: Icons.location_on_outlined,
+                              textColor: textColor,
+                              subTextColor: subTextColor,
+                              innerBg: innerBg,
+                              borderColor: borderColor,
+                              focusColor: greenColor,
+                            ),
                           ),
-                        ),
-                        const Gap(12),
-                        Expanded(
-                          child: _buildTextField(
-                            controller: _taxController,
-                            label: 'الرقم الضريبي (اختياري)',
-                            icon: Icons.receipt_long_outlined,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
-                            innerBg: innerBg,
-                            borderColor: borderColor,
-                            focusColor: greenColor,
+                          const Gap(12),
+                          Expanded(
+                            child: _buildTextField(
+                              controller: _taxController,
+                              label: 'الرقم الضريبي (اختياري)',
+                              icon: Icons.receipt_long_outlined,
+                              textColor: textColor,
+                              subTextColor: subTextColor,
+                              innerBg: innerBg,
+                              borderColor: borderColor,
+                              focusColor: greenColor,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                     const Gap(12),
                     _buildTextField(
                       controller: _footerController,
@@ -588,35 +699,64 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       style: TextStyle(color: subTextColor, fontSize: 13),
                     ),
                     const Gap(14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildTextField(
-                            controller: _locationIdController,
-                            label: 'معرّف الجهاز / الفرع الحالي',
-                            hint: 'مثال: Branch-Main-POS1',
-                            icon: Icons.devices_outlined,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
-                            innerBg: innerBg,
-                            borderColor: borderColor,
-                            focusColor: blueColor,
-                          ),
-                        ),
-                        const Gap(10),
-                        OutlinedButton.icon(
+                    if (isNarrow) ...[
+                      _buildTextField(
+                        controller: _locationIdController,
+                        label: 'معرّف الجهاز / الفرع الحالي',
+                        hint: 'مثال: Branch-Main-POS1',
+                        icon: Icons.devices_outlined,
+                        textColor: textColor,
+                        subTextColor: subTextColor,
+                        innerBg: innerBg,
+                        borderColor: borderColor,
+                        focusColor: blueColor,
+                      ),
+                      const Gap(10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
                           onPressed: _saveLocationId,
                           icon: const Icon(Icons.save_outlined, size: 16),
                           label: const Text('حفظ المعرّف'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: textColor,
                             side: BorderSide(color: borderColor),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildTextField(
+                              controller: _locationIdController,
+                              label: 'معرّف الجهاز / الفرع الحالي',
+                              hint: 'مثال: Branch-Main-POS1',
+                              icon: Icons.devices_outlined,
+                              textColor: textColor,
+                              subTextColor: subTextColor,
+                              innerBg: innerBg,
+                              borderColor: borderColor,
+                              focusColor: blueColor,
+                            ),
+                          ),
+                          const Gap(10),
+                          OutlinedButton.icon(
+                            onPressed: _saveLocationId,
+                            icon: const Icon(Icons.save_outlined, size: 16),
+                            label: const Text('حفظ المعرّف'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: textColor,
+                              side: BorderSide(color: borderColor),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const Gap(14),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -625,11 +765,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: borderColor),
                       ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                      child: isNarrow
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 Text(_lastSyncedText, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor)),
                                 const Gap(3),
@@ -637,29 +775,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   '$_lastPeriodicRunText | المعلق: $_pendingCount سجل',
                                   style: TextStyle(fontSize: 11, color: subTextColor),
                                 ),
+                                const Gap(10),
+                                ElevatedButton.icon(
+                                  onPressed: _syncing ? null : _syncNow,
+                                  icon: _syncing
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                        )
+                                      : const Icon(Icons.sync, size: 16),
+                                  label: Text(_syncing ? 'جارٍ المزامنة...' : 'مزامنة يدوية الآن', style: const TextStyle(fontSize: 12)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: blueColor,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(_lastSyncedText, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor)),
+                                      const Gap(3),
+                                      Text(
+                                        '$_lastPeriodicRunText | المعلق: $_pendingCount سجل',
+                                        style: TextStyle(fontSize: 11, color: subTextColor),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: _syncing ? null : _syncNow,
+                                  icon: _syncing
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                        )
+                                      : const Icon(Icons.sync, size: 16),
+                                  label: Text(_syncing ? 'جارٍ المزامنة...' : 'مزامنة يدوية الآن', style: const TextStyle(fontSize: 12)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: blueColor,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    elevation: 0,
+                                  ),
+                                ),
                               ],
                             ),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: _syncing ? null : _syncNow,
-                            icon: _syncing
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                  )
-                                : const Icon(Icons.sync, size: 16),
-                            label: Text(_syncing ? 'جارٍ المزامنة...' : 'مزامنة يدوية الآن', style: const TextStyle(fontSize: 12)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: blueColor,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              elevation: 0,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ],
                 ),
@@ -779,25 +950,61 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: iconColor, size: 20),
-              ),
-              const Gap(10),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                ),
-              ),
-              if (trailing != null) trailing,
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrowCard = constraints.maxWidth < 450;
+              if (isNarrowCard && trailing != null) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: iconColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(icon, color: iconColor, size: 20),
+                        ),
+                        const Gap(10),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Gap(10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: trailing,
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: iconColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, color: iconColor, size: 20),
+                  ),
+                  const Gap(10),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (trailing != null) trailing,
+                ],
+              );
+            },
           ),
           const Gap(14),
           Divider(color: borderColor, height: 1),
@@ -835,24 +1042,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               width: isSelected ? 1.5 : 1,
             ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-                size: 16,
-                color: isSelected ? goldColor : subTextColor,
-              ),
-              const Gap(6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? textColor : subTextColor,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                  size: 16,
+                  color: isSelected ? goldColor : subTextColor,
                 ),
-              ),
-            ],
+                const Gap(6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? textColor : subTextColor,
+                  ),
+                  maxLines: 1,
+                ),
+              ],
+            ),
           ),
         ),
       ),

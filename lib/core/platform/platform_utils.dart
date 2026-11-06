@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:pos_offline_desktop/core/config/app_flavor.dart';
 
 /// Central platform checks for the mobile/desktop split.
 ///
@@ -34,16 +33,11 @@ class PlatformUtils {
     if (debugOverrideHidesStaffFeaturesOnMobile != null) {
       return debugOverrideHidesStaffFeaturesOnMobile!;
     }
-    const showStaff =
-        bool.fromEnvironment('SHOW_STAFF_ON_MOBILE', defaultValue: false);
-    const enableAll =
-        bool.fromEnvironment('ENABLE_ALL_FEATURES', defaultValue: false);
-    if (showStaff || enableAll) {
-      return false;
+    const hideStaff =
+        bool.fromEnvironment('HIDE_STAFF_ON_MOBILE', defaultValue: false);
+    if (hideStaff) {
+      return true;
     }
-    if (AppFlavor.isInitialized && AppFlavor.current == Flavor.all) {
-      return false;
-    }
-    return isMobile;
+    return false;
   }
 }

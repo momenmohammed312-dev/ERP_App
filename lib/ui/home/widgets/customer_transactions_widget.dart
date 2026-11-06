@@ -754,38 +754,44 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
                 )
               : null,
           trailing: Container(
-            padding: EdgeInsets.symmetric(horizontal: isNarrow ? 6 : 10, vertical: isNarrow ? 4 : 6),
+            padding: EdgeInsets.symmetric(
+              horizontal: isNarrow ? 6 : 10,
+              vertical: isNarrow ? 2 : 4,
+            ),
             decoration: BoxDecoration(
               color: badgeColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  badgeLabel,
-                  style: TextStyle(
-                    fontFamily: 'NotoSansArabic',
-                    color: badgeColor,
-                    fontSize: isNarrow ? 9.5 : 10.5,
-                    fontWeight: FontWeight.w600,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    badgeLabel,
+                    style: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      color: badgeColor,
+                      fontSize: isNarrow ? 9.5 : 10.5,
+                      fontWeight: FontWeight.w600,
+                      height: 1.1,
+                    ),
                   ),
-                ),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
+                  const SizedBox(height: 2),
+                  Text(
                     badgeAmount,
                     style: TextStyle(
                       fontFamily: 'NotoSansArabic',
                       color: badgeColor,
                       fontSize: isNarrow ? 11.5 : 13,
                       fontWeight: FontWeight.w800,
+                      height: 1.1,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         children: [

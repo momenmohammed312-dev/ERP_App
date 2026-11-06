@@ -410,6 +410,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 750;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF121212) : Colors.grey.shade50;
     final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
@@ -490,6 +491,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                         cardBg,
                         textColor,
                         onTap: () => _showDrillDown(context, 'sales', totalSales),
+isNarrow: isNarrow,
                       );
                       final cardCash = _buildSummaryCard(
                         'مبيعات كاش',
@@ -498,6 +500,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                         cardBg,
                         textColor,
                         onTap: () => _showDrillDown(context, 'cash', totalCash),
+isNarrow: isNarrow,
                       );
                       final cardCredit = _buildSummaryCard(
                         'مبيعات آجل',
@@ -506,6 +509,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                         cardBg,
                         textColor,
                         onTap: () => _showDrillDown(context, 'credit', totalCredit),
+isNarrow: isNarrow,
                       );
                       final cardInvoices = _buildSummaryCard(
                         'عدد الفواتير',
@@ -514,6 +518,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                         cardBg,
                         textColor,
                         onTap: () => _showDrillDown(context, 'invoiceCount', totalInvoices.toDouble()),
+isNarrow: isNarrow,
                       );
 
                       final cardReturns = _buildSummaryCard(
@@ -523,6 +528,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                         cardBg,
                         textColor,
                         onTap: () => _showDrillDown(context, 'returns', totalReturns),
+isNarrow: isNarrow,
                       );
                       final cardNetSales = _buildSummaryCard(
                         'صافي المبيعات',
@@ -531,6 +537,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                         cardBg,
                         textColor,
                         onTap: () => _showDrillDown(context, 'netSales', netSales),
+isNarrow: isNarrow,
                       );
                       final cardPurchases = _buildSummaryCard(
                         'إجمالي المشتريات',
@@ -539,6 +546,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                         cardBg,
                         textColor,
                         onTap: () => _showDrillDown(context, 'purchases', totalPurchases),
+isNarrow: isNarrow,
                       );
                       final cardNetProfit = _buildSummaryCard(
                         'صافي الربح',
@@ -547,6 +555,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                         cardBg,
                         textColor,
                         onTap: () => _showDrillDown(context, 'netProfit', netProfit),
+isNarrow: isNarrow,
                       );
 
                       if (isNarrow) {
@@ -650,7 +659,10 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                             ),
                             child: DataTable(
                               showCheckboxColumn: false,
-                              columnSpacing: 20,
+                              columnSpacing: isNarrow ? 12 : 20,
+headingRowHeight: isNarrow ? 38 : 52,
+dataRowMinHeight: isNarrow ? 38 : 48,
+dataRowMaxHeight: isNarrow ? 44 : 56,
                               headingRowColor: WidgetStateProperty.all(
                                 Theme.of(context).colorScheme.primaryContainer
                                     .withValues(alpha: 0.5),
@@ -848,6 +860,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
     Color cardBg,
     Color textColor, {
     VoidCallback? onTap,
+    bool isNarrow = false,
   }) {
     return Card(
       color: cardBg,
@@ -860,25 +873,32 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(isNarrow ? 10 : 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
                 title,
                 style: TextStyle(
                   color: color,
                   fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                  fontSize: isNarrow ? 11 : 13,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const Gap(8),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
+              Gap(isNarrow ? 4 : 8),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: isNarrow ? 17 : 22,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
                 ),
               ),
             ],

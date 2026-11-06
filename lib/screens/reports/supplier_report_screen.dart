@@ -377,98 +377,122 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
       child: InkWell(
         onTap: () => _viewSupplierTransactions(supplier),
         borderRadius: BorderRadius.circular(12),
-        child: Row(
-          children: [
-            // Avatar
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: badgeColor.withValues(alpha: 0.12),
-              child: Text(
-                supplier['name']?.toString().isNotEmpty == true
-                    ? supplier['name'].toString()[0]
-                    : 'م',
-                style: TextStyle(
-                  fontFamily: 'NotoSansArabic',
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: badgeColor,
-                ),
-              ),
-            ),
-            const Gap(12),
-
-            // Name & Phone
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    supplier['name']?.toString() ?? '',
-                    style: const TextStyle(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 550;
+            return Row(
+              children: [
+                // Avatar
+                CircleAvatar(
+                  radius: isNarrow ? 18 : 20,
+                  backgroundColor: badgeColor.withValues(alpha: 0.12),
+                  child: Text(
+                    supplier['name']?.toString().isNotEmpty == true
+                        ? supplier['name'].toString()[0]
+                        : 'م',
+                    style: TextStyle(
                       fontFamily: 'NotoSansArabic',
-                      fontSize: 14,
                       fontWeight: FontWeight.bold,
+                      fontSize: isNarrow ? 14 : 16,
+                      color: badgeColor,
                     ),
                   ),
-                  const Gap(3),
-                  Row(
+                ),
+                Gap(isNarrow ? 8 : 12),
+
+                // Name & Phone
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        Icons.phone_rounded,
-                        size: 13,
-                        color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
-                      ),
-                      const Gap(4),
                       Text(
-                        supplier['phone']?.toString().isNotEmpty == true
-                            ? supplier['phone'].toString()
-                            : 'لا يوجد هاتف',
+                        supplier['name']?.toString() ?? '',
                         style: TextStyle(
                           fontFamily: 'NotoSansArabic',
-                          fontSize: 12,
-                          color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                          fontSize: isNarrow ? 13 : 14,
+                          fontWeight: FontWeight.bold,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const Gap(2),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.phone_rounded,
+                            size: 12,
+                            color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                          ),
+                          const Gap(4),
+                          Expanded(
+                            child: Text(
+                              supplier['phone']?.toString().isNotEmpty == true
+                                  ? supplier['phone'].toString()
+                                  : 'لا يوجد هاتف',
+                              style: TextStyle(
+                                fontFamily: 'NotoSansArabic',
+                                fontSize: isNarrow ? 11 : 12,
+                                color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-
-            // Purchases count & Balance Badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: badgeColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
-              ),
-              child: Text(
-                badgeText,
-                style: TextStyle(
-                  fontFamily: 'NotoSansArabic',
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: badgeColor,
                 ),
-              ),
-            ),
-            const Gap(10),
 
-            // Action Button
-            FilledButton.tonalIcon(
-              onPressed: () => _viewSupplierTransactions(supplier),
-              icon: const Icon(Icons.receipt_long_rounded, size: 16),
-              label: const Text(
-                'عرض المعاملات والسداد',
-                style: TextStyle(fontFamily: 'NotoSansArabic', fontSize: 12),
-              ),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            ),
-          ],
+                // Purchases count & Balance Badge
+                Flexible(
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: isNarrow ? 8 : 10, vertical: isNarrow ? 4 : 6),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        badgeText,
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: isNarrow ? 11 : 12,
+                          fontWeight: FontWeight.bold,
+                          color: badgeColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (!isNarrow) ...[
+                  const Gap(10),
+                  // Action Button
+                  FilledButton.tonalIcon(
+                    onPressed: () => _viewSupplierTransactions(supplier),
+                    icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                    label: const Text(
+                      'عرض المعاملات والسداد',
+                      style: TextStyle(fontFamily: 'NotoSansArabic', fontSize: 12),
+                    ),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ] else ...[
+                  const Gap(4),
+                  Icon(
+                    Icons.chevron_left_rounded,
+                    size: 20,
+                    color: isDark ? MadarColors.textMuted : Colors.grey.shade500,
+                  ),
+                ],
+              ],
+            );
+          },
         ),
       ),
     );

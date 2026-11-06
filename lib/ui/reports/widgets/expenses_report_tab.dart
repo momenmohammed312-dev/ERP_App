@@ -268,47 +268,43 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
       ),
       child: Column(
         children: [
-          Row(
-            children: [
-              // Search Input
-              Expanded(
-                child: SizedBox(
-                  height: 42,
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: (val) => _filterExpenses(),
-                    decoration: InputDecoration(
-                      hintText: 'البحث في بنود المصروفات...',
-                      hintStyle: const TextStyle(
-                        fontFamily: 'NotoSansArabic',
-                        fontSize: 13,
-                        color: Colors.grey,
-                      ),
-                      prefixIcon: const Icon(Icons.search, size: 20, color: MadarColors.gold),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.close, size: 18),
-                              onPressed: () {
-                                _searchController.clear();
-                                _filterExpenses();
-                              },
-                            )
-                          : null,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
-                      filled: true,
-                      fillColor: isDark ? MadarColors.bgSurface : Colors.grey.shade100,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
+          LayoutBuilder(
+            builder: (context, c) {
+              final isNarrowControls = c.maxWidth < 550;
+              final searchWidget = SizedBox(
+                height: 42,
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (val) => _filterExpenses(),
+                  decoration: InputDecoration(
+                    hintText: 'البحث في بنود المصروفات...',
+                    hintStyle: const TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontSize: 13,
+                      color: Colors.grey,
+                    ),
+                    prefixIcon: const Icon(Icons.search, size: 20, color: MadarColors.gold),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              _filterExpenses();
+                            },
+                          )
+                        : null,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                    filled: true,
+                    fillColor: isDark ? MadarColors.bgSurface : Colors.grey.shade100,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
                     ),
                   ),
                 ),
-              ),
-              const Gap(10),
+              );
 
-              // Date Range Picker Button
-              InkWell(
+              final dateWidget = InkWell(
                 onTap: () => _selectDateRange(context),
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
@@ -322,16 +318,20 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
                     ),
                   ),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisSize: isNarrowControls ? MainAxisSize.max : MainAxisSize.min,
                     children: [
                       const Icon(Icons.calendar_month_rounded, size: 18, color: MadarColors.gold),
                       const Gap(8),
-                      Text(
-                        '${DateFormat('yyyy/MM/dd').format(_startDate)}  -  ${DateFormat('yyyy/MM/dd').format(_endDate)}',
-                        style: const TextStyle(
-                          fontFamily: 'NotoSansArabic',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                      Expanded(
+                        child: Text(
+                          '${DateFormat('yyyy/MM/dd').format(_startDate)}  -  ${DateFormat('yyyy/MM/dd').format(_endDate)}',
+                          style: const TextStyle(
+                            fontFamily: 'NotoSansArabic',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const Gap(4),
@@ -339,8 +339,27 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
                     ],
                   ),
                 ),
-              ),
-            ],
+              );
+
+              if (isNarrowControls) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    searchWidget,
+                    const Gap(8),
+                    dateWidget,
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: searchWidget),
+                  const Gap(10),
+                  dateWidget,
+                ],
+              );
+            },
           ),
           const Gap(10),
           Row(
@@ -442,9 +461,14 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
   }
 
   Widget _buildExpenseItemCard(BuildContext context, bool isDark, Expense expense) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: isNarrow ? 10 : 14,
+        vertical: isNarrow ? 10 : 12,
+      ),
       decoration: BoxDecoration(
         color: isDark ? MadarColors.bgCard : Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -453,17 +477,18 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
         ),
       ),
       child: Row(
+        crossAxisAlignment: isNarrow ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
           // Icon badge
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: MadarColors.error.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.outbox_rounded, color: MadarColors.error, size: 20),
+            child: const Icon(Icons.outbox_rounded, color: MadarColors.error, size: 18),
           ),
-          const Gap(12),
+          const Gap(10),
 
           // Description & Date
           Expanded(
@@ -474,30 +499,39 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
                   expense.description,
                   style: const TextStyle(
                     fontFamily: 'NotoSansArabic',
-                    fontSize: 14,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.bold,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const Gap(3),
-                Row(
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Icon(
-                      Icons.access_time_rounded,
-                      size: 13,
-                      color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.access_time_rounded,
+                          size: 12,
+                          color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                        ),
+                        const Gap(4),
+                        Text(
+                          DateFormat('yyyy/MM/dd  HH:mm').format(expense.date),
+                          style: TextStyle(
+                            fontFamily: 'NotoSansArabic',
+                            fontSize: 11,
+                            color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
                     ),
-                    const Gap(4),
-                    Text(
-                      DateFormat('yyyy/MM/dd  HH:mm').format(expense.date),
-                      style: TextStyle(
-                        fontFamily: 'NotoSansArabic',
-                        fontSize: 12,
-                        color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
-                      ),
-                    ),
-                    const Gap(10),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                       decoration: BoxDecoration(
                         color: isDark ? MadarColors.bgSurface : Colors.grey.shade200,
                         borderRadius: BorderRadius.circular(4),
@@ -506,7 +540,7 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
                         'خزينة / نقد',
                         style: TextStyle(
                           fontFamily: 'NotoSansArabic',
-                          fontSize: 10,
+                          fontSize: 9.5,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -516,29 +550,39 @@ class _ExpensesReportTabState extends State<ExpensesReportTab> {
               ],
             ),
           ),
+          const Gap(8),
 
-          // Amount
-          Text(
-            '${expense.amount.toStringAsFixed(2)} ج.م',
-            style: const TextStyle(
-              fontFamily: 'NotoSansArabic',
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              color: MadarColors.error,
-            ),
-          ),
-          const Gap(12),
-
-          // Print Icon Button
-          IconButton(
-            onPressed: () => _printExpense(expense),
-            icon: const Icon(Icons.print_rounded, size: 20),
-            color: MadarColors.info,
-            tooltip: 'طباعة إيصال المصروف',
-            style: IconButton.styleFrom(
-              backgroundColor: MadarColors.info.withValues(alpha: 0.1),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
+          // Amount & Print action
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '${expense.amount.toStringAsFixed(2)} ج.م',
+                  style: const TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: MadarColors.error,
+                  ),
+                ),
+              ),
+              const Gap(4),
+              IconButton(
+                onPressed: () => _printExpense(expense),
+                icon: const Icon(Icons.print_rounded, size: 16),
+                color: MadarColors.info,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                tooltip: 'طباعة إيصال المصروف',
+                style: IconButton.styleFrom(
+                  backgroundColor: MadarColors.info.withValues(alpha: 0.1),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+              ),
+            ],
           ),
         ],
       ),

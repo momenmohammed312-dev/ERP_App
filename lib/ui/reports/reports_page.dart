@@ -396,36 +396,72 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
             const Gap(28),
 
             // 9 Official Sub-report Tiles Header
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: MadarColors.gold.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
+            isDesktop
+                ? Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: MadarColors.gold.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.hub_outlined, size: 18, color: MadarColors.gold),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'مركز التقارير المتخصصة',
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        'انقر على أي تقرير لفتحه في صفحة مخصصة',
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: MadarColors.gold.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.hub_outlined, size: 18, color: MadarColors.gold),
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            'مركز التقارير المتخصصة',
+                            style: TextStyle(
+                              fontFamily: 'NotoSansArabic',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'انقر على أي تقرير لفتحه في صفحة مخصصة',
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 11.5,
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ],
                   ),
-                  child: const Icon(Icons.hub_outlined, size: 18, color: MadarColors.gold),
-                ),
-                const SizedBox(width: 10),
-                const Text(
-                  'مركز التقارير المتخصصة',
-                  style: TextStyle(
-                    fontFamily: 'NotoSansArabic',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  'انقر على أي تقرير لفتحه في صفحة مخصصة',
-                  style: TextStyle(
-                    fontFamily: 'NotoSansArabic',
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
-                  ),
-                ),
-              ],
-            ),
             const Gap(16),
 
             // 9 Official Sub-report Tiles (Responsive Grid)

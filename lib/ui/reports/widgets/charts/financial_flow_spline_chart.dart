@@ -114,14 +114,14 @@ class _FinancialFlowSplineChartState extends State<FinancialFlowSplineChart> {
                   ),
                 ],
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
                 children: [
-                  _buildTelemetryBadge('المبيعات', activeSales, MadarColors.gold),
-                  const SizedBox(width: 12),
-                  _buildTelemetryBadge('المشتريات', activePurchases, const Color(0xFFD29922)),
-                  const SizedBox(width: 12),
+                  _buildTelemetryBadge(context, 'المبيعات', activeSales, MadarColors.gold),
+                  _buildTelemetryBadge(context, 'المشتريات', activePurchases, const Color(0xFFD29922)),
                   _buildTelemetryBadge(
+                    context,
                     'الصافي',
                     activeNet,
                     activeNet >= 0 ? const Color(0xFF238636) : const Color(0xFFF85149),
@@ -294,7 +294,8 @@ class _FinancialFlowSplineChartState extends State<FinancialFlowSplineChart> {
     );
   }
 
-  Widget _buildTelemetryBadge(String label, double value, Color color) {
+  Widget _buildTelemetryBadge(BuildContext context, String label, double value, Color color) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
     final formatter = NumberFormat.compact(locale: 'ar');
 
     return Row(
@@ -311,7 +312,7 @@ class _FinancialFlowSplineChartState extends State<FinancialFlowSplineChart> {
           style: TextStyle(
             fontFamily: 'NotoSansArabic',
             fontSize: 11,
-            color: Colors.white.withValues(alpha: 0.6),
+            color: isLight ? MadarColors.lightTextSecondary : Colors.white.withValues(alpha: 0.6),
           ),
         ),
         Text(

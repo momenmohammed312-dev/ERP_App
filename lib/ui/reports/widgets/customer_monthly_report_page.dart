@@ -230,32 +230,51 @@ class _CustomerMonthlyReportPageState
               const SizedBox(height: 16),
               const Divider(color: Colors.white12),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  _StatBox(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 600;
+                  final box1 = _StatBox(
                     label: 'العملاء',
                     value: '$_activeCount',
                     color: Colors.cyan,
-                  ),
-                  const Gap(8),
-                  _StatBox(
+                  );
+                  final box2 = _StatBox(
                     label: 'إجمالي المشتريات',
                     value: _fmt(_grandDebit),
                     color: Colors.orange,
-                  ),
-                  const Gap(8),
-                  _StatBox(
+                  );
+                  final box3 = _StatBox(
                     label: 'إجمالي المدفوعات',
                     value: _fmt(_grandCredit),
                     color: Colors.green,
-                  ),
-                  const Gap(8),
-                  _StatBox(
+                  );
+                  final box4 = _StatBox(
                     label: 'صافي الرصيد',
                     value: _fmt(_grandNet),
                     color: _grandNet > 0 ? Colors.red : Colors.greenAccent,
-                  ),
-                ],
+                  );
+
+                  if (isNarrow) {
+                    return Column(
+                      children: [
+                        Row(children: [box1, const Gap(8), box2]),
+                        const Gap(8),
+                        Row(children: [box3, const Gap(8), box4]),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      box1,
+                      const Gap(8),
+                      box2,
+                      const Gap(8),
+                      box3,
+                      const Gap(8),
+                      box4,
+                    ],
+                  );
+                },
               ),
             ],
           ],
@@ -368,34 +387,37 @@ class _CustomerMonthlyReportPageState
         children: [
           const Divider(color: Colors.white12),
           const SizedBox(height: 4),
-          DataTable(
-            headingRowColor: WidgetStateProperty.all(
-                Colors.purple.withValues(alpha: 0.15)),
-            dataRowColor: WidgetStateProperty.all(Colors.transparent),
-            columnSpacing: 8,
-            columns: const [
-              DataColumn(
-                  label: Text('الشهر',
-                      style:
-                          TextStyle(color: Colors.white70, fontSize: 11))),
-              DataColumn(
-                  label: Text('مشتريات',
-                      style:
-                          TextStyle(color: Colors.white70, fontSize: 11))),
-              DataColumn(
-                  label: Text('مدفوعات',
-                      style:
-                          TextStyle(color: Colors.white70, fontSize: 11))),
-              DataColumn(
-                  label: Text('صافي',
-                      style:
-                          TextStyle(color: Colors.white70, fontSize: 11))),
-              DataColumn(
-                  label: Text('الرصيد',
-                      style:
-                          TextStyle(color: Colors.white70, fontSize: 11))),
-            ],
-            rows: _buildMonthRows(r),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowColor: WidgetStateProperty.all(
+                  Colors.purple.withValues(alpha: 0.15)),
+              dataRowColor: WidgetStateProperty.all(Colors.transparent),
+              columnSpacing: 8,
+              columns: const [
+                DataColumn(
+                    label: Text('الشهر',
+                        style:
+                            TextStyle(color: Colors.white70, fontSize: 11))),
+                DataColumn(
+                    label: Text('مشتريات',
+                        style:
+                            TextStyle(color: Colors.white70, fontSize: 11))),
+                DataColumn(
+                    label: Text('مدفوعات',
+                        style:
+                            TextStyle(color: Colors.white70, fontSize: 11))),
+                DataColumn(
+                    label: Text('صافي',
+                        style:
+                            TextStyle(color: Colors.white70, fontSize: 11))),
+                DataColumn(
+                    label: Text('الرصيد',
+                        style:
+                            TextStyle(color: Colors.white70, fontSize: 11))),
+              ],
+              rows: _buildMonthRows(r),
+            ),
           ),
         ],
       ),
@@ -482,24 +504,42 @@ class _CustomerMonthlyReportPageState
               ],
             ),
             const Divider(color: Colors.white24, height: 24),
-            Row(
-              children: [
-                _TotalBox(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 600;
+                final box1 = _TotalBox(
                     label: 'إجمالي المشتريات',
                     value: _fmt(_grandDebit),
-                    color: Colors.orange),
-                const Gap(8),
-                _TotalBox(
+                    color: Colors.orange);
+                final box2 = _TotalBox(
                     label: 'إجمالي المدفوعات',
                     value: _fmt(_grandCredit),
-                    color: Colors.green),
-                const Gap(8),
-                _TotalBox(
+                    color: Colors.green);
+                final box3 = _TotalBox(
                     label: 'صافي الرصيد',
                     value: _fmt(_grandNet),
                     color:
-                        _grandNet > 0 ? Colors.red : Colors.greenAccent),
-              ],
+                        _grandNet > 0 ? Colors.red : Colors.greenAccent);
+
+                if (isNarrow) {
+                  return Column(
+                    children: [
+                      Row(children: [box1, const Gap(8), box2]),
+                      const Gap(8),
+                      Row(children: [box3]),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    box1,
+                    const Gap(8),
+                    box2,
+                    const Gap(8),
+                    box3,
+                  ],
+                );
+              },
             ),
           ],
         ),

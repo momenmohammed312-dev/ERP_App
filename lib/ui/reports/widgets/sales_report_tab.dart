@@ -517,6 +517,7 @@ class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
     final grandTotal = _filteredInvoices.fold(
       0.0,
       (sum, invoice) =>
@@ -592,97 +593,188 @@ class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
                     ),
                   ),
                   const Gap(12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => _selectDateRange(context),
+                  if (isNarrow) ...[
+                    InkWell(
+                      onTap: () => _selectDateRange(context),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 11,
+                          border: Border.all(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .outline
+                                .withValues(alpha: 0.15),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.date_range_rounded,
+                              size: 18,
+                              color: MadarColors.gold,
                             ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outline
-                                    .withValues(alpha: 0.15),
+                            const Gap(8),
+                            Expanded(
+                              child: Text(
+                                '${DateFormat('yyyy/MM/dd').format(_startDate)} - ${DateFormat('yyyy/MM/dd').format(_endDate)}',
+                                style: const TextStyle(
+                                  fontFamily: 'NotoSansArabic',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12.5,
+                                ),
                               ),
                             ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.date_range_rounded,
-                                  size: 18,
-                                  color: MadarColors.gold,
-                                ),
-                                const Gap(8),
-                                Text(
-                                  '${DateFormat('yyyy/MM/dd').format(_startDate)} - ${DateFormat('yyyy/MM/dd').format(_endDate)}',
-                                  style: const TextStyle(
-                                    fontFamily: 'NotoSansArabic',
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Gap(8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _exportPDF,
+                            icon: const Icon(
+                              Icons.picture_as_pdf_outlined,
+                              size: 15,
+                            ),
+                            label: Text(context.l10n.pdf_label, style: const TextStyle(fontSize: 11)),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const Gap(10),
-                      OutlinedButton.icon(
-                        onPressed: _exportPDF,
-                        icon: const Icon(
-                          Icons.picture_as_pdf_outlined,
-                          size: 17,
-                        ),
-                        label: Text(context.l10n.pdf_label),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
+                        const Gap(6),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _printThermalReceipt,
+                            icon: const Icon(Icons.print_outlined, size: 15),
+                            label: const Text('حراري', style: TextStyle(fontSize: 11)),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
                           ),
-                          shape: RoundedRectangleBorder(
+                        ),
+                        const Gap(6),
+                        Expanded(
+                          child: FilledButton.tonalIcon(
+                            onPressed: _exportExcel,
+                            icon: const Icon(Icons.table_chart_rounded, size: 15),
+                            label: Text(context.l10n.excel_label, style: const TextStyle(fontSize: 11)),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _selectDateRange(context),
                             borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 11,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outline
+                                      .withValues(alpha: 0.15),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.date_range_rounded,
+                                    size: 18,
+                                    color: MadarColors.gold,
+                                  ),
+                                  const Gap(8),
+                                  Text(
+                                    '${DateFormat('yyyy/MM/dd').format(_startDate)} - ${DateFormat('yyyy/MM/dd').format(_endDate)}',
+                                    style: const TextStyle(
+                                      fontFamily: 'NotoSansArabic',
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                      const Gap(8),
-                      OutlinedButton.icon(
-                        onPressed: _printThermalReceipt,
-                        icon: const Icon(Icons.print_outlined, size: 17),
-                        label: const Text('طباعة حرارية'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
+                        const Gap(10),
+                        OutlinedButton.icon(
+                          onPressed: _exportPDF,
+                          icon: const Icon(
+                            Icons.picture_as_pdf_outlined,
+                            size: 17,
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                      const Gap(8),
-                      FilledButton.tonalIcon(
-                        onPressed: _exportExcel,
-                        icon: const Icon(Icons.table_chart_rounded, size: 17),
-                        label: Text(context.l10n.excel_label),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                          label: Text(context.l10n.pdf_label),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                        const Gap(8),
+                        OutlinedButton.icon(
+                          onPressed: _printThermalReceipt,
+                          icon: const Icon(Icons.print_outlined, size: 17),
+                          label: const Text('طباعة حرارية'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const Gap(8),
+                        FilledButton.tonalIcon(
+                          onPressed: _exportExcel,
+                          icon: const Icon(Icons.table_chart_rounded, size: 17),
+                          label: Text(context.l10n.excel_label),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1164,6 +1256,11 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : MadarColors.lightTextPrimary;
+    final subTextColor = isDark ? Colors.white70 : MadarColors.lightTextSecondary;
+    final mutedTextColor = isDark ? Colors.white54 : MadarColors.lightTextMuted;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -1196,11 +1293,14 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
           ),
         title: Row(
           children: [
-            Text(
-              displayInvoiceNumber(widget.invoice.invoiceNumber, widget.invoice.id) ?? '',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.white, // White text for dark theme
+            Flexible(
+              child: Text(
+                displayInvoiceNumber(widget.invoice.invoiceNumber, widget.invoice.id) ?? '',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             if (widget.hasReturn) ...[
@@ -1228,87 +1328,137 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
           children: [
             Text(
               _formatCustomerName(widget.invoice.customerName),
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'NotoSansArabic',
-                color: Colors.white70,
+                color: subTextColor,
                 fontSize: 13,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               DateFormat('yyyy-MM-dd HH:mm').format(widget.invoice.date.toLocal()),
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'NotoSansArabic',
-                color: Colors.white54,
+                color: mutedTextColor,
                 fontSize: 12,
               ),
             ),
           ],
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
+        trailing: Builder(
+          builder: (context) {
+            final isNarrowCard = MediaQuery.of(context).size.width < 700;
+            return Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '${widget.invoice.totalAmount.toStringAsFixed(2)} ج.م',
-                  style: const TextStyle(
-                    fontFamily: 'NotoSansArabic',
-                    fontWeight: FontWeight.bold,
-                    color: Colors.greenAccent,
-                  ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '${widget.invoice.totalAmount.toStringAsFixed(2)} ج.م',
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontWeight: FontWeight.bold,
+                          color: Colors.greenAccent,
+                          fontSize: isNarrowCard ? 12 : 14,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${widget.invoice.paidAmount.toStringAsFixed(2)} ج.م',
+                      style: TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        color: subTextColor,
+                        fontSize: isNarrowCard ? 10.5 : 12,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  '${widget.invoice.paidAmount.toStringAsFixed(2)} ج.م',
-                  style: const TextStyle(
-                    fontFamily: 'NotoSansArabic',
-                    color: Colors.white70,
-                    fontSize: 12,
+                if (!isNarrowCard) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.visibility_outlined, size: 20, color: Color(0xFF388BFD)),
+                    onPressed: () => _showInvoiceDetailsDialog(context),
+                    tooltip: 'معاينة تفاصيل الفاتورة',
                   ),
-                ),
+                  if (!widget.isVoided && widget.onEditInvoice != null)
+                    IconButton(
+                      icon: const Icon(Icons.edit_note_rounded, size: 22, color: Colors.amberAccent),
+                      onPressed: widget.onEditInvoice,
+                      tooltip: 'تعديل الفاتورة',
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.print_outlined, size: 20, color: Colors.orangeAccent),
+                    onPressed: widget.onPrint,
+                    tooltip: 'طباعة الفاتورة',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.undo, size: 20, color: Colors.redAccent),
+                    onPressed: widget.onReturn,
+                    tooltip: 'مرتجع',
+                  ),
+                  if (!widget.isVoided && widget.onEditDate != null)
+                    IconButton(
+                      icon: const Icon(Icons.edit_calendar_outlined, size: 20, color: Colors.tealAccent),
+                      onPressed: widget.onEditDate,
+                      tooltip: 'تعديل تاريخ الفاتورة',
+                    ),
+                  if (!widget.isVoided)
+                    PermissionGuardedIconButton(
+                      icon: Icons.delete_outline,
+                      color: Colors.red,
+                      tooltip: 'إلغاء الفاتورة',
+                      onPressed: widget.onVoid,
+                    ),
+                ] else ...[
+                  IconButton(
+                    icon: const Icon(Icons.visibility_outlined, size: 18, color: Color(0xFF388BFD)),
+                    onPressed: () => _showInvoiceDetailsDialog(context),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    tooltip: 'معاينة',
+                  ),
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_vert, size: 18, color: subTextColor),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onSelected: (val) {
+                      switch (val) {
+                        case 'print':
+                          widget.onPrint();
+                          break;
+                        case 'edit':
+                          widget.onEditInvoice?.call();
+                          break;
+                        case 'return':
+                          widget.onReturn();
+                          break;
+                        case 'date':
+                          widget.onEditDate?.call();
+                          break;
+                        case 'void':
+                          widget.onVoid();
+                          break;
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      const PopupMenuItem(value: 'print', child: Text('طباعة الفاتورة')),
+                      if (!widget.isVoided && widget.onEditInvoice != null)
+                        const PopupMenuItem(value: 'edit', child: Text('تعديل الفاتورة')),
+                      const PopupMenuItem(value: 'return', child: Text('إرجاع / مرتجع')),
+                      if (!widget.isVoided && widget.onEditDate != null)
+                        const PopupMenuItem(value: 'date', child: Text('تعديل التاريخ')),
+                      if (!widget.isVoided)
+                        const PopupMenuItem(value: 'void', child: Text('إلغاء الفاتورة', style: TextStyle(color: Colors.red))),
+                    ],
+                  ),
+                ],
               ],
-            ),
-            const SizedBox(width: 8),
-            // Eye icon for quick view/preview modal
-            IconButton(
-              icon: const Icon(Icons.visibility_outlined, size: 20, color: Color(0xFF388BFD)),
-              onPressed: () => _showInvoiceDetailsDialog(context),
-              tooltip: 'معاينة تفاصيل الفاتورة',
-            ),
-            // Direct edit invoice button
-            if (!widget.isVoided && widget.onEditInvoice != null)
-              IconButton(
-                icon: const Icon(Icons.edit_note_rounded, size: 22, color: Colors.amberAccent),
-                onPressed: widget.onEditInvoice,
-                tooltip: 'تعديل الفاتورة',
-              ),
-            IconButton(
-              icon: const Icon(Icons.print_outlined, size: 20, color: Colors.orangeAccent),
-              onPressed: widget.onPrint,
-              tooltip: 'طباعة الفاتورة',
-            ),
-            IconButton(
-              icon: const Icon(Icons.undo, size: 20, color: Colors.redAccent),
-              onPressed: widget.onReturn,
-              tooltip: 'مرتجع',
-            ),
-            if (!widget.isVoided && widget.onEditDate != null)
-              IconButton(
-                icon: const Icon(Icons.edit_calendar_outlined, size: 20, color: Colors.tealAccent),
-                onPressed: widget.onEditDate,
-                tooltip: 'تعديل تاريخ الفاتورة',
-              ),
-            // إلغاء الفاتورة — بيظهر دايماً (الفحص جوّه الديالوج).
-            if (!widget.isVoided)
-              PermissionGuardedIconButton(
-                icon: Icons.delete_outline,
-                color: Colors.red,
-                tooltip: 'إلغاء الفاتورة',
-                onPressed: widget.onVoid,
-              ),
-          ],
+            );
+          },
         ),
         onExpansionChanged: (expanded) {
           setState(() => _isExpanded = expanded);
@@ -1332,9 +1482,7 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Color(
-                  0xFF21262D,
-                ), // Slightly lighter dark for expanded content
+                color: isDark ? const Color(0xFF21262D) : Colors.grey.shade100,
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(8),
                   bottomRight: Radius.circular(8),
@@ -1345,103 +1493,108 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
                 children: [
                   Text(
                     'تفاصيل المنتجات',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: textColor,
                       fontSize: 16,
                     ),
                   ),
                   const SizedBox(height: 12),
-                  DataTable(
-                    headingRowColor: WidgetStateProperty.all(
-                      Colors.grey.withValues(alpha: 0.2),
-                    ),
-                    dataRowColor: WidgetStateProperty.all(Colors.transparent),
-                    columns: const [
-                      DataColumn(
-                        label: Text(
-                          'اسم المنتج',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(
+                        isDark ? Colors.grey.withValues(alpha: 0.2) : Colors.grey.shade300,
+                      ),
+                      dataRowColor: WidgetStateProperty.all(Colors.transparent),
+                      columns: [
+                        DataColumn(
+                          label: Text(
+                            'اسم المنتج',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
                           ),
                         ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          'الكمية',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                        DataColumn(
+                          label: Text(
+                            'الكمية',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
                           ),
                         ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          'سعر الوحدة',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                        DataColumn(
+                          label: Text(
+                            'سعر الوحدة',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
                           ),
                         ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          'الإجمالي',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                        DataColumn(
+                          label: Text(
+                            'الإجمالي',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                    rows: _invoiceItems.map((itemWithProduct) {
-                      final item = itemWithProduct.$1;
-                      final product = itemWithProduct.$2;
-                      final unitPrice = item.quantity > 0
-                          ? item.price / item.quantity
-                          : 0.0;
+                      ],
+                      rows: _invoiceItems.map((itemWithProduct) {
+                        final item = itemWithProduct.$1;
+                        final product = itemWithProduct.$2;
+                        final unitPrice = item.quantity > 0
+                            ? item.price / item.quantity
+                            : 0.0;
 
-                      return DataRow(
-                        cells: [
-                          DataCell(
-                            Text(
-                              () {
-                                final base = product?.name ?? 'منتج ${item.productId}';
-                                final v = item.variantId != null ? _variantNames[item.variantId] : null;
-                                return (v != null && !base.endsWith('— $v')) ? '$base — $v' : base;
-                              }(),
-                              style: const TextStyle(color: Colors.white70),
-                            ),
-                          ),
-                          DataCell(
-                            Text(
-                              item.quantity.toString(),
-                              style: const TextStyle(color: Colors.white70),
-                            ),
-                          ),
-                          DataCell(
-                            Text(
-                              '${unitPrice.toStringAsFixed(2)} ج.م',
-                              style: const TextStyle(color: Colors.white70),
-                            ),
-                          ),
-                          DataCell(
-                            Text(
-                              '${item.price.toStringAsFixed(2)} ج.م',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.greenAccent,
+                        return DataRow(
+                          cells: [
+                            DataCell(
+                              Text(
+                                () {
+                                  final base = product?.name ?? 'منتج ${item.productId}';
+                                  final v = item.variantId != null ? _variantNames[item.variantId] : null;
+                                  return (v != null && !base.endsWith('— $v')) ? '$base — $v' : base;
+                                }(),
+                                style: TextStyle(color: subTextColor),
                               ),
                             ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
+                            DataCell(
+                              Text(
+                                item.quantity.toString(),
+                                style: TextStyle(color: subTextColor),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                '${unitPrice.toStringAsFixed(2)} ج.م',
+                                style: TextStyle(color: subTextColor),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                '${item.price.toStringAsFixed(2)} ج.م',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.greenAccent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.end,
                     children: [
                       if (!widget.isVoided) ...[
                         if (widget.onEditInvoice != null)
@@ -1453,7 +1606,6 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
                               foregroundColor: Colors.blueAccent,
                             ),
                           ),
-                        const SizedBox(width: 8),
                         if (widget.onEditDate != null)
                           OutlinedButton.icon(
                             onPressed: widget.onEditDate,
@@ -1463,7 +1615,6 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
                               foregroundColor: Colors.tealAccent,
                             ),
                           ),
-                        const SizedBox(width: 8),
                       ],
                       ElevatedButton.icon(
                         onPressed: widget.onPrint,
