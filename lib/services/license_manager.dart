@@ -12,7 +12,7 @@ import 'secure_license_storage.dart';
 
 List<String> _widenLegacyFeatures(List<String> raw, LicenseType type) {
   final features = <String>{
-    ...raw.map((f) => '$f'.trim()).where((f) => f.isNotEmpty),
+    ...raw.map((f) => f.trim()).where((f) => f.isNotEmpty),
   };
 
   // Legacy catch-all markers meaning "everything".
@@ -182,7 +182,10 @@ class LicenseManager {
   static const String _storageKey = 'app_license';
   static const String _secretKey = LicenseConfig.secretKey;
   static const String _firstRunKey = 'free_version_first_run';
-  static const int _freeTrialDays = 36500; // 100 years
+  static const int _freeTrialDays = int.fromEnvironment(
+    'FREE_TRIAL_DAYS',
+    defaultValue: 36500,
+  );
 
   // Singleton
   static final LicenseManager _instance = LicenseManager._internal();
@@ -505,15 +508,16 @@ class LicenseManager {
         await SecureLicenseStorage.write(newData);
         // Also save to SharedPreferences for migration
         await _saveFirstRunDate(now);
+        final isShortTrial = _freeTrialDays <= 30;
         return License(
-          licenseKey: 'FREE_VERSION',
+          licenseKey: isShortTrial ? 'TRIAL_7_DAYS' : 'FREE_VERSION',
           deviceFingerprint: 'free',
-          type: LicenseType.free,
+          type: isShortTrial ? LicenseType.trial : LicenseType.free,
           issueDate: now,
           expiryDate: now.add(Duration(days: _freeTrialDays)),
           features: List<String>.from(LicenseConfig.availableFeatures),
           maxUsers: 999,
-          companyName: 'Free Version',
+          companyName: isShortTrial ? 'نسخة تجريبية ($_freeTrialDays أيام)' : 'Free Version',
           contactEmail: '',
           hardwareId: hardwareId,
         );
@@ -574,15 +578,16 @@ class LicenseManager {
       final expiry = freshData.firstRunDate.add(Duration(days: _freeTrialDays));
       if (DateTime.now().isAfter(expiry)) return null;
 
+      final isShortTrial = _freeTrialDays <= 30;
       return License(
-        licenseKey: 'FREE_VERSION',
+        licenseKey: isShortTrial ? 'TRIAL_7_DAYS' : 'FREE_VERSION',
         deviceFingerprint: 'free',
-        type: LicenseType.free,
+        type: isShortTrial ? LicenseType.trial : LicenseType.free,
         issueDate: freshData.firstRunDate,
         expiryDate: expiry,
         features: List<String>.from(LicenseConfig.availableFeatures),
         maxUsers: 999,
-        companyName: 'Free Version',
+        companyName: isShortTrial ? 'نسخة تجريبية ($_freeTrialDays أيام)' : 'Free Version',
         contactEmail: '',
         hardwareId: freshData.hardwareId,
       );
