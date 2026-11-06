@@ -1,3 +1,4 @@
+import '../../core/platform/platform_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
@@ -444,25 +445,26 @@ class _EmployeeDashboardPageState
   }
 
   Widget _buildAttendanceStat(String count, String label, Color color, IconData icon) {
+    final isMobile = PlatformUtils.isMobile;
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+        padding: EdgeInsets.symmetric(vertical: isMobile ? 5 : 8, horizontal: 2),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
           border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: color),
+            Icon(icon, size: isMobile ? 13 : 16, color: color),
             const SizedBox(height: 2),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
                 count,
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: isMobile ? 13 : 16,
                   fontWeight: FontWeight.bold,
                   color: color,
                 ),
@@ -474,7 +476,7 @@ class _EmployeeDashboardPageState
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: isMobile ? 9.5 : 10,
                 fontWeight: FontWeight.w600,
                 color: color.withValues(alpha: 0.9),
               ),

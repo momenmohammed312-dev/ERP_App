@@ -281,19 +281,28 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: _buildUnifiedHeader(context, tabs, isDesktop),
-      body: AnimatedBuilder(
-        animation: _tabController,
-        builder: (context, _) {
-          return IndexedStack(
-            index: _tabController.index,
-            children: List.generate(tabViews.length, (i) {
-              if (_loadedTabs.contains(i) || _tabController.index == i) {
-                return tabViews[i];
-              }
-              return const SizedBox.shrink();
-            }),
-          );
-        },
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: PlatformUtils.isMobile ? 12.0 : 0.0,
+          ),
+          child: AnimatedBuilder(
+            animation: _tabController,
+            builder: (context, _) {
+              return IndexedStack(
+                index: _tabController.index,
+                children: List.generate(tabViews.length, (i) {
+                  if (_loadedTabs.contains(i) || _tabController.index == i) {
+                    return tabViews[i];
+                  }
+                  return const SizedBox.shrink();
+                }),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

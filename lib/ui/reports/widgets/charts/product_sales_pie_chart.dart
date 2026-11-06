@@ -196,8 +196,8 @@ class _ProductSalesPieChartState extends ConsumerState<ProductSalesPieChart> {
                   const SizedBox(height: 2),
                   Text(
                     activeEntry != null
-                        ? ' ج.م'
-                        : ' ج.م',
+                        ? '${currencyFormatter.format(activeEntry.value)} ج.م'
+                        : '${currencyFormatter.format(total)} ج.م',
                     style: TextStyle(
                       fontFamily: 'NotoSansArabic',
                       fontSize: 13,
@@ -263,7 +263,7 @@ class _ProductSalesPieChartState extends ConsumerState<ProductSalesPieChart> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '%',
+                        '${pct.toStringAsFixed(1)}%',
                         style: TextStyle(
                           fontFamily: 'NotoSansArabic',
                           fontSize: 10.5,

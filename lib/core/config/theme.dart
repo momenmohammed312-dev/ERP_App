@@ -47,7 +47,6 @@ class AppTheme {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
-            inherit: false,
             fontWeight: FontWeight.w600,
             fontSize: 14,
             fontFamily: arabicFontFamily,
@@ -61,7 +60,6 @@ class AppTheme {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
-            inherit: false,
             fontWeight: FontWeight.w600,
             fontSize: 14,
             fontFamily: arabicFontFamily,
@@ -169,7 +167,6 @@ class AppTheme {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
-            inherit: false,
             fontWeight: FontWeight.w600,
             fontSize: 14,
             fontFamily: arabicFontFamily,
@@ -183,7 +180,6 @@ class AppTheme {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
-            inherit: false,
             fontWeight: FontWeight.w600,
             fontSize: 14,
             fontFamily: arabicFontFamily,
@@ -268,7 +264,6 @@ class AppTheme {
         foregroundColor: isDark ? Colors.black : Colors.white,
         elevation: 0,
         textStyle: TextStyle(
-          inherit: false,
           color: isDark ? Colors.black : Colors.white,
           fontWeight: FontWeight.w700,
           fontSize: 15,
@@ -290,7 +285,6 @@ class AppTheme {
       elevation: 0,
       centerTitle: true,
       titleTextStyle: TextStyle(
-        inherit: false,
         fontWeight: FontWeight.w700,
         fontSize: 20,
         color: isDark ? const Color(0xFFE6EDF3) : MadarColors.lightTextPrimary,

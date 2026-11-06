@@ -753,6 +753,7 @@ class _SupplierCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
     final remainingDebt = totalPurchases - totalPaid;
     final isCreditor = remainingDebt > 0.001;
     final isDebtor = remainingDebt < -0.001;
@@ -785,7 +786,7 @@ class _SupplierCard extends ConsumerWidget {
         child: ExpansionTile(
           shape: const Border(),
           collapsedShape: const Border(),
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          tilePadding: EdgeInsets.symmetric(horizontal: isNarrow ? 10 : 16, vertical: 6),
           leading: Container(
             width: 42,
             height: 42,
@@ -852,7 +853,7 @@ class _SupplierCard extends ConsumerWidget {
             ],
           ),
           trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: EdgeInsets.symmetric(horizontal: isNarrow ? 6 : 10, vertical: isNarrow ? 4 : 6),
             decoration: BoxDecoration(
               color: badgeColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
@@ -867,17 +868,20 @@ class _SupplierCard extends ConsumerWidget {
                   style: TextStyle(
                     fontFamily: 'NotoSansArabic',
                     color: badgeColor,
-                    fontSize: 10.5,
+                    fontSize: isNarrow ? 9.5 : 10.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                Text(
-                  badgeAmount,
-                  style: TextStyle(
-                    fontFamily: 'NotoSansArabic',
-                    color: badgeColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    badgeAmount,
+                    style: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      color: badgeColor,
+                      fontSize: isNarrow ? 11.5 : 13,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ],
@@ -936,7 +940,7 @@ class _SupplierCard extends ConsumerWidget {
                         color: Colors.blue,
                       ),
                     ),
-                    const Gap(16),
+                    Gap(isNarrow ? 8 : 16),
                     Expanded(
                       child: _FinancialCard(
                         title: AppLocalizations.of(context).paid,
@@ -944,7 +948,7 @@ class _SupplierCard extends ConsumerWidget {
                         color: Colors.green,
                       ),
                     ),
-                    const Gap(16),
+                    Gap(isNarrow ? 8 : 16),
                     Expanded(
                       child: _FinancialCard(
                         title: AppLocalizations.of(context).remaining,
@@ -1340,80 +1344,159 @@ class _SupplierCard extends ConsumerWidget {
                 // it posted debit-side ledger rows with no purchase, items or
                 // stock — see Item 3; purchases are created from the supply
                 // invoice page only).
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () async {
-                          await _showPaymentDialog(supplier);
-                          if (context.mounted) {
-                            (context as Element).markNeedsBuild();
-                          }
-                        },
-                        icon: const Icon(Icons.payments_rounded, size: 17),
-                        label: Text(
-                          AppLocalizations.of(context).settle_payment,
-                        ),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                if (isNarrow)
+                  Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () async {
+                                await _showPaymentDialog(supplier);
+                                if (context.mounted) {
+                                  (context as Element).markNeedsBuild();
+                                }
+                              },
+                              icon: const Icon(Icons.payments_rounded, size: 16),
+                              label: Text(
+                                AppLocalizations.of(context).settle_payment,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const Gap(8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _exportSupplierReport(supplier),
+                              icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                              label: const Text('كشف حساب PDF', style: TextStyle(fontSize: 12)),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Gap(8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showEditSupplierDialog(supplier),
+                              icon: const Icon(Icons.edit_outlined, size: 16),
+                              label: const Text('تعديل البيانات', style: TextStyle(fontSize: 12)),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const Gap(8),
+                          OutlinedButton.icon(
+                            onPressed: () => _showDeleteSupplierDialog(supplier),
+                            icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                            label: const Text('حذف', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFFF85149),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () async {
+                            await _showPaymentDialog(supplier);
+                            if (context.mounted) {
+                              (context as Element).markNeedsBuild();
+                            }
+                          },
+                          icon: const Icon(Icons.payments_rounded, size: 17),
+                          label: Text(
+                            AppLocalizations.of(context).settle_payment,
+                          ),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const Gap(10),
-                    Expanded(
-                      child: OutlinedButton.icon(
+                      const Gap(10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            _exportSupplierReport(supplier);
+                          },
+                          icon: const Icon(Icons.picture_as_pdf_outlined, size: 17),
+                          label: const Text('كشف حساب PDF'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Gap(10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            _showEditSupplierDialog(supplier);
+                          },
+                          icon: const Icon(Icons.edit_outlined, size: 17),
+                          label: const Text('تعديل البيانات'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Gap(10),
+                      OutlinedButton.icon(
                         onPressed: () {
-                          _exportSupplierReport(supplier);
+                          _showDeleteSupplierDialog(supplier);
                         },
-                        icon: const Icon(Icons.picture_as_pdf_outlined, size: 17),
-                        label: const Text('كشف حساب PDF'),
+                        icon: const Icon(Icons.delete_outline_rounded, size: 17),
+                        label: const Text('حذف'),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          foregroundColor: const Color(0xFFF85149),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
                       ),
-                    ),
-                    const Gap(10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          _showEditSupplierDialog(supplier);
-                        },
-                        icon: const Icon(Icons.edit_outlined, size: 17),
-                        label: const Text('تعديل البيانات'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const Gap(10),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        _showDeleteSupplierDialog(supplier);
-                      },
-                      icon: const Icon(Icons.delete_outline_rounded, size: 17),
-                      label: const Text('حذف'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFF85149),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
               ],
             ),
           ),

@@ -1,3 +1,4 @@
+import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -39,6 +40,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   double _totalExpenses = 0.0;
   List<Map<String, dynamic>> _dailyFlow = [];
   bool _isLoading = false;
+  int _mobileChartIndex = 0;
 
   @override
   void initState() {
@@ -248,7 +250,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        padding: EdgeInsets.fromLTRB(PlatformUtils.isMobile ? 12 : 24, 16, PlatformUtils.isMobile ? 12 : 24, PlatformUtils.isMobile ? 40 : 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -276,14 +278,121 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                   ),
                 ],
               )
-            else
-              Column(
-                children: [
-                  _buildSplineChartContainer(),
-                  const Gap(16),
-                  _buildDonutChartContainer(),
-                ],
+            else ...[
+              // Mobile Chart Selector Toggle
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+                  ),
+                ),
+                padding: const EdgeInsets.all(4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setState(() => _mobileChartIndex = 0),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _mobileChartIndex == 0
+                                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _mobileChartIndex == 0
+                                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.4)
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.waterfall_chart_rounded,
+                                  size: 16,
+                                  color: _mobileChartIndex == 0
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'منحنى التدفقات',
+                                  style: TextStyle(
+                                    fontFamily: 'NotoSansArabic',
+                                    fontSize: 12,
+                                    fontWeight: _mobileChartIndex == 0 ? FontWeight.bold : FontWeight.w500,
+                                    color: _mobileChartIndex == 0
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setState(() => _mobileChartIndex = 1),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _mobileChartIndex == 1
+                                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _mobileChartIndex == 1
+                                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.4)
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.pie_chart_outline_rounded,
+                                  size: 16,
+                                  color: _mobileChartIndex == 1
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'توزيع الأصناف',
+                                  style: TextStyle(
+                                    fontFamily: 'NotoSansArabic',
+                                    fontSize: 12,
+                                    fontWeight: _mobileChartIndex == 1 ? FontWeight.bold : FontWeight.w500,
+                                    color: _mobileChartIndex == 1
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const Gap(12),
+              if (_mobileChartIndex == 0)
+                _buildSplineChartContainer()
+              else
+                _buildDonutChartContainer(),
+            ],
             const Gap(28),
 
             // 9 Official Sub-report Tiles Header
@@ -352,13 +461,15 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.date_range_rounded, size: 18, color: MadarColors.gold),
-                const SizedBox(width: 8),
+                const Icon(Icons.date_range_rounded, size: 16, color: MadarColors.gold),
+                const SizedBox(width: 6),
                 Text(
-                  'الفترة المحددة: ${dateFormat.format(_startDate)}  ←  ${dateFormat.format(_endDate)}',
+                  PlatformUtils.isMobile
+                      ? '${dateFormat.format(_startDate)}  ←  ${dateFormat.format(_endDate)}'
+                      : 'الفترة المحددة: ${dateFormat.format(_startDate)}  ←  ${dateFormat.format(_endDate)}',
                   style: const TextStyle(
                     fontFamily: 'NotoSansArabic',
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -435,7 +546,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           _buildKpiCard(
             title: 'التدفق النقدي والآجل',
             amount: currencyFormatter.format(_totalCash),
-            badgeText: 'كاش ($_cashInvoices) ${(cashRatio * 100).toStringAsFixed(0)}% / آجل ($_creditInvoices) ${((1 - cashRatio) * 100).toStringAsFixed(0)}%',
+            badgeText: PlatformUtils.isMobile ? 'كاش ${(cashRatio * 100).toStringAsFixed(0)}% • آجل ${((1 - cashRatio) * 100).toStringAsFixed(0)}%' : 'كاش ($_cashInvoices) ${(cashRatio * 100).toStringAsFixed(0)}% / آجل ($_creditInvoices) ${((1 - cashRatio) * 100).toStringAsFixed(0)}%',
             badgeColor: const Color(0xFF238636),
             icon: Icons.account_balance_wallet_rounded,
             iconColor: const Color(0xFF238636),
@@ -567,13 +678,17 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
             ],
           ),
           const SizedBox(height: 10),
-          Text(
-            amount,
-            style: const TextStyle(
-              fontFamily: 'NotoSansArabic',
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.5,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              amount,
+              style: const TextStyle(
+                fontFamily: 'NotoSansArabic',
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.5,
+              ),
             ),
           ),
           const SizedBox(height: 8),
