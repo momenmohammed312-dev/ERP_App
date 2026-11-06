@@ -993,223 +993,263 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
 
     await showDialog(
       context: modalContext,
-      builder: (dialogCtx) => Directionality(
-        textDirection: ui.TextDirection.rtl,
-        child: Dialog(
-          backgroundColor: const Color(0xFF1E222B),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: Colors.white.withValues(alpha: 0.1),
+      builder: (dialogCtx) {
+        final isNarrowModal = MediaQuery.of(dialogCtx).size.width < 600;
+        return Directionality(
+          textDirection: ui.TextDirection.rtl,
+          child: Dialog(
+            backgroundColor: const Color(0xFF1E222B),
+            insetPadding: EdgeInsets.symmetric(
+              horizontal: isNarrowModal ? 12 : 40,
+              vertical: 24,
             ),
-          ),
-          child: Container(
-            width: 620,
-            constraints: const BoxConstraints(maxHeight: 700),
-            padding: const EdgeInsets.all(22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Dialog Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: MadarColors.gold.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.receipt_long_rounded,
-                            color: MadarColors.gold,
-                            size: 24,
-                          ),
-                        ),
-                        const Gap(12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: Colors.white.withValues(alpha: 0.1),
+              ),
+            ),
+            child: Container(
+              width: 620,
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(dialogCtx).size.height * 0.88,
+              ),
+              padding: EdgeInsets.all(isNarrowModal ? 14 : 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Dialog Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Row(
                           children: [
-                            Text(
-                              'تفاصيل الفاتورة #$formattedNumber',
-                              style: const TextStyle(
-                                fontFamily: 'NotoSansArabic',
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: MadarColors.gold.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.receipt_long_rounded,
+                                color: MadarColors.gold,
+                                size: 20,
                               ),
                             ),
-                            Text(
-                              DateFormat('yyyy-MM-dd HH:mm').format(widget.invoice.date.toLocal()),
-                              style: TextStyle(
-                                fontFamily: 'NotoSansArabic',
-                                fontSize: 12,
-                                color: Colors.white.withValues(alpha: 0.6),
+                            const Gap(10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      'تفاصيل الفاتورة #$formattedNumber',
+                                      style: const TextStyle(
+                                        fontFamily: 'NotoSansArabic',
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    DateFormat('yyyy-MM-dd HH:mm').format(widget.invoice.date.toLocal()),
+                                    style: TextStyle(
+                                      fontFamily: 'NotoSansArabic',
+                                      fontSize: 11,
+                                      color: Colors.white.withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                      onPressed: () => Navigator.of(dialogCtx).pop(),
-                    ),
-                  ],
-                ),
-                const Gap(16),
-
-                // Info Badges
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF161B22),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildInfoItem('العميل', _formatCustomerName(widget.invoice.customerName), Icons.person_outline),
-                      _buildInfoItem(
-                        'حالة السداد',
-                        isFullyPaid ? 'مدفوعة بالكامل' : 'متبقي ${remaining.toStringAsFixed(2)} ج.م',
-                        isFullyPaid ? Icons.check_circle_outline : Icons.pending_outlined,
-                        color: isFullyPaid ? Colors.greenAccent : Colors.orangeAccent,
                       ),
-                      if (widget.hasReturn)
-                        _buildInfoItem('المرتجع', 'يوجد مرتجع', Icons.undo_rounded, color: Colors.redAccent),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        onPressed: () => Navigator.of(dialogCtx).pop(),
+                      ),
                     ],
                   ),
-                ),
-                const Gap(16),
+                  const Gap(12),
 
-                // Items list / table
-                const Text(
-                  'المنتجات والبنود',
-                  style: TextStyle(
-                    fontFamily: 'NotoSansArabic',
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                  // Info Badges
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161B22),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.spaceAround,
+                      children: [
+                        _buildInfoItem('العميل', _formatCustomerName(widget.invoice.customerName), Icons.person_outline),
+                        _buildInfoItem(
+                          'حالة السداد',
+                          isFullyPaid ? 'مدفوعة بالكامل' : 'متبقي ${remaining.toStringAsFixed(2)} ج.م',
+                          isFullyPaid ? Icons.check_circle_outline : Icons.pending_outlined,
+                          color: isFullyPaid ? Colors.greenAccent : Colors.orangeAccent,
+                        ),
+                        if (widget.hasReturn)
+                          _buildInfoItem('المرتجع', 'يوجد مرتجع', Icons.undo_rounded, color: Colors.redAccent),
+                      ],
+                    ),
                   ),
-                ),
-                const Gap(8),
-                Flexible(
-                  child: _isLoadingItems
-                      ? const Center(child: CircularProgressIndicator())
-                      : _invoiceItems.isEmpty
-                          ? const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(20),
-                                child: Text('لا توجد منتجات مسجلة في الفاتورة', style: TextStyle(color: Colors.white60)),
-                              ),
-                            )
-                          : Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: SingleChildScrollView(
-                                  child: DataTable(
-                                    headingRowColor: WidgetStateProperty.all(const Color(0xFF161B22)),
-                                    dataRowColor: WidgetStateProperty.all(Colors.transparent),
-                                    columns: const [
-                                      DataColumn(label: Text('المنتج', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                                      DataColumn(label: Text('الكمية', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                                      DataColumn(label: Text('سعر الوحدة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                                      DataColumn(label: Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
-                                    ],
-                                    rows: _invoiceItems.map((itemWithProduct) {
-                                      final item = itemWithProduct.$1;
-                                      final product = itemWithProduct.$2;
-                                      final unitPrice = item.quantity > 0 ? item.price / item.quantity : 0.0;
-                                      final baseName = product?.name ?? 'منتج ${item.productId}';
-                                      final vName = item.variantId != null ? _variantNames[item.variantId] : null;
-                                      final fullName = (vName != null && !baseName.endsWith('— $vName')) ? '$baseName — $vName' : baseName;
+                  const Gap(12),
 
-                                      return DataRow(
-                                        cells: [
-                                          DataCell(Text(fullName, style: const TextStyle(color: Colors.white70))),
-                                          DataCell(Text('${item.quantity}', style: const TextStyle(color: Colors.white70))),
-                                          DataCell(Text('${unitPrice.toStringAsFixed(2)} ج.م', style: const TextStyle(color: Colors.white70))),
-                                          DataCell(Text('${item.price.toStringAsFixed(2)} ج.م', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent))),
+                  // Items list / table
+                  const Text(
+                    'المنتجات والبنود',
+                    style: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Gap(6),
+                  Flexible(
+                    child: _isLoadingItems
+                        ? const Center(child: CircularProgressIndicator())
+                        : _invoiceItems.isEmpty
+                            ? const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(20),
+                                  child: Text('لا توجد منتجات مسجلة في الفاتورة', style: TextStyle(color: Colors.white60)),
+                                ),
+                              )
+                            : Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: SingleChildScrollView(
+                                      child: DataTable(
+                                        headingRowColor: WidgetStateProperty.all(const Color(0xFF161B22)),
+                                        dataRowColor: WidgetStateProperty.all(Colors.transparent),
+                                        columnSpacing: isNarrowModal ? 12 : 24,
+                                        columns: const [
+                                          DataColumn(label: Text('المنتج', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                                          DataColumn(label: Text('الكمية', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                                          DataColumn(label: Text('سعر الوحدة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
+                                          DataColumn(label: Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white))),
                                         ],
-                                      );
-                                    }).toList(),
+                                        rows: _invoiceItems.map((itemWithProduct) {
+                                          final item = itemWithProduct.$1;
+                                          final product = itemWithProduct.$2;
+                                          final unitPrice = item.quantity > 0 ? item.price / item.quantity : 0.0;
+                                          final baseName = product?.name ?? 'منتج ${item.productId}';
+                                          final vName = item.variantId != null ? _variantNames[item.variantId] : null;
+                                          final fullName = (vName != null && !baseName.endsWith('— $vName')) ? '$baseName — $vName' : baseName;
+
+                                          return DataRow(
+                                            cells: [
+                                              DataCell(Text(fullName, style: const TextStyle(color: Colors.white70))),
+                                              DataCell(Text('${item.quantity}', style: const TextStyle(color: Colors.white70))),
+                                              DataCell(Text('${unitPrice.toStringAsFixed(2)} ج.م', style: const TextStyle(color: Colors.white70))),
+                                              DataCell(Text('${item.price.toStringAsFixed(2)} ج.م', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent))),
+                                            ],
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                ),
-                const Gap(16),
-
-                // Financial Footer Summary
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF161B22),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: MadarColors.gold.withValues(alpha: 0.3)),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('المدفوع: ${widget.invoice.paidAmount.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'NotoSansArabic', color: Colors.white70, fontSize: 13)),
-                          if (remaining > 0.001)
-                            Text('المتبقي: ${remaining.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'NotoSansArabic', color: Colors.orangeAccent, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const Gap(12),
+
+                  // Financial Footer Summary
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161B22),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: MadarColors.gold.withValues(alpha: 0.3)),
+                    ),
+                    child: Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('المدفوع: ${widget.invoice.paidAmount.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'NotoSansArabic', color: Colors.white70, fontSize: 12)),
+                            if (remaining > 0.001)
+                              Text('المتبقي: ${remaining.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'NotoSansArabic', color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold)),
                         ],
                       ),
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          const Text('الإجمالي الكلي: ', style: TextStyle(fontFamily: 'NotoSansArabic', color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-                          Text('${widget.invoice.totalAmount.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'NotoSansArabic', color: Color(0xFF10B981), fontSize: 18, fontWeight: FontWeight.w800)),
+                          const Text('الإجمالي الكلي: ', style: TextStyle(fontFamily: 'NotoSansArabic', color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text('${widget.invoice.totalAmount.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'NotoSansArabic', color: Color(0xFF10B981), fontSize: 16, fontWeight: FontWeight.w800)),
                         ],
                       ),
                     ],
                   ),
                 ),
-                const Gap(18),
+                const Gap(14),
 
                 // Action Buttons in Dialog
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
                   children: [
                     OutlinedButton(
                       onPressed: () => Navigator.of(dialogCtx).pop(),
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white70),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      ),
                       child: const Text('إغلاق', style: TextStyle(fontFamily: 'NotoSansArabic')),
                     ),
-                    const SizedBox(width: 8),
                     if (!widget.isVoided && widget.onEditInvoice != null)
                       ElevatedButton.icon(
                         onPressed: () {
                           Navigator.of(dialogCtx).pop();
                           widget.onEditInvoice?.call();
                         },
-                        icon: const Icon(Icons.edit_note, size: 18),
-                        label: const Text('تعديل الفاتورة', style: TextStyle(fontFamily: 'NotoSansArabic')),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
+                        icon: const Icon(Icons.edit_note, size: 16),
+                        label: const Text('تعديل الفاتورة', style: TextStyle(fontFamily: 'NotoSansArabic', fontSize: 12.5)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
                       ),
-                    const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () {
                         Navigator.of(dialogCtx).pop();
                         widget.onPrint();
                       },
-                      icon: const Icon(Icons.print, size: 18),
-                      label: const Text('طباعة', style: TextStyle(fontFamily: 'NotoSansArabic')),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                      icon: const Icon(Icons.print, size: 16),
+                      label: const Text('طباعة', style: TextStyle(fontFamily: 'NotoSansArabic', fontSize: 12.5)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      ),
                     ),
                   ],
                 ),
@@ -1217,8 +1257,9 @@ class _InvoiceExpansionTileState extends State<_InvoiceExpansionTile> {
             ),
           ),
         ),
-      ),
-    );
+      );
+    },
+  );
   }
 
   Widget _buildInfoItem(String title, String value, IconData icon, {Color? color}) {

@@ -562,6 +562,7 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
     final isDue = balance > 0.01;
     final isCredit = balance < -0.01;
     final isSettled = !isDue && !isCredit;
+    final isNarrow = MediaQuery.of(context).size.width < 650;
 
     final Color badgeColor = isDue
         ? MadarColors.error
@@ -575,9 +576,60 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
             ? 'له رصيد: ${(-balance).toStringAsFixed(2)} ج.م'
             : 'خالص الحساب';
 
+    final badgeWidget = Container(
+      padding: EdgeInsets.symmetric(horizontal: isNarrow ? 8 : 10, vertical: isNarrow ? 3.5 : 5),
+      decoration: BoxDecoration(
+        color: badgeColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isDue
+                  ? Icons.arrow_outward_rounded
+                  : isCredit
+                      ? Icons.arrow_downward_rounded
+                      : Icons.check_circle_outline_rounded,
+              size: isNarrow ? 13 : 14,
+              color: badgeColor,
+            ),
+            const Gap(5),
+            Text(
+              badgeText,
+              style: TextStyle(
+                fontFamily: 'NotoSansArabic',
+                fontSize: isNarrow ? 11 : 11.5,
+                fontWeight: FontWeight.bold,
+                color: badgeColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final statementButton = OutlinedButton.icon(
+      onPressed: () => _showStatementDialog(item.customer),
+      icon: const Icon(Icons.receipt_long_rounded, size: 15),
+      label: const Text(
+        'كشف حساب',
+        style: TextStyle(fontFamily: 'NotoSansArabic', fontSize: 11.5),
+      ),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        minimumSize: const Size(0, 32),
+        side: BorderSide(color: isDark ? MadarColors.border : Colors.grey.shade300),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: isNarrow ? 12 : 14, vertical: isNarrow ? 10 : 12),
       decoration: BoxDecoration(
         color: isDark ? MadarColors.bgCard : Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -585,118 +637,134 @@ class _CustomerReportTabState extends State<CustomerReportTab> {
           color: isDark ? MadarColors.border : Colors.grey.shade200,
         ),
       ),
-      child: Row(
-        children: [
-          // Avatar
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: badgeColor.withValues(alpha: 0.12),
-            child: Text(
-              item.customer.name.isNotEmpty ? item.customer.name[0] : 'ع',
-              style: TextStyle(
-                fontFamily: 'NotoSansArabic',
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: badgeColor,
-              ),
-            ),
-          ),
-          const Gap(12),
-
-          // Name & Phone
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: isNarrow
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  item.customer.name,
-                  style: const TextStyle(
-                    fontFamily: 'NotoSansArabic',
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Gap(3),
                 Row(
                   children: [
-                    Icon(
-                      Icons.phone_rounded,
-                      size: 13,
-                      color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
-                    ),
-                    const Gap(4),
-                    Text(
-                      item.customer.phone?.isNotEmpty == true
-                          ? item.customer.phone!
-                          : 'لا يوجد هاتف',
-                      style: TextStyle(
-                        fontFamily: 'NotoSansArabic',
-                        fontSize: 12,
-                        color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: badgeColor.withValues(alpha: 0.12),
+                      child: Text(
+                        item.customer.name.isNotEmpty ? item.customer.name[0] : 'ع',
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: badgeColor,
+                        ),
                       ),
                     ),
+                    const Gap(10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.customer.name,
+                            style: const TextStyle(
+                              fontFamily: 'NotoSansArabic',
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const Gap(2),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.phone_rounded,
+                                size: 12,
+                                color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                              ),
+                              const Gap(4),
+                              Text(
+                                item.customer.phone?.isNotEmpty == true
+                                    ? item.customer.phone!
+                                    : 'لا يوجد هاتف',
+                                style: TextStyle(
+                                  fontFamily: 'NotoSansArabic',
+                                  fontSize: 11,
+                                  color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Gap(8),
+                    badgeWidget,
+                  ],
+                ),
+                const Gap(8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    statementButton,
                   ],
                 ),
               ],
-            ),
-          ),
-
-          // Balance Badge
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: badgeColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
-              ),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isDue
-                          ? Icons.arrow_outward_rounded
-                          : isCredit
-                              ? Icons.arrow_downward_rounded
-                              : Icons.check_circle_outline_rounded,
-                      size: 14,
+            )
+          : Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: badgeColor.withValues(alpha: 0.12),
+                  child: Text(
+                    item.customer.name.isNotEmpty ? item.customer.name[0] : 'ع',
+                    style: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
                       color: badgeColor,
                     ),
-                    const Gap(5),
-                    Text(
-                      badgeText,
-                      style: TextStyle(
-                        fontFamily: 'NotoSansArabic',
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.bold,
-                        color: badgeColor,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                const Gap(12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.customer.name,
+                        style: const TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Gap(3),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.phone_rounded,
+                            size: 13,
+                            color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                          ),
+                          const Gap(4),
+                          Text(
+                            item.customer.phone?.isNotEmpty == true
+                                ? item.customer.phone!
+                                : 'لا يوجد هاتف',
+                            style: TextStyle(
+                              fontFamily: 'NotoSansArabic',
+                              fontSize: 12,
+                              color: isDark ? MadarColors.textMuted : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(child: badgeWidget),
+                const Gap(10),
+                statementButton,
+              ],
             ),
-          ),
-          const Gap(10),
-
-          // Statement Action Button
-          OutlinedButton.icon(
-            onPressed: () => _showStatementDialog(item.customer),
-            icon: const Icon(Icons.receipt_long_rounded, size: 16),
-            label: const Text(
-              'كشف حساب',
-              style: TextStyle(fontFamily: 'NotoSansArabic', fontSize: 12),
-            ),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              side: BorderSide(color: isDark ? MadarColors.border : Colors.grey.shade300),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
