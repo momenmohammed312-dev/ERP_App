@@ -105,6 +105,9 @@ class _SmartFloatingToastState extends State<SmartFloatingToast>
         ? Colors.black.withValues(alpha: 0.5)
         : Colors.black.withValues(alpha: 0.12);
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxToastWidth = (screenWidth - 32).clamp(280.0, 420.0);
+
     return SlideTransition(
       position: _slideAnim,
       child: FadeTransition(
@@ -112,8 +115,8 @@ class _SmartFloatingToastState extends State<SmartFloatingToast>
         child: Material(
           color: Colors.transparent,
           child: Container(
-            constraints: const BoxConstraints(maxWidth: 420),
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            constraints: BoxConstraints(maxWidth: maxToastWidth),
+            margin: EdgeInsets.zero,
             decoration: BoxDecoration(
               color: bgColor,
               borderRadius: BorderRadius.circular(10),
