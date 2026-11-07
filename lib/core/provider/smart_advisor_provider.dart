@@ -9,12 +9,14 @@ class SmartAdvisorState {
   final int unreadCount;
   final bool isEnabled;
   final bool isLoading;
+  final SmartAlert? pendingToastAlert;
 
   const SmartAdvisorState({
     this.alerts = const [],
     this.unreadCount = 0,
     this.isEnabled = true,
     this.isLoading = false,
+    this.pendingToastAlert,
   });
 
   SmartAdvisorState copyWith({
@@ -22,12 +24,16 @@ class SmartAdvisorState {
     int? unreadCount,
     bool? isEnabled,
     bool? isLoading,
+    SmartAlert? pendingToastAlert,
+    bool clearToast = false,
   }) {
     return SmartAdvisorState(
       alerts: alerts ?? this.alerts,
       unreadCount: unreadCount ?? this.unreadCount,
       isEnabled: isEnabled ?? this.isEnabled,
       isLoading: isLoading ?? this.isLoading,
+      pendingToastAlert:
+          clearToast ? null : (pendingToastAlert ?? this.pendingToastAlert),
     );
   }
 }
@@ -62,26 +68,38 @@ class SmartAdvisorNotifier extends StateNotifier<SmartAdvisorState> {
           alerts: [],
           unreadCount: 0,
           isLoading: false,
+          clearToast: true,
         );
         return;
       }
 
+      SmartAlert? newlyDiscoveredToast;
       if (runAnalysis) {
-        await _service.runAutomaticAnalysis(force: true);
+        final newDiscovered = await _service.runAutomaticAnalysis(force: true);
+        if (newDiscovered.isNotEmpty) {
+          newlyDiscoveredToast = newDiscovered.first;
+        }
       }
 
       final alerts = await _service.getActiveAlerts();
       final unreadCount = await _service.getUnreadCount();
 
+      // If there wasn't a newly discovered toast from force run, but we have unread alerts
+      // and no toast currently shown, we can show the most urgent unread alert if needed
       state = state.copyWith(
         isEnabled: true,
         alerts: alerts,
         unreadCount: unreadCount,
         isLoading: false,
+        pendingToastAlert: newlyDiscoveredToast,
       );
     } catch (_) {
       state = state.copyWith(isLoading: false);
     }
+  }
+
+  void dismissToast() {
+    state = state.copyWith(clearToast: true);
   }
 
   Future<void> markAsRead(int notificationId) async {
@@ -105,7 +123,7 @@ class SmartAdvisorNotifier extends StateNotifier<SmartAdvisorState> {
     if (enabled) {
       await refresh(runAnalysis: true);
     } else {
-      state = state.copyWith(alerts: [], unreadCount: 0);
+      state = state.copyWith(alerts: [], unreadCount: 0, clearToast: true);
     }
   }
 }

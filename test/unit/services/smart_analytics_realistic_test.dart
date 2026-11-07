@@ -6,6 +6,9 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/smart_analytics/predictive_stock_service.dart';
 import 'package:pos_offline_desktop/core/services/smart_analytics/financial_anomaly_service.dart';
 import 'package:pos_offline_desktop/core/services/smart_analytics/customer_retention_service.dart';
+import 'package:pos_offline_desktop/core/services/smart_analytics/staff_discipline_service.dart';
+import 'package:pos_offline_desktop/core/services/smart_analytics/supplier_payables_service.dart';
+import 'package:pos_offline_desktop/core/services/smart_analytics/operations_audit_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pos_offline_desktop/core/services/smart_analytics/smart_advisor_service.dart';
 
@@ -132,7 +135,7 @@ void main() {
       final voidedInvId = await db.into(db.invoices).insert(
             InvoicesCompanion.insert(
               invoiceNumber: const Value('INV-VOIDED-1'),
-              totalAmount: const Value(3500.0),
+              totalAmount: const Value(10000.0),
               date: Value(now.subtract(const Duration(days: 1))),
               status: const Value('voided'),
             ),
@@ -149,13 +152,14 @@ void main() {
       final service = PredictiveStockService(db);
       final results = await service.analyzeStockRunRate();
 
-      // Verify raw material and inactive products are excluded
+      // Verify that P4 (raw material) and P5 (inactive) are completely excluded
       expect(results.any((r) => r.productId == p4), isFalse);
       expect(results.any((r) => r.productId == p5), isFalse);
 
       // Verify P2 is out_of_stock
       final p2Result = results.firstWhere((r) => r.productId == p2);
       expect(p2Result.urgency, equals('out_of_stock'));
+      expect(p2Result.daysUntilStockout, equals(0));
       expect(p2Result.suggestedReorderQuantity, greaterThan(0));
 
       // Verify P1 is critical (10 stock / 5 daily = ~2 days)
@@ -388,10 +392,253 @@ void main() {
       // Customer 2 is on schedule, must NOT be flagged
       expect(atRisk.any((c) => c.customerId == 'CUST-MONTHLY-2'), isFalse);
     });
+
+    test('detects customers accumulating credit without payment (credit stagnation)', () async {
+      final now = DateTime.now();
+
+      await db.into(db.customers).insert(
+            CustomersCompanion.insert(
+              id: 'CUST-STAGNANT-1',
+              name: 'محلات الأمل للملابس',
+              phone: const Value('01122334455'),
+              openingBalance: const Value(0.0),
+              status: const Value('Active'),
+            ),
+          );
+
+      // Paid an initial payment 25 days ago
+      await db.into(db.ledgerTransactions).insert(
+            LedgerTransactionsCompanion.insert(
+              id: 'TX-PAY-OLD',
+              entityType: 'Customer',
+              refId: 'CUST-STAGNANT-1',
+              date: now.subtract(const Duration(days: 25)),
+              description: 'سداد دفعة نقدية',
+              credit: const Value(1000.0), // Payment
+              origin: 'payment',
+            ),
+          );
+
+      // Took 3 consecutive credit sales afterwards, without any further payments
+      for (int i = 1; i <= 3; i++) {
+        await db.into(db.ledgerTransactions).insert(
+              LedgerTransactionsCompanion.insert(
+                id: 'TX-SALE-CREDIT-$i',
+                entityType: 'Customer',
+                refId: 'CUST-STAGNANT-1',
+                date: now.subtract(Duration(days: 20 - (i * 4))),
+                description: 'فاتورة بيع آجل $i',
+                debit: const Value(2500.0), // Debt increases
+                origin: 'sale',
+              ),
+            );
+      }
+
+      final service = CustomerRetentionService(db);
+      final stagnantList = await service.analyzeCreditAccumulationWithoutPayment();
+
+      expect(stagnantList.any((c) => c.customerId == 'CUST-STAGNANT-1'), isTrue);
+      final stag = stagnantList.firstWhere((c) => c.customerId == 'CUST-STAGNANT-1');
+      expect(stag.currentDebt, equals(6500.0)); // 3*2500 - 1000 = 6500
+      expect(stag.purchasesWithoutPaymentCount, equals(3));
+      expect(stag.daysSinceLastPayment, equals(25));
+    });
+  });
+
+  group('StaffDisciplineService — Absence & Tardiness Monitoring', () {
+    test('accurately flags consecutive unexcused absences and frequent tardiness', () async {
+      final now = DateTime.now();
+
+      // Employee 1: Disciplined
+      await db.into(db.staffTable).insert(
+            StaffTableCompanion.insert(
+              staffId: 'STAFF-001',
+              name: 'أحمد سعيد (ملتزم)',
+              position: 'مبيعات',
+              employmentType: 'full_time',
+              basicSalary: 4000.0,
+              hireDate: now.subtract(const Duration(days: 100)),
+              status: 'active',
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+
+      // Employee 2: Absent for 3 consecutive days without excuse
+      await db.into(db.staffTable).insert(
+            StaffTableCompanion.insert(
+              staffId: 'STAFF-002',
+              name: 'كريم وائل (غائب)',
+              position: 'كاشير',
+              employmentType: 'full_time',
+              basicSalary: 3500.0,
+              hireDate: now.subtract(const Duration(days: 100)),
+              status: 'active',
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+
+      // Employee 3: Frequent tardiness (4 times late, 40 mins each)
+      await db.into(db.staffTable).insert(
+            StaffTableCompanion.insert(
+              staffId: 'STAFF-003',
+              name: 'طارق سامي (متأخر)',
+              position: 'مخازن',
+              employmentType: 'full_time',
+              basicSalary: 3500.0,
+              hireDate: now.subtract(const Duration(days: 100)),
+              status: 'active',
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+
+      // Seed attendance for Employee 2 (3 consecutive absences)
+      for (int i = 1; i <= 3; i++) {
+        await db.into(db.attendanceTable).insert(
+              AttendanceTableCompanion.insert(
+                staffId: 'STAFF-002',
+                date: now.subtract(Duration(days: 4 - i)),
+                status: 'absent',
+                excused: const Value(false),
+                createdAt: now,
+                updatedAt: now,
+              ),
+            );
+      }
+
+      // Seed attendance for Employee 3 (4 late days)
+      for (int i = 1; i <= 4; i++) {
+        await db.into(db.attendanceTable).insert(
+              AttendanceTableCompanion.insert(
+                staffId: 'STAFF-003',
+                date: now.subtract(Duration(days: 10 - (i * 2))),
+                status: 'late',
+                lateMinutes: const Value(40),
+                excused: const Value(false),
+                createdAt: now,
+                updatedAt: now,
+              ),
+            );
+      }
+
+      final service = StaffDisciplineService(db);
+      final disciplineList = await service.analyzeStaffDiscipline();
+
+      // Employee 1 must NOT be in the list
+      expect(disciplineList.any((s) => s.staffId == 'STAFF-001'), isFalse);
+
+      // Employee 2 must be flagged for consecutive absence
+      expect(disciplineList.any((s) => s.staffId == 'STAFF-002' && s.issueType == 'consecutive_absence'), isTrue);
+
+      // Employee 3 must be flagged for frequent tardiness
+      expect(disciplineList.any((s) => s.staffId == 'STAFF-003' && s.issueType == 'frequent_tardiness'), isTrue);
+      final lateStaff = disciplineList.firstWhere((s) => s.staffId == 'STAFF-003');
+      expect(lateStaff.totalLateMinutes, equals(160));
+    });
+  });
+
+  group('SupplierPayablesService — Overdue Supplier Debts', () {
+    test('detects overdue payables without payment for >= 15 days', () async {
+      final now = DateTime.now();
+
+      // Supplier 1: We owe 12,000 EGP and made no payment since 22 days ago
+      await db.into(db.suppliers).insert(
+            SuppliersCompanion.insert(
+              id: 'SUP-001',
+              name: 'شركة النسيج المتحد',
+              openingBalance: const Value(0.0),
+              status: const Value('Active'),
+            ),
+          );
+
+      // Initial purchase 22 days ago (credit: debt to supplier)
+      await db.into(db.ledgerTransactions).insert(
+            LedgerTransactionsCompanion.insert(
+              id: 'TX-SUP-PUR-1',
+              entityType: 'Supplier',
+              refId: 'SUP-001',
+              date: now.subtract(const Duration(days: 22)),
+              description: 'فاتورة توريد قماش',
+              credit: const Value(12000.0),
+              origin: 'purchase',
+            ),
+          );
+
+      // Supplier 2: Fully paid (no debt)
+      await db.into(db.suppliers).insert(
+            SuppliersCompanion.insert(
+              id: 'SUP-002',
+              name: 'مصنع الأزرار الحديث',
+              openingBalance: const Value(0.0),
+              status: const Value('Active'),
+            ),
+          );
+
+      final service = SupplierPayablesService(db);
+      final overdueList = await service.analyzeOverduePayables();
+
+      expect(overdueList.any((s) => s.supplierId == 'SUP-001'), isTrue);
+      final sup1 = overdueList.firstWhere((s) => s.supplierId == 'SUP-001');
+      expect(sup1.outstandingBalance, equals(12000.0));
+      expect(sup1.daysSinceLastPayment, equals(22));
+
+      expect(overdueList.any((s) => s.supplierId == 'SUP-002'), isFalse);
+    });
+  });
+
+  group('OperationsAuditService — Custodies & Manufacturing Audit', () {
+    test('detects open custodies, lingering manufacturing stages, and open sessions', () async {
+      final now = DateTime.now();
+
+      // 1. Open custody older than 5 days
+      await db.into(db.cashCustodies).insert(
+            CashCustodiesCompanion.insert(
+              custodyNumber: 'CUST-0001',
+              staffId: 'STAFF-001',
+              staffName: 'أحمد مندوب المشتريات',
+              date: now.subtract(const Duration(days: 5)),
+              amount: 3000.0,
+              remainingAmount: 3000.0,
+              status: const Value('open'),
+            ),
+          );
+
+      // 2. Settled custody (should NOT be flagged)
+      await db.into(db.cashCustodies).insert(
+            CashCustodiesCompanion.insert(
+              custodyNumber: 'CUST-0002',
+              staffId: 'STAFF-001',
+              staffName: 'أحمد مندوب المشتريات',
+              date: now.subtract(const Duration(days: 10)),
+              amount: 1000.0,
+              remainingAmount: 0.0,
+              status: const Value('settled'),
+            ),
+          );
+
+      // 3. Open Cash Session for 26 hours
+      await db.into(db.cashSessions).insert(
+            CashSessionsCompanion.insert(
+              openedAt: now.subtract(const Duration(hours: 26)),
+              status: const Value('open'),
+              openingBalance: const Value(500.0),
+              openedBy: const Value('كاشير أحمد'),
+            ),
+          );
+
+      final service = OperationsAuditService(db);
+      final ops = await service.checkUnclosedOperations();
+
+      expect(ops.any((o) => o.category == 'custody' && o.referenceId == 'CUST-0001'), isTrue);
+      expect(ops.any((o) => o.category == 'custody' && o.referenceId == 'CUST-0002'), isFalse);
+      expect(ops.any((o) => o.category == 'cash_session'), isTrue);
+    });
   });
 
   group('SmartAdvisorService — Orchestration, Deduplication & Briefing', () {
-    test('runs suite, updates notifications without duplicating, marks read and generates brief', () async {
+    test('runs full suite, updates notifications without duplicating, marks read and returns new alerts', () async {
       final now = DateTime.now();
 
       // Seed a low stock product
@@ -425,14 +672,16 @@ void main() {
 
       final advisor = SmartAdvisorService(db);
 
-      // First run: should generate notifications
-      await advisor.runAutomaticAnalysis(force: true);
+      // First run: should generate notifications and return newly discovered alerts
+      final newAlerts = await advisor.runAutomaticAnalysis(force: true);
+      expect(newAlerts, isNotEmpty);
       final alerts1 = await advisor.getActiveAlerts();
       expect(alerts1, isNotEmpty);
       final initialCount = alerts1.length;
 
-      // Second run: must deduplicate and NOT create double rows
-      await advisor.runAutomaticAnalysis(force: true);
+      // Second run: must deduplicate, return empty new alerts and NOT create double rows
+      final secondNewAlerts = await advisor.runAutomaticAnalysis(force: true);
+      expect(secondNewAlerts, isEmpty);
       final alerts2 = await advisor.getActiveAlerts();
       expect(alerts2.length, equals(initialCount));
 

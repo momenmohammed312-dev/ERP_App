@@ -18,7 +18,8 @@ class SmartNotificationsScreen extends ConsumerStatefulWidget {
 
 class _SmartNotificationsScreenState
     extends ConsumerState<SmartNotificationsScreen> {
-  String _selectedCategory = 'all'; // 'all' | 'unread' | 'stock' | 'finance' | 'customer'
+  String _selectedCategory =
+      'all'; // 'all' | 'unread' | 'stock' | 'finance' | 'customer' | 'supplier' | 'staff' | 'operations'
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +32,9 @@ class _SmartNotificationsScreenState
       if (_selectedCategory == 'stock') return alert.category == 'stock';
       if (_selectedCategory == 'finance') return alert.category == 'finance';
       if (_selectedCategory == 'customer') return alert.category == 'customer';
+      if (_selectedCategory == 'supplier') return alert.category == 'supplier';
+      if (_selectedCategory == 'staff') return alert.category == 'staff';
+      if (_selectedCategory == 'operations') return alert.category == 'operations';
       return true;
     }).toList();
 
@@ -121,7 +125,13 @@ class _SmartNotificationsScreenState
           const Gap(8),
           _buildFilterChip('الأمان المالي', 'finance'),
           const Gap(8),
-          _buildFilterChip('العملاء', 'customer'),
+          _buildFilterChip('العملاء والائتمان', 'customer'),
+          const Gap(8),
+          _buildFilterChip('الموردين', 'supplier'),
+          const Gap(8),
+          _buildFilterChip('الموظفين', 'staff'),
+          const Gap(8),
+          _buildFilterChip('العمليات والعهد', 'operations'),
         ],
       ),
     );
@@ -187,7 +197,16 @@ class _SmartNotificationsScreenState
         categoryLabel = 'أمان مالي';
         break;
       case 'customer':
-        categoryLabel = 'عملاء';
+        categoryLabel = 'عملاء وائتمان';
+        break;
+      case 'supplier':
+        categoryLabel = 'موردين';
+        break;
+      case 'staff':
+        categoryLabel = 'موظفين';
+        break;
+      case 'operations':
+        categoryLabel = 'عمليات وعهد';
         break;
       default:
         categoryLabel = 'عام';
@@ -198,8 +217,6 @@ class _SmartNotificationsScreenState
         ? (alert.isRead ? MadarColors.bgCard : const Color(0xFF21262D))
         : (alert.isRead ? MadarColors.lightBgCard : MadarColors.lightBgSurface);
 
-    final timeStr = _formatRelativeTime(alert.createdAt);
-
     return Container(
       decoration: BoxDecoration(
         color: cardBg,
@@ -207,148 +224,185 @@ class _SmartNotificationsScreenState
         border: Border.all(
           color: alert.isRead
               ? context.borderColor
-              : tagColor.withValues(alpha: 0.5),
+              : (isDark ? MadarColors.gold.withValues(alpha: 0.4) : MadarColors.lightPrimary.withValues(alpha: 0.4)),
           width: alert.isRead ? 1 : 1.5,
         ),
       ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top metadata row: tags + time (Strictly NO icons)
-          Row(
-            children: [
-              // Urgency Badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: tagColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Text(
-                  tagLabel,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: tagColor,
-                  ),
-                ),
-              ),
-              const Gap(6),
-              // Category Badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF333A48) : const Color(0xFFE2EFF9),
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Text(
-                  categoryLabel,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? MadarColors.textSecondary : MadarColors.lightTextSecondary,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              Text(
-                timeStr,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: context.textMuted,
-                ),
-              ),
-            ],
-          ),
-          const Gap(10),
-
-          // Title
-          Text(
-            alert.title,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: alert.isRead ? FontWeight.w600 : FontWeight.bold,
-              color: context.textPrimary,
-            ),
-          ),
-          const Gap(6),
-
-          // Body Text
-          Text(
-            alert.body,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.45,
-              color: context.textSecondary,
-            ),
-          ),
-          const Gap(12),
-
-          // Action row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (!alert.isRead)
-                TextButton(
-                  onPressed: () => ref
-                      .read(smartAdvisorProvider.notifier)
-                      .markAsRead(alert.id),
-                  child: Text(
-                    'تمييز كمقروء',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? MadarColors.gold : MadarColors.lightPrimary,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            if (!alert.isRead) {
+              ref.read(smartAdvisorProvider.notifier).markAsRead(alert.id);
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top row: Badges + Timestamp + Delete button
+                Row(
+                  children: [
+                    // Urgency Tag (Textual Badge, No Icon)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tagColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: tagColor.withValues(alpha: 0.35),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Text(
+                        tagLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: tagColor,
+                        ),
+                      ),
                     ),
-                  ),
+                    const Gap(8),
+
+                    // Category Tag
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : Colors.black.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        categoryLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.textSecondary,
+                        ),
+                      ),
+                    ),
+
+                    if (!alert.isRead) ...[
+                      const Gap(8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: (isDark ? MadarColors.gold : MadarColors.lightPrimary)
+                              .withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'جديد',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? MadarColors.gold : MadarColors.lightPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    const Spacer(),
+
+                    // Timestamp
+                    Text(
+                      _formatDate(alert.createdAt),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: context.textMuted,
+                      ),
+                    ),
+                    const Gap(4),
+
+                    // Action: Delete notification
+                    IconButton(
+                      iconSize: 17,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'حذف الإشعار',
+                      onPressed: () => ref
+                          .read(smartAdvisorProvider.notifier)
+                          .deleteAlert(alert.id),
+                      icon: Icon(
+                        Icons.close,
+                        color: context.textSecondary.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
                 ),
-              TextButton(
-                onPressed: () => ref
-                    .read(smartAdvisorProvider.notifier)
-                    .deleteAlert(alert.id),
-                child: Text(
-                  'حذف',
+                const Gap(8),
+
+                // Notification Title (Minimalist Typography)
+                Text(
+                  alert.title,
                   style: TextStyle(
-                    fontSize: 12,
-                    color: context.textMuted,
+                    fontSize: 14.5,
+                    fontWeight: alert.isRead ? FontWeight.w600 : FontWeight.bold,
+                    color: context.textPrimary,
                   ),
                 ),
-              ),
-            ],
+                const Gap(4),
+
+                // Notification Body
+                Text(
+                  alert.body,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: context.textSecondary,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildEmptyState(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            'لا توجد تنبيهات جديدة حالياً',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: context.textPrimary,
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'لا توجد تنبيهات حالياً في هذا القسم',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: context.textPrimary,
+              ),
             ),
-          ),
-          const Gap(6),
-          Text(
-            'مؤشرات المخزون والورديات والعملاء في حالة منتظمة ومستقرة.',
-            style: TextStyle(
-              fontSize: 13,
-              color: context.textMuted,
+            const Gap(6),
+            Text(
+              'كافة المؤشرات في هذا النطاق تعمل بشكل طبيعي ومستقر.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: context.textSecondary,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  String _formatRelativeTime(DateTime dt) {
+  String _formatDate(DateTime dt) {
     final now = DateTime.now();
     final diff = now.difference(dt);
     if (diff.inMinutes < 60) {
@@ -356,7 +410,7 @@ class _SmartNotificationsScreenState
     } else if (diff.inHours < 24) {
       return 'منذ ${diff.inHours} ساعة';
     } else {
-      return 'منذ ${diff.inDays} يوم';
+      return '${dt.year}/${dt.month}/${dt.day}';
     }
   }
 }

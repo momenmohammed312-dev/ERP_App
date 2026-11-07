@@ -5,10 +5,14 @@ import '../../../core/provider/smart_advisor_provider.dart';
 import '../../../core/services/smart_analytics/predictive_stock_service.dart';
 import '../../../core/services/smart_analytics/financial_anomaly_service.dart';
 import '../../../core/services/smart_analytics/customer_retention_service.dart';
+import '../../../core/services/smart_analytics/staff_discipline_service.dart';
+import '../../../core/services/smart_analytics/supplier_payables_service.dart';
+import '../../../core/services/smart_analytics/operations_audit_service.dart';
 import '../../../core/theme/madar_colors.dart';
 
 /// Dedicated comprehensive page for Smart Analytics, Predictive Stockout,
-/// Financial Anomaly Detection, and Customer Retention Insights.
+/// Financial Anomaly Detection, Customer Retention, Staff Discipline,
+/// Supplier Payables, and Lingering Operations Audit.
 /// Fully responsive across mobile, tablet, and desktop with official Madar Light & Dark mode tokens.
 class SmartAnalyticsReportPage extends ConsumerStatefulWidget {
   const SmartAnalyticsReportPage({super.key});
@@ -25,6 +29,10 @@ class _SmartAnalyticsReportPageState
   List<StockPredictionItem> _stockPredictions = [];
   List<FinancialAnomalyItem> _anomalies = [];
   List<CustomerRetentionItem> _churnCustomers = [];
+  List<CustomerCreditStagnationItem> _creditStagnant = [];
+  List<StaffDisciplineItem> _staffIssues = [];
+  List<SupplierPayableItem> _supplierPayables = [];
+  List<OperationsAuditItem> _operationsIssues = [];
 
   @override
   void initState() {
@@ -41,6 +49,11 @@ class _SmartAnalyticsReportPageState
       final stock = await advisor.stockService.analyzeStockRunRate();
       final anomalies = await advisor.anomalyService.checkSessionAnomalies();
       final churn = await advisor.retentionService.analyzeCustomerCadences();
+      final creditStagnant =
+          await advisor.retentionService.analyzeCreditAccumulationWithoutPayment();
+      final staff = await advisor.staffService.analyzeStaffDiscipline();
+      final suppliers = await advisor.supplierService.analyzeOverduePayables();
+      final ops = await advisor.operationsAuditService.checkUnclosedOperations();
 
       if (mounted) {
         setState(() {
@@ -48,6 +61,10 @@ class _SmartAnalyticsReportPageState
           _stockPredictions = stock;
           _anomalies = anomalies;
           _churnCustomers = churn;
+          _creditStagnant = creditStagnant;
+          _staffIssues = staff;
+          _supplierPayables = suppliers;
+          _operationsIssues = ops;
           _isLoading = false;
         });
       }
@@ -66,7 +83,7 @@ class _SmartAnalyticsReportPageState
         backgroundColor: context.bgCard,
         elevation: 0,
         title: Text(
-          'التحليل الذكي والمستشار',
+          'التحليل الذكي والمستشار الشامل',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 18,
@@ -107,8 +124,20 @@ class _SmartAnalyticsReportPageState
                       _buildAnomalySection(context),
                       const Gap(20),
 
-                      // 4. Customer Churn & Retention Section
+                      // 4. Staff Discipline & Attendance Section
+                      _buildStaffSection(context),
+                      const Gap(20),
+
+                      // 5. Customer Credit Stagnation & Churn Section
                       _buildCustomerSection(context),
+                      const Gap(20),
+
+                      // 6. Supplier Overdue Payables Section
+                      _buildSupplierSection(context),
+                      const Gap(20),
+
+                      // 7. Lingering Operations & Custody Audit Section
+                      _buildOperationsSection(context),
                       const Gap(30),
                     ],
                   ),
@@ -150,7 +179,7 @@ class _SmartAnalyticsReportPageState
                   borderRadius: BorderRadius.circular(5),
                 ),
                 child: Text(
-                  'تحليل استباقي',
+                  'تحليل فوري',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
@@ -162,9 +191,9 @@ class _SmartAnalyticsReportPageState
           ),
           const Gap(12),
           Text(
-            _executiveBrief.isNotEmpty
-                ? _executiveBrief
-                : 'جاري تجميع المؤشرات...',
+            _executiveBrief.isEmpty
+                ? 'جاري إعداد التقرير والموجز التنفيذي...'
+                : _executiveBrief,
             style: TextStyle(
               fontSize: 13.5,
               height: 1.6,
@@ -344,18 +373,124 @@ class _SmartAnalyticsReportPageState
     );
   }
 
-  Widget _buildCustomerSection(BuildContext context) {
+  Widget _buildStaffSection(BuildContext context) {
     final isDark = context.isDarkMode;
 
     return _buildSectionContainer(
       context: context,
-      title: 'رادار العملاء والاحتفاظ (Customer Retention)',
-      subtitle: 'العملاء الذين كسروا إيقاع ترددهم المعتاد أو تأخروا في السداد',
-      child: _churnCustomers.isEmpty
+      title: 'انضباط الموظفين والحضور (Staff Discipline)',
+      subtitle: 'كشف الغياب المتتالي والمتكرر بدون عذر، وتكرار التأخيرات المؤثرة',
+      child: _staffIssues.isEmpty
           ? Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Text(
-                'وتيرة شراء العملاء مستقرة ولا يوجد عملاء معتادون متوقفون عن الشراء حالياً.',
+                'سجل الحضور ممتاز. لا توجد غيابات متتالية أو تأخيرات غير مبررة خلال آخر أسبوعين.',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF81C784) : const Color(0xFF2E7D32),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            )
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columnSpacing: 24,
+                headingTextStyle: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: context.textPrimary,
+                ),
+                dataTextStyle: TextStyle(
+                  fontSize: 13,
+                  color: context.textSecondary,
+                ),
+                columns: const [
+                  DataColumn(label: Text('الموظف')),
+                  DataColumn(label: Text('نوع المخالفة')),
+                  DataColumn(label: Text('التكرار')),
+                  DataColumn(label: Text('التفاصيل / التوصية')),
+                  DataColumn(label: Text('الحالة')),
+                ],
+                rows: _staffIssues.map((s) {
+                  final isCritical = s.severity == 'critical';
+                  final badgeColor = isCritical
+                      ? (isDark ? const Color(0xFFFF5252) : const Color(0xFFD32F2F))
+                      : (isDark ? const Color(0xFFFFB74D) : const Color(0xFFE65100));
+
+                  final issueLabel = s.issueType == 'consecutive_absence'
+                      ? 'غياب متتالي'
+                      : s.issueType == 'frequent_absence'
+                          ? 'تكرار غياب'
+                          : 'تأخير متكرر';
+
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(
+                        s.staffName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: context.textPrimary,
+                        ),
+                      )),
+                      DataCell(Text(issueLabel)),
+                      DataCell(Text(
+                        s.issueType == 'frequent_tardiness'
+                            ? '${s.count} مرات (${s.totalLateMinutes} د)'
+                            : '${s.count} أيام',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: badgeColor,
+                        ),
+                      )),
+                      DataCell(ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 320),
+                        child: Text(
+                          s.recommendation,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      )),
+                      DataCell(Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          isCritical ? 'حرج' : 'تنبيه',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: badgeColor,
+                          ),
+                        ),
+                      )),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildCustomerSection(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final allCustomerAlerts = [..._creditStagnant, ..._churnCustomers];
+
+    return _buildSectionContainer(
+      context: context,
+      title: 'رادار العملاء والائتمان (Customer Credit & Retention)',
+      subtitle: 'العملاء الساحبون بضاعة بدون سداد، والعملاء الذين كسروا إيقاع ترددهم',
+      child: allCustomerAlerts.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'التحصيلات منتظمة ومعدلات شراء العملاء مستقرة تماماً.',
                 style: TextStyle(
                   color: isDark ? const Color(0xFF81C784) : const Color(0xFF2E7D32),
                   fontWeight: FontWeight.w500,
@@ -378,39 +513,293 @@ class _SmartAnalyticsReportPageState
                 ),
                 columns: const [
                   DataColumn(label: Text('العميل')),
-                  DataColumn(label: Text('الانقطاع')),
-                  DataColumn(label: Text('المعدل السابق')),
+                  DataColumn(label: Text('المشكلة / الحالة')),
+                  DataColumn(label: Text('فترة الانقطاع')),
                   DataColumn(label: Text('المديونية')),
                   DataColumn(label: Text('التوصية')),
                 ],
-                rows: _churnCustomers.take(10).map((c) {
-                  final debtColor = isDark ? const Color(0xFFFF5252) : const Color(0xFFD32F2F);
+                rows: [
+                  ..._creditStagnant.map((c) {
+                    final badgeColor = isDark
+                        ? const Color(0xFFFF5252)
+                        : const Color(0xFFD32F2F);
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(
+                          c.customerName,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: context.textPrimary,
+                          ),
+                        )),
+                        DataCell(Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: badgeColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'سحب بدون سداد (${c.purchasesWithoutPaymentCount} فواتير)',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: badgeColor,
+                            ),
+                          ),
+                        )),
+                        DataCell(Text('${c.daysSinceLastPayment} يوم بدون دفعة')),
+                        DataCell(Text(
+                          '${c.currentDebt.toStringAsFixed(0)} ج',
+                          style: TextStyle(
+                            color: badgeColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )),
+                        DataCell(ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 280),
+                          child: Text(
+                            c.recommendation,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        )),
+                      ],
+                    );
+                  }),
+                  ..._churnCustomers.map((c) {
+                    final debtColor = isDark
+                        ? const Color(0xFFFFB74D)
+                        : const Color(0xFFE65100);
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(
+                          c.customerName,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: context.textPrimary,
+                          ),
+                        )),
+                        DataCell(Text('انقطاع عن الشراء')),
+                        DataCell(Text('${c.daysSinceLastPurchase} يوم (معدله: ${c.averageCadenceDays} د)')),
+                        DataCell(Text(
+                          '${c.outstandingDebt.toStringAsFixed(0)} ج',
+                          style: TextStyle(
+                            color: c.outstandingDebt > 0 ? debtColor : null,
+                            fontWeight: c.outstandingDebt > 0 ? FontWeight.bold : null,
+                          ),
+                        )),
+                        DataCell(ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 280),
+                          child: Text(
+                            c.suggestedAction,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        )),
+                      ],
+                    );
+                  }),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildSupplierSection(BuildContext context) {
+    final isDark = context.isDarkMode;
+
+    return _buildSectionContainer(
+      context: context,
+      title: 'مستحقات الموردين المتأخرة (Supplier Payables)',
+      subtitle: 'أرصدة الموردين المستحقة دون سداد منذ أكثر من 15 يوماً',
+      child: _supplierPayables.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'حسابات الموردين منتظمة ولا توجد أي دفعات متأخرة أو حرجة.',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF81C784) : const Color(0xFF2E7D32),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            )
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columnSpacing: 24,
+                headingTextStyle: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: context.textPrimary,
+                ),
+                dataTextStyle: TextStyle(
+                  fontSize: 13,
+                  color: context.textSecondary,
+                ),
+                columns: const [
+                  DataColumn(label: Text('المورد')),
+                  DataColumn(label: Text('المستحق له')),
+                  DataColumn(label: Text('أيام بدون سداد')),
+                  DataColumn(label: Text('المشتريات بعد آخر دفعة')),
+                  DataColumn(label: Text('التوصية')),
+                  DataColumn(label: Text('الحالة')),
+                ],
+                rows: _supplierPayables.map((s) {
+                  final isCritical = s.severity == 'critical';
+                  final badgeColor = isCritical
+                      ? (isDark ? const Color(0xFFFF5252) : const Color(0xFFD32F2F))
+                      : (isDark ? const Color(0xFFFFB74D) : const Color(0xFFE65100));
+
                   return DataRow(
                     cells: [
                       DataCell(Text(
-                        c.customerName,
+                        s.supplierName,
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           color: context.textPrimary,
                         ),
                       )),
-                      DataCell(Text('${c.daysSinceLastPurchase} يوم')),
-                      DataCell(Text('كل ${c.averageCadenceDays} يوم')),
                       DataCell(Text(
-                        '${c.outstandingDebt.toStringAsFixed(0)} ج',
+                        '${s.outstandingBalance.toStringAsFixed(0)} ج',
                         style: TextStyle(
-                          color: c.outstandingDebt > 0 ? debtColor : null,
-                          fontWeight: c.outstandingDebt > 0 ? FontWeight.bold : null,
+                          color: badgeColor,
+                          fontWeight: FontWeight.bold,
                         ),
                       )),
-                      DataCell(Text(
-                        c.suggestedAction,
-                        style: const TextStyle(fontSize: 12),
+                      DataCell(Text('${s.daysSinceLastPayment} يوم')),
+                      DataCell(Text('${s.unpaidsPurchasesCount} فواتير')),
+                      DataCell(ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 300),
+                        child: Text(
+                          s.recommendation,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      )),
+                      DataCell(Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          isCritical ? 'حرج' : 'تنبيه',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: badgeColor,
+                          ),
+                        ),
                       )),
                     ],
                   );
                 }).toList(),
               ),
+            ),
+    );
+  }
+
+  Widget _buildOperationsSection(BuildContext context) {
+    final isDark = context.isDarkMode;
+
+    return _buildSectionContainer(
+      context: context,
+      title: 'العمليات والعهد المفتوحة المعلقة (Operations & Custodies)',
+      subtitle: 'العهد المالية المفتوحة، مراحل التصنيع الجارية، والورديات المنسية',
+      child: _operationsIssues.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'كافة العهد المالية ومراحل التصنيع والورديات مغلقة ومسواة بانتظام.',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF81C784) : const Color(0xFF2E7D32),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            )
+          : Column(
+              children: _operationsIssues.map((op) {
+                final isCritical = op.severity == 'critical';
+                final accentColor = isCritical
+                    ? (isDark ? const Color(0xFFFF5252) : const Color(0xFFD32F2F))
+                    : (isDark ? const Color(0xFFFFB74D) : const Color(0xFFE65100));
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: accentColor.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  op.title,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: accentColor,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  op.category == 'cash_session'
+                                      ? '${op.ageInDaysOrHours} ساعة'
+                                      : '${op.ageInDaysOrHours} أيام',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: accentColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Gap(4),
+                            Text(
+                              op.description,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: context.textSecondary,
+                              ),
+                            ),
+                            const Gap(4),
+                            Text(
+                              op.actionRequired,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? MadarColors.gold
+                                    : MadarColors.lightPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
     );
   }

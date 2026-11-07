@@ -17,6 +17,7 @@ import 'package:pos_offline_desktop/ui/custody/custody_page.dart';
 import 'package:pos_offline_desktop/ui/setting/settings.dart';
 import 'package:pos_offline_desktop/core/provider/smart_advisor_provider.dart';
 import 'package:pos_offline_desktop/ui/notifications/smart_notifications_screen.dart';
+import 'package:pos_offline_desktop/ui/notifications/widgets/smart_floating_toast.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
@@ -297,7 +298,9 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
           padding: EdgeInsets.only(
             bottom: PlatformUtils.isMobile ? 12.0 : 0.0,
           ),
-          child: AnimatedBuilder(
+          child: Stack(
+            children: [
+              AnimatedBuilder(
             animation: _tabController,
             builder: (context, _) {
               return IndexedStack(
@@ -310,6 +313,34 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                 }),
               );
             },
+          ),
+              Positioned(
+                top: 8,
+                left: 16,
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    final state = ref.watch(smartAdvisorProvider);
+                    final toastAlert = state.pendingToastAlert;
+                    if (toastAlert == null) return const SizedBox.shrink();
+
+                    return SmartFloatingToast(
+                      alert: toastAlert,
+                      onDismiss: () => ref
+                          .read(smartAdvisorProvider.notifier)
+                          .dismissToast(),
+                      onView: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SmartNotificationsScreen(),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
       ),
