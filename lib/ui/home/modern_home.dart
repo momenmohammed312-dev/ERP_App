@@ -15,6 +15,8 @@ import 'package:pos_offline_desktop/ui/invoice/widgets/enhanced_new_invoice_page
 import 'package:pos_offline_desktop/ui/staff/employee_dashboard_page.dart';
 import 'package:pos_offline_desktop/ui/custody/custody_page.dart';
 import 'package:pos_offline_desktop/ui/setting/settings.dart';
+import 'package:pos_offline_desktop/core/provider/smart_advisor_provider.dart';
+import 'package:pos_offline_desktop/ui/notifications/smart_notifications_screen.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
@@ -171,6 +173,11 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     _tabController = TabController(length: _tabCount, vsync: this);
     _tabController.addListener(_handleTabSelection);
     _checkLicenseWarning();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(smartAdvisorProvider.notifier).refresh(runAnalysis: true);
+      }
+    });
   }
 
   void _handleTabSelection() {
@@ -230,6 +237,8 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
             children: [
               // Financial KPIs
               _DashboardSummary(db: widget.db),
+              Gap(isDesktop ? 16 : 10),
+              _buildSmartAlertsPromptCard(context),
               Gap(isDesktop ? 20 : 14),
               // Sleek Quick Action Strip (3 core buttons: New Invoice, Customers, Products)
               _buildQuickActionStrip(context),
@@ -450,8 +459,42 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                             IconButton(
                               icon: const Icon(Icons.cloud_sync_rounded, size: 20),
                               onPressed: () => context.push('/backup'),
-                              tooltip: 'النسخ الاحتياطي (Google Drive & محلي)',
                             ),
+                            if (AppFeatures.hasSmartAnalytics)
+                              IconButton(
+                                icon: Consumer(
+                                  builder: (context, ref, _) {
+                                    final count = ref.watch(
+                                      smartAdvisorProvider.select(
+                                        (s) => s.unreadCount,
+                                      ),
+                                    );
+                                    if (count > 0) {
+                                      return Badge(
+                                        label: Text('$count'),
+                                        child: const Icon(
+                                          Icons.notifications_outlined,
+                                          size: 20,
+                                        ),
+                                      );
+                                    }
+                                    return const Icon(
+                                      Icons.notifications_outlined,
+                                      size: 20,
+                                    );
+                                  },
+                                ),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const SmartNotificationsScreen(),
+                                    ),
+                                  );
+                                },
+                                tooltip: 'الإشعارات الذكية',
+                              ),
                             IconButton(
                               icon: const Icon(Icons.settings_outlined, size: 20),
                               onPressed: () {
@@ -514,6 +557,41 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                               ),
                             ),
                             const Spacer(),
+                            if (AppFeatures.hasSmartAnalytics)
+                              IconButton(
+                                icon: Consumer(
+                                  builder: (context, ref, _) {
+                                    final count = ref.watch(
+                                      smartAdvisorProvider.select(
+                                        (s) => s.unreadCount,
+                                      ),
+                                    );
+                                    if (count > 0) {
+                                      return Badge(
+                                        label: Text('$count'),
+                                        child: const Icon(
+                                          Icons.notifications_outlined,
+                                          size: 20,
+                                        ),
+                                      );
+                                    }
+                                    return const Icon(
+                                      Icons.notifications_outlined,
+                                      size: 20,
+                                    );
+                                  },
+                                ),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const SmartNotificationsScreen(),
+                                    ),
+                                  );
+                                },
+                                tooltip: 'الإشعارات الذكية',
+                              ),
                             const _LicenseBadge(),
                             IconButton(
                               icon: const Icon(Icons.settings_outlined, size: 20),
@@ -570,6 +648,81 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
   }
 
   /// Horizontal Quick Action Strip (New Invoice, Customers, Products)
+  Widget _buildSmartAlertsPromptCard(BuildContext context) {
+    if (!AppFeatures.hasSmartAnalytics) return const SizedBox.shrink();
+    return Consumer(
+      builder: (context, ref, _) {
+        final state = ref.watch(smartAdvisorProvider);
+        if (state.unreadCount == 0) return const SizedBox.shrink();
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SmartNotificationsScreen(),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E222A) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.orangeAccent.withValues(alpha: 0.4),
+                  width: 1.2,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.orangeAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${state.unreadCount} تنبيهات',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orangeAccent,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'يوجد تنبيهات ذكية استباقية تتطلب انتباهك في المخزون أو العمليات المالية.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'عرض التفاصيل ←',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: MadarColors.gold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildQuickActionStrip(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 720;
 

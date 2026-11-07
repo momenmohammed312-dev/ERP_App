@@ -10,6 +10,7 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
+import 'package:pos_offline_desktop/core/provider/smart_advisor_provider.dart';
 
 class CashierPage extends ConsumerStatefulWidget {
   const CashierPage({super.key});
@@ -127,6 +128,9 @@ class _CashierPageState extends ConsumerState<CashierPage> {
 
       await _loadCurrentDay();
       if (mounted) {
+        ref.read(smartAdvisorProvider.notifier).refresh(runAnalysis: true);
+      }
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(l10n.day_opened_successfully)),
         );
@@ -152,6 +156,9 @@ class _CashierPageState extends ConsumerState<CashierPage> {
       );
       if (closed == true && mounted) {
         await _loadCurrentDay();
+      if (mounted) {
+        ref.read(smartAdvisorProvider.notifier).refresh(runAnalysis: true);
+      }
         if (!mounted) return;
         final l10n = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -173,6 +180,9 @@ class _CashierPageState extends ConsumerState<CashierPage> {
       );
 
       await _loadCurrentDay();
+      if (mounted) {
+        ref.read(smartAdvisorProvider.notifier).refresh(runAnalysis: true);
+      }
       if (mounted) {
         final l10n = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(

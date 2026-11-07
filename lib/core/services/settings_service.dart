@@ -329,4 +329,38 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_cloudFolderSyncEnabledKey, enabled);
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Smart Analytics & AI Advisor (المستشار والتحليل الذكي)
+  // ─────────────────────────────────────────────────────────────────────────
+  static const _smartAnalyticsEnabledKey = 'smart_analytics_enabled';
+  static const _smartAnalyticsGeminiApiKey = 'smart_analytics_gemini_api_key';
+
+  /// Whether Smart Analytics & Predictive Alerts are enabled (default true).
+  static Future<bool> isSmartAnalyticsEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_smartAnalyticsEnabledKey) ?? true;
+  }
+
+  /// Sets whether Smart Analytics & Predictive Alerts are enabled.
+  static Future<void> setSmartAnalyticsEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_smartAnalyticsEnabledKey, enabled);
+  }
+
+  /// Optional free Gemini API Key for executive brief generation.
+  static Future<String?> getGeminiApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_smartAnalyticsGeminiApiKey);
+  }
+
+  /// Sets or clears the optional Gemini API key.
+  static Future<void> setGeminiApiKey(String? key) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (key == null || key.trim().isEmpty) {
+      await prefs.remove(_smartAnalyticsGeminiApiKey);
+    } else {
+      await prefs.setString(_smartAnalyticsGeminiApiKey, key.trim());
+    }
+  }
 }

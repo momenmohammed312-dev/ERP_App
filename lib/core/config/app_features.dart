@@ -57,4 +57,10 @@ class AppFeatures {
   /// that flavor only needs invoices, purchases and reports.
   static bool get hasManufacturing =>
       enableAllFeatures || flavor != Flavor.clothing;
+
+  /// Smart Analytics & Predictive Engine (المستشار والتحليل الذكي).
+  /// Enabled by default across flavors, overridable or toggleable via settings.
+  static bool? hasSmartAnalyticsOverride;
+  static bool get hasSmartAnalytics =>
+      hasSmartAnalyticsOverride ?? true;
 }

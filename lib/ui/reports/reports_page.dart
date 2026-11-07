@@ -16,6 +16,8 @@ import 'package:pos_offline_desktop/ui/reports/widgets/staff_expenses_report.dar
 import 'package:pos_offline_desktop/ui/reports/widgets/purchase_by_product_report.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/daily_report_page.dart';
 import 'package:pos_offline_desktop/ui/analytics/consolidated_accounts_screen.dart';
+import 'package:pos_offline_desktop/ui/reports/subreports/smart_analytics_report_page.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/charts/financial_flow_spline_chart.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/charts/product_sales_pie_chart.dart';
 
@@ -941,6 +943,18 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         'color': const Color(0xFF8B949E),
         'onTap': () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const ConsolidatedAccountsScreen()),
+            ),
+      },
+      if (AppFeatures.hasSmartAnalytics)
+        {
+          'title': 'التحليل الذكي والمستشار',
+          'desc': 'استشراف المخزون والطلب ورادار الأمان المالي وركود العملاء',
+          'icon': Icons.insights_rounded,
+          'color': const Color(0xFF2EA043),
+          'onTap': () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const SmartAnalyticsReportPage(),
+                ),
             ),
       },
     ];
