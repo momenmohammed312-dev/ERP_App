@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/staff_management_tables.dart'
     as staff_tables;
+import 'package:pos_offline_desktop/services/attendance/attendance_deduction_calculator.dart';
 
 part 'staff_management_dao.g.dart';
 
@@ -237,7 +238,38 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
     String? finalStatus = status;
 
     if (finalWorkingHours == null && record.checkInTime != null) {
-      final diffMinutes = now.difference(record.checkInTime!).inMinutes;
+      int diffMinutes = now.difference(record.checkInTime!).inMinutes;
+      try {
+        final restRow = await (db.select(db.attendanceSettings)
+              ..where((s) => s.settingKey.equals('rest_break_enabled')))
+            .getSingleOrNull();
+        if (restRow?.settingValue.toLowerCase() == 'true' && diffMinutes > 0) {
+          final startRow = await (db.select(db.attendanceSettings)
+                ..where((s) => s.settingKey.equals('rest_break_start')))
+              .getSingleOrNull();
+          final endRow = await (db.select(db.attendanceSettings)
+                ..where((s) => s.settingKey.equals('rest_break_end')))
+              .getSingleOrNull();
+          final startStr = startRow?.settingValue ?? '13:00';
+          final endStr = endRow?.settingValue ?? '14:00';
+          final sp = startStr.split(':');
+          final ep = endStr.split(':');
+          final rs = (int.tryParse(sp[0]) ?? 13) * 60 +
+              (int.tryParse(sp.length > 1 ? sp[1] : '0') ?? 0);
+          final re = (int.tryParse(ep[0]) ?? 14) * 60 +
+              (int.tryParse(ep.length > 1 ? ep[1] : '0') ?? 0);
+          final inM =
+              record.checkInTime!.hour * 60 + record.checkInTime!.minute;
+          final outM = now.hour * 60 + now.minute;
+          final overlap = AttendanceDeductionRules.calculateWindowOverlap(
+            windowAStart: inM,
+            windowAEnd: outM,
+            windowBStart: rs,
+            windowBEnd: re,
+          );
+          diffMinutes = (diffMinutes - overlap).clamp(0, diffMinutes);
+        }
+      } catch (_) {}
       finalWorkingHours = diffMinutes / 60.0;
     }
 

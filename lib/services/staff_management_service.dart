@@ -264,19 +264,85 @@ class StaffManagementService {
     int skipped = 0;
     await db.transaction(() async {
       for (final r in rows) {
-        if (r.checkInTime == null ||
-            r.checkOutTime == null ||
-            inPaidPeriod(r.date)) {
+        if (inPaidPeriod(r.date)) {
           skipped++;
           continue;
         }
+
+        DateTime? checkIn = r.checkInTime;
+        // Attempt to recover missing check-in from raw biometric punches
+        if (checkIn == null) {
+          final dayStart = DateTime(r.date.year, r.date.month, r.date.day);
+          final dayEnd = dayStart.add(const Duration(hours: 26));
+          final rawPunches = await _dao.attachedDatabase.attendanceDeviceDao
+              .getMatchedEventsForStaff(staffId, dayStart, dayEnd);
+          if (rawPunches.isNotEmpty) {
+            rawPunches.sort((a, b) => a.eventTime.compareTo(b.eventTime));
+            checkIn = rawPunches.first.eventTime;
+          }
+        }
+
+        if (checkIn == null) {
+          skipped++;
+          continue;
+        }
+
+        DateTime? checkOut = r.checkOutTime;
+        // Attempt to close missing early checkout from raw biometric punches
+        if (checkOut == null) {
+          final dayStart = DateTime(r.date.year, r.date.month, r.date.day);
+          final dayEnd = dayStart.add(const Duration(hours: 26));
+          final rawPunches = await _dao.attachedDatabase.attendanceDeviceDao
+              .getMatchedEventsForStaff(staffId, dayStart, dayEnd);
+          final eligible = rawPunches.where((e) =>
+              e.eventTime.isAfter(checkIn!) &&
+              e.eventTime.difference(checkIn) >= const Duration(hours: 2)
+          ).toList();
+          if (eligible.isNotEmpty) {
+            eligible.sort((a, b) => a.eventTime.compareTo(b.eventTime));
+            checkOut = eligible.last.eventTime;
+          }
+        }
+
+        if (checkOut == null) {
+          if (r.checkInTime == null) {
+            await _dao.updateAttendance(
+              r.copyWith(
+                checkInTime: Value(checkIn),
+                updatedAt: DateTime.now(),
+              ),
+            );
+            recomputed++;
+          } else {
+            skipped++;
+          }
+          continue;
+        }
+
         final calc = await _calcWorkedHours(
           staffId,
-          r.checkInTime!,
-          r.checkOutTime!,
+          checkIn,
+          checkOut,
         );
 
         String newStatus = r.status;
+        if (r.source != 'admin_override') {
+          try {
+            final engine = AttendanceCalculationEngine(
+              db,
+              db.attendanceDeviceDao,
+              _dao,
+            );
+            final sched = await engine.getScheduleForStaff(staffId);
+            final calcRes = engine.calculateAttendance(
+              checkInTime: checkIn,
+              checkOutTime: checkOut,
+              schedule: sched,
+            );
+            newStatus = calcRes.status;
+          } catch (_) {}
+        }
+
         String? newLeaveType = r.leaveType;
         final notesText = r.notes ?? '';
         final mentionsExcuse =
@@ -297,6 +363,8 @@ class StaffManagementService {
 
         await _dao.updateAttendance(
           r.copyWith(
+            checkInTime: Value(checkIn),
+            checkOutTime: Value(checkOut),
             status: newStatus,
             leaveType: Value(newLeaveType),
             workingHours: Value(calc.workingHours),
@@ -1067,6 +1135,11 @@ class StaffManagementService {
       standardHoursPerDay:
           schedule?.standardHoursPerDay ??
           AttendanceDeductionRules.defaultStandardHoursPerDay,
+      restBreakEnabled: schedule?.restBreakEnabled ?? false,
+      restBreakStartMinutes:
+          schedule?.restBreakStartMinutesSinceMidnight ?? 13 * 60,
+      restBreakEndMinutes:
+          schedule?.restBreakEndMinutesSinceMidnight ?? 14 * 60,
     );
     final hourlyBase = deduction.hourly;
 
