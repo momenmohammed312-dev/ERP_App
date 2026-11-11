@@ -43,12 +43,17 @@ Write-Host "  - LICENSE_SECRET_KEY: [Configured]" -ForegroundColor Green
 Write-Host "  - LICENSE_PUBLIC_KEY: [Configured]" -ForegroundColor Green
 Write-Host "  - FREE_VERSION: true" -ForegroundColor Green
 Write-Host "  - FREE_TRIAL_DAYS: $TrialDays" -ForegroundColor Green
+Write-Host "  - ENABLE_SMART_ANALYTICS: false (Smart Analytics & Smart Notifications hidden)" -ForegroundColor Green
 
 $buildArgs = @(
     'build', 'apk', '--release',
     '-t', $Target,
     '--dart-define=FLAVOR=all',
     '--dart-define=ENABLE_ALL_FEATURES=true',
+    # NOTE: ENABLE_ALL_FEATURES=true does NOT re-enable Smart Analytics.
+    # An explicit ENABLE_SMART_ANALYTICS=false wins over ENABLE_ALL_FEATURES
+    # on the Dart side (AppFeatures.hasSmartAnalytics) - do not "fix" this.
+    '--dart-define=ENABLE_SMART_ANALYTICS=false',
     '--dart-define=FREE_VERSION=true',
     "--dart-define=FREE_TRIAL_DAYS=$TrialDays",
     "--dart-define=LICENSE_SECRET_KEY=$($secrets.LICENSE_SECRET_KEY)",

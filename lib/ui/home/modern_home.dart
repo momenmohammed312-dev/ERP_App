@@ -317,28 +317,7 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
               Positioned(
                 top: 8,
                 left: 16,
-                child: Consumer(
-                  builder: (context, ref, _) {
-                    final state = ref.watch(smartAdvisorProvider);
-                    final toastAlert = state.pendingToastAlert;
-                    if (toastAlert == null) return const SizedBox.shrink();
-
-                    return SmartFloatingToast(
-                      alert: toastAlert,
-                      onDismiss: () => ref
-                          .read(smartAdvisorProvider.notifier)
-                          .dismissToast(),
-                      onView: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const SmartNotificationsScreen(),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
+                child: const _SmartFloatingToastOverlay(),
               ),
             ],
           ),
@@ -1090,6 +1069,40 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
       onPressed: onTap,
       backgroundColor: color.withValues(alpha: 0.1),
       side: BorderSide(color: color.withValues(alpha: 0.3)),
+    );
+  }
+}
+
+/// Toast عائم للتحليل الذكي — يظهر فقط لو ميزة [AppFeatures.hasSmartAnalytics] مفعلة.
+/// بوابة زمنية للتجميع: في نسخة الإصدار المفعّلة off ما يُبنى الكود ده إطلاقاً.
+class _SmartFloatingToastOverlay extends StatelessWidget {
+  const _SmartFloatingToastOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    if (!AppFeatures.hasSmartAnalytics) return const SizedBox.shrink();
+
+    return Consumer(
+      builder: (context, ref, _) {
+        final state = ref.watch(smartAdvisorProvider);
+        final toastAlert = state.pendingToastAlert;
+        if (toastAlert == null) return const SizedBox.shrink();
+
+        return SmartFloatingToast(
+          alert: toastAlert,
+          onDismiss: () => ref
+              .read(smartAdvisorProvider.notifier)
+              .dismissToast(),
+          onView: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const SmartNotificationsScreen(),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

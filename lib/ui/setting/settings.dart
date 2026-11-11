@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
 import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/ui/user/user_management_page.dart';
@@ -916,89 +917,93 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
 
               // 6. المستشار والتحليل الذكي (Smart Analytics & AI)
-              _buildSectionCard(
-                cardBg: cardBg,
-                borderColor: borderColor,
-                title: 'المستشار والتحليل الذكي (Smart Analytics)',
-                icon: Icons.psychology_outlined,
-                iconColor: const Color(0xFF2EA043),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'تفعيل التحليل الذكي والتنبيهات الاستباقية',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor),
-                                ),
-                                const Gap(2),
-                                Text(
-                                  'استشراف موعد نفاد البضائع، كشف شذوذ الورديات، وتنبيهات ركود العملاء تلقائياً',
-                                  style: TextStyle(fontSize: 12, color: subTextColor),
-                                ),
-                              ],
+              // بوابة زمنية للتجميع: الكارت كله (التبديل + مفتاح Gemini) مخفي
+              // في نسخ الإصدار اللي فيها الميزة مقفولة.
+              if (AppFeatures.hasSmartAnalytics) ...[
+                _buildSectionCard(
+                  cardBg: cardBg,
+                  borderColor: borderColor,
+                  title: 'المستشار والتحليل الذكي (Smart Analytics)',
+                  icon: Icons.psychology_outlined,
+                  iconColor: const Color(0xFF2EA043),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'تفعيل التحليل الذكي والتنبيهات الاستباقية',
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor),
+                                  ),
+                                  const Gap(2),
+                                  Text(
+                                    'استشراف موعد نفاد البضائع، كشف شذوذ الورديات، وتنبيهات ركود العملاء تلقائياً',
+                                    style: TextStyle(fontSize: 12, color: subTextColor),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          Switch(
-                            value: _smartAnalyticsEnabled,
-                            activeColor: const Color(0xFF2EA043),
-                            onChanged: (value) async {
-                              setState(() => _smartAnalyticsEnabled = value);
-                              await ref
-                                  .read(smartAdvisorProvider.notifier)
-                                  .setEnabled(value);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Gap(16),
-                    Text(
-                      'مفتاح Gemini API المجاني (اختياري للملخص التنفيذي)',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor),
-                    ),
-                    const Gap(4),
-                    Text(
-                      'مجاني 100% من Google AI Studio (بدون بطاقة ائتمان) لصياغة ملخص الصباح بأسلوب بشري',
-                      style: TextStyle(fontSize: 11, color: subTextColor),
-                    ),
-                    const Gap(8),
-                    TextField(
-                      controller: _geminiKeyController,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        hintText: 'AIzaSy...',
-                        isDense: true,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.save_outlined, size: 20),
-                          tooltip: 'حفظ المفتاح',
-                          onPressed: () async {
-                            await SettingsService.setGeminiApiKey(_geminiKeyController.text);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('تم حفظ مفتاح Gemini بنجاح')),
-                              );
-                            }
-                          },
+                            Switch(
+                              value: _smartAnalyticsEnabled,
+                              activeColor: const Color(0xFF2EA043),
+                              onChanged: (value) async {
+                                setState(() => _smartAnalyticsEnabled = value);
+                                await ref
+                                    .read(smartAdvisorProvider.notifier)
+                                    .setEnabled(value);
+                              },
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
+                      const Gap(16),
+                      Text(
+                        'مفتاح Gemini API المجاني (اختياري للملخص التنفيذي)',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor),
+                      ),
+                      const Gap(4),
+                      Text(
+                        'مجاني 100% من Google AI Studio (بدون بطاقة ائتمان) لصياغة ملخص الصباح بأسلوب بشري',
+                        style: TextStyle(fontSize: 11, color: subTextColor),
+                      ),
+                      const Gap(8),
+                      TextField(
+                        controller: _geminiKeyController,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          hintText: 'AIzaSy...',
+                          isDense: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.save_outlined, size: 20),
+                            tooltip: 'حفظ المفتاح',
+                            onPressed: () async {
+                              await SettingsService.setGeminiApiKey(_geminiKeyController.text);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('تم حفظ مفتاح Gemini بنجاح')),
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const Gap(20),
+                const Gap(20),
+              ],
 
               const Gap(30),
 
