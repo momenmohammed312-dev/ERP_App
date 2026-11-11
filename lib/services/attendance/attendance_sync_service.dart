@@ -84,7 +84,7 @@ class _ProtectedAttendanceException implements Exception {
 
 class AttendanceSyncService {
   static const _duplicateWindow = Duration(minutes: 10);
-  static const _minCheckoutAfterCheckIn = Duration(hours: 4);
+  static const _minCheckoutAfterCheckIn = Duration(hours: 2);
   static const _checkoutThresholdBeforeEnd = Duration(hours: 2);
 
   /// كيرسور مخزن أبعد من الآن بهذا القدر يُعتبر مسموماً (قفزة ساعة سابقة)
@@ -1396,14 +1396,15 @@ class AttendanceSyncService {
     final thresholdBySchedule = scheduleEnd.subtract(
       _checkoutThresholdBeforeEnd,
     );
-    final checkoutThreshold = thresholdByDuration.isAfter(thresholdBySchedule)
+    final checkoutThreshold = thresholdByDuration.isBefore(thresholdBySchedule)
         ? thresholdByDuration
         : thresholdBySchedule;
 
     final checkoutCandidates = <_AttendanceCandidate>[];
     for (final event in retainedEvents) {
       if (event.eventTime.isAfter(checkin.time) &&
-          !event.eventTime.isBefore(checkoutThreshold)) {
+          !event.eventTime.isBefore(checkoutThreshold) &&
+          event.eventTime.difference(checkin.time) >= _minCheckoutAfterCheckIn) {
         checkoutCandidates.add(
           _AttendanceCandidate(time: event.eventTime, raw: event),
         );

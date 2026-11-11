@@ -485,6 +485,9 @@ class AppDatabase extends _$AppDatabase {
       // BUG-020: One-time idempotent repair for corrupted attendance late_minutes
       await _repairCorruptedAttendanceLateMinutes();
 
+      // BUG-035: Ensure default attendance rest break settings exist
+      await _ensureDefaultAttendanceRestBreakSettings();
+
       // Safety check to prevent SQL logic error on missing audit_log
       try {
         await customStatement('''
@@ -4075,6 +4078,22 @@ class AppDatabase extends _$AppDatabase {
       await _logMigrationStep(80, 'v80_repair_attendance_late_minutes', 'completed');
     } catch (e) {
       log('v80: _repairCorruptedAttendanceLateMinutes warning: $e');
+    }
+  }
+
+  /// BUG-035: Ensure default attendance rest break settings exist in attendance_settings
+  Future<void> _ensureDefaultAttendanceRestBreakSettings() async {
+    try {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await customStatement('''
+        INSERT OR IGNORE INTO attendance_settings (setting_key, setting_value, description, created_at, updated_at)
+        VALUES 
+          ('rest_break_enabled', 'false', 'تفعيل استقطاع فترة الراحة اليومية', $now, $now),
+          ('rest_break_start', '13:00', 'بداية فترة الراحة اليومية', $now, $now),
+          ('rest_break_end', '14:00', 'نهاية فترة الراحة اليومية', $now, $now)
+      ''');
+    } catch (e) {
+      log('beforeOpen: _ensureDefaultAttendanceRestBreakSettings warning: $e');
     }
   }
 

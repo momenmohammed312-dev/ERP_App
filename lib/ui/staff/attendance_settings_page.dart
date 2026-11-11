@@ -21,6 +21,9 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
   // Work schedule defaults
   TimeOfDay _workStart = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _workEnd = const TimeOfDay(hour: 17, minute: 0);
+  bool _restBreakEnabled = false;
+  TimeOfDay _restBreakStart = const TimeOfDay(hour: 13, minute: 0);
+  TimeOfDay _restBreakEnd = const TimeOfDay(hour: 14, minute: 0);
   final Map<String, bool> _workDays = {
     'sun': true, 'mon': true, 'tue': true, 'wed': true, 'thu': true,
     'fri': false, 'sat': false,
@@ -63,6 +66,12 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             _workStart = _parseTime(s.settingValue);
           case 'default_work_end':
             _workEnd = _parseTime(s.settingValue);
+          case 'rest_break_enabled':
+            _restBreakEnabled = s.settingValue.toLowerCase() == 'true';
+          case 'rest_break_start':
+            _restBreakStart = _parseTime(s.settingValue);
+          case 'rest_break_end':
+            _restBreakEnd = _parseTime(s.settingValue);
           case 'default_work_days':
             final days = s.settingValue.split(',');
             for (final key in _workDays.keys) {
@@ -125,6 +134,9 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
       final settingsMap = {
         'default_work_start': _formatTime(_workStart),
         'default_work_end': _formatTime(_workEnd),
+        'rest_break_enabled': _restBreakEnabled.toString(),
+        'rest_break_start': _formatTime(_restBreakStart),
+        'rest_break_end': _formatTime(_restBreakEnd),
         'default_work_days': _workDays.entries.where((e) => e.value).map((e) => e.key).join(','),
         'default_weekend': _weekendDay,
         'grace_period_minutes': _gracePeriodMinutes.toString(),
@@ -378,6 +390,44 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (result != null) setState(() => _overtimeThresholdHours = result);
           },
         ),
+        Divider(height: 1, color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle),
+        SwitchListTile(
+          secondary: const Icon(Icons.coffee_outlined, color: MadarColors.gold, size: 22),
+          title: Text('فترة الراحة اليومية (Rest)', style: TextStyle(color: context.textPrimary, fontSize: 14)),
+          subtitle: Text('استقطاع ساعة الراحة تلقائياً من ساعات العمل والإذن المتداخل معها', style: TextStyle(color: context.textMuted, fontSize: 12)),
+          value: _restBreakEnabled,
+          onChanged: (val) => setState(() => _restBreakEnabled = val),
+        ),
+        if (_restBreakEnabled) ...[
+          Divider(height: 1, color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle),
+          ListTile(
+            leading: const Icon(Icons.free_breakfast, color: MadarColors.gold, size: 20),
+            title: Text('بداية فترة الراحة', style: TextStyle(color: context.textPrimary, fontSize: 14)),
+            subtitle: Text(_formatTime(_restBreakStart), style: TextStyle(color: context.primaryColor, fontWeight: FontWeight.bold)),
+            trailing: Icon(Icons.access_time, color: context.textMuted),
+            onTap: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: _restBreakStart,
+              );
+              if (picked != null) setState(() => _restBreakStart = picked);
+            },
+          ),
+          Divider(height: 1, color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle),
+          ListTile(
+            leading: const Icon(Icons.work_history, color: MadarColors.gold, size: 20),
+            title: Text('نهاية فترة الراحة', style: TextStyle(color: context.textPrimary, fontSize: 14)),
+            subtitle: Text(_formatTime(_restBreakEnd), style: TextStyle(color: context.primaryColor, fontWeight: FontWeight.bold)),
+            trailing: Icon(Icons.access_time, color: context.textMuted),
+            onTap: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: _restBreakEnd,
+              );
+              if (picked != null) setState(() => _restBreakEnd = picked);
+            },
+          ),
+        ],
       ],
     );
   }

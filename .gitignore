@@ -90,6 +90,12 @@ product_test_results.json
 # Release packaging output (built by build_all_targets.ps1 - never committed)
 dist/
 
+# Sales/marketing working files - contain real customer lead data
+# (AGENTS.md 7.2.3: never commit real customer names/contacts).
+b2b_erp_leads.csv
+b2b_erp_leads.xlsx
+b2b_erp_sales_playbook.md
+
 # Temporary scratch files, backups, and screenshots
 *.bak
 chrome_shot*.png
