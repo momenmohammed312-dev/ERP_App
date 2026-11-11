@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../config/app_features.dart';
 import '../database/app_database.dart';
 import '../services/settings_service.dart';
 import '../services/smart_analytics/smart_advisor_service.dart';
@@ -51,6 +52,17 @@ class SmartAdvisorNotifier extends StateNotifier<SmartAdvisorState> {
   }
 
   Future<void> init() async {
+    // البوابة الزمنية للتجميع: لو الميزة متوقفة ما نقراش أي إعدادات ولا نكتب في الـDB.
+    if (!AppFeatures.hasSmartAnalytics) {
+      state = state.copyWith(
+        isEnabled: false,
+        alerts: const [],
+        unreadCount: 0,
+        isLoading: false,
+        clearToast: true,
+      );
+      return;
+    }
     final enabled = await SettingsService.isSmartAnalyticsEnabled();
     state = state.copyWith(isEnabled: enabled);
     if (enabled) {
@@ -59,6 +71,17 @@ class SmartAdvisorNotifier extends StateNotifier<SmartAdvisorState> {
   }
 
   Future<void> refresh({bool runAnalysis = false}) async {
+    // الميزة متوقفة: نمنع تشغيل محرك التحليل وكتابة إشعارات smart:* في الـDB.
+    if (!AppFeatures.hasSmartAnalytics) {
+      state = state.copyWith(
+        isEnabled: false,
+        alerts: const [],
+        unreadCount: 0,
+        isLoading: false,
+        clearToast: true,
+      );
+      return;
+    }
     state = state.copyWith(isLoading: true);
     try {
       final enabled = await SettingsService.isSmartAnalyticsEnabled();

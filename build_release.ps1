@@ -90,7 +90,10 @@ $buildArgs = @(
     "--dart-define=SUPABASE_URL=$($secrets.SUPABASE_URL)",
     "--dart-define=SUPABASE_ANON_KEY=$($secrets.SUPABASE_ANON_KEY)",
     "--dart-define=LICENSE_SECRET_KEY=$($secrets.LICENSE_SECRET_KEY)",
-    "--dart-define=LICENSE_PUBLIC_KEY=$publicKeyPem"
+    "--dart-define=LICENSE_PUBLIC_KEY=$publicKeyPem",
+    # Customer release gate: Smart Analytics & Smart Notifications are hidden.
+    # Unconditional - it must NOT depend on -FreeVersion or any other flag.
+    '--dart-define=ENABLE_SMART_ANALYTICS=false'
 )
 
 if ($FreeVersion) {
@@ -100,6 +103,7 @@ if ($FreeVersion) {
 } else {
     Write-Host "[MODE] Standard Licensed Version (requires client activation via .madarlicense or cloud key)." -ForegroundColor Cyan
 }
+Write-Host "[MODE] Smart Analytics & Smart Notifications are HIDDEN in this release build (--dart-define=ENABLE_SMART_ANALYTICS=false)." -ForegroundColor Yellow
 
 & flutter @buildArgs
 if ($LASTEXITCODE -ne 0) {
@@ -164,6 +168,7 @@ if ($FreeVersion) {
     Write-Host "[DONE] License Mode: STANDARD LICENSED (Client activation required)" -ForegroundColor Cyan
 }
 Write-Host "[DONE] Output: $outputPath" -ForegroundColor Green
+Write-Host "[DONE] Smart Analytics & Smart Notifications: HIDDEN (ENABLE_SMART_ANALYTICS=false)" -ForegroundColor Yellow
 Write-Host "[IMPORTANT] To deliver to client: Copy the ENTIRE folder 'build\windows\x64\runner\Release\' (including 'data/' and all .dll files), not just pos_offline_desktop.exe alone." -ForegroundColor Yellow
 Write-Host '' -ForegroundColor Green
 exit 0

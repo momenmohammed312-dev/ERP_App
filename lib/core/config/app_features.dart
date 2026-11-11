@@ -58,9 +58,22 @@ class AppFeatures {
   static bool get hasManufacturing =>
       enableAllFeatures || flavor != Flavor.clothing;
 
-  /// Smart Analytics & Predictive Engine (المستشار والتحليل الذكي).
-  /// Enabled by default across flavors, overridable or toggleable via settings.
+  /// Smart Analytics & Predictive Engine (المستشار والتحليل الذكي)
+  /// + Smart Notifications (الإشعارات الذكية).
+  ///
+  /// Release gate: `--dart-define=ENABLE_SMART_ANALYTICS=false` hides the
+  /// whole smart surface (notification bell, smart-alerts banner, floating
+  /// toast and the analytics report tile) from the customer build.
+  /// An explicit `false` WINS over [enableAllFeatures] so a release can
+  /// never leak the feature by accident.
   static bool? hasSmartAnalyticsOverride;
-  static bool get hasSmartAnalytics =>
-      hasSmartAnalyticsOverride ?? true;
+  static bool get hasSmartAnalytics {
+    final override = hasSmartAnalyticsOverride;
+    if (override != null) return override;
+    const enabledByEnv = bool.fromEnvironment(
+      'ENABLE_SMART_ANALYTICS',
+      defaultValue: true,
+    );
+    return enabledByEnv;
+  }
 }
