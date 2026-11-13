@@ -46,17 +46,29 @@ class AppFeatures {
   static bool get hasDamagedModule =>
       enableAllFeatures || flavor == Flavor.base;
 
-  /// Custody module (العهد المالية). Hidden in clothing flavor.
+  /// Custody module (العهد المالية). Hidden in clothing and vegetable flavors.
   static bool get hasCustodyModule =>
-      enableAllFeatures || flavor != Flavor.clothing;
+      enableAllFeatures ||
+      (flavor != Flavor.clothing && flavor != Flavor.vegetable);
 
   /// Suppliers module (الموردين). Available across flavors.
   static bool get hasSuppliersModule => true;
 
-  /// Manufacturing (BOM, production orders, scrap). Hidden in clothing —
-  /// that flavor only needs invoices, purchases and reports.
+  /// Manufacturing (BOM, production orders, scrap). Hidden in clothing and
+  /// vegetable flavors.
   static bool get hasManufacturing =>
-      enableAllFeatures || flavor != Flavor.clothing;
+      enableAllFeatures ||
+      (flavor != Flavor.clothing && flavor != Flavor.vegetable);
+
+  /// Standard barcode inventory & regular purchases (المخزن العادي بالباركود
+  /// والمشتريات العادية). Hidden in vegetable flavor (uses shipments instead).
+  static bool get hasStandardInventory =>
+      enableAllFeatures || flavor != Flavor.vegetable;
+
+  /// Multi-user accounts & role permissions (تعدد المستخدمين والصلاحيات).
+  /// Hidden in vegetable flavor (single offline mobile user).
+  static bool get hasMultiUser =>
+      enableAllFeatures || flavor != Flavor.vegetable;
 
   /// Smart Analytics & Predictive Engine (المستشار والتحليل الذكي)
   /// + Smart Notifications (الإشعارات الذكية).
@@ -70,6 +82,7 @@ class AppFeatures {
   static bool get hasSmartAnalytics {
     final override = hasSmartAnalyticsOverride;
     if (override != null) return override;
+    if (flavor == Flavor.vegetable) return false;
     const enabledByEnv = bool.fromEnvironment(
       'ENABLE_SMART_ANALYTICS',
       defaultValue: true,

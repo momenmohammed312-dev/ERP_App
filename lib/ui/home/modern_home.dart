@@ -29,9 +29,12 @@ class ModernHomeScreen extends ConsumerStatefulWidget {
   final AppDatabase db;
   const ModernHomeScreen({super.key, required this.db});
 
-  /// Dynamic tab count based on platform (7 on mobile, 8 on desktop when all modules enabled).
+  /// Dynamic tab count based on platform and active flavor flags.
   static int get tabCount {
-    int count = 5; // Dashboard, Products, Customers, Cash, Reports
+    int count = 4; // Dashboard, Customers, Cash, Reports
+    if (AppFeatures.hasStandardInventory) {
+      count++;
+    }
     if (AppFeatures.hasSuppliersModule) {
       count++;
     }
@@ -44,34 +47,40 @@ class ModernHomeScreen extends ConsumerStatefulWidget {
     return count;
   }
 
-  /// Index of the Products tab (1 on both desktop and mobile).
-  static int get productsTabIndex => 1;
+  /// Index of the Products tab (1 when standard inventory is enabled, else null).
+  static int? get productsTabIndex =>
+      AppFeatures.hasStandardInventory ? 1 : null;
 
-  /// Index of the Customers tab (2 on both desktop and mobile).
-  static int get customersTabIndex => 2;
+  /// Index of the Customers tab.
+  static int get customersTabIndex =>
+      AppFeatures.hasStandardInventory ? 2 : 1;
 
-  /// Index of the Suppliers tab (3 on both desktop and mobile).
-  static int get suppliersTabIndex => 3;
+  /// Index of the Suppliers tab.
+  static int get suppliersTabIndex => customersTabIndex + 1;
 
-  /// Index of the Staff tab (null on mobile, 4 on desktop when enabled).
-  static int? get staffTabIndex =>
-      (!AppFeatures.hasStaffModule || PlatformUtils.hidesStaffFeaturesOnMobile)
-      ? null
-      : 4;
+  /// Index of the Staff tab (null on mobile or when staff module disabled).
+  static int? get staffTabIndex {
+    if (!AppFeatures.hasStaffModule || PlatformUtils.hidesStaffFeaturesOnMobile) {
+      return null;
+    }
+    int index = customersTabIndex + 1;
+    if (AppFeatures.hasSuppliersModule) index++;
+    return index;
+  }
 
-  /// Index of the Custody tab (4 on mobile, 5 on desktop when preceding enabled).
+  /// Index of the Custody tab.
   static int get custodyTabIndex {
-    int index =
-        4; // after Dashboard(0), Products(1), Customers(2), Suppliers(3)
+    int index = customersTabIndex + 1;
+    if (AppFeatures.hasSuppliersModule) index++;
     if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile) {
       index++;
     }
     return index;
   }
 
-  /// Index of the Cashier tab (5 on mobile, 6 on desktop when preceding enabled).
+  /// Index of the Cashier tab.
   static int get cashierTabIndex {
-    int index = 3; // after Dashboard(0), Products(1), Customers(2)
+    int index = customersTabIndex + 1;
     if (AppFeatures.hasSuppliersModule) {
       index++;
     }
@@ -97,14 +106,15 @@ class ModernHomeScreen extends ConsumerStatefulWidget {
         iconMargin: const EdgeInsets.only(bottom: 2),
         height: 48,
       ),
-      // Index 1
-      Tab(
-        icon: const Icon(Icons.shopping_bag_outlined, size: 18),
-        text: l10n.products,
-        iconMargin: const EdgeInsets.only(bottom: 2),
-        height: 48,
-      ),
-      // Index 2
+      // Products (standard inventory)
+      if (AppFeatures.hasStandardInventory)
+        Tab(
+          icon: const Icon(Icons.shopping_bag_outlined, size: 18),
+          text: l10n.products,
+          iconMargin: const EdgeInsets.only(bottom: 2),
+          height: 48,
+        ),
+      // Customers
       Tab(
         icon: const Icon(Icons.people_outline, size: 18),
         text: l10n.customer_list,
@@ -256,9 +266,9 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
           ),
         ),
       ),
-      // Index 1: Products
-      ProductScreen(db: widget.db),
-      // Index 2: Customers
+      // Products (standard inventory)
+      if (AppFeatures.hasStandardInventory) ProductScreen(db: widget.db),
+      // Customers
       CustomerTransactionsWidget(db: widget.db),
       // Suppliers
       if (AppFeatures.hasSuppliersModule) SuppliersWidget(db: widget.db),
@@ -792,20 +802,38 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                     subtitle: 'إدارة وتتبع حسابات العملاء',
                     icon: Icons.people_alt_rounded,
                     color: const Color(0xFF388BFD),
-                    onTap: () => _tabController.animateTo(2),
+                    onTap: () => _tabController.animateTo(
+                      ModernHomeScreen.customersTabIndex,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildActionStripButton(
-                    context,
-                    title: 'المنتجات',
-                    subtitle: 'المخزون والأسعار والأصناف',
-                    icon: Icons.inventory_2_rounded,
-                    color: const Color(0xFF238636),
-                    onTap: () => _tabController.animateTo(1),
+                if (AppFeatures.hasStandardInventory) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildActionStripButton(
+                      context,
+                      title: 'المنتجات',
+                      subtitle: 'المخزون والأسعار والأصناف',
+                      icon: Icons.inventory_2_rounded,
+                      color: const Color(0xFF238636),
+                      onTap: () => _tabController.animateTo(
+                        ModernHomeScreen.productsTabIndex!,
+                      ),
+                    ),
                   ),
-                ),
+                ] else if (AppFeatures.hasShipmentTracking) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildActionStripButton(
+                      context,
+                      title: 'الشحنات',
+                      subtitle: 'استلام الشحنات وكشف حساب المورد',
+                      icon: Icons.local_shipping_rounded,
+                      color: const Color(0xFF238636),
+                      onTap: () => context.push('/shipments'),
+                    ),
+                  ),
+                ],
               ],
             )
           else
@@ -828,17 +856,33 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                   subtitle: 'إدارة وتتبع حسابات العملاء',
                   icon: Icons.people_alt_rounded,
                   color: const Color(0xFF388BFD),
-                  onTap: () => _tabController.animateTo(2),
+                  onTap: () => _tabController.animateTo(
+                    ModernHomeScreen.customersTabIndex,
+                  ),
                 ),
-                const SizedBox(height: 10),
-                _buildActionStripButton(
-                  context,
-                  title: 'المنتجات',
-                  subtitle: 'المخزون والأسعار والأصناف',
-                  icon: Icons.inventory_2_rounded,
-                  color: const Color(0xFF238636),
-                  onTap: () => _tabController.animateTo(1),
-                ),
+                if (AppFeatures.hasStandardInventory) ...[
+                  const SizedBox(height: 10),
+                  _buildActionStripButton(
+                    context,
+                    title: 'المنتجات',
+                    subtitle: 'المخزون والأسعار والأصناف',
+                    icon: Icons.inventory_2_rounded,
+                    color: const Color(0xFF238636),
+                    onTap: () => _tabController.animateTo(
+                      ModernHomeScreen.productsTabIndex!,
+                    ),
+                  ),
+                ] else if (AppFeatures.hasShipmentTracking) ...[
+                  const SizedBox(height: 10),
+                  _buildActionStripButton(
+                    context,
+                    title: 'الشحنات',
+                    subtitle: 'استلام الشحنات وكشف حساب المورد',
+                    icon: Icons.local_shipping_rounded,
+                    color: const Color(0xFF238636),
+                    onTap: () => context.push('/shipments'),
+                  ),
+                ],
               ],
             ),
         ],

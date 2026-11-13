@@ -30,16 +30,17 @@ class SideBarMenu extends StatelessWidget {
           page: SideBarPage.home,
         ),
 
-        // المنتجات - يتطلب صلاحية عرض المنتجات
-        PermissionGuard(
-          permission: Permission.viewProducts,
-          child: _buildMenuItem(
-            context,
-            svgAssetPath: 'assets/svg/product.svg',
-            title: context.l10n.products,
-            page: SideBarPage.products,
+        // المنتجات - يتطلب صلاحية عرض المنتجات وتوفر المخزن العادي
+        if (AppFeatures.hasStandardInventory)
+          PermissionGuard(
+            permission: Permission.viewProducts,
+            child: _buildMenuItem(
+              context,
+              svgAssetPath: 'assets/svg/product.svg',
+              title: context.l10n.products,
+              page: SideBarPage.products,
+            ),
           ),
-        ),
 
         // العملاء - يتطلب صلاحية عرض العملاء
         PermissionGuard(
@@ -75,15 +76,16 @@ class SideBarMenu extends StatelessWidget {
         ),
 
         // المشتريات - يتطلب صلاحية عرض المشتريات
-        PermissionGuard(
-          permission: Permission.viewPurchases,
-          child: _buildMenuItem(
-            context,
-            svgAssetPath: 'assets/svg/graph.svg',
-            title: 'المشتريات',
-            page: SideBarPage.purchases,
+        if (AppFeatures.hasStandardInventory)
+          PermissionGuard(
+            permission: Permission.viewPurchases,
+            child: _buildMenuItem(
+              context,
+              svgAssetPath: 'assets/svg/graph.svg',
+              title: 'المشتريات',
+              page: SideBarPage.purchases,
+            ),
           ),
-        ),
 
         // التقارير - يتطلب صلاحية عرض التقارير
         PermissionGuard(
@@ -119,26 +121,28 @@ class SideBarMenu extends StatelessWidget {
         ),
 
         // إدارة المستخدمين - يتطلب صلاحية عرض المستخدمين
-        PermissionGuard(
-          permission: Permission.viewUsers,
-          child: _buildMenuItem(
-            context,
-            svgAssetPath: 'assets/svg/admin_panel_settings.svg',
-            title: 'إدارة المستخدمين',
-            page: SideBarPage.users,
+        if (AppFeatures.hasMultiUser)
+          PermissionGuard(
+            permission: Permission.viewUsers,
+            child: _buildMenuItem(
+              context,
+              svgAssetPath: 'assets/svg/admin_panel_settings.svg',
+              title: 'إدارة المستخدمين',
+              page: SideBarPage.users,
+            ),
           ),
-        ),
 
         // إدارة الموظفين - يتطلب باقة Enterprise
-        ConditionalWidget(
-          feature: 'staff_management',
-          child: _buildMenuItem(
-            context,
-            svgAssetPath: 'assets/svg/people.svg',
-            title: 'الموظفين',
-            page: SideBarPage.staff,
+        if (AppFeatures.hasStaffModule)
+          ConditionalWidget(
+            feature: 'staff_management',
+            child: _buildMenuItem(
+              context,
+              svgAssetPath: 'assets/svg/people.svg',
+              title: 'الموظفين',
+              page: SideBarPage.staff,
+            ),
           ),
-        ),
 
         // العهد المالية
         if (AppFeatures.hasCustodyModule)
@@ -172,15 +176,16 @@ class SideBarMenu extends StatelessWidget {
         ),
 
         // لوحة تحكم المدير - تتطلب صلاحية إدارة المستخدمين
-        PermissionGuard(
-          permission: Permission.manageUsers,
-          child: _buildMenuItem(
-            context,
-            svgAssetPath: 'assets/svg/admin_panel_settings.svg',
-            title: 'لوحة التحكم',
-            page: SideBarPage.admin,
+        if (AppFeatures.hasMultiUser)
+          PermissionGuard(
+            permission: Permission.manageUsers,
+            child: _buildMenuItem(
+              context,
+              svgAssetPath: 'assets/svg/admin_panel_settings.svg',
+              title: 'لوحة التحكم',
+              page: SideBarPage.admin,
+            ),
           ),
-        ),
 
         // عن التطبيق
         ListTile(

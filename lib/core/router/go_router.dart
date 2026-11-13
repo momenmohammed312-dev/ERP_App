@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
@@ -100,6 +101,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (gatedFeature != null && isLoggedIn) {
         if (!LicenseEntitlement.instance.allowsNavigation(location)) {
           return '/?denied=$gatedFeature';
+        }
+      }
+
+      if (isLoggedIn) {
+        if (location == '/new-supply-invoice' &&
+            !AppFeatures.hasStandardInventory) {
+          return '/';
+        }
+        if (location.startsWith('/manufacturing') &&
+            !AppFeatures.hasManufacturing) {
+          return '/';
+        }
+        if (location == '/custody' && !AppFeatures.hasCustodyModule) {
+          return '/';
+        }
+        if (location == '/admin' && !AppFeatures.hasMultiUser) {
+          return '/';
         }
       }
 

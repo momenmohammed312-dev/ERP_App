@@ -58,7 +58,7 @@ class AppFlavor {
   static String get appTitle {
     switch (current) {
       case Flavor.vegetable:
-        return 'سوق الخضار - ERP';
+        return 'سوق الخضار - مِدار';
       case Flavor.clothing:
         return 'POS - ملابس';
       case Flavor.all:

@@ -27,18 +27,37 @@ void main() {
   });
 
   group('AppFeatures', () {
-    test('vegetable-only flags are enabled for vegetable flavor', () {
+    test('vegetable-only flags are enabled and extra modules are disabled for vegetable flavor', () {
       AppFlavor.initialize(Flavor.vegetable);
       expect(AppFeatures.hasShipmentTracking, isTrue);
       expect(AppFeatures.hasEmptyContainerTracking, isTrue);
       expect(AppFeatures.hasCommissionPricing, isTrue);
+      expect(AppFeatures.hasDaySettlement, isTrue);
+      expect(AppFeatures.hasSuppliersModule, isTrue);
+      expect(AppFeatures.hasManufacturing, isFalse);
+      expect(AppFeatures.hasCustodyModule, isFalse);
+      expect(AppFeatures.hasSmartAnalytics, isFalse);
+      expect(AppFeatures.hasStandardInventory, isFalse);
+      expect(AppFeatures.hasMultiUser, isFalse);
+      expect(AppFeatures.hasStaffModule, isFalse);
+      expect(AppFeatures.hasDamagedModule, isFalse);
+      expect(AppFeatures.hasProductVariants, isFalse);
     });
 
-    test('vegetable-only flags are disabled for base flavor', () {
+    test('base flavor keeps core modules enabled and vegetable flags disabled', () {
       AppFlavor.initialize(Flavor.base);
       expect(AppFeatures.hasShipmentTracking, isFalse);
       expect(AppFeatures.hasEmptyContainerTracking, isFalse);
       expect(AppFeatures.hasCommissionPricing, isFalse);
+      expect(AppFeatures.hasManufacturing, isTrue);
+      expect(AppFeatures.hasCustodyModule, isTrue);
+      expect(AppFeatures.hasSmartAnalytics, isTrue);
+      expect(AppFeatures.hasStandardInventory, isTrue);
+      expect(AppFeatures.hasMultiUser, isTrue);
+      expect(AppFeatures.hasStaffModule, isTrue);
+      expect(AppFeatures.hasDamagedModule, isTrue);
+      expect(AppFeatures.hasProductVariants, isTrue);
+      expect(AppFeatures.hasSuppliersModule, isTrue);
     });
 
     test('all flags are enabled for all flavor', () {
@@ -54,6 +73,9 @@ void main() {
       expect(AppFeatures.hasCustodyModule, isTrue);
       expect(AppFeatures.hasSuppliersModule, isTrue);
       expect(AppFeatures.hasManufacturing, isTrue);
+      expect(AppFeatures.hasStandardInventory, isTrue);
+      expect(AppFeatures.hasMultiUser, isTrue);
+      expect(AppFeatures.hasSmartAnalytics, isTrue);
       expect(PlatformUtils.hidesStaffFeaturesOnMobile, isFalse);
     });
   });

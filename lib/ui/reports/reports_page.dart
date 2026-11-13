@@ -882,15 +882,16 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               MaterialPageRoute(builder: (_) => SalesReportTab(db: db)),
             ),
       },
-      {
-        'title': 'فواتير المشتريات',
-        'desc': 'سجل فواتير الموردين والدفعات والتوريدات',
-        'icon': Icons.shopping_cart_outlined,
-        'color': const Color(0xFF238636),
-        'onTap': () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => PurchasesReportTab(db: db)),
-            ),
-      },
+      if (AppFeatures.hasStandardInventory)
+        {
+          'title': 'فواتير المشتريات',
+          'desc': 'سجل فواتير الموردين والدفعات والتوريدات',
+          'icon': Icons.shopping_cart_outlined,
+          'color': const Color(0xFF238636),
+          'onTap': () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => PurchasesReportTab(db: db)),
+              ),
+        },
       {
         'title': 'تقرير العملاء والذمم',
         'desc': 'أرصدة العملاء والمديونيات وأعلى المشترين',
@@ -909,33 +910,36 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               MaterialPageRoute(builder: (_) => ExpensesReportTab(db: db)),
             ),
       },
-      {
-        'title': 'مصروفات الموظفين',
-        'desc': 'الرواتب والسلف والبدلات واستحقاقات الفريق',
-        'icon': Icons.badge_outlined,
-        'color': const Color(0xFFA371F7),
-        'onTap': () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => StaffExpensesReport(db: db)),
-            ),
-      },
-      {
-        'title': 'المشتريات حسب المورد',
-        'desc': 'كشف حسابات الموردين وحجم التوريد لكل مورد',
-        'icon': Icons.business_outlined,
-        'color': const Color(0xFF39C5CF),
-        'onTap': () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => SupplierReportScreen(database: db)),
-            ),
-      },
-      {
-        'title': 'المشتريات حسب المنتج',
-        'desc': 'متوسط أسعار الشراء والكميات المستلمة لكل صنف',
-        'icon': Icons.inventory_2_outlined,
-        'color': const Color(0xFF58A6FF),
-        'onTap': () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PurchaseByProductReport()),
-            ),
-      },
+      if (AppFeatures.hasStaffModule)
+        {
+          'title': 'مصروفات الموظفين',
+          'desc': 'الرواتب والسلف والبدلات واستحقاقات الفريق',
+          'icon': Icons.badge_outlined,
+          'color': const Color(0xFFA371F7),
+          'onTap': () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => StaffExpensesReport(db: db)),
+              ),
+        },
+      if (AppFeatures.hasStandardInventory)
+        {
+          'title': 'المشتريات حسب المورد',
+          'desc': 'كشف حسابات الموردين وحجم التوريد لكل مورد',
+          'icon': Icons.business_outlined,
+          'color': const Color(0xFF39C5CF),
+          'onTap': () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => SupplierReportScreen(database: db)),
+              ),
+        },
+      if (AppFeatures.hasStandardInventory)
+        {
+          'title': 'المشتريات حسب المنتج',
+          'desc': 'متوسط أسعار الشراء والكميات المستلمة لكل صنف',
+          'icon': Icons.inventory_2_outlined,
+          'color': const Color(0xFF58A6FF),
+          'onTap': () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PurchaseByProductReport()),
+              ),
+        },
       {
         'title': 'الأرصدة الموحدة',
         'desc': 'كشوف الحسابات التفصيلية والمختصرة للموردين والعملاء',

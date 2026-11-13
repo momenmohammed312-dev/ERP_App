@@ -423,19 +423,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       borderColor: borderColor,
                       focusColor: greenColor,
                     ),
-                    const Gap(12),
-                    _buildTextField(
-                      controller: _pageUrlController,
-                      label: 'رابط صفحة المحل (للطباعة كـ QR على ملصقات الباركود)',
-                      hint: 'https://facebook.com/...',
-                      icon: Icons.qr_code_2_rounded,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      innerBg: innerBg,
-                      borderColor: borderColor,
-                      focusColor: greenColor,
-                      textDirection: TextDirection.ltr,
-                    ),
+                    if (AppFeatures.hasStandardInventory) ...[
+                      const Gap(12),
+                      _buildTextField(
+                        controller: _pageUrlController,
+                        label: 'رابط صفحة المحل (للطباعة كـ QR على ملصقات الباركود)',
+                        hint: 'https://facebook.com/...',
+                        icon: Icons.qr_code_2_rounded,
+                        textColor: textColor,
+                        subTextColor: subTextColor,
+                        innerBg: innerBg,
+                        borderColor: borderColor,
+                        focusColor: greenColor,
+                        textDirection: TextDirection.ltr,
+                      ),
+                    ],
                     const Gap(16),
                     SizedBox(
                       width: double.infinity,
@@ -621,24 +623,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 iconColor: goldColor,
                 child: Column(
                   children: [
-                    _buildSettingsTile(
-                      icon: Icons.people_outline,
-                      iconColor: blueColor,
-                      title: 'المستخدمون والصلاحيات',
-                      subtitle: 'إضافة الكاشير والمديرين وتعيين صلاحيات كل دور بدقة',
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      borderColor: borderColor,
-                      onTap: () {
-                        final db = ref.read(appDatabaseProvider);
-                        final authService = ref.read(authServiceProvider);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => UserManagementPage(database: db, authService: authService)),
-                        );
-                      },
-                    ),
-                    const Gap(10),
+                    if (AppFeatures.hasMultiUser) ...[
+                      _buildSettingsTile(
+                        icon: Icons.people_outline,
+                        iconColor: blueColor,
+                        title: 'المستخدمون والصلاحيات',
+                        subtitle: 'إضافة الكاشير والمديرين وتعيين صلاحيات كل دور بدقة',
+                        textColor: textColor,
+                        subTextColor: subTextColor,
+                        borderColor: borderColor,
+                        onTap: () {
+                          final db = ref.read(appDatabaseProvider);
+                          final authService = ref.read(authServiceProvider);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => UserManagementPage(database: db, authService: authService)),
+                          );
+                        },
+                      ),
+                      const Gap(10),
+                    ],
                     _buildSettingsTile(
                       icon: Icons.cloud_sync_outlined,
                       iconColor: greenColor,

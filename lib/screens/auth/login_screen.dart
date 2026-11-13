@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
@@ -877,24 +878,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ),
               style: TextButton.styleFrom(foregroundColor: linkColor),
             ),
-            TextButton.icon(
-              onPressed: () => _openPreAuthUserManagement(),
-              icon: Icon(
-                Icons.admin_panel_settings,
-                size: 16,
-                color: linkColor,
-              ),
-              label: Text(
-                'إدارة المستخدمين',
-                style: TextStyle(
-                  fontFamily: 'NotoSansArabic',
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
+            if (AppFeatures.hasMultiUser)
+              TextButton.icon(
+                onPressed: () => _openPreAuthUserManagement(),
+                icon: Icon(
+                  Icons.admin_panel_settings,
+                  size: 16,
                   color: linkColor,
                 ),
+                label: Text(
+                  'إدارة المستخدمين',
+                  style: TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: linkColor,
+                  ),
+                ),
+                style: TextButton.styleFrom(foregroundColor: linkColor),
               ),
-              style: TextButton.styleFrom(foregroundColor: linkColor),
-            ),
           ],
         ),
         const SizedBox(height: 2),

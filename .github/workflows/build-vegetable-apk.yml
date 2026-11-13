@@ -1,0 +1,79 @@
+name: Build Vegetable Market APK
+
+on:
+  push:
+    branches:
+      - feat/vegetable-market-flavor
+  workflow_dispatch:
+
+jobs:
+  build-vegetable-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Run Flutter analyze & flavor tests
+        run: |
+          flutter analyze
+          flutter test test/unit/app_flavor_test.dart test/unit/services/smart_analytics_release_gate_test.dart
+
+      - name: Build Vegetable Release APK
+        env:
+          LICENSE_SECRET_KEY: ${{ secrets.LICENSE_SECRET_KEY }}
+          LICENSE_PUBLIC_KEY: ${{ secrets.LICENSE_PUBLIC_KEY }}
+          TRIAL_LICENSE_KEY: ${{ secrets.TRIAL_LICENSE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          ARGS=(
+            build apk --release
+            --flavor vegetable
+            -t lib/main_vegetable.dart
+            --dart-define=FLAVOR=vegetable
+            --dart-define=ENABLE_SMART_ANALYTICS=false
+          )
+          if [ -n "$LICENSE_SECRET_KEY" ]; then
+            ARGS+=(--dart-define="LICENSE_SECRET_KEY=$LICENSE_SECRET_KEY")
+          else
+            ARGS+=(--dart-define=LICENSE_SECRET_KEY=ci-preview-key --dart-define=FREE_VERSION=true --dart-define=FREE_TRIAL_DAYS=7)
+          fi
+          if [ -n "$LICENSE_PUBLIC_KEY" ]; then
+            ARGS+=(--dart-define="LICENSE_PUBLIC_KEY=$LICENSE_PUBLIC_KEY")
+          fi
+          if [ -n "$TRIAL_LICENSE_KEY" ]; then
+            ARGS+=(--dart-define="TRIAL_LICENSE_KEY=$TRIAL_LICENSE_KEY")
+          fi
+          if [ -n "$SUPABASE_URL" ]; then
+            ARGS+=(--dart-define="SUPABASE_URL=$SUPABASE_URL")
+          fi
+          if [ -n "$SUPABASE_ANON_KEY" ]; then
+            ARGS+=(--dart-define="SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY")
+          fi
+          flutter "${ARGS[@]}"
+
+      - name: Package Vegetable Market APK
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-vegetable-release.apk dist/MADAR-Vegetable-Market.apk
+
+      - name: Upload Vegetable Market APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: madar-vegetable-market-apk
+          path: dist/MADAR-Vegetable-Market.apk
+          retention-days: 30
