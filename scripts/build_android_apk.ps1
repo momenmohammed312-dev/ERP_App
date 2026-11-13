@@ -10,7 +10,8 @@
 param(
     [int]$TrialDays = 7,
     [switch]$InstallOnDevice,
-    [string]$Target = "lib/main_all.dart"
+    [string]$Target = "lib/main_all.dart",
+    [string]$AndroidFlavor = "base"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,6 +48,7 @@ Write-Host "  - ENABLE_SMART_ANALYTICS: false (Smart Analytics & Smart Notificat
 
 $buildArgs = @(
     'build', 'apk', '--release',
+    '--flavor', $AndroidFlavor,
     '-t', $Target,
     '--dart-define=FLAVOR=all',
     '--dart-define=ENABLE_ALL_FEATURES=true',
@@ -76,7 +78,7 @@ try {
         exit $LASTEXITCODE
     }
 
-    $builtApk = Join-Path $ProjectRoot 'build\app\outputs\flutter-apk\app-release.apk'
+    $builtApk = Join-Path $ProjectRoot "build\app\outputs\flutter-apk\app-$AndroidFlavor-release.apk"
     if (-not (Test-Path -LiteralPath $builtApk)) {
         Write-Host "[FAILED] Output APK not found at $builtApk" -ForegroundColor Red
         exit 1

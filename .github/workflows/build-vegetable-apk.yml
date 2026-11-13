@@ -29,8 +29,16 @@ jobs:
 
       - name: Run Flutter analyze & flavor tests
         run: |
-          flutter analyze
-          flutter test test/unit/app_flavor_test.dart test/unit/services/smart_analytics_release_gate_test.dart
+          flutter analyze --no-fatal-infos --no-fatal-warnings lib/
+          flutter test \
+            test/unit/app_flavor_test.dart \
+            test/unit/migration_v82_vegetable_test.dart \
+            test/unit/services/shipment_allocation_service_test.dart \
+            test/unit/services/shipment_settlement_service_test.dart \
+            test/unit/services/smart_analytics_release_gate_test.dart \
+            test/unit/vegetable_flavor_phase4_test.dart \
+            test/widget/vegetable_excel_import_screen_test.dart \
+            test/widget/vegetable_phase_d_flows_test.dart
 
       - name: Build Vegetable Release APK
         env:

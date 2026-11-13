@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:drift/drift.dart' as drift;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -18,6 +19,117 @@ import 'package:pos_offline_desktop/core/utils/logger.dart';
 
 class CloseDayDialog extends ConsumerStatefulWidget {
   const CloseDayDialog({super.key});
+
+  /// Computes the vegetable flavor day-close settlement totals for [now].
+  @visibleForTesting
+  static Future<Map<String, double>> computeVegetableSettlement(
+    AppDatabase db, {
+    DateTime? now,
+  }) async {
+    final targetDate = now ?? DateTime.now();
+    final startOfDay = DateTime(targetDate.year, targetDate.month, targetDate.day);
+    final endOfDay = DateTime(
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+      23,
+      59,
+      59,
+    );
+
+    // ['refunded'] استردادات نقدية خرجت من الصندوق (مرتجعات) — تخصم.
+    final cashRefunds = await db.returnRefundsDao
+        .getCashRefundsBetween(startOfDay, endOfDay);
+
+    final cashSales = await db.invoiceDao.getTotalCashSalesForDate(targetDate);
+    final creditCollections = await db.invoicePaymentsDao
+        .getTotalByMethodAndDateRange('cash', startOfDay, endOfDay);
+    final expenses = await db.expenseDao.getTotalExpensesForDate(targetDate);
+    final supplierOwed = await db.ledgerDao.getSupplierOutstandingBalance();
+
+    // دفعات الموردين النقدية (كاش) الخارجة من الدرج خلال اليوم.
+    final supplierCashPayRow = await db.customSelect(
+      '''
+      SELECT COALESCE(SUM(debit), 0) as total
+      FROM ledger_transactions
+      WHERE entity_type = 'Supplier'
+        AND origin = 'payment'
+        AND payment_method = 'cash'
+        AND date >= ? AND date <= ?
+      ''',
+      variables: [
+        drift.Variable.withDateTime(startOfDay),
+        drift.Variable.withDateTime(endOfDay),
+      ],
+    ).getSingle();
+    final supplierCashPayments =
+        (supplierCashPayRow.data['total'] as num?)?.toDouble() ?? 0.0;
+
+    final dayExpenses = await db.expenseDao.getExpensesByDateRange(
+      startOfDay,
+      endOfDay,
+    );
+    double shopExpenses = 0.0;
+    double shipmentExpenses = 0.0;
+    for (final e in dayExpenses) {
+      if (e.scope == ExpenseScope.shipment) {
+        shipmentExpenses += e.amount;
+      } else {
+        shopExpenses += e.amount;
+      }
+    }
+
+    final commRow = await db.customSelect(
+      '''
+      SELECT COALESCE(SUM(ii.commission), 0) as total
+      FROM invoice_items ii
+      INNER JOIN invoices inv ON inv.id = ii.invoice_id
+      WHERE inv.date >= ? AND inv.date <= ? AND inv.status != 'voided'
+      ''',
+      variables: [
+        drift.Variable.withDateTime(startOfDay),
+        drift.Variable.withDateTime(endOfDay),
+      ],
+    ).getSingle();
+    final shopCommissions =
+        (commRow.data['total'] as num?)?.toDouble() ?? 0.0;
+
+    // [MONEY] حركات العُهد النقدية
+    final custodyRows = await (db.select(db.ledgerTransactions)
+          ..where((t) =>
+              t.origin.equals('custody') &
+              t.paymentMethod.equals('cash') &
+              t.date.isBetweenValues(startOfDay, endOfDay)))
+        .get();
+    double custodyDisbursed = 0.0;
+    double custodyReturned = 0.0;
+    for (final r in custodyRows) {
+      custodyDisbursed += r.debit;
+      custodyReturned += r.credit;
+    }
+    final netCustody = custodyDisbursed - custodyReturned;
+
+    final expectedNetCash =
+        cashSales +
+        creditCollections -
+        cashRefunds -
+        expenses -
+        supplierCashPayments -
+        netCustody;
+
+    return {
+      'cash_sales': cashSales,
+      'credit_collections': creditCollections,
+      'refunded': cashRefunds,
+      'expenses': expenses,
+      'shop_expenses': shopExpenses,
+      'shipment_expenses': shipmentExpenses,
+      'shop_commissions': shopCommissions,
+      'supplier_cash_payments': supplierCashPayments,
+      'expected_net_cash': expectedNetCash,
+      'supplier_owed': supplierOwed,
+    };
+  }
 
   @override
   ConsumerState<CloseDayDialog> createState() => _CloseDayDialogState();
@@ -42,6 +154,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
   double _shopExpenses = 0;
   double _shipmentExpenses = 0;
   double _todayCommissions = 0;
+  double _supplierCashPayments = 0;
   double _expectedNetCash = 0;
   double _supplierOwed = 0;
 
@@ -86,8 +199,8 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
       double expectedBalance = summary['expected_balance'] as double;
       if (_isVegetable) {
         // Vegetable flavor: compute the settlement summary (today's cash sales
-        // + credit collections - expenses) and use its net cash as the
-        // expected balance shown in the variance display.
+        // + credit collections - refunds - expenses - supplier cash payments)
+        // and use its net cash as the expected balance shown in the variance display.
         final settlement = await _calculateVegetableSettlement(db);
         _cashSales = settlement['cash_sales']!;
         _creditCollections = settlement['credit_collections']!;
@@ -95,6 +208,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
         _shopExpenses = settlement['shop_expenses']!;
         _shipmentExpenses = settlement['shipment_expenses']!;
         _todayCommissions = settlement['shop_commissions']!;
+        _supplierCashPayments = settlement['supplier_cash_payments']!;
         _expectedNetCash = settlement['expected_net_cash']!;
         _supplierOwed = settlement['supplier_owed']!;
         expectedBalance = _expectedNetCash;
@@ -289,84 +403,11 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
   }
 
   /// Vegetable flavor settlement summary — auto-computed, read-only:
-  /// expected net cash = cash sales + credit collections - expenses.
+  /// expected net cash = cash sales + credit collections - refunds - expenses - supplier cash payments - net custody.
   /// Supplier outstanding balance is display-only (not part of the cash math).
   Future<Map<String, double>> _calculateVegetableSettlement(
     AppDatabase db,
-  ) async {
-    final now = DateTime.now();
-    final startOfDay = DateTime(now.year, now.month, now.day);
-    final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
-
-    // ['refunded'] استردادات نقدية خرجت من الصندوق (مرتجعات) — تخصم.
-    final cashRefunds = await db.returnRefundsDao
-        .getCashRefundsBetween(startOfDay, endOfDay);
-
-    final cashSales = await db.invoiceDao.getTotalCashSalesForDate(now);
-    final creditCollections = await db.invoicePaymentsDao
-        .getTotalByMethodAndDateRange('cash', startOfDay, endOfDay);
-    final expenses = await db.expenseDao.getTotalExpensesForDate(now);
-    final supplierOwed = await db.ledgerDao.getSupplierOutstandingBalance();
-
-    final dayExpenses = await db.expenseDao.getExpensesByDateRange(
-      startOfDay,
-      endOfDay,
-    );
-    double shopExpenses = 0.0;
-    double shipmentExpenses = 0.0;
-    for (final e in dayExpenses) {
-      if (e.scope == ExpenseScope.shipment) {
-        shipmentExpenses += e.amount;
-      } else {
-        shopExpenses += e.amount;
-      }
-    }
-
-    final commRow = await db.customSelect(
-      '''
-      SELECT COALESCE(SUM(ii.commission), 0) as total
-      FROM invoice_items ii
-      INNER JOIN invoices inv ON inv.id = ii.invoice_id
-      WHERE inv.date >= ? AND inv.date <= ? AND inv.status != 'voided'
-      ''',
-      variables: [
-        drift.Variable.withDateTime(startOfDay),
-        drift.Variable.withDateTime(endOfDay),
-      ],
-    ).getSingle();
-    final shopCommissions =
-        (commRow.data['total'] as num?)?.toDouble() ?? 0.0;
-
-    // [MONEY] حركات العُهد النقدية
-    final custodyRows = await (db.select(db.ledgerTransactions)
-          ..where((t) =>
-              t.origin.equals('custody') &
-              t.paymentMethod.equals('cash') &
-              t.date.isBetweenValues(startOfDay, endOfDay)))
-        .get();
-    double custodyDisbursed = 0.0;
-    double custodyReturned = 0.0;
-    for (final r in custodyRows) {
-      custodyDisbursed += r.debit;
-      custodyReturned += r.credit;
-    }
-    final netCustody = custodyDisbursed - custodyReturned;
-
-    final expectedNetCash =
-        cashSales + creditCollections - cashRefunds - expenses - netCustody;
-
-    return {
-      'cash_sales': cashSales,
-      'credit_collections': creditCollections,
-      'refunded': cashRefunds,
-      'expenses': expenses,
-      'shop_expenses': shopExpenses,
-      'shipment_expenses': shipmentExpenses,
-      'shop_commissions': shopCommissions,
-      'expected_net_cash': expectedNetCash,
-      'supplier_owed': supplierOwed,
-    };
-  }
+  ) => CloseDayDialog.computeVegetableSettlement(db);
 
   void _calculateDifference() {
     setState(() {});
@@ -946,6 +987,18 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
             const SizedBox(width: 12),
             Expanded(
               child: _buildSummaryCard(
+                'دفعات الموردين (كاش)',
+                '${_supplierCashPayments.toStringAsFixed(2)} ج.م',
+                Colors.deepOrange,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildSummaryCard(
                 'مستحق للموردين',
                 '${_supplierOwed.toStringAsFixed(2)} ج.م',
                 Colors.indigo,
@@ -1002,6 +1055,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
       {'item': 'مصروفات الشحنات (نولون)', 'amount': _shipmentExpenses},
       {'item': 'ربح المحل (عمولات − مصروف محل)', 'amount': shopNetProfit},
       {'item': 'إجمالي المصروفات', 'amount': _expenses},
+      {'item': 'دفعات الموردين (كاش)', 'amount': _supplierCashPayments},
       {'item': 'صافي الكاش المتوقع', 'amount': _expectedNetCash},
       {'item': 'مستحق للموردين - للعرض فقط', 'amount': _supplierOwed},
       if (settlementAmount != null)

@@ -195,6 +195,7 @@ if (-not $SkipAndroid) {
     Write-Host "========================================================" -ForegroundColor Magenta
     $apkStdArgs = @(
         'build', 'apk', '--release',
+        '--flavor', 'base',
         '-t', 'lib/main_all.dart',
         '--dart-define=FLAVOR=all',
         '--dart-define=ENABLE_ALL_FEATURES=true',
@@ -210,7 +211,7 @@ if (-not $SkipAndroid) {
     & flutter @apkStdArgs
     if ($LASTEXITCODE -ne 0) { throw "Android Standard build failed" }
     
-    $rawApk = Join-Path $ProjectRoot 'build\app\outputs\flutter-apk\app-release.apk'
+    $rawApk = Join-Path $ProjectRoot 'build\app\outputs\flutter-apk\app-base-release.apk'
     $destApkStd = Join-Path $distAndroidStandard "MADAR_ERP_Standard_Release.apk"
     Copy-Item -LiteralPath $rawApk -Destination $destApkStd -Force
     Write-Host "[DIST] Android Standard APK ready at $destApkStd" -ForegroundColor Green
@@ -221,6 +222,7 @@ if (-not $SkipAndroid) {
     Write-Host "========================================================" -ForegroundColor Magenta
     $apkTrialArgs = @(
         'build', 'apk', '--release',
+        '--flavor', 'base',
         '-t', 'lib/main_all.dart',
         '--dart-define=FLAVOR=all',
         '--dart-define=ENABLE_ALL_FEATURES=true',

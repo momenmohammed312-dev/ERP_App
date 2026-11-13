@@ -10,6 +10,7 @@ import 'package:pos_offline_desktop/core/services/invoice_service.dart';
 import 'package:pos_offline_desktop/core/services/invoice_void_service.dart';
 import 'package:pos_offline_desktop/core/services/shipment_allocation_service.dart';
 import 'package:pos_offline_desktop/core/services/shipment_settlement_service.dart';
+import 'package:pos_offline_desktop/ui/day/close_day_dialog.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -312,6 +313,93 @@ void main() {
         expect(afterPayStmt.paidForShipment, closeTo(500, 0.01));
         expect(afterPayStmt.remainingForShipment, closeTo(420, 0.01));
         expect(await db.ledgerDao.getSupplierBalance('SUP-A'), closeTo(420, 0.01));
+      },
+    );
+
+    test(
+      'vegetable close-day settlement subtracts cash supplier payments and excludes bank transfers',
+      () async {
+        final day = DateTime(2026, 3, 5, 11, 0);
+        final shipmentId = await createCommissionShipment(
+          total: 20,
+          commissionPct: 10.0,
+        );
+
+        // Cash sale: 10 * 100 = 1000 (commission = 100)
+        await invoiceService.createInvoice(
+          customerId: 'CUST-1',
+          customerName: 'عميل جملة',
+          paymentMethod: 'cash',
+          totalAmount: 1000,
+          paidAmount: 1000,
+          cashAmount: 1000,
+          status: 'paid',
+          primaryShipmentId: shipmentId,
+          invoiceDate: day,
+          items: [
+            InvoiceItemParams(
+              productId: 1,
+              quantity: 10,
+              price: 100,
+              shipmentId: shipmentId,
+              commission: 100,
+            ),
+          ],
+        );
+
+        // Shop expense: 50, shipment expense: 30 (total expenses = 80)
+        await db.expenseDao.insertExpense(
+          ExpensesCompanion.insert(
+            id: 'exp-day-shop',
+            description: 'شاي وضيافة',
+            amount: 50,
+            date: Value(day),
+            category: 'أخرى',
+            scope: const Value(ExpenseScope.shop),
+          ),
+        );
+        await db.expenseDao.insertExpense(
+          ExpensesCompanion.insert(
+            id: 'exp-day-ship',
+            description: 'نولون',
+            amount: 30,
+            date: Value(day),
+            category: 'نقل',
+            shipmentId: Value(shipmentId),
+            scope: const Value(ExpenseScope.shipment),
+          ),
+        );
+
+        // Cash supplier payment: 400 (MUST reduce expected net cash)
+        await settlementService.recordSupplierPayment(
+          supplierId: 'SUP-A',
+          amount: 400,
+          shipmentId: shipmentId,
+          paymentMethod: 'cash',
+          date: day,
+        );
+
+        // Bank transfer supplier payment: 250 (MUST NOT reduce cash drawer)
+        await settlementService.recordSupplierPayment(
+          supplierId: 'SUP-A',
+          amount: 250,
+          shipmentId: shipmentId,
+          paymentMethod: 'bank',
+          date: day,
+        );
+
+        final summary = await CloseDayDialog.computeVegetableSettlement(
+          db,
+          now: day,
+        );
+        expect(summary['cash_sales'], closeTo(1000, 0.01));
+        expect(summary['shop_expenses'], closeTo(50, 0.01));
+        expect(summary['shipment_expenses'], closeTo(30, 0.01));
+        expect(summary['expenses'], closeTo(80, 0.01));
+        expect(summary['shop_commissions'], closeTo(100, 0.01));
+        expect(summary['supplier_cash_payments'], closeTo(400, 0.01));
+        // Expected net cash: 1000 - 80 - 400 = 520
+        expect(summary['expected_net_cash'], closeTo(520, 0.01));
       },
     );
   });
