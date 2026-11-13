@@ -55,7 +55,6 @@ class _BomFormDialogState extends State<BomFormDialog> {
   int? _selectedFinishedProductId;
 
   List<Product> _allProducts = [];
-  List<Product> _rawCandidates = [];
   List<_BomItemRow> _items = [];
   bool _loadingProducts = true;
   bool _loadingBomItems = false;
@@ -92,7 +91,6 @@ class _BomFormDialogState extends State<BomFormDialog> {
       setState(() {
         _allProducts = products;
         // Raw candidates: raw_material + standard + all, so user can pick any
-        _rawCandidates = products.where((p) => p.status != 'Deleted').toList();
         _loadingProducts = false;
       });
       _recalcCost();
@@ -382,6 +380,7 @@ class _BomFormDialogState extends State<BomFormDialog> {
                         SearchableProductPicker(
                           db: widget.db,
                           label: 'المنتج النهائي *',
+                          productTypeHint: 'finished_product',
                           initialProductId: _selectedFinishedProductId,
                           helperText: 'المنتج الذي ستنتجه هذه الوصفة',
                           validator: (v) =>
@@ -431,10 +430,10 @@ class _BomFormDialogState extends State<BomFormDialog> {
                                       decimal: true,
                                     ),
                                 decoration: const InputDecoration(
-                                  labelText: 'العائد (Yield) *',
+                                  labelText: 'الكمية القياسية للوصفة (عدد الوحدات المنتجة) *',
                                   border: OutlineInputBorder(),
                                   prefixIcon: Icon(Icons.numbers),
-                                  helperText: 'كم وحدة ينتجها التنفيذ الواحد',
+                                  helperText: 'مثال: 500 قطعة — الكمية التلقائية لأمر التصنيع والمرحلة الأولى',
                                 ),
                                 validator: (v) {
                                   final n = double.tryParse(v ?? '');
@@ -642,53 +641,32 @@ class _BomFormDialogState extends State<BomFormDialog> {
                                         children: [
                                           Expanded(
                                             flex: 3,
-                                            child: DropdownButtonFormField<int>(
-                                              initialValue:
+                                            child: SearchableProductPicker(
+                                              db: widget.db,
+                                              label: 'المادة الخام *',
+                                              productTypeHint: 'raw_material',
+                                              initialProductId:
                                                   row.rawMaterialProductId,
-                                              isExpanded: true,
-                                              decoration: InputDecoration(
-                                                labelText: 'المادة الخام *',
-                                                hintText: 'اختر مادة',
-                                                border:
-                                                    const OutlineInputBorder(),
-                                                contentPadding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 12,
-                                                    ),
-                                                filled: true,
-                                                fillColor:
-                                                    theme.colorScheme.surface,
-                                              ),
-                                              items: _rawCandidates
-                                                  .map(
-                                                    (p) => DropdownMenuItem(
-                                                      value: p.id,
-                                                      child: Text(
-                                                        '${p.name} (${p.quantity} ${p.unit ?? ''})',
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        style: const TextStyle(
-                                                          fontSize: 12,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  )
-                                                  .toList(),
-                                              onChanged: (v) {
+                                              validator: (p) => p == null
+                                                  ? 'اختر مادة خام'
+                                                  : null,
+                                              onChanged: (p) {
                                                 setState(() {
-                                                  row.rawMaterialProductId = v;
-                                                  final m = _allProducts.where(
-                                                    (pp) => pp.id == v,
-                                                  );
+                                                  row.rawMaterialProductId =
+                                                      p?.id;
                                                   row.rawMaterialName =
-                                                      m.isNotEmpty
-                                                      ? m.first.name
-                                                      : null;
-                                                  if (m.isNotEmpty &&
-                                                      (row.unit.isEmpty)) {
+                                                      p?.name;
+                                                  if (p != null &&
+                                                      row.unit.isEmpty) {
                                                     row.unit =
-                                                        m.first.unit ?? '';
+                                                        p.unit ?? 'قطعة';
+                                                  }
+                                                  if (p != null &&
+                                                      !_allProducts.any(
+                                                        (prod) =>
+                                                            prod.id == p.id,
+                                                      )) {
+                                                    _allProducts.add(p);
                                                   }
                                                 });
                                                 _recalcCost();

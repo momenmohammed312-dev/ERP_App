@@ -127,11 +127,14 @@ void main() {
       );
     });
 
-    test('PlatformUtils.hidesStaffFeaturesOnMobile matches isMobile', () {
+    test('PlatformUtils.hidesStaffFeaturesOnMobile is false by default allowing staff on mobile', () {
       expect(
         PlatformUtils.hidesStaffFeaturesOnMobile,
-        equals(PlatformUtils.isMobile),
+        isFalse,
       );
+      PlatformUtils.debugOverrideHidesStaffFeaturesOnMobile = true;
+      expect(PlatformUtils.hidesStaffFeaturesOnMobile, isTrue);
+      PlatformUtils.debugOverrideHidesStaffFeaturesOnMobile = null;
     });
   });
 }

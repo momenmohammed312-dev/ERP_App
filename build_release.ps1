@@ -6,7 +6,12 @@
 # never ship a build with sync or licensing silently broken.
 #
 # Usage (from repo root):
-#   .\build_release.ps1
+#   .\build_release.ps1               # Standard licensed build (requires activation)
+#   .\build_release.ps1 -FreeVersion  # Free/Pre-activated build (bypasses activation screen)
+
+param(
+    [switch]$FreeVersion
+)
 
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Get-Location).Path
@@ -66,18 +71,40 @@ $appVersion = ($versionLine.Line -replace '^version:\s*', '').Trim()
 # 2) Build
 # ────────────────────────────────────────────────────────────────────────────
 Write-Host "=== Building release v$appVersion ===" -ForegroundColor Cyan
-# LICENSE_PUBLIC_KEY is not secret, but it IS mandatory: it is compiled into the
-# binary and is the only thing that can verify an RS256 lease offline. Escape
-# the literal newlines because --dart-define cannot carry real ones; the app
-# side (LicenseConfig.normalizePem) converts them back.
-$publicKeyPem = ($secrets.LICENSE_PUBLIC_KEY -replace "`r`n", '\n' -replace "`n", '\n')
+
+# Robust defensive extraction for LICENSE_PUBLIC_KEY
+$rawKey = if ($secrets.LICENSE_PUBLIC_KEY.value) {
+    [string]$secrets.LICENSE_PUBLIC_KEY.value
+} else {
+    [string]$secrets.LICENSE_PUBLIC_KEY
+}
+$publicKeyPem = ($rawKey -replace "`r`n", '\n' -replace "`n", '\n').Trim()
+
+if (-not $publicKeyPem.StartsWith('-----BEGIN PUBLIC KEY-----')) {
+    Write-Host "[ABORT] LICENSE_PUBLIC_KEY is invalid or malformed! Must start with '-----BEGIN PUBLIC KEY-----'." -ForegroundColor Red
+    exit 1
+}
+
 $buildArgs = @(
     'build', 'windows', '--release',
     "--dart-define=SUPABASE_URL=$($secrets.SUPABASE_URL)",
     "--dart-define=SUPABASE_ANON_KEY=$($secrets.SUPABASE_ANON_KEY)",
     "--dart-define=LICENSE_SECRET_KEY=$($secrets.LICENSE_SECRET_KEY)",
-    "--dart-define=LICENSE_PUBLIC_KEY=$publicKeyPem"
+    "--dart-define=LICENSE_PUBLIC_KEY=$publicKeyPem",
+    # Customer release gate: Smart Analytics & Smart Notifications are hidden.
+    # Unconditional - it must NOT depend on -FreeVersion or any other flag.
+    '--dart-define=ENABLE_SMART_ANALYTICS=false'
 )
+
+if ($FreeVersion) {
+    Write-Host ">>> [MODE] FREE VERSION ACTIVATED (--dart-define=FREE_VERSION=true) <<<" -ForegroundColor Yellow
+    Write-Host ">>> Application will run completely unlocked without requiring client activation." -ForegroundColor Yellow
+    $buildArgs += "--dart-define=FREE_VERSION=true"
+} else {
+    Write-Host "[MODE] Standard Licensed Version (requires client activation via .madarlicense or cloud key)." -ForegroundColor Cyan
+}
+Write-Host "[MODE] Smart Analytics & Smart Notifications are HIDDEN in this release build (--dart-define=ENABLE_SMART_ANALYTICS=false)." -ForegroundColor Yellow
+
 & flutter @buildArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ABORT] flutter build windows --release failed." -ForegroundColor Red
@@ -85,12 +112,63 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # ────────────────────────────────────────────────────────────────────────────
-# 3) Report
+# 3) Post-build verification & bundling (Release DLL + MSVC Runtimes)
 # ────────────────────────────────────────────────────────────────────────────
-$outputPath = Join-Path $ProjectRoot 'build\windows\x64\runner\Release\pos_offline_desktop.exe'
+$releaseDir = Join-Path $ProjectRoot 'build\windows\x64\runner\Release'
+$outputPath = Join-Path $releaseDir 'pos_offline_desktop.exe'
+
+# Locate Flutter SDK cache to guarantee Release AOT flutter_windows.dll
+$flutterCmd = Get-Command flutter -ErrorAction SilentlyContinue
+if ($flutterCmd) {
+    $flutterBin = Split-Path $flutterCmd.Source
+    $flutterRoot = Split-Path $flutterBin
+    $engineReleaseDll = Join-Path $flutterRoot 'bin\cache\artifacts\engine\windows-x64-release\flutter_windows.dll'
+    $targetDll = Join-Path $releaseDir 'flutter_windows.dll'
+
+    if (Test-Path $engineReleaseDll) {
+        $targetItem = Get-Item $targetDll -ErrorAction SilentlyContinue
+        # If the target DLL is the debug one (>30MB) or missing, overwrite with genuine release AOT DLL
+        if (-not $targetItem -or $targetItem.Length -gt 30MB) {
+            Write-Host "[POST-BUILD] Ensuring genuine Release AOT flutter_windows.dll..." -ForegroundColor Yellow
+            Copy-Item -LiteralPath $engineReleaseDll -Destination $targetDll -Force
+        }
+    }
+}
+
+# Copy MSVC C++ Redistributable DLLs so client machines never hit missing runtime DLLs
+$msvcDlls = @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
+foreach ($dll in $msvcDlls) {
+    $sysPath = Join-Path $env:windir "System32\$dll"
+    $destPath = Join-Path $releaseDir $dll
+    if (Test-Path $sysPath) {
+        Copy-Item -LiteralPath $sysPath -Destination $destPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Sanity smoke-test: verify binary launches cleanly and doesn't crash on start
+Write-Host "[POST-BUILD] Running sanity smoke-test on release binary..." -ForegroundColor Cyan
+$p = Start-Process -FilePath $outputPath -PassThru
+Start-Sleep -Seconds 2
+if ($p.HasExited) {
+    Write-Host "[FATAL] Release binary crashed immediately with exit code $($p.ExitCode)!" -ForegroundColor Red
+    exit 1
+}
+Stop-Process -Id $p.Id -Force
+Write-Host "[POST-BUILD] Sanity smoke-test passed! Application launches cleanly." -ForegroundColor Green
+
+# ────────────────────────────────────────────────────────────────────────────
+# 4) Report
+# ────────────────────────────────────────────────────────────────────────────
 Write-Host '' -ForegroundColor Green
-Write-Host "[DONE] Release build succeeded." -ForegroundColor Green
+Write-Host "[DONE] Release build succeeded and verified." -ForegroundColor Green
 Write-Host "[DONE] Version: $appVersion" -ForegroundColor Green
+if ($FreeVersion) {
+    Write-Host "[DONE] License Mode: FREE VERSION (Unlocked - No activation needed)" -ForegroundColor Yellow
+} else {
+    Write-Host "[DONE] License Mode: STANDARD LICENSED (Client activation required)" -ForegroundColor Cyan
+}
 Write-Host "[DONE] Output: $outputPath" -ForegroundColor Green
+Write-Host "[DONE] Smart Analytics & Smart Notifications: HIDDEN (ENABLE_SMART_ANALYTICS=false)" -ForegroundColor Yellow
+Write-Host "[IMPORTANT] To deliver to client: Copy the ENTIRE folder 'build\windows\x64\runner\Release\' (including 'data/' and all .dll files), not just pos_offline_desktop.exe alone." -ForegroundColor Yellow
 Write-Host '' -ForegroundColor Green
 exit 0

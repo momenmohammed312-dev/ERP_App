@@ -471,6 +471,8 @@ class BackupService {
       'manufacturing_orders',
       'manufacturing_cost_components',
       'manufacturing_scrap',
+      'manufacturing_stages',
+      'manufacturing_stage_outputs',
       // ── Manufacturing for Others (Phase B1 - v76) ──
       'customer_material_receipts',
       'customer_material_receipt_items',
@@ -587,6 +589,8 @@ class BackupService {
       'manufacturing_orders',
       'manufacturing_cost_components',
       'manufacturing_scrap',
+      'manufacturing_stages',
+      'manufacturing_stage_outputs',
       // ── Manufacturing for Others (Phase B1 - v76) ──
       // FK order:
       // customers and products are restored above;

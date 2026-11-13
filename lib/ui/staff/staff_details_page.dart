@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/utils/currency_helper.dart';
+import '../../core/theme/madar_colors.dart';
 import 'attendance_page.dart';
 import 'biometric_enrollment_page.dart';
 import 'vacations_page.dart';
@@ -10,6 +11,9 @@ import 'advances_page.dart';
 import 'payroll_page.dart';
 import 'performance_page.dart';
 import 'staff_form_page.dart';
+import '../../core/database/dao/staff_management_dao.dart';
+import '../../services/staff_management_service.dart';
+import '../../core/provider/auth_provider.dart';
 
 class StaffDetailsPage extends ConsumerStatefulWidget {
   final Staff staff;
@@ -50,14 +54,19 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
+
     return Scaffold(
+      backgroundColor: context.bgCanvas,
       appBar: AppBar(
         title: const Text('تفاصيل الموظف'),
-        backgroundColor: Colors.blue[700],
-        foregroundColor: Colors.white,
+        backgroundColor: isDark ? MadarColors.bgDark : Colors.white,
+        foregroundColor: context.textPrimary,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.fingerprint),
+            icon: Icon(Icons.fingerprint, color: isDark ? MadarColors.info : MadarColors.lightPrimary),
             onPressed: () async {
               await Navigator.push(
                 context,
@@ -70,9 +79,14 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
             tooltip: 'ربط البصمة',
           ),
           IconButton(
-            icon: const Icon(Icons.edit),
+            icon: Icon(Icons.edit_outlined, color: primary),
             onPressed: _editStaff,
             tooltip: 'تعديل',
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: MadarColors.error),
+            onPressed: _deleteStaff,
+            tooltip: 'حذف الموظف',
           ),
         ],
       ),
@@ -100,17 +114,36 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
 
   Widget _buildStaffHeader() {
     final isActive = widget.staff.status == 'active' && widget.staff.isActive;
-    final statusColor = isActive ? Colors.green : Colors.red;
+    final statusColor = isActive ? MadarColors.success : MadarColors.error;
     final statusText = isActive ? 'نشط' : 'غير نشط';
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(18.0),
       decoration: BoxDecoration(
+        color: context.bgCard,
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+        border: Border.all(
+          color: isDark ? MadarColors.border.withValues(alpha: 0.6) : MadarColors.lightBorder,
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.25)
+                : const Color(0x0A0066FF),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
         gradient: LinearGradient(
-          colors: [Colors.blue[700]!, Colors.blue[500]!],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          colors: isDark
+              ? const [MadarColors.bgCard, Color(0xFF1E2836)]
+              : const [Colors.white, Color(0xFFF0F6FC)],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
         ),
       ),
       child: Column(
@@ -118,10 +151,26 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 30,
-                backgroundColor: Colors.white,
-                child: Icon(Icons.person, size: 40, color: Colors.blue[700]),
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isDark
+                      ? MadarColors.gold.withValues(alpha: 0.15)
+                      : MadarColors.lightBabyBlueContainer,
+                  border: Border.all(
+                    color: isDark
+                        ? MadarColors.gold.withValues(alpha: 0.4)
+                        : MadarColors.lightBorder,
+                    width: 2,
+                  ),
+                ),
+                child: Icon(
+                  Icons.person,
+                  size: 34,
+                  color: primary,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -130,17 +179,20 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
                   children: [
                     Text(
                       widget.staff.name,
-                      style: const TextStyle(
-                        fontSize: 24,
+                      style: TextStyle(
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: context.textPrimary,
                       ),
                     ),
+                    const SizedBox(height: 4),
                     Text(
-                      widget.staff.position,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.white70,
+                      widget.staff.position.isNotEmpty
+                          ? widget.staff.position
+                          : 'موظف',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: context.textSecondary,
                       ),
                     ),
                   ],
@@ -148,53 +200,60 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
+                  horizontal: 14,
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.2),
+                  color: statusColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: statusColor),
                 ),
-                child: Text(
-                  statusText,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: statusColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      statusText,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
             children: [
-              Icon(Icons.badge, color: Colors.white70, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                widget.staff.staffId,
-                style: const TextStyle(color: Colors.white70),
+              _buildHeaderChip(Icons.badge_outlined, widget.staff.staffId),
+              _buildHeaderChip(
+                Icons.phone_outlined,
+                widget.staff.phone ?? 'لا يوجد هاتف',
               ),
-              const SizedBox(width: 24),
-              Icon(Icons.phone, color: Colors.white70, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                widget.staff.phone ?? 'لا يوجد',
-                style: const TextStyle(color: Colors.white70),
-              ),
-              const SizedBox(width: 24),
-              Icon(Icons.attach_money, color: Colors.white70, size: 20),
-              const SizedBox(width: 8),
-              Text(
+              _buildHeaderChip(
+                Icons.attach_money,
                 CurrencyHelper.formatCurrency(widget.staff.basicSalary),
-                style: const TextStyle(color: Colors.white70),
+                color: primary,
               ),
-              const SizedBox(width: 24),
-              Icon(Icons.fingerprint, color: Colors.white70, size: 20),
-              const SizedBox(width: 8),
-              Text(
+              _buildHeaderChip(
+                Icons.fingerprint,
                 _biometricId != null ? 'بصمة: $_biometricId' : 'بدون بصمة',
-                style: const TextStyle(color: Colors.white70),
+                color: _biometricId != null
+                    ? (isDark ? MadarColors.info : MadarColors.lightPrimary)
+                    : context.textMuted,
               ),
             ],
           ),
@@ -203,21 +262,60 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
     );
   }
 
-  Widget _buildTabBar() {
+  Widget _buildHeaderChip(IconData icon, String label, {Color? color}) {
+    final isDark = context.isDarkMode;
+    final chipColor = color ?? context.textSecondary;
     return Container(
-      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isDark
+            ? MadarColors.bgDark.withValues(alpha: 0.5)
+            : MadarColors.lightBgSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark
+              ? chipColor.withValues(alpha: 0.25)
+              : MadarColors.lightBorder,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: chipColor),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: chipColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabBar() {
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
+
+    return Container(
+      color: isDark ? MadarColors.bgDark : Colors.white,
       child: TabBar(
         controller: _tabController,
-        labelColor: Colors.blue[700],
-        unselectedLabelColor: Colors.grey[600],
-        indicatorColor: Colors.blue[700],
+        labelColor: primary,
+        unselectedLabelColor: context.textMuted,
+        indicatorColor: primary,
+        indicatorWeight: 3,
+        dividerColor: isDark ? MadarColors.border : MadarColors.lightBorderSubtle,
         tabs: const [
-          Tab(icon: Icon(Icons.info), text: 'المعلومات'),
-          Tab(icon: Icon(Icons.schedule), text: 'الحضور'),
-          Tab(icon: Icon(Icons.beach_access), text: 'الإجازات'),
-          Tab(icon: Icon(Icons.money), text: 'السلف'),
-          Tab(icon: Icon(Icons.payment), text: 'المرتبات'),
-          Tab(icon: Icon(Icons.star), text: 'التقييم'),
+          Tab(icon: Icon(Icons.info_outline), text: 'المعلومات'),
+          Tab(icon: Icon(Icons.schedule_outlined), text: 'الحضور'),
+          Tab(icon: Icon(Icons.beach_access_outlined), text: 'الإجازات'),
+          Tab(icon: Icon(Icons.payments_outlined), text: 'السلف'),
+          Tab(icon: Icon(Icons.receipt_long_outlined), text: 'المرتبات'),
+          Tab(icon: Icon(Icons.star_outline), text: 'التقييم'),
         ],
       ),
     );
@@ -306,20 +404,55 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
   }
 
   Widget _buildInfoSection(String title, List<Widget> children) {
-    return Card(
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: context.bgCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? MadarColors.border : MadarColors.lightBorder,
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.15)
+                : const Color(0x0A0066FF),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.blue[700],
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                Container(
+                  width: 4,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: primary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             ...children,
           ],
         ),
@@ -329,23 +462,31 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
 
   Widget _buildInfoRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: 140,
             child: Text(
               label,
               style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
+                fontWeight: FontWeight.w600,
+                color: context.textMuted,
+                fontSize: 13,
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(value, style: TextStyle(color: Colors.grey[800])),
+            child: Text(
+              value,
+              style: TextStyle(
+                color: context.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
           ),
         ],
       ),
@@ -377,6 +518,94 @@ class _StaffDetailsPageState extends ConsumerState<StaffDetailsPage>
     if (result == true) {
       if (!mounted) return;
       Navigator.pop(context, true);
+    }
+  }
+
+  void _deleteStaff() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.redAccent, width: 1.5),
+        ),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+            SizedBox(width: 8),
+            Text(
+              'تأكيد حذف الموظف',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'هل أنت متأكد من حذف الموظف "${widget.staff.name}" نهائياً؟',
+              style: const TextStyle(color: Color(0xFFE6EDF3), fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+              ),
+              child: const Text(
+                'ملاحظة: سيتم استبعاد الموظف من القوائم وأجهزة البصمة، مع الحفاظ على الأثر المحاسبي لسجلات الرواتب السابقة.',
+                style: TextStyle(color: Colors.redAccent, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء', style: TextStyle(color: Color(0xFFC9A84C))),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.delete_forever, size: 18),
+            label: const Text('تأكيد الحذف'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final db = ref.read(appDatabaseProvider);
+        final dao = StaffManagementDao(db);
+        final service = StaffManagementService(dao, db);
+        final user = ref.read(authProvider);
+        await service.deleteStaff(user, widget.staff.staffId);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم حذف الموظف "${widget.staff.name}" بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      } catch (e) {
+        if (!mounted) return;
+        final errorMsg = e.toString().replaceAll('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

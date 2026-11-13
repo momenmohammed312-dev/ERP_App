@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "opencode-delegate": {
+      "source": "amElnagdy/delegate-skills",
+      "sourceType": "github",
+      "skillPath": "skills/opencode-delegate/SKILL.md",
+      "computedHash": "05a1743b697dae5c7088ce72fe777f8dffd05b8ac217f049c4ec203208d57c85"
+    }
+  }
+}

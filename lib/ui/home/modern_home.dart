@@ -3,6 +3,7 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 import 'package:pos_offline_desktop/ui/product/product.dart';
@@ -14,6 +15,9 @@ import 'package:pos_offline_desktop/ui/invoice/widgets/enhanced_new_invoice_page
 import 'package:pos_offline_desktop/ui/staff/employee_dashboard_page.dart';
 import 'package:pos_offline_desktop/ui/custody/custody_page.dart';
 import 'package:pos_offline_desktop/ui/setting/settings.dart';
+import 'package:pos_offline_desktop/core/provider/smart_advisor_provider.dart';
+import 'package:pos_offline_desktop/ui/notifications/smart_notifications_screen.dart';
+import 'package:pos_offline_desktop/ui/notifications/widgets/smart_floating_toast.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
@@ -28,10 +32,15 @@ class ModernHomeScreen extends ConsumerStatefulWidget {
   /// Dynamic tab count based on platform (7 on mobile, 8 on desktop when all modules enabled).
   static int get tabCount {
     int count = 5; // Dashboard, Products, Customers, Cash, Reports
-    if (AppFeatures.hasSuppliersModule) count++;
-    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile)
+    if (AppFeatures.hasSuppliersModule) {
       count++;
-    if (AppFeatures.hasCustodyModule) count++;
+    }
+    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile) {
+      count++;
+    }
+    if (AppFeatures.hasCustodyModule) {
+      count++;
+    }
     return count;
   }
 
@@ -54,18 +63,24 @@ class ModernHomeScreen extends ConsumerStatefulWidget {
   static int get custodyTabIndex {
     int index =
         4; // after Dashboard(0), Products(1), Customers(2), Suppliers(3)
-    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile)
+    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile) {
       index++;
+    }
     return index;
   }
 
   /// Index of the Cashier tab (5 on mobile, 6 on desktop when preceding enabled).
   static int get cashierTabIndex {
     int index = 3; // after Dashboard(0), Products(1), Customers(2)
-    if (AppFeatures.hasSuppliersModule) index++;
-    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile)
+    if (AppFeatures.hasSuppliersModule) {
       index++;
-    if (AppFeatures.hasCustodyModule) index++;
+    }
+    if (AppFeatures.hasStaffModule && !PlatformUtils.hidesStaffFeaturesOnMobile) {
+      index++;
+    }
+    if (AppFeatures.hasCustodyModule) {
+      index++;
+    }
     return index;
   }
 
@@ -76,28 +91,65 @@ class ModernHomeScreen extends ConsumerStatefulWidget {
   static List<Tab> buildTabs(AppLocalizations l10n) {
     return <Tab>[
       // Index 0
-      Tab(icon: const Icon(Icons.dashboard_outlined), text: l10n.dashboard),
+      Tab(
+        icon: const Icon(Icons.dashboard_outlined, size: 18),
+        text: l10n.dashboard,
+        iconMargin: const EdgeInsets.only(bottom: 2),
+        height: 48,
+      ),
       // Index 1
-      Tab(icon: const Icon(Icons.shopping_bag_outlined), text: l10n.products),
+      Tab(
+        icon: const Icon(Icons.shopping_bag_outlined, size: 18),
+        text: l10n.products,
+        iconMargin: const EdgeInsets.only(bottom: 2),
+        height: 48,
+      ),
       // Index 2
-      Tab(icon: const Icon(Icons.people_outline), text: l10n.customer_list),
+      Tab(
+        icon: const Icon(Icons.people_outline, size: 18),
+        text: l10n.customer_list,
+        iconMargin: const EdgeInsets.only(bottom: 2),
+        height: 48,
+      ),
       // Suppliers
       if (AppFeatures.hasSuppliersModule)
-        Tab(icon: const Icon(Icons.inventory_outlined), text: l10n.suppliers),
+        Tab(
+          icon: const Icon(Icons.inventory_outlined, size: 18),
+          text: l10n.suppliers,
+          iconMargin: const EdgeInsets.only(bottom: 2),
+          height: 48,
+        ),
       // Staff (desktop only, index 4)
       if (AppFeatures.hasStaffModule &&
           !PlatformUtils.hidesStaffFeaturesOnMobile)
-        const Tab(icon: Icon(Icons.badge_outlined), text: 'الموظفين'),
+        const Tab(
+          icon: Icon(Icons.badge_outlined, size: 18),
+          text: 'الموظفين',
+          iconMargin: EdgeInsets.only(bottom: 2),
+          height: 48,
+        ),
       // Custody — index 4 on mobile, 5 on desktop
       if (AppFeatures.hasCustodyModule)
         const Tab(
-          icon: Icon(Icons.account_balance_wallet_outlined),
+          icon: Icon(Icons.account_balance_wallet_outlined, size: 18),
           text: 'العهد المالية',
+          iconMargin: EdgeInsets.only(bottom: 2),
+          height: 48,
         ),
       // Cash
-      Tab(icon: const Icon(Icons.point_of_sale_outlined), text: l10n.cash),
+      Tab(
+        icon: const Icon(Icons.point_of_sale_outlined, size: 18),
+        text: l10n.cash,
+        iconMargin: const EdgeInsets.only(bottom: 2),
+        height: 48,
+      ),
       // Reports
-      Tab(icon: const Icon(Icons.analytics), text: l10n.reports),
+      Tab(
+        icon: const Icon(Icons.analytics, size: 18),
+        text: l10n.reports,
+        iconMargin: const EdgeInsets.only(bottom: 2),
+        height: 48,
+      ),
     ];
   }
 
@@ -108,6 +160,7 @@ class ModernHomeScreen extends ConsumerStatefulWidget {
 class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final Set<int> _loadedTabs = {0};
 
   int get _tabCount => ModernHomeScreen.tabCount;
   int get _cashierTabIndex => ModernHomeScreen.cashierTabIndex;
@@ -119,7 +172,23 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
     super.initState();
     // Length MUST equal TabBar tabs count AND TabBarView children count
     _tabController = TabController(length: _tabCount, vsync: this);
+    _tabController.addListener(_handleTabSelection);
     _checkLicenseWarning();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(smartAdvisorProvider.notifier).refresh(runAnalysis: true);
+      }
+    });
+  }
+
+  void _handleTabSelection() {
+    if (!_loadedTabs.contains(_tabController.index)) {
+      setState(() {
+        _loadedTabs.add(_tabController.index);
+      });
+    } else {
+      setState(() {});
+    }
   }
 
   Future<void> _checkLicenseWarning() async {
@@ -152,257 +221,37 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isDesktop = MediaQuery.of(context).size.width >= 800;
 
     final tabs = ModernHomeScreen.buildTabs(l10n);
 
     final tabViews = <Widget>[
-      // Control Panel - Simplified with functional buttons
+      // Control Panel - Financial KPIs + Quick Action Strip
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: EdgeInsets.symmetric(
+          horizontal: isDesktop ? 24 : 12,
+          vertical: isDesktop ? 16 : 12,
+        ),
         child: SingleChildScrollView(
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Gap(24),
               // Financial KPIs
               _DashboardSummary(db: widget.db),
-              const Gap(24),
-              const Text(
-                'لوحة التحكم',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              ),
-              const Gap(24),
-              Wrap(
-                spacing: 20,
-                runSpacing: 20,
-                alignment: WrapAlignment.center,
-                children: [
-                  // New Invoice Button — Day Guard
-                  _buildLauncherButton(
-                    context,
-                    'فاتورة جديدة',
-                    Icons.receipt_long,
-                    Colors.blue,
-                    () async {
-                      final isOpen = await widget.db.dayDao.isDayOpen();
-                      if (!context.mounted) return;
-                      if (!isOpen) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text(
-                              'يجب فتح اليوم أولاً من تبويب الكاشير',
-                            ),
-                            backgroundColor: Colors.red,
-                            action: SnackBarAction(
-                              label: 'الذهاب للكاشير',
-                              onPressed: () =>
-                                  _tabController.animateTo(_cashierTabIndex),
-                            ),
-                          ),
-                        );
-                        return;
-                      }
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              EnhancedNewInvoicePage(db: widget.db),
-                        ),
-                      );
-                    },
-                  ),
-                  // Add/Edit Customer Button
-                  _buildLauncherButton(
-                    context,
-                    'العملاء',
-                    Icons.person_add,
-                    Colors.green,
-                    () => _tabController.animateTo(2),
-                  ),
-                  // Add/Edit Product Button
-                  _buildLauncherButton(
-                    context,
-                    'المنتجات',
-                    Icons.inventory,
-                    Colors.orange,
-                    () => _tabController.animateTo(1),
-                  ),
-                  // Staff Management Button - Guarded + hidden without module
-                  if (AppFeatures.hasStaffModule)
-                    FeatureGuard(
-                      featureName: 'staff_management',
-                      lockedWidget: _buildLauncherButton(
-                        context,
-                        'الموظفين (مغلق)',
-                        Icons.badge_outlined,
-                        Colors.grey,
-                        () => _tabController.animateTo(4),
-                      ),
-                      child: _buildLauncherButton(
-                        context,
-                        'الموظفين',
-                        Icons.badge_outlined,
-                        Colors.indigo,
-                        () => _tabController.animateTo(4),
-                      ),
-                    ),
-                  // Custody Button — العهد المالية
-                  if (AppFeatures.hasCustodyModule)
-                    FeatureGuard(
-                      featureName: 'custody',
-                      lockedWidget: _buildLauncherButton(
-                        context,
-                        'العهد المالية (مغلق)',
-                        Icons.account_balance_wallet_outlined,
-                        Colors.grey,
-                        () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'موديول العهد المالية غير مفعّل في ترخيصك. تواصل مع الإدارة لتفعيله.',
-                              ),
-                              backgroundColor: Colors.orange,
-                            ),
-                          );
-                        },
-                      ),
-                      child: _buildLauncherButton(
-                        context,
-                        'العهد المالية',
-                        Icons.account_balance_wallet_outlined,
-                        Colors.teal.shade700,
-                        () {
-                          int index = 3;
-                          if (AppFeatures.hasSuppliersModule) index++;
-                          if (AppFeatures.hasStaffModule) index++;
-                          _tabController.animateTo(index);
-                        },
-                      ),
-                    ),
-                  // Damaged Items Button — الهوالك والتوالف
-                  if (AppFeatures.hasDamagedModule)
-                    FeatureGuard(
-                      featureName: 'damaged_goods',
-                      lockedWidget: _buildLauncherButton(
-                        context,
-                        'الهالك (مغلق)',
-                        Icons.delete_sweep,
-                        Colors.grey,
-                        () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'موديول الهوالك والتوالف غير مفعّل في ترخيصك. تواصل مع الإدارة لتفعيله.',
-                              ),
-                              backgroundColor: Colors.orange,
-                            ),
-                          );
-                        },
-                      ),
-                      child: _buildLauncherButton(
-                        context,
-                        'الهالك',
-                        Icons.delete_sweep,
-                        Colors.redAccent,
-                        () {
-                          context.push('/damaged-items');
-                        },
-                      ),
-                    ),
-                  // Manufacturing Button — BOM, production orders and scrap.
-                  // Pushed as its own route rather than a tab, so the tab count
-                  // and every index above stay exactly as they are for the
-                  // base and vegetable flavors.
-                  //
-                  // BUG-018: this launcher had NO FeatureGuard at all — only
-                  // the flavor check below — so a basic-license customer was
-                  // one tap from BOMs and work orders.
-                  if (AppFeatures.hasManufacturing)
-                    FeatureGuard(
-                      featureName: 'manufacturing',
-                      lockedWidget: _buildLauncherButton(
-                        context,
-                        'التصنيع (مغلق)',
-                        Icons.precision_manufacturing_outlined,
-                        Colors.grey,
-                        () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'موديول التصنيع غير متاح في ترخيصك الحالي. '
-                                'للترقية تواصل معنا.',
-                              ),
-                              backgroundColor: Colors.orange,
-                            ),
-                          );
-                        },
-                      ),
-                      child: _buildLauncherButton(
-                        context,
-                        'التصنيع',
-                        Icons.precision_manufacturing_outlined,
-                        Colors.deepOrange,
-                        () {
-                          context.push('/manufacturing/orders');
-                        },
-                      ),
-                    ),
-                  // Barneka (Returnable Containers) Button — vegetable-market
-                  // feature, hidden in the factory (base) flavor.
-                  if (AppFeatures.hasEmptyContainerTracking)
-                    _buildLauncherButton(
-                      context,
-                      'البرنيكه',
-                      Icons.eco,
-                      Colors.teal,
-                      () {
-                        context.push('/barneka');
-                      },
-                    ),
-                  if (AppFeatures.hasShipmentTracking)
-                    _buildLauncherButton(
-                      context,
-                      'الشحنات',
-                      Icons.local_shipping,
-                      Colors.amber.shade800,
-                      () {
-                        context.push('/shipments');
-                      },
-                    ),
-                  if (AppFeatures.hasEmptyContainerTracking)
-                    _buildLauncherButton(
-                      context,
-                      'البرانيك المستحقة',
-                      Icons.assignment_return,
-                      Colors.teal.shade700,
-                      () {
-                        context.push('/empty-barnika');
-                      },
-                    ),
-
-                  if (AppFeatures.hasShipmentTracking)
-                    _buildLauncherButton(
-                      context,
-                      'مديونيات العملاء',
-                      Icons.account_balance_wallet,
-                      Colors.red.shade700,
-                      () {
-                        context.push('/customer-debts');
-                      },
-                    ),
-                  if (AppFeatures.hasShipmentTracking)
-                    _buildLauncherButton(
-                      context,
-                      'استيراد إكسل',
-                      Icons.table_chart,
-                      Colors.purple,
-                      () {
-                        context.push('/excel-import');
-                      },
-                    ),
-                ],
-              ),
-              const Gap(40),
+              Gap(isDesktop ? 16 : 10),
+              _buildSmartAlertsPromptCard(context),
+              Gap(isDesktop ? 20 : 14),
+              // Sleek Quick Action Strip (3 core buttons: New Invoice, Customers, Products)
+              _buildQuickActionStrip(context),
+              // Flavor-specific modules (if enabled)
+              if (AppFeatures.hasManufacturing ||
+                  AppFeatures.hasEmptyContainerTracking ||
+                  AppFeatures.hasShipmentTracking ||
+                  AppFeatures.hasDamagedModule) ...[
+                Gap(isDesktop ? 20 : 14),
+                _buildFlavorActionGrid(context),
+              ],
+              Gap(isDesktop ? 24 : 16),
             ],
           ),
         ),
@@ -441,175 +290,823 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      appBar: _buildAppBar(context),
-      body: Column(
-        children: [
-          // Tab Bar
-          Container(
-            margin: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(
-                  context,
-                ).colorScheme.outline.withValues(alpha: 0.2),
-              ),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              labelColor: Theme.of(context).colorScheme.primary,
-              unselectedLabelColor: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.6),
-              indicator: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              tabs: tabs,
-            ),
+      appBar: _buildUnifiedHeader(context, tabs, isDesktop),
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: PlatformUtils.isMobile ? 12.0 : 0.0,
           ),
+          child: Stack(
+            children: [
+              AnimatedBuilder(
+            animation: _tabController,
+            builder: (context, _) {
+              return IndexedStack(
+                index: _tabController.index,
+                children: List.generate(tabViews.length, (i) {
+                  if (_loadedTabs.contains(i) || _tabController.index == i) {
+                    return tabViews[i];
+                  }
+                  return const SizedBox.shrink();
+                }),
+              );
+            },
+          ),
+              Positioned(
+                top: 8,
+                left: 16,
+                child: const _SmartFloatingToastOverlay(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-          // Tab Content
-          Expanded(
-            child: TabBarView(controller: _tabController, children: tabViews),
+  /// Unified 62-64px App Header on Desktop / Tablet (merges Logo, Title, TabBar & Actions into one sleek bar)
+  PreferredSizeWidget _buildUnifiedHeader(
+    BuildContext context,
+    List<Tab> tabs,
+    bool isDesktop,
+  ) {
+    return PreferredSize(
+      preferredSize: Size.fromHeight(isDesktop ? 64 : 104),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(
+            bottom: BorderSide(
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+            ),
           ),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: isDesktop
+              ? SizedBox(
+                  height: 64,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        // Brand Logo + Title
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Builder(
+                              builder: (ctx) {
+                                final isLight = Theme.of(ctx).brightness == Brightness.light;
+                                return Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: isLight ? MadarColors.lightBgCard : MadarColors.bgDark,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isLight
+                                          ? MadarColors.lightBorder
+                                          : MadarColors.border.withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                  child: Image.asset(
+                                    isLight ? 'assets/logo/app_logo_light.png' : 'assets/logo/app_logo.png',
+                                    width: 28,
+                                    height: 28,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (c, err, st) => Icon(
+                                      Icons.point_of_sale,
+                                      color: isLight ? MadarColors.lightPrimary : MadarColors.gold,
+                                      size: 24,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'مدار ERP',
+                                  style: TextStyle(
+                                    fontFamily: 'NotoSansArabic',
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                Text(
+                                  'Developed by MO2',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.5),
+                                    letterSpacing: 0.6,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(width: 16),
+                        Container(
+                          width: 1,
+                          height: 24,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .outline
+                              .withValues(alpha: 0.2),
+                        ),
+                        const SizedBox(width: 12),
+
+                        // Integrated Unified TabBar (compact pills)
+                        Expanded(
+                          child: TabBar(
+                            controller: _tabController,
+                            isScrollable: true,
+                            tabAlignment: TabAlignment.start,
+                            indicatorSize: TabBarIndicatorSize.tab,
+                            dividerColor: Colors.transparent,
+                            indicator: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.35),
+                              ),
+                            ),
+                            labelColor: Theme.of(context).colorScheme.primary,
+                            unselectedLabelColor: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.65),
+                            padding: EdgeInsets.zero,
+                            labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                            tabs: tabs,
+                          ),
+                        ),
+
+                        const SizedBox(width: 12),
+
+                        // Actions
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const _LicenseBadge(),
+                            const SizedBox(width: 6),
+                            IconButton(
+                              icon: const Icon(Icons.cloud_sync_rounded, size: 20),
+                              onPressed: () => context.push('/backup'),
+                            ),
+                            if (AppFeatures.hasSmartAnalytics)
+                              IconButton(
+                                icon: Consumer(
+                                  builder: (context, ref, _) {
+                                    final count = ref.watch(
+                                      smartAdvisorProvider.select(
+                                        (s) => s.unreadCount,
+                                      ),
+                                    );
+                                    if (count > 0) {
+                                      return Badge(
+                                        label: Text('$count'),
+                                        child: const Icon(
+                                          Icons.notifications_outlined,
+                                          size: 20,
+                                        ),
+                                      );
+                                    }
+                                    return const Icon(
+                                      Icons.notifications_outlined,
+                                      size: 20,
+                                    );
+                                  },
+                                ),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const SmartNotificationsScreen(),
+                                    ),
+                                  );
+                                },
+                                tooltip: 'الإشعارات الذكية',
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.settings_outlined, size: 20),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const SettingsScreen(),
+                                  ),
+                                );
+                              },
+                              tooltip: 'الإعدادات',
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.logout, size: 20, color: Colors.redAccent),
+                              tooltip: 'تسجيل خروج',
+                              onPressed: () {
+                                ref.read(authProvider.notifier).logout();
+                                context.go('/login');
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Top Bar for Mobile
+                    SizedBox(
+                      height: 54,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
+                          children: [
+                            Builder(
+                              builder: (ctx) {
+                                final isLight = Theme.of(ctx).brightness == Brightness.light;
+                                return Image.asset(
+                                  isLight ? 'assets/logo/app_logo_light.png' : 'assets/logo/app_logo.png',
+                                  width: 26,
+                                  height: 26,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (ctx, err, st) => Icon(
+                                    Icons.point_of_sale,
+                                    color: isLight ? MadarColors.lightPrimary : MadarColors.gold,
+                                    size: 22,
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'مدار ERP',
+                              style: TextStyle(
+                                fontFamily: 'NotoSansArabic',
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const Spacer(),
+                            if (AppFeatures.hasSmartAnalytics)
+                              IconButton(
+                                icon: Consumer(
+                                  builder: (context, ref, _) {
+                                    final count = ref.watch(
+                                      smartAdvisorProvider.select(
+                                        (s) => s.unreadCount,
+                                      ),
+                                    );
+                                    if (count > 0) {
+                                      return Badge(
+                                        label: Text('$count'),
+                                        child: const Icon(
+                                          Icons.notifications_outlined,
+                                          size: 20,
+                                        ),
+                                      );
+                                    }
+                                    return const Icon(
+                                      Icons.notifications_outlined,
+                                      size: 20,
+                                    );
+                                  },
+                                ),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const SmartNotificationsScreen(),
+                                    ),
+                                  );
+                                },
+                                tooltip: 'الإشعارات الذكية',
+                              ),
+                            const _LicenseBadge(),
+                            IconButton(
+                              icon: const Icon(Icons.settings_outlined, size: 20),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const SettingsScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.logout, size: 20, color: Colors.redAccent),
+                              onPressed: () {
+                                ref.read(authProvider.notifier).logout();
+                                context.go('/login');
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // Mobile Scrollable TabBar
+                    SizedBox(
+                      height: 48,
+                      child: TabBar(
+                        controller: _tabController,
+                        isScrollable: true,
+                        tabAlignment: TabAlignment.start,
+                        indicatorSize: TabBarIndicatorSize.tab,
+                        dividerColor: Colors.transparent,
+                        indicator: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        labelColor: Theme.of(context).colorScheme.primary,
+                        unselectedLabelColor: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.6),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        tabs: tabs,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
+  /// Horizontal Quick Action Strip (New Invoice, Customers, Products)
+  Widget _buildSmartAlertsPromptCard(BuildContext context) {
+    if (!AppFeatures.hasSmartAnalytics) return const SizedBox.shrink();
+    return Consumer(
+      builder: (context, ref, _) {
+        final state = ref.watch(smartAdvisorProvider);
+        if (state.unreadCount == 0) return const SizedBox.shrink();
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SmartNotificationsScreen(),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E222A) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.orangeAccent.withValues(alpha: 0.4),
+                  width: 1.2,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.orangeAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${state.unreadCount} تنبيهات',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orangeAccent,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'يوجد تنبيهات ذكية استباقية تتطلب انتباهك في المخزون أو العمليات المالية.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'عرض التفاصيل ←',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: MadarColors.gold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickActionStrip(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 720;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: MadarColors.gold.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.bolt_rounded, size: 16, color: MadarColors.gold),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'الإجراءات السريعة',
+                style: TextStyle(
+                  fontFamily: 'NotoSansArabic',
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (isDesktop)
+            Row(
+              children: [
+                Expanded(
+                  child: _buildActionStripButton(
+                    context,
+                    title: 'فاتورة جديدة',
+                    subtitle: 'إنشاء وطباعة فاتورة بيع',
+                    icon: Icons.receipt_long_rounded,
+                    color: MadarColors.gold,
+                    onTap: _onNewInvoiceTap,
+                    isPrimary: true,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildActionStripButton(
+                    context,
+                    title: 'العملاء',
+                    subtitle: 'إدارة وتتبع حسابات العملاء',
+                    icon: Icons.people_alt_rounded,
+                    color: const Color(0xFF388BFD),
+                    onTap: () => _tabController.animateTo(2),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildActionStripButton(
+                    context,
+                    title: 'المنتجات',
+                    subtitle: 'المخزون والأسعار والأصناف',
+                    icon: Icons.inventory_2_rounded,
+                    color: const Color(0xFF238636),
+                    onTap: () => _tabController.animateTo(1),
+                  ),
+                ),
+              ],
+            )
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildActionStripButton(
+                  context,
+                  title: 'فاتورة جديدة',
+                  subtitle: 'إنشاء وطباعة فاتورة بيع',
+                  icon: Icons.receipt_long_rounded,
+                  color: MadarColors.gold,
+                  onTap: _onNewInvoiceTap,
+                  isPrimary: true,
+                ),
+                const SizedBox(height: 10),
+                _buildActionStripButton(
+                  context,
+                  title: 'العملاء',
+                  subtitle: 'إدارة وتتبع حسابات العملاء',
+                  icon: Icons.people_alt_rounded,
+                  color: const Color(0xFF388BFD),
+                  onTap: () => _tabController.animateTo(2),
+                ),
+                const SizedBox(height: 10),
+                _buildActionStripButton(
+                  context,
+                  title: 'المنتجات',
+                  subtitle: 'المخزون والأسعار والأصناف',
+                  icon: Icons.inventory_2_rounded,
+                  color: const Color(0xFF238636),
+                  onTap: () => _tabController.animateTo(1),
+                ),
+              ],
+            ),
         ],
       ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
-    final isMobile = PlatformUtils.isMobile;
-
-    return AppBar(
-      automaticallyImplyLeading: false,
-      backgroundColor: Theme.of(
-        context,
-      ).colorScheme.primary.withValues(alpha: 0.1),
-      surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      toolbarHeight: isMobile ? 56 : 92,
-      titleSpacing: isMobile ? 12 : 20,
-      shape: Border(
-        bottom: BorderSide(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-        ),
-      ),
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: EdgeInsets.all(isMobile ? 8 : 12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-              borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
-            ),
-            child: Icon(
-              Icons.point_of_sale,
-              color: Theme.of(context).colorScheme.onPrimary,
-              size: isMobile ? 20 : 28,
+  Widget _buildActionStripButton(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+    bool isPrimary = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: isPrimary
+                ? color.withValues(alpha: 0.12)
+                : Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isPrimary
+                  ? color.withValues(alpha: 0.4)
+                  : Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              width: isPrimary ? 1.5 : 1,
             ),
           ),
-          Gap(isMobile ? 10 : 16),
-          Text(
-            'Developed by MO2',
-            style:
-                (isMobile
-                        ? Theme.of(context).textTheme.titleSmall
-                        : Theme.of(context).textTheme.headlineMedium)
-                    ?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.7),
-                    ),
-          ),
-        ],
-      ),
-      actions: [
-        Padding(
-          padding: EdgeInsetsDirectional.only(end: isMobile ? 12 : 20),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              const _LicenseBadge(),
-              Gap(isMobile ? 4 : 8),
-              IconButton(
-                icon: const Icon(Icons.settings),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SettingsScreen(),
-                    ),
-                  );
-                },
-                tooltip: 'الإعدادات',
-              ),
-              Gap(isMobile ? 2 : 4),
-              if (isMobile)
-                IconButton(
-                  icon: const Icon(Icons.logout, color: Colors.redAccent),
-                  tooltip: 'تسجيل خروج',
-                  onPressed: () {
-                    ref.read(authProvider.notifier).logout();
-                    context.go('/login');
-                  },
-                )
-              else
-                TextButton.icon(
-                  icon: const Icon(Icons.logout, color: Colors.redAccent),
-                  label: const Text(
-                    'تسجيل خروج',
-                    style: TextStyle(
-                      color: Colors.redAccent,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onPressed: () {
-                    ref.read(authProvider.notifier).logout();
-                    context.go('/login');
-                  },
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
                 ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        fontSize: 11,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.55),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _onNewInvoiceTap() async {
+    final isOpen = await widget.db.dayDao.isDayOpen();
+    if (!mounted) return;
+    if (!isOpen) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'يجب فتح اليوم أولاً من تبويب الكاشير',
+            style: TextStyle(fontFamily: 'NotoSansArabic'),
+          ),
+          backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'الذهاب للكاشير',
+            textColor: Colors.white,
+            onPressed: () => _tabController.animateTo(_cashierTabIndex),
+          ),
+        ),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EnhancedNewInvoicePage(db: widget.db),
+      ),
+    );
+  }
+
+  /// Secondary grid for active flavor modules (Barneka, Shipments, Manufacturing, Damaged Goods)
+  Widget _buildFlavorActionGrid(BuildContext context) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        if (AppFeatures.hasDamagedModule)
+          FeatureGuard(
+            featureName: 'damaged_goods',
+            lockedWidget: _buildFlavorChip(
+              context,
+              'الهالك (مغلق)',
+              Icons.delete_sweep,
+              Colors.grey,
+              () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('موديول الهوالك والتوالف غير مفعّل في ترخيصك.'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              },
+            ),
+            child: _buildFlavorChip(
+              context,
+              'الهالك',
+              Icons.delete_sweep,
+              Colors.redAccent,
+              () => context.push('/damaged-items'),
+            ),
+          ),
+        if (AppFeatures.hasManufacturing)
+          FeatureGuard(
+            featureName: 'manufacturing',
+            lockedWidget: _buildFlavorChip(
+              context,
+              'التصنيع (مغلق)',
+              Icons.precision_manufacturing_outlined,
+              Colors.grey,
+              () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('موديول التصنيع غير متاح في ترخيصك الحالي.'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              },
+            ),
+            child: _buildFlavorChip(
+              context,
+              'التصنيع',
+              Icons.precision_manufacturing_outlined,
+              Colors.deepOrange,
+              () => context.push('/manufacturing/orders'),
+            ),
+          ),
+        if (AppFeatures.hasEmptyContainerTracking)
+          _buildFlavorChip(
+            context,
+            'البرنيكه',
+            Icons.eco,
+            Colors.teal,
+            () => context.push('/barneka'),
+          ),
+        if (AppFeatures.hasShipmentTracking)
+          _buildFlavorChip(
+            context,
+            'الشحنات',
+            Icons.local_shipping,
+            Colors.amber.shade800,
+            () => context.push('/shipments'),
+          ),
+        if (AppFeatures.hasEmptyContainerTracking)
+          _buildFlavorChip(
+            context,
+            'البرانيك المستحقة',
+            Icons.assignment_return,
+            Colors.teal.shade700,
+            () => context.push('/empty-barnika'),
+          ),
+        if (AppFeatures.hasShipmentTracking)
+          _buildFlavorChip(
+            context,
+            'مديونيات العملاء',
+            Icons.account_balance_wallet,
+            Colors.red.shade700,
+            () => context.push('/customer-debts'),
+          ),
+        if (AppFeatures.hasShipmentTracking)
+          _buildFlavorChip(
+            context,
+            'استيراد إكسل',
+            Icons.table_chart,
+            Colors.purple,
+            () => context.push('/excel-import'),
+          ),
       ],
     );
   }
 
-  Widget _buildLauncherButton(
+  Widget _buildFlavorChip(
     BuildContext context,
     String label,
     IconData icon,
     Color color,
     VoidCallback onTap,
   ) {
-    return SizedBox(
-      width: 180,
-      height: 140,
-      child: ElevatedButton.icon(
-        onPressed: onTap,
-        icon: Icon(icon, size: 35),
-        label: Text(label, style: const TextStyle(fontSize: 14)),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
+    return ActionChip(
+      avatar: Icon(icon, size: 16, color: color),
+      label: Text(label, style: const TextStyle(fontFamily: 'NotoSansArabic', fontSize: 12.5)),
+      onPressed: onTap,
+      backgroundColor: color.withValues(alpha: 0.1),
+      side: BorderSide(color: color.withValues(alpha: 0.3)),
     );
   }
 }
 
-/// ملخص مالي سريع يعرض مبيعات ومصروفات وأرباح اليوم
+/// Toast عائم للتحليل الذكي — يظهر فقط لو ميزة [AppFeatures.hasSmartAnalytics] مفعلة.
+/// بوابة زمنية للتجميع: في نسخة الإصدار المفعّلة off ما يُبنى الكود ده إطلاقاً.
+class _SmartFloatingToastOverlay extends StatelessWidget {
+  const _SmartFloatingToastOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    if (!AppFeatures.hasSmartAnalytics) return const SizedBox.shrink();
+
+    return Consumer(
+      builder: (context, ref, _) {
+        final state = ref.watch(smartAdvisorProvider);
+        final toastAlert = state.pendingToastAlert;
+        if (toastAlert == null) return const SizedBox.shrink();
+
+        return SmartFloatingToast(
+          alert: toastAlert,
+          onDismiss: () => ref
+              .read(smartAdvisorProvider.notifier)
+              .dismissToast(),
+          onView: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const SmartNotificationsScreen(),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
 class _DashboardSummary extends ConsumerStatefulWidget {
   final AppDatabase db;
   const _DashboardSummary({required this.db});
@@ -723,109 +1220,243 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const SizedBox(
-        height: 100,
+        height: 80,
         child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
+    final isDesktop = MediaQuery.of(context).size.width >= 720;
     final netProfit = _todaySales - _todayPurchases - _todayExpenses;
-    final baseCardsRow = Row(
-      children: [
-        Expanded(
-          child: _buildCard(
-            'مبيعات اليوم',
-            _todaySales,
-            Colors.green,
-            Icons.trending_up,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _buildCard(
-            'مشتريات',
-            _todayPurchases,
-            Colors.orange,
-            Icons.shopping_cart,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _buildCard(
-            'مصروفات',
-            _todayExpenses,
-            Colors.redAccent,
-            Icons.receipt_long,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _buildCard(
-            'صافي الربح',
-            netProfit,
-            netProfit >= 0 ? Colors.blue : Colors.red,
-            Icons.account_balance,
-          ),
-        ),
-      ],
-    );
 
-    // الأصل (base flavor) بيشوف الكروت الأربعة بس زي ما هو
-    if (!AppFeatures.hasShipmentTracking) {
-      return SizedBox(height: 100, child: baseCardsRow);
+    if (isDesktop) {
+      final baseCardsRow = Row(
+        children: [
+          Expanded(
+            child: _buildCard(
+              context,
+              'مبيعات اليوم',
+              _todaySales,
+              Colors.green,
+              Icons.trending_up,
+              isMobile: false,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildCard(
+              context,
+              'مشتريات',
+              _todayPurchases,
+              Colors.orange,
+              Icons.shopping_cart,
+              isMobile: false,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildCard(
+              context,
+              'مصروفات',
+              _todayExpenses,
+              Colors.redAccent,
+              Icons.receipt_long,
+              isMobile: false,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildCard(
+              context,
+              'صافي الربح',
+              netProfit,
+              netProfit >= 0 ? Colors.blue : Colors.red,
+              Icons.account_balance,
+              isMobile: false,
+            ),
+          ),
+        ],
+      );
+
+      if (!AppFeatures.hasShipmentTracking) {
+        return SizedBox(height: 100, child: baseCardsRow);
+      }
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(height: 100, child: baseCardsRow),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 100,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildCard(
+                    context,
+                    'برانيك بالمخزن',
+                    _remainingBarnikas.toDouble(),
+                    Colors.teal,
+                    Icons.eco,
+                    isMobile: false,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCard(
+                    context,
+                    'مديونيات آجل',
+                    _receivablesDue,
+                    Colors.deepPurple,
+                    Icons.account_balance_wallet,
+                    isMobile: false,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCard(
+                    context,
+                    'كاش متوقع',
+                    _expectedCash,
+                    Colors.indigo,
+                    Icons.payments,
+                    isMobile: false,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCard(
+                    context,
+                    'مستحق للموردين',
+                    _supplierCommissionDue,
+                    Colors.brown,
+                    Icons.storefront,
+                    isMobile: false,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
     }
 
-    // Vegetable flavor: الكروت الأربعة الحالية + 4 كروت جديدة لتحتها
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(height: 100, child: baseCardsRow),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 100,
-          child: Row(
-            children: [
-              Expanded(
-                child: _buildCard(
-                  'برانيك متبقية بالمخزن',
-                  _remainingBarnikas.toDouble(),
-                  Colors.teal,
-                  Icons.eco,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildCard(
-                  'مديونيات آجل مستحقة اليوم',
-                  _receivablesDue,
-                  Colors.deepPurple,
-                  Icons.account_balance_wallet,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildCard(
-                  'صافي كاش متوقع لسه ما اتقفلش',
-                  _expectedCash,
-                  Colors.indigo,
-                  Icons.payments,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildCard(
-                  'مستحق للموردين',
-                  _supplierCommissionDue,
-                  Colors.brown,
-                  Icons.storefront,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+    // Mobile / Compact Layout: exactly 4 core cards (Sales, Net Profit, Purchases, Expenses)
+    final mobileCards = <Widget>[
+      _buildCard(
+        context,
+        'مبيعات اليوم',
+        _todaySales,
+        Colors.green,
+        Icons.trending_up,
+        isMobile: true,
+      ),
+      _buildCard(
+        context,
+        'صافي الربح',
+        netProfit,
+        netProfit >= 0 ? Colors.blue : Colors.red,
+        Icons.account_balance,
+        isMobile: true,
+      ),
+      _buildCard(
+        context,
+        'مشتريات',
+        _todayPurchases,
+        Colors.orange,
+        Icons.shopping_cart,
+        isMobile: true,
+      ),
+      _buildCard(
+        context,
+        'مصروفات',
+        _todayExpenses,
+        Colors.redAccent,
+        Icons.receipt_long,
+        isMobile: true,
+      ),
+    ];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: mobileCards.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        mainAxisExtent: 68,
+      ),
+      itemBuilder: (context, index) => mobileCards[index],
     );
   }
 
-  Widget _buildCard(String label, double amount, Color color, IconData icon) {
+  Widget _buildCard(
+    BuildContext context,
+    String label,
+    double amount,
+    Color color,
+    IconData icon, {
+    required bool isMobile,
+  }) {
+    if (isMobile) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      amount.toStringAsFixed(2),
+                      style: TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.75),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -838,17 +1469,27 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
         children: [
           Icon(icon, color: color, size: 20),
           const SizedBox(height: 4),
-          Text(
-            amount.toStringAsFixed(2),
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: color,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              amount.toStringAsFixed(2),
+              style: TextStyle(
+                fontFamily: 'NotoSansArabic',
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
           ),
           Text(
             label,
-            style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8)),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'NotoSansArabic',
+              fontSize: 11,
+              color: color.withValues(alpha: 0.8),
+            ),
           ),
         ],
       ),

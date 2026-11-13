@@ -44,6 +44,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
   // so this page and the payroll can never resolve it differently.
   double _latePenaltyPerHour = 0.0;
   String _absenceMode = 'day_wage'; // 'day_wage' | 'fixed'
+  bool _restBreakEnabled = false;
+  String _restBreakStart = '13:00';
+  String _restBreakEnd = '14:00';
 
   String _dateFilter = 'all'; // 'all', 'today', 'this_week', 'this_month', 'custom'
   DateTimeRange? _customDateRange;
@@ -114,6 +117,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       double absenceMult = 1.0;
       double lateMult = 0.0;
       String absenceMode = 'day_wage';
+      bool restBreakEnabled = false;
+      String restBreakStart = '13:00';
+      String restBreakEnd = '14:00';
       try {
         final absRow = await (db.select(db.attendanceSettings)
               ..where((t) => t.settingKey.equals('absence_penalty_amount')))
@@ -142,6 +148,14 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
             lateMult = double.tryParse(s.settingValue) ?? lateMult;
           } else if (s.settingKey == 'absence_deduction_mode') {
             absenceMode = s.settingValue == 'fixed' ? 'fixed' : 'day_wage';
+          } else if (s.settingKey == 'rest_break_enabled') {
+            restBreakEnabled = s.settingValue.toLowerCase() == 'true';
+          } else if (s.settingKey == 'rest_break_start' &&
+              s.settingValue.isNotEmpty) {
+            restBreakStart = s.settingValue;
+          } else if (s.settingKey == 'rest_break_end' &&
+              s.settingValue.isNotEmpty) {
+            restBreakEnd = s.settingValue;
           }
         }
       } catch (_) {}
@@ -183,6 +197,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
         _absenceMultiplier = absenceMult;
         _latePenaltyPerHour = lateMult;
         _absenceMode = absenceMode;
+        _restBreakEnabled = restBreakEnabled;
+        _restBreakStart = restBreakStart;
+        _restBreakEnd = restBreakEnd;
         _penaltiesTotal = penaltiesTotal;
         _penaltyTitles = penaltyTitles;
         _isLoading = false;
@@ -899,6 +916,24 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
     }
   }
 
+  int _restBreakStartMinutes() {
+    try {
+      final p = _restBreakStart.split(':');
+      return (int.tryParse(p[0]) ?? 13) * 60 + (int.tryParse(p[1]) ?? 0);
+    } catch (_) {
+      return 13 * 60;
+    }
+  }
+
+  int _restBreakEndMinutes() {
+    try {
+      final p = _restBreakEnd.split(':');
+      return (int.tryParse(p[0]) ?? 14) * 60 + (int.tryParse(p[1]) ?? 0);
+    } catch (_) {
+      return 14 * 60;
+    }
+  }
+
   // v72: this page no longer keeps private copies of these rules. The summary
   // cards, the detail dialogs and the payroll all go through
   // AttendanceDeductionRules, so a card value and the rows listed in its own
@@ -945,6 +980,9 @@ class _AttendancePageState extends ConsumerState<AttendancePage> {
       absenceMultiplier: _absenceMultiplier,
       absenceMode: _absenceMode,
       fixedAbsenceAmount: _absencePenalty,
+      restBreakEnabled: _restBreakEnabled,
+      restBreakStartMinutes: _restBreakStartMinutes(),
+      restBreakEndMinutes: _restBreakEndMinutes(),
     );
   }
 

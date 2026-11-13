@@ -1,44 +1,30 @@
 @echo off
-title POS Factory v2.3.0 Setup
+title POS System v2.3.0 Setup
 chcp 65001 >nul 2>&1
 
 echo ============================================
-echo   POS Factory v2.3.0 - Setup
-echo   DEVELOPED BY MO2 | 01025545211
+echo   POS System v2.3.0 - Setup
 echo ============================================
 echo.
 
 :: Check admin rights
->nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
-if '%errorlevel%' NEQ '0' (
-    echo [ERROR] This installer requires administrator rights.
-    echo Please right-click and select "Run as administrator".
-    echo.
-    pause
-    exit /b 1
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [INFO] Requesting Administrator Privileges...
+    powershell -ExecutionPolicy Bypass -Command "Start-Process cmd -ArgumentList '/c', '\"\"%~f0\"\"' -Verb RunAs"
+    exit /b
 )
 
 :: Set paths
-set "INSTALL_DIR=%ProgramFiles%\POS Factory"
-set "ZIP_FILE=%~dp0pos_factory_package.zip"
-set "APP_DATA=%APPDATA%\com.example\pos_offline_desktop"
+set "INSTALL_DIR=%ProgramFiles%\POS System"
+set "APP_DATA=%APPDATA%\pos_offline_desktop"
 
-echo [1/5] Checking installation package...
-if not exist "%ZIP_FILE%" (
-    echo [ERROR] Package not found: %ZIP_FILE%
-    echo Please ensure pos_factory_package.zip is in the same folder.
-    echo.
-    pause
-    exit /b 1
-)
-echo       Found: %ZIP_FILE%
-
-echo [2/5] Closing application if running...
+echo [1/4] Closing application if running...
 taskkill /f /im pos_offline_desktop.exe >nul 2>&1
-timeout /t 2 /nobreak >nul
+timeout /t 1 /nobreak >nul
 echo       Done.
 
-echo [3/5] Checking previous license state...
+echo [2/4] Checking previous license state...
 REM FEAT-013: the old license data is deliberately NOT deleted. An update must
 REM never cost a paying customer their license. See
 REM test/unit/services/installer_license_persistence_test.dart
@@ -48,42 +34,32 @@ if exist "%APP_DATA%\secure_license.dat" (
     echo       No license file found.
 )
 
-echo [4/5] Installing application...
-if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
+echo [3/4] Installing application...
+if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%" >nul 2>&1
 
-:: Extract using PowerShell (built into Windows)
-powershell -Command "Expand-Archive -Path '%ZIP_FILE%' -DestinationPath '%INSTALL_DIR%' -Force" 2>nul
-if '%errorlevel%' NEQ '0' (
-    echo [ERROR] Failed to extract files.
-    pause
-    exit /b 1
+:: Copy application files
+robocopy "%~dp0\" "%INSTALL_DIR%" /E /IS /IT /XF "Install*.bat" "Setup*.bat" "*.zip" >nul 2>&1
+if %errorlevel% gtr 7 (
+    xcopy /s /e /y /q "%~dp0*" "%INSTALL_DIR%\" >nul 2>&1
 )
 echo       Application installed to: %INSTALL_DIR%
 
-echo [5/5] Creating shortcuts...
+echo [4/4] Creating shortcuts...
 set "DESKTOP=%PUBLIC%\Desktop"
 set "STARTMENU=%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs"
 
-:: Desktop shortcut
-echo Set oWS = WScript.CreateObject("WScript.Shell") > "%TEMP%\create_shortcut.vbs"
-echo sLinkFile = "%DESKTOP%\POS Factory.lnk" >> "%TEMP%\create_shortcut.vbs"
-echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%TEMP%\create_shortcut.vbs"
-echo oLink.TargetPath = "%INSTALL_DIR%\pos_offline_desktop.exe" >> "%TEMP%\create_shortcut.vbs"
-echo oLink.WorkingDirectory = "%INSTALL_DIR%" >> "%TEMP%\create_shortcut.vbs"
-echo oLink.Save >> "%TEMP%\create_shortcut.vbs"
-cscript /nologo "%TEMP%\create_shortcut.vbs" >nul 2>&1
-
-:: Start Menu shortcut
-echo Set oWS = WScript.CreateObject("WScript.Shell") > "%TEMP%\create_shortcut2.vbs"
-echo sLinkFile = "%STARTMENU%\POS Factory.lnk" >> "%TEMP%\create_shortcut2.vbs"
-echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%TEMP%\create_shortcut2.vbs"
-echo oLink.TargetPath = "%INSTALL_DIR%\pos_offline_desktop.exe" >> "%TEMP%\create_shortcut2.vbs"
-echo oLink.WorkingDirectory = "%INSTALL_DIR%" >> "%TEMP%\create_shortcut2.vbs"
-echo oLink.Save >> "%TEMP%\create_shortcut2.vbs"
-cscript /nologo "%TEMP%\create_shortcut2.vbs" >nul 2>&1
-
-del "%TEMP%\create_shortcut.vbs" >nul 2>&1
-del "%TEMP%\create_shortcut2.vbs" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$ws = New-Object -ComObject WScript.Shell; " ^
+    "$desk = $ws.CreateShortcut('%DESKTOP%\POS System.lnk'); " ^
+    "$desk.TargetPath = '%INSTALL_DIR%\pos_offline_desktop.exe'; " ^
+    "$desk.WorkingDirectory = '%INSTALL_DIR%'; " ^
+    "$desk.IconLocation = '%INSTALL_DIR%\pos_offline_desktop.exe,0'; " ^
+    "$desk.Save(); " ^
+    "$menu = $ws.CreateShortcut('%STARTMENU%\POS System.lnk'); " ^
+    "$menu.TargetPath = '%INSTALL_DIR%\pos_offline_desktop.exe'; " ^
+    "$menu.WorkingDirectory = '%INSTALL_DIR%'; " ^
+    "$menu.IconLocation = '%INSTALL_DIR%\pos_offline_desktop.exe,0'; " ^
+    "$menu.Save();" >nul 2>&1
 
 echo       Shortcuts created.
 echo.
@@ -91,23 +67,16 @@ echo ============================================
 echo   Installation Complete!
 echo ============================================
 echo.
-echo   POS Factory v2.3.0 installed successfully!
+echo   POS System v2.3.0 installed successfully!
 echo   Location: %INSTALL_DIR%
 echo.
-echo   New Features:
-echo   + QR Code Support
-echo   + Enhanced Customer Management
-echo   + Delete Customer from Edit Page
-echo.
-echo   Contact: 01025545211
-echo   Website: https://mo2.dev
-echo.
-echo ============================================
 
-set /p LAUNCH="Launch POS Factory now? (Y/N): "
+set /p LAUNCH="Launch POS System now? (Y/N): "
+if /i "%LAUNCH%"=="" set LAUNCH=Y
 if /i "%LAUNCH%"=="Y" (
     start "" "%INSTALL_DIR%\pos_offline_desktop.exe"
 )
 
 echo.
-pause
+timeout /t 2 >nul
+exit /b 0

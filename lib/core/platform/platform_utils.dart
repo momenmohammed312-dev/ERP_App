@@ -14,6 +14,10 @@ class PlatformUtils {
   @visibleForTesting
   static bool? debugOverrideIsMobile;
 
+  /// Override flag for staff features visibility on mobile.
+  @visibleForTesting
+  static bool? debugOverrideHidesStaffFeaturesOnMobile;
+
   /// True on Android and iOS.
   static bool get isMobile =>
       debugOverrideIsMobile ?? (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
@@ -25,5 +29,15 @@ class PlatformUtils {
       (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
   /// Whether staff/admin management features should be hidden on mobile platforms.
-  static bool get hidesStaffFeaturesOnMobile => isMobile;
+  static bool get hidesStaffFeaturesOnMobile {
+    if (debugOverrideHidesStaffFeaturesOnMobile != null) {
+      return debugOverrideHidesStaffFeaturesOnMobile!;
+    }
+    const hideStaff =
+        bool.fromEnvironment('HIDE_STAFF_ON_MOBILE', defaultValue: false);
+    if (hideStaff) {
+      return true;
+    }
+    return false;
+  }
 }

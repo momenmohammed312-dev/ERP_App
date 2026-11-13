@@ -47716,6 +47716,29 @@ class $ManufacturingOrdersTable extends ManufacturingOrders
     type: DriftSqlType.double,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _currentStageNameMeta = const VerificationMeta(
+    'currentStageName',
+  );
+  @override
+  late final GeneratedColumn<String> currentStageName = GeneratedColumn<String>(
+    'current_stage_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _targetMarginPercentMeta =
+      const VerificationMeta('targetMarginPercent');
+  @override
+  late final GeneratedColumn<double> targetMarginPercent =
+      GeneratedColumn<double>(
+        'target_margin_percent',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.0),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -47768,6 +47791,8 @@ class $ManufacturingOrdersTable extends ManufacturingOrders
     inputColor,
     inputSize,
     inputQuantity,
+    currentStageName,
+    targetMarginPercent,
     createdAt,
     updatedAt,
   ];
@@ -47989,6 +48014,24 @@ class $ManufacturingOrdersTable extends ManufacturingOrders
         ),
       );
     }
+    if (data.containsKey('current_stage_name')) {
+      context.handle(
+        _currentStageNameMeta,
+        currentStageName.isAcceptableOrUnknown(
+          data['current_stage_name']!,
+          _currentStageNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('target_margin_percent')) {
+      context.handle(
+        _targetMarginPercentMeta,
+        targetMarginPercent.isAcceptableOrUnknown(
+          data['target_margin_percent']!,
+          _targetMarginPercentMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -48114,6 +48157,14 @@ class $ManufacturingOrdersTable extends ManufacturingOrders
         DriftSqlType.double,
         data['${effectivePrefix}input_quantity'],
       ),
+      currentStageName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}current_stage_name'],
+      ),
+      targetMarginPercent: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}target_margin_percent'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -48185,11 +48236,15 @@ class ManufacturingOrder extends DataClass
   final String? notes;
   final String? createdBy;
 
-  /// â”€â”€ Phase B1.5: Job Work (for_others) direct input tracking (v77) â”€â”€
+  /// ── Phase B1.5: Job Work (for_others) direct input tracking (v77) ──
   final int? inputProductId;
   final String? inputColor;
   final String? inputSize;
   final double? inputQuantity;
+
+  /// ── FEAT-026: Multi-stage routing & pricing margins (v81) ──
+  final String? currentStageName;
+  final double? targetMarginPercent;
   final DateTime createdAt;
   final DateTime updatedAt;
   const ManufacturingOrder({
@@ -48219,6 +48274,8 @@ class ManufacturingOrder extends DataClass
     this.inputColor,
     this.inputSize,
     this.inputQuantity,
+    this.currentStageName,
+    this.targetMarginPercent,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -48288,6 +48345,12 @@ class ManufacturingOrder extends DataClass
     }
     if (!nullToAbsent || inputQuantity != null) {
       map['input_quantity'] = Variable<double>(inputQuantity);
+    }
+    if (!nullToAbsent || currentStageName != null) {
+      map['current_stage_name'] = Variable<String>(currentStageName);
+    }
+    if (!nullToAbsent || targetMarginPercent != null) {
+      map['target_margin_percent'] = Variable<double>(targetMarginPercent);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -48360,6 +48423,12 @@ class ManufacturingOrder extends DataClass
       inputQuantity: inputQuantity == null && nullToAbsent
           ? const Value.absent()
           : Value(inputQuantity),
+      currentStageName: currentStageName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(currentStageName),
+      targetMarginPercent: targetMarginPercent == null && nullToAbsent
+          ? const Value.absent()
+          : Value(targetMarginPercent),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -48397,6 +48466,10 @@ class ManufacturingOrder extends DataClass
       inputColor: serializer.fromJson<String?>(json['inputColor']),
       inputSize: serializer.fromJson<String?>(json['inputSize']),
       inputQuantity: serializer.fromJson<double?>(json['inputQuantity']),
+      currentStageName: serializer.fromJson<String?>(json['currentStageName']),
+      targetMarginPercent: serializer.fromJson<double?>(
+        json['targetMarginPercent'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -48431,6 +48504,8 @@ class ManufacturingOrder extends DataClass
       'inputColor': serializer.toJson<String?>(inputColor),
       'inputSize': serializer.toJson<String?>(inputSize),
       'inputQuantity': serializer.toJson<double?>(inputQuantity),
+      'currentStageName': serializer.toJson<String?>(currentStageName),
+      'targetMarginPercent': serializer.toJson<double?>(targetMarginPercent),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -48463,6 +48538,8 @@ class ManufacturingOrder extends DataClass
     Value<String?> inputColor = const Value.absent(),
     Value<String?> inputSize = const Value.absent(),
     Value<double?> inputQuantity = const Value.absent(),
+    Value<String?> currentStageName = const Value.absent(),
+    Value<double?> targetMarginPercent = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => ManufacturingOrder(
@@ -48502,6 +48579,12 @@ class ManufacturingOrder extends DataClass
     inputQuantity: inputQuantity.present
         ? inputQuantity.value
         : this.inputQuantity,
+    currentStageName: currentStageName.present
+        ? currentStageName.value
+        : this.currentStageName,
+    targetMarginPercent: targetMarginPercent.present
+        ? targetMarginPercent.value
+        : this.targetMarginPercent,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -48567,6 +48650,12 @@ class ManufacturingOrder extends DataClass
       inputQuantity: data.inputQuantity.present
           ? data.inputQuantity.value
           : this.inputQuantity,
+      currentStageName: data.currentStageName.present
+          ? data.currentStageName.value
+          : this.currentStageName,
+      targetMarginPercent: data.targetMarginPercent.present
+          ? data.targetMarginPercent.value
+          : this.targetMarginPercent,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -48601,6 +48690,8 @@ class ManufacturingOrder extends DataClass
           ..write('inputColor: $inputColor, ')
           ..write('inputSize: $inputSize, ')
           ..write('inputQuantity: $inputQuantity, ')
+          ..write('currentStageName: $currentStageName, ')
+          ..write('targetMarginPercent: $targetMarginPercent, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -48635,6 +48726,8 @@ class ManufacturingOrder extends DataClass
     inputColor,
     inputSize,
     inputQuantity,
+    currentStageName,
+    targetMarginPercent,
     createdAt,
     updatedAt,
   ]);
@@ -48668,6 +48761,8 @@ class ManufacturingOrder extends DataClass
           other.inputColor == this.inputColor &&
           other.inputSize == this.inputSize &&
           other.inputQuantity == this.inputQuantity &&
+          other.currentStageName == this.currentStageName &&
+          other.targetMarginPercent == this.targetMarginPercent &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -48699,6 +48794,8 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
   final Value<String?> inputColor;
   final Value<String?> inputSize;
   final Value<double?> inputQuantity;
+  final Value<String?> currentStageName;
+  final Value<double?> targetMarginPercent;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const ManufacturingOrdersCompanion({
@@ -48728,6 +48825,8 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
     this.inputColor = const Value.absent(),
     this.inputSize = const Value.absent(),
     this.inputQuantity = const Value.absent(),
+    this.currentStageName = const Value.absent(),
+    this.targetMarginPercent = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -48758,6 +48857,8 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
     this.inputColor = const Value.absent(),
     this.inputSize = const Value.absent(),
     this.inputQuantity = const Value.absent(),
+    this.currentStageName = const Value.absent(),
+    this.targetMarginPercent = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   }) : orderNumber = Value(orderNumber),
@@ -48791,6 +48892,8 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
     Expression<String>? inputColor,
     Expression<String>? inputSize,
     Expression<double>? inputQuantity,
+    Expression<String>? currentStageName,
+    Expression<double>? targetMarginPercent,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -48821,6 +48924,9 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
       if (inputColor != null) 'input_color': inputColor,
       if (inputSize != null) 'input_size': inputSize,
       if (inputQuantity != null) 'input_quantity': inputQuantity,
+      if (currentStageName != null) 'current_stage_name': currentStageName,
+      if (targetMarginPercent != null)
+        'target_margin_percent': targetMarginPercent,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -48853,6 +48959,8 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
     Value<String?>? inputColor,
     Value<String?>? inputSize,
     Value<double?>? inputQuantity,
+    Value<String?>? currentStageName,
+    Value<double?>? targetMarginPercent,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -48883,6 +48991,8 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
       inputColor: inputColor ?? this.inputColor,
       inputSize: inputSize ?? this.inputSize,
       inputQuantity: inputQuantity ?? this.inputQuantity,
+      currentStageName: currentStageName ?? this.currentStageName,
+      targetMarginPercent: targetMarginPercent ?? this.targetMarginPercent,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -48969,6 +49079,14 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
     if (inputQuantity.present) {
       map['input_quantity'] = Variable<double>(inputQuantity.value);
     }
+    if (currentStageName.present) {
+      map['current_stage_name'] = Variable<String>(currentStageName.value);
+    }
+    if (targetMarginPercent.present) {
+      map['target_margin_percent'] = Variable<double>(
+        targetMarginPercent.value,
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -49007,6 +49125,8 @@ class ManufacturingOrdersCompanion extends UpdateCompanion<ManufacturingOrder> {
           ..write('inputColor: $inputColor, ')
           ..write('inputSize: $inputSize, ')
           ..write('inputQuantity: $inputQuantity, ')
+          ..write('currentStageName: $currentStageName, ')
+          ..write('targetMarginPercent: $targetMarginPercent, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -49744,6 +49864,80 @@ class $ManufacturingScrapsTable extends ManufacturingScraps
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _stageIdMeta = const VerificationMeta(
+    'stageId',
+  );
+  @override
+  late final GeneratedColumn<int> stageId = GeneratedColumn<int>(
+    'stage_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _variantIdMeta = const VerificationMeta(
+    'variantId',
+  );
+  @override
+  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
+    'variant_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _variantNameMeta = const VerificationMeta(
+    'variantName',
+  );
+  @override
+  late final GeneratedColumn<String> variantName = GeneratedColumn<String>(
+    'variant_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isSellableMeta = const VerificationMeta(
+    'isSellable',
+  );
+  @override
+  late final GeneratedColumn<bool> isSellable = GeneratedColumn<bool>(
+    'is_sellable',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_sellable" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _estimatedSellPriceMeta =
+      const VerificationMeta('estimatedSellPrice');
+  @override
+  late final GeneratedColumn<double> estimatedSellPrice =
+      GeneratedColumn<double>(
+        'estimated_sell_price',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.0),
+      );
+  static const VerificationMeta _scrapProductIdMeta = const VerificationMeta(
+    'scrapProductId',
+  );
+  @override
+  late final GeneratedColumn<int> scrapProductId = GeneratedColumn<int>(
+    'scrap_product_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id) ON DELETE SET NULL',
+    ),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -49770,6 +49964,12 @@ class $ManufacturingScrapsTable extends ManufacturingScraps
     compensationAction,
     compensationAmount,
     performedBy,
+    stageId,
+    variantId,
+    variantName,
+    isSellable,
+    estimatedSellPrice,
+    scrapProductId,
     createdAt,
   ];
   @override
@@ -49881,6 +50081,51 @@ class $ManufacturingScrapsTable extends ManufacturingScraps
         ),
       );
     }
+    if (data.containsKey('stage_id')) {
+      context.handle(
+        _stageIdMeta,
+        stageId.isAcceptableOrUnknown(data['stage_id']!, _stageIdMeta),
+      );
+    }
+    if (data.containsKey('variant_id')) {
+      context.handle(
+        _variantIdMeta,
+        variantId.isAcceptableOrUnknown(data['variant_id']!, _variantIdMeta),
+      );
+    }
+    if (data.containsKey('variant_name')) {
+      context.handle(
+        _variantNameMeta,
+        variantName.isAcceptableOrUnknown(
+          data['variant_name']!,
+          _variantNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_sellable')) {
+      context.handle(
+        _isSellableMeta,
+        isSellable.isAcceptableOrUnknown(data['is_sellable']!, _isSellableMeta),
+      );
+    }
+    if (data.containsKey('estimated_sell_price')) {
+      context.handle(
+        _estimatedSellPriceMeta,
+        estimatedSellPrice.isAcceptableOrUnknown(
+          data['estimated_sell_price']!,
+          _estimatedSellPriceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('scrap_product_id')) {
+      context.handle(
+        _scrapProductIdMeta,
+        scrapProductId.isAcceptableOrUnknown(
+          data['scrap_product_id']!,
+          _scrapProductIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -49944,6 +50189,30 @@ class $ManufacturingScrapsTable extends ManufacturingScraps
         DriftSqlType.string,
         data['${effectivePrefix}performed_by'],
       ),
+      stageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stage_id'],
+      ),
+      variantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variant_id'],
+      ),
+      variantName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}variant_name'],
+      ),
+      isSellable: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_sellable'],
+      ),
+      estimatedSellPrice: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}estimated_sell_price'],
+      ),
+      scrapProductId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}scrap_product_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -49962,22 +50231,19 @@ class ManufacturingScrap extends DataClass
   final int id;
   final int manufacturingOrderId;
 
-  /// What was thrown away. May be a raw material or the finished good itself;
-  /// use [bomItemId] to tell which recipe line it came from.
+  /// What was thrown away or set aside. May be a raw material or the finished good itself.
   final int productId;
 
   /// The recipe line, when the scrap came from raw material.
   final int? bomItemId;
 
-  /// How many units were written off. REAL because a recipe can be fractional
-  /// (0.2 litre), and the record must not lose that precision.
+  /// How many units were written off.
   final double quantity;
 
   /// One of [ManufacturingScrapReason].
   final String reason;
 
-  /// Who is accountable. Required and non-blank — a scrap line with no owner
-  /// is not auditable.
+  /// Who is accountable.
   final String responsibleParty;
 
   /// Free text, typically an authorisation reference for the write-off.
@@ -49993,6 +50259,14 @@ class ManufacturingScrap extends DataClass
   /// Amount to credit customer or financial loss
   final double? compensationAmount;
   final String? performedBy;
+
+  /// ── FEAT-026: Multi-stage, Variants & Sellable Scrap (v81) ──
+  final int? stageId;
+  final int? variantId;
+  final String? variantName;
+  final bool? isSellable;
+  final double? estimatedSellPrice;
+  final int? scrapProductId;
   final DateTime createdAt;
   const ManufacturingScrap({
     required this.id,
@@ -50007,6 +50281,12 @@ class ManufacturingScrap extends DataClass
     this.compensationAction,
     this.compensationAmount,
     this.performedBy,
+    this.stageId,
+    this.variantId,
+    this.variantName,
+    this.isSellable,
+    this.estimatedSellPrice,
+    this.scrapProductId,
     required this.createdAt,
   });
   @override
@@ -50035,6 +50315,24 @@ class ManufacturingScrap extends DataClass
     }
     if (!nullToAbsent || performedBy != null) {
       map['performed_by'] = Variable<String>(performedBy);
+    }
+    if (!nullToAbsent || stageId != null) {
+      map['stage_id'] = Variable<int>(stageId);
+    }
+    if (!nullToAbsent || variantId != null) {
+      map['variant_id'] = Variable<int>(variantId);
+    }
+    if (!nullToAbsent || variantName != null) {
+      map['variant_name'] = Variable<String>(variantName);
+    }
+    if (!nullToAbsent || isSellable != null) {
+      map['is_sellable'] = Variable<bool>(isSellable);
+    }
+    if (!nullToAbsent || estimatedSellPrice != null) {
+      map['estimated_sell_price'] = Variable<double>(estimatedSellPrice);
+    }
+    if (!nullToAbsent || scrapProductId != null) {
+      map['scrap_product_id'] = Variable<int>(scrapProductId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -50066,6 +50364,24 @@ class ManufacturingScrap extends DataClass
       performedBy: performedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(performedBy),
+      stageId: stageId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stageId),
+      variantId: variantId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(variantId),
+      variantName: variantName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(variantName),
+      isSellable: isSellable == null && nullToAbsent
+          ? const Value.absent()
+          : Value(isSellable),
+      estimatedSellPrice: estimatedSellPrice == null && nullToAbsent
+          ? const Value.absent()
+          : Value(estimatedSellPrice),
+      scrapProductId: scrapProductId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(scrapProductId),
       createdAt: Value(createdAt),
     );
   }
@@ -50094,6 +50410,14 @@ class ManufacturingScrap extends DataClass
         json['compensationAmount'],
       ),
       performedBy: serializer.fromJson<String?>(json['performedBy']),
+      stageId: serializer.fromJson<int?>(json['stageId']),
+      variantId: serializer.fromJson<int?>(json['variantId']),
+      variantName: serializer.fromJson<String?>(json['variantName']),
+      isSellable: serializer.fromJson<bool?>(json['isSellable']),
+      estimatedSellPrice: serializer.fromJson<double?>(
+        json['estimatedSellPrice'],
+      ),
+      scrapProductId: serializer.fromJson<int?>(json['scrapProductId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -50113,6 +50437,12 @@ class ManufacturingScrap extends DataClass
       'compensationAction': serializer.toJson<String?>(compensationAction),
       'compensationAmount': serializer.toJson<double?>(compensationAmount),
       'performedBy': serializer.toJson<String?>(performedBy),
+      'stageId': serializer.toJson<int?>(stageId),
+      'variantId': serializer.toJson<int?>(variantId),
+      'variantName': serializer.toJson<String?>(variantName),
+      'isSellable': serializer.toJson<bool?>(isSellable),
+      'estimatedSellPrice': serializer.toJson<double?>(estimatedSellPrice),
+      'scrapProductId': serializer.toJson<int?>(scrapProductId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -50130,6 +50460,12 @@ class ManufacturingScrap extends DataClass
     Value<String?> compensationAction = const Value.absent(),
     Value<double?> compensationAmount = const Value.absent(),
     Value<String?> performedBy = const Value.absent(),
+    Value<int?> stageId = const Value.absent(),
+    Value<int?> variantId = const Value.absent(),
+    Value<String?> variantName = const Value.absent(),
+    Value<bool?> isSellable = const Value.absent(),
+    Value<double?> estimatedSellPrice = const Value.absent(),
+    Value<int?> scrapProductId = const Value.absent(),
     DateTime? createdAt,
   }) => ManufacturingScrap(
     id: id ?? this.id,
@@ -50150,6 +50486,16 @@ class ManufacturingScrap extends DataClass
         ? compensationAmount.value
         : this.compensationAmount,
     performedBy: performedBy.present ? performedBy.value : this.performedBy,
+    stageId: stageId.present ? stageId.value : this.stageId,
+    variantId: variantId.present ? variantId.value : this.variantId,
+    variantName: variantName.present ? variantName.value : this.variantName,
+    isSellable: isSellable.present ? isSellable.value : this.isSellable,
+    estimatedSellPrice: estimatedSellPrice.present
+        ? estimatedSellPrice.value
+        : this.estimatedSellPrice,
+    scrapProductId: scrapProductId.present
+        ? scrapProductId.value
+        : this.scrapProductId,
     createdAt: createdAt ?? this.createdAt,
   );
   ManufacturingScrap copyWithCompanion(ManufacturingScrapsCompanion data) {
@@ -50180,6 +50526,20 @@ class ManufacturingScrap extends DataClass
       performedBy: data.performedBy.present
           ? data.performedBy.value
           : this.performedBy,
+      stageId: data.stageId.present ? data.stageId.value : this.stageId,
+      variantId: data.variantId.present ? data.variantId.value : this.variantId,
+      variantName: data.variantName.present
+          ? data.variantName.value
+          : this.variantName,
+      isSellable: data.isSellable.present
+          ? data.isSellable.value
+          : this.isSellable,
+      estimatedSellPrice: data.estimatedSellPrice.present
+          ? data.estimatedSellPrice.value
+          : this.estimatedSellPrice,
+      scrapProductId: data.scrapProductId.present
+          ? data.scrapProductId.value
+          : this.scrapProductId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -50199,6 +50559,12 @@ class ManufacturingScrap extends DataClass
           ..write('compensationAction: $compensationAction, ')
           ..write('compensationAmount: $compensationAmount, ')
           ..write('performedBy: $performedBy, ')
+          ..write('stageId: $stageId, ')
+          ..write('variantId: $variantId, ')
+          ..write('variantName: $variantName, ')
+          ..write('isSellable: $isSellable, ')
+          ..write('estimatedSellPrice: $estimatedSellPrice, ')
+          ..write('scrapProductId: $scrapProductId, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -50218,6 +50584,12 @@ class ManufacturingScrap extends DataClass
     compensationAction,
     compensationAmount,
     performedBy,
+    stageId,
+    variantId,
+    variantName,
+    isSellable,
+    estimatedSellPrice,
+    scrapProductId,
     createdAt,
   );
   @override
@@ -50236,6 +50608,12 @@ class ManufacturingScrap extends DataClass
           other.compensationAction == this.compensationAction &&
           other.compensationAmount == this.compensationAmount &&
           other.performedBy == this.performedBy &&
+          other.stageId == this.stageId &&
+          other.variantId == this.variantId &&
+          other.variantName == this.variantName &&
+          other.isSellable == this.isSellable &&
+          other.estimatedSellPrice == this.estimatedSellPrice &&
+          other.scrapProductId == this.scrapProductId &&
           other.createdAt == this.createdAt);
 }
 
@@ -50252,6 +50630,12 @@ class ManufacturingScrapsCompanion extends UpdateCompanion<ManufacturingScrap> {
   final Value<String?> compensationAction;
   final Value<double?> compensationAmount;
   final Value<String?> performedBy;
+  final Value<int?> stageId;
+  final Value<int?> variantId;
+  final Value<String?> variantName;
+  final Value<bool?> isSellable;
+  final Value<double?> estimatedSellPrice;
+  final Value<int?> scrapProductId;
   final Value<DateTime> createdAt;
   const ManufacturingScrapsCompanion({
     this.id = const Value.absent(),
@@ -50266,6 +50650,12 @@ class ManufacturingScrapsCompanion extends UpdateCompanion<ManufacturingScrap> {
     this.compensationAction = const Value.absent(),
     this.compensationAmount = const Value.absent(),
     this.performedBy = const Value.absent(),
+    this.stageId = const Value.absent(),
+    this.variantId = const Value.absent(),
+    this.variantName = const Value.absent(),
+    this.isSellable = const Value.absent(),
+    this.estimatedSellPrice = const Value.absent(),
+    this.scrapProductId = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   ManufacturingScrapsCompanion.insert({
@@ -50281,6 +50671,12 @@ class ManufacturingScrapsCompanion extends UpdateCompanion<ManufacturingScrap> {
     this.compensationAction = const Value.absent(),
     this.compensationAmount = const Value.absent(),
     this.performedBy = const Value.absent(),
+    this.stageId = const Value.absent(),
+    this.variantId = const Value.absent(),
+    this.variantName = const Value.absent(),
+    this.isSellable = const Value.absent(),
+    this.estimatedSellPrice = const Value.absent(),
+    this.scrapProductId = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : manufacturingOrderId = Value(manufacturingOrderId),
        productId = Value(productId),
@@ -50300,6 +50696,12 @@ class ManufacturingScrapsCompanion extends UpdateCompanion<ManufacturingScrap> {
     Expression<String>? compensationAction,
     Expression<double>? compensationAmount,
     Expression<String>? performedBy,
+    Expression<int>? stageId,
+    Expression<int>? variantId,
+    Expression<String>? variantName,
+    Expression<bool>? isSellable,
+    Expression<double>? estimatedSellPrice,
+    Expression<int>? scrapProductId,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -50316,6 +50718,13 @@ class ManufacturingScrapsCompanion extends UpdateCompanion<ManufacturingScrap> {
       if (compensationAction != null) 'compensation_action': compensationAction,
       if (compensationAmount != null) 'compensation_amount': compensationAmount,
       if (performedBy != null) 'performed_by': performedBy,
+      if (stageId != null) 'stage_id': stageId,
+      if (variantId != null) 'variant_id': variantId,
+      if (variantName != null) 'variant_name': variantName,
+      if (isSellable != null) 'is_sellable': isSellable,
+      if (estimatedSellPrice != null)
+        'estimated_sell_price': estimatedSellPrice,
+      if (scrapProductId != null) 'scrap_product_id': scrapProductId,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -50333,6 +50742,12 @@ class ManufacturingScrapsCompanion extends UpdateCompanion<ManufacturingScrap> {
     Value<String?>? compensationAction,
     Value<double?>? compensationAmount,
     Value<String?>? performedBy,
+    Value<int?>? stageId,
+    Value<int?>? variantId,
+    Value<String?>? variantName,
+    Value<bool?>? isSellable,
+    Value<double?>? estimatedSellPrice,
+    Value<int?>? scrapProductId,
     Value<DateTime>? createdAt,
   }) {
     return ManufacturingScrapsCompanion(
@@ -50348,6 +50763,12 @@ class ManufacturingScrapsCompanion extends UpdateCompanion<ManufacturingScrap> {
       compensationAction: compensationAction ?? this.compensationAction,
       compensationAmount: compensationAmount ?? this.compensationAmount,
       performedBy: performedBy ?? this.performedBy,
+      stageId: stageId ?? this.stageId,
+      variantId: variantId ?? this.variantId,
+      variantName: variantName ?? this.variantName,
+      isSellable: isSellable ?? this.isSellable,
+      estimatedSellPrice: estimatedSellPrice ?? this.estimatedSellPrice,
+      scrapProductId: scrapProductId ?? this.scrapProductId,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -50391,6 +50812,24 @@ class ManufacturingScrapsCompanion extends UpdateCompanion<ManufacturingScrap> {
     if (performedBy.present) {
       map['performed_by'] = Variable<String>(performedBy.value);
     }
+    if (stageId.present) {
+      map['stage_id'] = Variable<int>(stageId.value);
+    }
+    if (variantId.present) {
+      map['variant_id'] = Variable<int>(variantId.value);
+    }
+    if (variantName.present) {
+      map['variant_name'] = Variable<String>(variantName.value);
+    }
+    if (isSellable.present) {
+      map['is_sellable'] = Variable<bool>(isSellable.value);
+    }
+    if (estimatedSellPrice.present) {
+      map['estimated_sell_price'] = Variable<double>(estimatedSellPrice.value);
+    }
+    if (scrapProductId.present) {
+      map['scrap_product_id'] = Variable<int>(scrapProductId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -50412,6 +50851,12 @@ class ManufacturingScrapsCompanion extends UpdateCompanion<ManufacturingScrap> {
           ..write('compensationAction: $compensationAction, ')
           ..write('compensationAmount: $compensationAmount, ')
           ..write('performedBy: $performedBy, ')
+          ..write('stageId: $stageId, ')
+          ..write('variantId: $variantId, ')
+          ..write('variantName: $variantName, ')
+          ..write('isSellable: $isSellable, ')
+          ..write('estimatedSellPrice: $estimatedSellPrice, ')
+          ..write('scrapProductId: $scrapProductId, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -54079,6 +54524,1701 @@ class ManufacturingDeliveryItemsCompanion
   }
 }
 
+class $ManufacturingStagesTable extends ManufacturingStages
+    with TableInfo<$ManufacturingStagesTable, ManufacturingStage> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ManufacturingStagesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _manufacturingOrderIdMeta =
+      const VerificationMeta('manufacturingOrderId');
+  @override
+  late final GeneratedColumn<int> manufacturingOrderId = GeneratedColumn<int>(
+    'manufacturing_order_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES manufacturing_orders (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _stageNameMeta = const VerificationMeta(
+    'stageName',
+  );
+  @override
+  late final GeneratedColumn<String> stageName = GeneratedColumn<String>(
+    'stage_name',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 255,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stageOrderMeta = const VerificationMeta(
+    'stageOrder',
+  );
+  @override
+  late final GeneratedColumn<int> stageOrder = GeneratedColumn<int>(
+    'stage_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(ManufacturingStageStatus.pending),
+  );
+  static const VerificationMeta _inputQuantityMeta = const VerificationMeta(
+    'inputQuantity',
+  );
+  @override
+  late final GeneratedColumn<double> inputQuantity = GeneratedColumn<double>(
+    'input_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _outputQuantityMeta = const VerificationMeta(
+    'outputQuantity',
+  );
+  @override
+  late final GeneratedColumn<double> outputQuantity = GeneratedColumn<double>(
+    'output_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _scrapQuantityMeta = const VerificationMeta(
+    'scrapQuantity',
+  );
+  @override
+  late final GeneratedColumn<double> scrapQuantity = GeneratedColumn<double>(
+    'scrap_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _stageCostMeta = const VerificationMeta(
+    'stageCost',
+  );
+  @override
+  late final GeneratedColumn<double> stageCost = GeneratedColumn<double>(
+    'stage_cost',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _assignedToMeta = const VerificationMeta(
+    'assignedTo',
+  );
+  @override
+  late final GeneratedColumn<String> assignedTo = GeneratedColumn<String>(
+    'assigned_to',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _startedAtMeta = const VerificationMeta(
+    'startedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+    'started_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _completedAtMeta = const VerificationMeta(
+    'completedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> completedAt = GeneratedColumn<DateTime>(
+    'completed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    manufacturingOrderId,
+    stageName,
+    stageOrder,
+    status,
+    inputQuantity,
+    outputQuantity,
+    scrapQuantity,
+    stageCost,
+    assignedTo,
+    notes,
+    startedAt,
+    completedAt,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'manufacturing_stages';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ManufacturingStage> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('manufacturing_order_id')) {
+      context.handle(
+        _manufacturingOrderIdMeta,
+        manufacturingOrderId.isAcceptableOrUnknown(
+          data['manufacturing_order_id']!,
+          _manufacturingOrderIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_manufacturingOrderIdMeta);
+    }
+    if (data.containsKey('stage_name')) {
+      context.handle(
+        _stageNameMeta,
+        stageName.isAcceptableOrUnknown(data['stage_name']!, _stageNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stageNameMeta);
+    }
+    if (data.containsKey('stage_order')) {
+      context.handle(
+        _stageOrderMeta,
+        stageOrder.isAcceptableOrUnknown(data['stage_order']!, _stageOrderMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('input_quantity')) {
+      context.handle(
+        _inputQuantityMeta,
+        inputQuantity.isAcceptableOrUnknown(
+          data['input_quantity']!,
+          _inputQuantityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('output_quantity')) {
+      context.handle(
+        _outputQuantityMeta,
+        outputQuantity.isAcceptableOrUnknown(
+          data['output_quantity']!,
+          _outputQuantityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('scrap_quantity')) {
+      context.handle(
+        _scrapQuantityMeta,
+        scrapQuantity.isAcceptableOrUnknown(
+          data['scrap_quantity']!,
+          _scrapQuantityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('stage_cost')) {
+      context.handle(
+        _stageCostMeta,
+        stageCost.isAcceptableOrUnknown(data['stage_cost']!, _stageCostMeta),
+      );
+    }
+    if (data.containsKey('assigned_to')) {
+      context.handle(
+        _assignedToMeta,
+        assignedTo.isAcceptableOrUnknown(data['assigned_to']!, _assignedToMeta),
+      );
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('started_at')) {
+      context.handle(
+        _startedAtMeta,
+        startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta),
+      );
+    }
+    if (data.containsKey('completed_at')) {
+      context.handle(
+        _completedAtMeta,
+        completedAt.isAcceptableOrUnknown(
+          data['completed_at']!,
+          _completedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ManufacturingStage map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ManufacturingStage(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      manufacturingOrderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}manufacturing_order_id'],
+      )!,
+      stageName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}stage_name'],
+      )!,
+      stageOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stage_order'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      inputQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}input_quantity'],
+      )!,
+      outputQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}output_quantity'],
+      )!,
+      scrapQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}scrap_quantity'],
+      )!,
+      stageCost: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}stage_cost'],
+      )!,
+      assignedTo: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}assigned_to'],
+      ),
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      startedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}started_at'],
+      ),
+      completedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}completed_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ManufacturingStagesTable createAlias(String alias) {
+    return $ManufacturingStagesTable(attachedDatabase, alias);
+  }
+}
+
+class ManufacturingStage extends DataClass
+    implements Insertable<ManufacturingStage> {
+  final int id;
+  final int manufacturingOrderId;
+
+  /// اسم المرحلة (مثلاً: القص، الخياطة والتقفيل، الكي والتغليف، الفحص والجودة)
+  final String stageName;
+
+  /// ترتيب المرحلة (1, 2, 3...)
+  final int stageOrder;
+
+  /// pending | in_progress | completed
+  final String status;
+
+  /// كمية المدخلات المستلمة في هذه المرحلة
+  final double inputQuantity;
+
+  /// كمية المخرجات التامة السليمة من هذه المرحلة
+  final double outputQuantity;
+
+  /// كمية الهالك والتوالف في هذه المرحلة
+  final double scrapQuantity;
+
+  /// تكلفة تشغيل/مصنعية المرحلة (إضافية على تكلفة الخامات)
+  final double stageCost;
+
+  /// المسؤول أو خط الإنتاج / الورشة
+  final String? assignedTo;
+  final String? notes;
+  final DateTime? startedAt;
+  final DateTime? completedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const ManufacturingStage({
+    required this.id,
+    required this.manufacturingOrderId,
+    required this.stageName,
+    required this.stageOrder,
+    required this.status,
+    required this.inputQuantity,
+    required this.outputQuantity,
+    required this.scrapQuantity,
+    required this.stageCost,
+    this.assignedTo,
+    this.notes,
+    this.startedAt,
+    this.completedAt,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['manufacturing_order_id'] = Variable<int>(manufacturingOrderId);
+    map['stage_name'] = Variable<String>(stageName);
+    map['stage_order'] = Variable<int>(stageOrder);
+    map['status'] = Variable<String>(status);
+    map['input_quantity'] = Variable<double>(inputQuantity);
+    map['output_quantity'] = Variable<double>(outputQuantity);
+    map['scrap_quantity'] = Variable<double>(scrapQuantity);
+    map['stage_cost'] = Variable<double>(stageCost);
+    if (!nullToAbsent || assignedTo != null) {
+      map['assigned_to'] = Variable<String>(assignedTo);
+    }
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    if (!nullToAbsent || startedAt != null) {
+      map['started_at'] = Variable<DateTime>(startedAt);
+    }
+    if (!nullToAbsent || completedAt != null) {
+      map['completed_at'] = Variable<DateTime>(completedAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ManufacturingStagesCompanion toCompanion(bool nullToAbsent) {
+    return ManufacturingStagesCompanion(
+      id: Value(id),
+      manufacturingOrderId: Value(manufacturingOrderId),
+      stageName: Value(stageName),
+      stageOrder: Value(stageOrder),
+      status: Value(status),
+      inputQuantity: Value(inputQuantity),
+      outputQuantity: Value(outputQuantity),
+      scrapQuantity: Value(scrapQuantity),
+      stageCost: Value(stageCost),
+      assignedTo: assignedTo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(assignedTo),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      startedAt: startedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startedAt),
+      completedAt: completedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(completedAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ManufacturingStage.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ManufacturingStage(
+      id: serializer.fromJson<int>(json['id']),
+      manufacturingOrderId: serializer.fromJson<int>(
+        json['manufacturingOrderId'],
+      ),
+      stageName: serializer.fromJson<String>(json['stageName']),
+      stageOrder: serializer.fromJson<int>(json['stageOrder']),
+      status: serializer.fromJson<String>(json['status']),
+      inputQuantity: serializer.fromJson<double>(json['inputQuantity']),
+      outputQuantity: serializer.fromJson<double>(json['outputQuantity']),
+      scrapQuantity: serializer.fromJson<double>(json['scrapQuantity']),
+      stageCost: serializer.fromJson<double>(json['stageCost']),
+      assignedTo: serializer.fromJson<String?>(json['assignedTo']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      startedAt: serializer.fromJson<DateTime?>(json['startedAt']),
+      completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'manufacturingOrderId': serializer.toJson<int>(manufacturingOrderId),
+      'stageName': serializer.toJson<String>(stageName),
+      'stageOrder': serializer.toJson<int>(stageOrder),
+      'status': serializer.toJson<String>(status),
+      'inputQuantity': serializer.toJson<double>(inputQuantity),
+      'outputQuantity': serializer.toJson<double>(outputQuantity),
+      'scrapQuantity': serializer.toJson<double>(scrapQuantity),
+      'stageCost': serializer.toJson<double>(stageCost),
+      'assignedTo': serializer.toJson<String?>(assignedTo),
+      'notes': serializer.toJson<String?>(notes),
+      'startedAt': serializer.toJson<DateTime?>(startedAt),
+      'completedAt': serializer.toJson<DateTime?>(completedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ManufacturingStage copyWith({
+    int? id,
+    int? manufacturingOrderId,
+    String? stageName,
+    int? stageOrder,
+    String? status,
+    double? inputQuantity,
+    double? outputQuantity,
+    double? scrapQuantity,
+    double? stageCost,
+    Value<String?> assignedTo = const Value.absent(),
+    Value<String?> notes = const Value.absent(),
+    Value<DateTime?> startedAt = const Value.absent(),
+    Value<DateTime?> completedAt = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => ManufacturingStage(
+    id: id ?? this.id,
+    manufacturingOrderId: manufacturingOrderId ?? this.manufacturingOrderId,
+    stageName: stageName ?? this.stageName,
+    stageOrder: stageOrder ?? this.stageOrder,
+    status: status ?? this.status,
+    inputQuantity: inputQuantity ?? this.inputQuantity,
+    outputQuantity: outputQuantity ?? this.outputQuantity,
+    scrapQuantity: scrapQuantity ?? this.scrapQuantity,
+    stageCost: stageCost ?? this.stageCost,
+    assignedTo: assignedTo.present ? assignedTo.value : this.assignedTo,
+    notes: notes.present ? notes.value : this.notes,
+    startedAt: startedAt.present ? startedAt.value : this.startedAt,
+    completedAt: completedAt.present ? completedAt.value : this.completedAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ManufacturingStage copyWithCompanion(ManufacturingStagesCompanion data) {
+    return ManufacturingStage(
+      id: data.id.present ? data.id.value : this.id,
+      manufacturingOrderId: data.manufacturingOrderId.present
+          ? data.manufacturingOrderId.value
+          : this.manufacturingOrderId,
+      stageName: data.stageName.present ? data.stageName.value : this.stageName,
+      stageOrder: data.stageOrder.present
+          ? data.stageOrder.value
+          : this.stageOrder,
+      status: data.status.present ? data.status.value : this.status,
+      inputQuantity: data.inputQuantity.present
+          ? data.inputQuantity.value
+          : this.inputQuantity,
+      outputQuantity: data.outputQuantity.present
+          ? data.outputQuantity.value
+          : this.outputQuantity,
+      scrapQuantity: data.scrapQuantity.present
+          ? data.scrapQuantity.value
+          : this.scrapQuantity,
+      stageCost: data.stageCost.present ? data.stageCost.value : this.stageCost,
+      assignedTo: data.assignedTo.present
+          ? data.assignedTo.value
+          : this.assignedTo,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      completedAt: data.completedAt.present
+          ? data.completedAt.value
+          : this.completedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ManufacturingStage(')
+          ..write('id: $id, ')
+          ..write('manufacturingOrderId: $manufacturingOrderId, ')
+          ..write('stageName: $stageName, ')
+          ..write('stageOrder: $stageOrder, ')
+          ..write('status: $status, ')
+          ..write('inputQuantity: $inputQuantity, ')
+          ..write('outputQuantity: $outputQuantity, ')
+          ..write('scrapQuantity: $scrapQuantity, ')
+          ..write('stageCost: $stageCost, ')
+          ..write('assignedTo: $assignedTo, ')
+          ..write('notes: $notes, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    manufacturingOrderId,
+    stageName,
+    stageOrder,
+    status,
+    inputQuantity,
+    outputQuantity,
+    scrapQuantity,
+    stageCost,
+    assignedTo,
+    notes,
+    startedAt,
+    completedAt,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ManufacturingStage &&
+          other.id == this.id &&
+          other.manufacturingOrderId == this.manufacturingOrderId &&
+          other.stageName == this.stageName &&
+          other.stageOrder == this.stageOrder &&
+          other.status == this.status &&
+          other.inputQuantity == this.inputQuantity &&
+          other.outputQuantity == this.outputQuantity &&
+          other.scrapQuantity == this.scrapQuantity &&
+          other.stageCost == this.stageCost &&
+          other.assignedTo == this.assignedTo &&
+          other.notes == this.notes &&
+          other.startedAt == this.startedAt &&
+          other.completedAt == this.completedAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ManufacturingStagesCompanion extends UpdateCompanion<ManufacturingStage> {
+  final Value<int> id;
+  final Value<int> manufacturingOrderId;
+  final Value<String> stageName;
+  final Value<int> stageOrder;
+  final Value<String> status;
+  final Value<double> inputQuantity;
+  final Value<double> outputQuantity;
+  final Value<double> scrapQuantity;
+  final Value<double> stageCost;
+  final Value<String?> assignedTo;
+  final Value<String?> notes;
+  final Value<DateTime?> startedAt;
+  final Value<DateTime?> completedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const ManufacturingStagesCompanion({
+    this.id = const Value.absent(),
+    this.manufacturingOrderId = const Value.absent(),
+    this.stageName = const Value.absent(),
+    this.stageOrder = const Value.absent(),
+    this.status = const Value.absent(),
+    this.inputQuantity = const Value.absent(),
+    this.outputQuantity = const Value.absent(),
+    this.scrapQuantity = const Value.absent(),
+    this.stageCost = const Value.absent(),
+    this.assignedTo = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.completedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  ManufacturingStagesCompanion.insert({
+    this.id = const Value.absent(),
+    required int manufacturingOrderId,
+    required String stageName,
+    this.stageOrder = const Value.absent(),
+    this.status = const Value.absent(),
+    this.inputQuantity = const Value.absent(),
+    this.outputQuantity = const Value.absent(),
+    this.scrapQuantity = const Value.absent(),
+    this.stageCost = const Value.absent(),
+    this.assignedTo = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.completedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : manufacturingOrderId = Value(manufacturingOrderId),
+       stageName = Value(stageName);
+  static Insertable<ManufacturingStage> custom({
+    Expression<int>? id,
+    Expression<int>? manufacturingOrderId,
+    Expression<String>? stageName,
+    Expression<int>? stageOrder,
+    Expression<String>? status,
+    Expression<double>? inputQuantity,
+    Expression<double>? outputQuantity,
+    Expression<double>? scrapQuantity,
+    Expression<double>? stageCost,
+    Expression<String>? assignedTo,
+    Expression<String>? notes,
+    Expression<DateTime>? startedAt,
+    Expression<DateTime>? completedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (manufacturingOrderId != null)
+        'manufacturing_order_id': manufacturingOrderId,
+      if (stageName != null) 'stage_name': stageName,
+      if (stageOrder != null) 'stage_order': stageOrder,
+      if (status != null) 'status': status,
+      if (inputQuantity != null) 'input_quantity': inputQuantity,
+      if (outputQuantity != null) 'output_quantity': outputQuantity,
+      if (scrapQuantity != null) 'scrap_quantity': scrapQuantity,
+      if (stageCost != null) 'stage_cost': stageCost,
+      if (assignedTo != null) 'assigned_to': assignedTo,
+      if (notes != null) 'notes': notes,
+      if (startedAt != null) 'started_at': startedAt,
+      if (completedAt != null) 'completed_at': completedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  ManufacturingStagesCompanion copyWith({
+    Value<int>? id,
+    Value<int>? manufacturingOrderId,
+    Value<String>? stageName,
+    Value<int>? stageOrder,
+    Value<String>? status,
+    Value<double>? inputQuantity,
+    Value<double>? outputQuantity,
+    Value<double>? scrapQuantity,
+    Value<double>? stageCost,
+    Value<String?>? assignedTo,
+    Value<String?>? notes,
+    Value<DateTime?>? startedAt,
+    Value<DateTime?>? completedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return ManufacturingStagesCompanion(
+      id: id ?? this.id,
+      manufacturingOrderId: manufacturingOrderId ?? this.manufacturingOrderId,
+      stageName: stageName ?? this.stageName,
+      stageOrder: stageOrder ?? this.stageOrder,
+      status: status ?? this.status,
+      inputQuantity: inputQuantity ?? this.inputQuantity,
+      outputQuantity: outputQuantity ?? this.outputQuantity,
+      scrapQuantity: scrapQuantity ?? this.scrapQuantity,
+      stageCost: stageCost ?? this.stageCost,
+      assignedTo: assignedTo ?? this.assignedTo,
+      notes: notes ?? this.notes,
+      startedAt: startedAt ?? this.startedAt,
+      completedAt: completedAt ?? this.completedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (manufacturingOrderId.present) {
+      map['manufacturing_order_id'] = Variable<int>(manufacturingOrderId.value);
+    }
+    if (stageName.present) {
+      map['stage_name'] = Variable<String>(stageName.value);
+    }
+    if (stageOrder.present) {
+      map['stage_order'] = Variable<int>(stageOrder.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (inputQuantity.present) {
+      map['input_quantity'] = Variable<double>(inputQuantity.value);
+    }
+    if (outputQuantity.present) {
+      map['output_quantity'] = Variable<double>(outputQuantity.value);
+    }
+    if (scrapQuantity.present) {
+      map['scrap_quantity'] = Variable<double>(scrapQuantity.value);
+    }
+    if (stageCost.present) {
+      map['stage_cost'] = Variable<double>(stageCost.value);
+    }
+    if (assignedTo.present) {
+      map['assigned_to'] = Variable<String>(assignedTo.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (completedAt.present) {
+      map['completed_at'] = Variable<DateTime>(completedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ManufacturingStagesCompanion(')
+          ..write('id: $id, ')
+          ..write('manufacturingOrderId: $manufacturingOrderId, ')
+          ..write('stageName: $stageName, ')
+          ..write('stageOrder: $stageOrder, ')
+          ..write('status: $status, ')
+          ..write('inputQuantity: $inputQuantity, ')
+          ..write('outputQuantity: $outputQuantity, ')
+          ..write('scrapQuantity: $scrapQuantity, ')
+          ..write('stageCost: $stageCost, ')
+          ..write('assignedTo: $assignedTo, ')
+          ..write('notes: $notes, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ManufacturingStageOutputsTable extends ManufacturingStageOutputs
+    with TableInfo<$ManufacturingStageOutputsTable, ManufacturingStageOutput> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ManufacturingStageOutputsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _stageIdMeta = const VerificationMeta(
+    'stageId',
+  );
+  @override
+  late final GeneratedColumn<int> stageId = GeneratedColumn<int>(
+    'stage_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES manufacturing_stages (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _manufacturingOrderIdMeta =
+      const VerificationMeta('manufacturingOrderId');
+  @override
+  late final GeneratedColumn<int> manufacturingOrderId = GeneratedColumn<int>(
+    'manufacturing_order_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES manufacturing_orders (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _variantIdMeta = const VerificationMeta(
+    'variantId',
+  );
+  @override
+  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
+    'variant_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES product_variants (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _variantNameMeta = const VerificationMeta(
+    'variantName',
+  );
+  @override
+  late final GeneratedColumn<String> variantName = GeneratedColumn<String>(
+    'variant_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _plannedQuantityMeta = const VerificationMeta(
+    'plannedQuantity',
+  );
+  @override
+  late final GeneratedColumn<double> plannedQuantity = GeneratedColumn<double>(
+    'planned_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _producedQuantityMeta = const VerificationMeta(
+    'producedQuantity',
+  );
+  @override
+  late final GeneratedColumn<double> producedQuantity = GeneratedColumn<double>(
+    'produced_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _scrapQuantityMeta = const VerificationMeta(
+    'scrapQuantity',
+  );
+  @override
+  late final GeneratedColumn<double> scrapQuantity = GeneratedColumn<double>(
+    'scrap_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _unitCostOverrideMeta = const VerificationMeta(
+    'unitCostOverride',
+  );
+  @override
+  late final GeneratedColumn<double> unitCostOverride = GeneratedColumn<double>(
+    'unit_cost_override',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sellingPriceOverrideMeta =
+      const VerificationMeta('sellingPriceOverride');
+  @override
+  late final GeneratedColumn<double> sellingPriceOverride =
+      GeneratedColumn<double>(
+        'selling_price_override',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    stageId,
+    manufacturingOrderId,
+    productId,
+    variantId,
+    variantName,
+    plannedQuantity,
+    producedQuantity,
+    scrapQuantity,
+    unitCostOverride,
+    sellingPriceOverride,
+    notes,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'manufacturing_stage_outputs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ManufacturingStageOutput> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('stage_id')) {
+      context.handle(
+        _stageIdMeta,
+        stageId.isAcceptableOrUnknown(data['stage_id']!, _stageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stageIdMeta);
+    }
+    if (data.containsKey('manufacturing_order_id')) {
+      context.handle(
+        _manufacturingOrderIdMeta,
+        manufacturingOrderId.isAcceptableOrUnknown(
+          data['manufacturing_order_id']!,
+          _manufacturingOrderIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_manufacturingOrderIdMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('variant_id')) {
+      context.handle(
+        _variantIdMeta,
+        variantId.isAcceptableOrUnknown(data['variant_id']!, _variantIdMeta),
+      );
+    }
+    if (data.containsKey('variant_name')) {
+      context.handle(
+        _variantNameMeta,
+        variantName.isAcceptableOrUnknown(
+          data['variant_name']!,
+          _variantNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('planned_quantity')) {
+      context.handle(
+        _plannedQuantityMeta,
+        plannedQuantity.isAcceptableOrUnknown(
+          data['planned_quantity']!,
+          _plannedQuantityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('produced_quantity')) {
+      context.handle(
+        _producedQuantityMeta,
+        producedQuantity.isAcceptableOrUnknown(
+          data['produced_quantity']!,
+          _producedQuantityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('scrap_quantity')) {
+      context.handle(
+        _scrapQuantityMeta,
+        scrapQuantity.isAcceptableOrUnknown(
+          data['scrap_quantity']!,
+          _scrapQuantityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('unit_cost_override')) {
+      context.handle(
+        _unitCostOverrideMeta,
+        unitCostOverride.isAcceptableOrUnknown(
+          data['unit_cost_override']!,
+          _unitCostOverrideMeta,
+        ),
+      );
+    }
+    if (data.containsKey('selling_price_override')) {
+      context.handle(
+        _sellingPriceOverrideMeta,
+        sellingPriceOverride.isAcceptableOrUnknown(
+          data['selling_price_override']!,
+          _sellingPriceOverrideMeta,
+        ),
+      );
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ManufacturingStageOutput map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ManufacturingStageOutput(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      stageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stage_id'],
+      )!,
+      manufacturingOrderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}manufacturing_order_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      )!,
+      variantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variant_id'],
+      ),
+      variantName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}variant_name'],
+      ),
+      plannedQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}planned_quantity'],
+      )!,
+      producedQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}produced_quantity'],
+      )!,
+      scrapQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}scrap_quantity'],
+      )!,
+      unitCostOverride: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}unit_cost_override'],
+      ),
+      sellingPriceOverride: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}selling_price_override'],
+      ),
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ManufacturingStageOutputsTable createAlias(String alias) {
+    return $ManufacturingStageOutputsTable(attachedDatabase, alias);
+  }
+}
+
+class ManufacturingStageOutput extends DataClass
+    implements Insertable<ManufacturingStageOutput> {
+  final int id;
+  final int stageId;
+  final int manufacturingOrderId;
+
+  /// المنتج الأب التابع له المقاس
+  final int productId;
+
+  /// معرف الصنف / المقاس في جدول ProductVariants (nullable لو منتج بدون مقاسات)
+  final int? variantId;
+
+  /// لقطة لاسم المقاس/اللون وقت الإنتاج (مثل: S, M, L, XL, أو أبيض - قطن)
+  final String? variantName;
+
+  /// الكمية المخططة لهذا المقاس
+  final double plannedQuantity;
+
+  /// الكمية المنتجة السليمة
+  final double producedQuantity;
+
+  /// كمية الهالك من هذا المقاس
+  final double scrapQuantity;
+
+  /// تكلفة تقديرية للوحدة من هذا المقاس
+  final double? unitCostOverride;
+
+  /// سعر بيع مقترح للوحدة من هذا المقاس
+  final double? sellingPriceOverride;
+  final String? notes;
+  final DateTime createdAt;
+  const ManufacturingStageOutput({
+    required this.id,
+    required this.stageId,
+    required this.manufacturingOrderId,
+    required this.productId,
+    this.variantId,
+    this.variantName,
+    required this.plannedQuantity,
+    required this.producedQuantity,
+    required this.scrapQuantity,
+    this.unitCostOverride,
+    this.sellingPriceOverride,
+    this.notes,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['stage_id'] = Variable<int>(stageId);
+    map['manufacturing_order_id'] = Variable<int>(manufacturingOrderId);
+    map['product_id'] = Variable<int>(productId);
+    if (!nullToAbsent || variantId != null) {
+      map['variant_id'] = Variable<int>(variantId);
+    }
+    if (!nullToAbsent || variantName != null) {
+      map['variant_name'] = Variable<String>(variantName);
+    }
+    map['planned_quantity'] = Variable<double>(plannedQuantity);
+    map['produced_quantity'] = Variable<double>(producedQuantity);
+    map['scrap_quantity'] = Variable<double>(scrapQuantity);
+    if (!nullToAbsent || unitCostOverride != null) {
+      map['unit_cost_override'] = Variable<double>(unitCostOverride);
+    }
+    if (!nullToAbsent || sellingPriceOverride != null) {
+      map['selling_price_override'] = Variable<double>(sellingPriceOverride);
+    }
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  ManufacturingStageOutputsCompanion toCompanion(bool nullToAbsent) {
+    return ManufacturingStageOutputsCompanion(
+      id: Value(id),
+      stageId: Value(stageId),
+      manufacturingOrderId: Value(manufacturingOrderId),
+      productId: Value(productId),
+      variantId: variantId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(variantId),
+      variantName: variantName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(variantName),
+      plannedQuantity: Value(plannedQuantity),
+      producedQuantity: Value(producedQuantity),
+      scrapQuantity: Value(scrapQuantity),
+      unitCostOverride: unitCostOverride == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unitCostOverride),
+      sellingPriceOverride: sellingPriceOverride == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sellingPriceOverride),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory ManufacturingStageOutput.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ManufacturingStageOutput(
+      id: serializer.fromJson<int>(json['id']),
+      stageId: serializer.fromJson<int>(json['stageId']),
+      manufacturingOrderId: serializer.fromJson<int>(
+        json['manufacturingOrderId'],
+      ),
+      productId: serializer.fromJson<int>(json['productId']),
+      variantId: serializer.fromJson<int?>(json['variantId']),
+      variantName: serializer.fromJson<String?>(json['variantName']),
+      plannedQuantity: serializer.fromJson<double>(json['plannedQuantity']),
+      producedQuantity: serializer.fromJson<double>(json['producedQuantity']),
+      scrapQuantity: serializer.fromJson<double>(json['scrapQuantity']),
+      unitCostOverride: serializer.fromJson<double?>(json['unitCostOverride']),
+      sellingPriceOverride: serializer.fromJson<double?>(
+        json['sellingPriceOverride'],
+      ),
+      notes: serializer.fromJson<String?>(json['notes']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'stageId': serializer.toJson<int>(stageId),
+      'manufacturingOrderId': serializer.toJson<int>(manufacturingOrderId),
+      'productId': serializer.toJson<int>(productId),
+      'variantId': serializer.toJson<int?>(variantId),
+      'variantName': serializer.toJson<String?>(variantName),
+      'plannedQuantity': serializer.toJson<double>(plannedQuantity),
+      'producedQuantity': serializer.toJson<double>(producedQuantity),
+      'scrapQuantity': serializer.toJson<double>(scrapQuantity),
+      'unitCostOverride': serializer.toJson<double?>(unitCostOverride),
+      'sellingPriceOverride': serializer.toJson<double?>(sellingPriceOverride),
+      'notes': serializer.toJson<String?>(notes),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  ManufacturingStageOutput copyWith({
+    int? id,
+    int? stageId,
+    int? manufacturingOrderId,
+    int? productId,
+    Value<int?> variantId = const Value.absent(),
+    Value<String?> variantName = const Value.absent(),
+    double? plannedQuantity,
+    double? producedQuantity,
+    double? scrapQuantity,
+    Value<double?> unitCostOverride = const Value.absent(),
+    Value<double?> sellingPriceOverride = const Value.absent(),
+    Value<String?> notes = const Value.absent(),
+    DateTime? createdAt,
+  }) => ManufacturingStageOutput(
+    id: id ?? this.id,
+    stageId: stageId ?? this.stageId,
+    manufacturingOrderId: manufacturingOrderId ?? this.manufacturingOrderId,
+    productId: productId ?? this.productId,
+    variantId: variantId.present ? variantId.value : this.variantId,
+    variantName: variantName.present ? variantName.value : this.variantName,
+    plannedQuantity: plannedQuantity ?? this.plannedQuantity,
+    producedQuantity: producedQuantity ?? this.producedQuantity,
+    scrapQuantity: scrapQuantity ?? this.scrapQuantity,
+    unitCostOverride: unitCostOverride.present
+        ? unitCostOverride.value
+        : this.unitCostOverride,
+    sellingPriceOverride: sellingPriceOverride.present
+        ? sellingPriceOverride.value
+        : this.sellingPriceOverride,
+    notes: notes.present ? notes.value : this.notes,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  ManufacturingStageOutput copyWithCompanion(
+    ManufacturingStageOutputsCompanion data,
+  ) {
+    return ManufacturingStageOutput(
+      id: data.id.present ? data.id.value : this.id,
+      stageId: data.stageId.present ? data.stageId.value : this.stageId,
+      manufacturingOrderId: data.manufacturingOrderId.present
+          ? data.manufacturingOrderId.value
+          : this.manufacturingOrderId,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      variantId: data.variantId.present ? data.variantId.value : this.variantId,
+      variantName: data.variantName.present
+          ? data.variantName.value
+          : this.variantName,
+      plannedQuantity: data.plannedQuantity.present
+          ? data.plannedQuantity.value
+          : this.plannedQuantity,
+      producedQuantity: data.producedQuantity.present
+          ? data.producedQuantity.value
+          : this.producedQuantity,
+      scrapQuantity: data.scrapQuantity.present
+          ? data.scrapQuantity.value
+          : this.scrapQuantity,
+      unitCostOverride: data.unitCostOverride.present
+          ? data.unitCostOverride.value
+          : this.unitCostOverride,
+      sellingPriceOverride: data.sellingPriceOverride.present
+          ? data.sellingPriceOverride.value
+          : this.sellingPriceOverride,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ManufacturingStageOutput(')
+          ..write('id: $id, ')
+          ..write('stageId: $stageId, ')
+          ..write('manufacturingOrderId: $manufacturingOrderId, ')
+          ..write('productId: $productId, ')
+          ..write('variantId: $variantId, ')
+          ..write('variantName: $variantName, ')
+          ..write('plannedQuantity: $plannedQuantity, ')
+          ..write('producedQuantity: $producedQuantity, ')
+          ..write('scrapQuantity: $scrapQuantity, ')
+          ..write('unitCostOverride: $unitCostOverride, ')
+          ..write('sellingPriceOverride: $sellingPriceOverride, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    stageId,
+    manufacturingOrderId,
+    productId,
+    variantId,
+    variantName,
+    plannedQuantity,
+    producedQuantity,
+    scrapQuantity,
+    unitCostOverride,
+    sellingPriceOverride,
+    notes,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ManufacturingStageOutput &&
+          other.id == this.id &&
+          other.stageId == this.stageId &&
+          other.manufacturingOrderId == this.manufacturingOrderId &&
+          other.productId == this.productId &&
+          other.variantId == this.variantId &&
+          other.variantName == this.variantName &&
+          other.plannedQuantity == this.plannedQuantity &&
+          other.producedQuantity == this.producedQuantity &&
+          other.scrapQuantity == this.scrapQuantity &&
+          other.unitCostOverride == this.unitCostOverride &&
+          other.sellingPriceOverride == this.sellingPriceOverride &&
+          other.notes == this.notes &&
+          other.createdAt == this.createdAt);
+}
+
+class ManufacturingStageOutputsCompanion
+    extends UpdateCompanion<ManufacturingStageOutput> {
+  final Value<int> id;
+  final Value<int> stageId;
+  final Value<int> manufacturingOrderId;
+  final Value<int> productId;
+  final Value<int?> variantId;
+  final Value<String?> variantName;
+  final Value<double> plannedQuantity;
+  final Value<double> producedQuantity;
+  final Value<double> scrapQuantity;
+  final Value<double?> unitCostOverride;
+  final Value<double?> sellingPriceOverride;
+  final Value<String?> notes;
+  final Value<DateTime> createdAt;
+  const ManufacturingStageOutputsCompanion({
+    this.id = const Value.absent(),
+    this.stageId = const Value.absent(),
+    this.manufacturingOrderId = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.variantId = const Value.absent(),
+    this.variantName = const Value.absent(),
+    this.plannedQuantity = const Value.absent(),
+    this.producedQuantity = const Value.absent(),
+    this.scrapQuantity = const Value.absent(),
+    this.unitCostOverride = const Value.absent(),
+    this.sellingPriceOverride = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  ManufacturingStageOutputsCompanion.insert({
+    this.id = const Value.absent(),
+    required int stageId,
+    required int manufacturingOrderId,
+    required int productId,
+    this.variantId = const Value.absent(),
+    this.variantName = const Value.absent(),
+    this.plannedQuantity = const Value.absent(),
+    this.producedQuantity = const Value.absent(),
+    this.scrapQuantity = const Value.absent(),
+    this.unitCostOverride = const Value.absent(),
+    this.sellingPriceOverride = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : stageId = Value(stageId),
+       manufacturingOrderId = Value(manufacturingOrderId),
+       productId = Value(productId);
+  static Insertable<ManufacturingStageOutput> custom({
+    Expression<int>? id,
+    Expression<int>? stageId,
+    Expression<int>? manufacturingOrderId,
+    Expression<int>? productId,
+    Expression<int>? variantId,
+    Expression<String>? variantName,
+    Expression<double>? plannedQuantity,
+    Expression<double>? producedQuantity,
+    Expression<double>? scrapQuantity,
+    Expression<double>? unitCostOverride,
+    Expression<double>? sellingPriceOverride,
+    Expression<String>? notes,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (stageId != null) 'stage_id': stageId,
+      if (manufacturingOrderId != null)
+        'manufacturing_order_id': manufacturingOrderId,
+      if (productId != null) 'product_id': productId,
+      if (variantId != null) 'variant_id': variantId,
+      if (variantName != null) 'variant_name': variantName,
+      if (plannedQuantity != null) 'planned_quantity': plannedQuantity,
+      if (producedQuantity != null) 'produced_quantity': producedQuantity,
+      if (scrapQuantity != null) 'scrap_quantity': scrapQuantity,
+      if (unitCostOverride != null) 'unit_cost_override': unitCostOverride,
+      if (sellingPriceOverride != null)
+        'selling_price_override': sellingPriceOverride,
+      if (notes != null) 'notes': notes,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  ManufacturingStageOutputsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? stageId,
+    Value<int>? manufacturingOrderId,
+    Value<int>? productId,
+    Value<int?>? variantId,
+    Value<String?>? variantName,
+    Value<double>? plannedQuantity,
+    Value<double>? producedQuantity,
+    Value<double>? scrapQuantity,
+    Value<double?>? unitCostOverride,
+    Value<double?>? sellingPriceOverride,
+    Value<String?>? notes,
+    Value<DateTime>? createdAt,
+  }) {
+    return ManufacturingStageOutputsCompanion(
+      id: id ?? this.id,
+      stageId: stageId ?? this.stageId,
+      manufacturingOrderId: manufacturingOrderId ?? this.manufacturingOrderId,
+      productId: productId ?? this.productId,
+      variantId: variantId ?? this.variantId,
+      variantName: variantName ?? this.variantName,
+      plannedQuantity: plannedQuantity ?? this.plannedQuantity,
+      producedQuantity: producedQuantity ?? this.producedQuantity,
+      scrapQuantity: scrapQuantity ?? this.scrapQuantity,
+      unitCostOverride: unitCostOverride ?? this.unitCostOverride,
+      sellingPriceOverride: sellingPriceOverride ?? this.sellingPriceOverride,
+      notes: notes ?? this.notes,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (stageId.present) {
+      map['stage_id'] = Variable<int>(stageId.value);
+    }
+    if (manufacturingOrderId.present) {
+      map['manufacturing_order_id'] = Variable<int>(manufacturingOrderId.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<int>(productId.value);
+    }
+    if (variantId.present) {
+      map['variant_id'] = Variable<int>(variantId.value);
+    }
+    if (variantName.present) {
+      map['variant_name'] = Variable<String>(variantName.value);
+    }
+    if (plannedQuantity.present) {
+      map['planned_quantity'] = Variable<double>(plannedQuantity.value);
+    }
+    if (producedQuantity.present) {
+      map['produced_quantity'] = Variable<double>(producedQuantity.value);
+    }
+    if (scrapQuantity.present) {
+      map['scrap_quantity'] = Variable<double>(scrapQuantity.value);
+    }
+    if (unitCostOverride.present) {
+      map['unit_cost_override'] = Variable<double>(unitCostOverride.value);
+    }
+    if (sellingPriceOverride.present) {
+      map['selling_price_override'] = Variable<double>(
+        sellingPriceOverride.value,
+      );
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ManufacturingStageOutputsCompanion(')
+          ..write('id: $id, ')
+          ..write('stageId: $stageId, ')
+          ..write('manufacturingOrderId: $manufacturingOrderId, ')
+          ..write('productId: $productId, ')
+          ..write('variantId: $variantId, ')
+          ..write('variantName: $variantName, ')
+          ..write('plannedQuantity: $plannedQuantity, ')
+          ..write('producedQuantity: $producedQuantity, ')
+          ..write('scrapQuantity: $scrapQuantity, ')
+          ..write('unitCostOverride: $unitCostOverride, ')
+          ..write('sellingPriceOverride: $sellingPriceOverride, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -57392,6 +59532,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $ManufacturingDeliveriesTable(this);
   late final $ManufacturingDeliveryItemsTable manufacturingDeliveryItems =
       $ManufacturingDeliveryItemsTable(this);
+  late final $ManufacturingStagesTable manufacturingStages =
+      $ManufacturingStagesTable(this);
+  late final $ManufacturingStageOutputsTable manufacturingStageOutputs =
+      $ManufacturingStageOutputsTable(this);
   late final $AccountsTable accounts = $AccountsTable(this);
   late final $JournalEntriesTable journalEntries = $JournalEntriesTable(this);
   late final $JournalLinesTable journalLines = $JournalLinesTable(this);
@@ -57474,6 +59618,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final ProductVariantDao productVariantDao = ProductVariantDao(
     this as AppDatabase,
   );
+  late final ManufacturingStageDao manufacturingStageDao =
+      ManufacturingStageDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -57549,6 +59695,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     customerStockMovements,
     manufacturingDeliveries,
     manufacturingDeliveryItems,
+    manufacturingStages,
+    manufacturingStageOutputs,
     accounts,
     journalEntries,
     journalLines,
@@ -57667,6 +59815,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
+        'products',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('manufacturing_scrap', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
         'customer_material_receipts',
         limitUpdateKind: UpdateKind.delete,
       ),
@@ -57681,6 +59836,40 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       ),
       result: [
         TableUpdate('manufacturing_delivery_items', kind: UpdateKind.delete),
+      ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'manufacturing_orders',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('manufacturing_stages', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'manufacturing_stages',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('manufacturing_stage_outputs', kind: UpdateKind.delete),
+      ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'manufacturing_orders',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('manufacturing_stage_outputs', kind: UpdateKind.delete),
+      ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'product_variants',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('manufacturing_stage_outputs', kind: UpdateKind.update),
       ],
     ),
     WritePropagation(
@@ -57992,33 +60181,6 @@ final class $$ProductsTableReferences
   }
 
   static MultiTypedResultKey<
-    $ManufacturingScrapsTable,
-    List<ManufacturingScrap>
-  >
-  _manufacturingScrapsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.manufacturingScraps,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.manufacturingScraps.productId,
-        ),
-      );
-
-  $$ManufacturingScrapsTableProcessedTableManager get manufacturingScrapsRefs {
-    final manager = $$ManufacturingScrapsTableTableManager(
-      $_db,
-      $_db.manufacturingScraps,
-    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<int>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(
-      _manufacturingScrapsRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<
     $CustomerMaterialReceiptItemsTable,
     List<CustomerMaterialReceiptItem>
   >
@@ -58124,6 +60286,34 @@ final class $$ProductsTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _manufacturingDeliveryItemsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $ManufacturingStageOutputsTable,
+    List<ManufacturingStageOutput>
+  >
+  _manufacturingStageOutputsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.manufacturingStageOutputs,
+        aliasName: $_aliasNameGenerator(
+          db.products.id,
+          db.manufacturingStageOutputs.productId,
+        ),
+      );
+
+  $$ManufacturingStageOutputsTableProcessedTableManager
+  get manufacturingStageOutputsRefs {
+    final manager = $$ManufacturingStageOutputsTableTableManager(
+      $_db,
+      $_db.manufacturingStageOutputs,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _manufacturingStageOutputsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -58501,31 +60691,6 @@ class $$ProductsTableFilterComposer
     return f(composer);
   }
 
-  Expression<bool> manufacturingScrapsRefs(
-    Expression<bool> Function($$ManufacturingScrapsTableFilterComposer f) f,
-  ) {
-    final $$ManufacturingScrapsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.manufacturingScraps,
-      getReferencedColumn: (t) => t.productId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$ManufacturingScrapsTableFilterComposer(
-            $db: $db,
-            $table: $db.manufacturingScraps,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
   Expression<bool> customerMaterialReceiptItemsRefs(
     Expression<bool> Function(
       $$CustomerMaterialReceiptItemsTableFilterComposer f,
@@ -58625,6 +60790,33 @@ class $$ProductsTableFilterComposer
               }) => $$ManufacturingDeliveryItemsTableFilterComposer(
                 $db: $db,
                 $table: $db.manufacturingDeliveryItems,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> manufacturingStageOutputsRefs(
+    Expression<bool> Function($$ManufacturingStageOutputsTableFilterComposer f)
+    f,
+  ) {
+    final $$ManufacturingStageOutputsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.manufacturingStageOutputs,
+          getReferencedColumn: (t) => t.productId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingStageOutputsTableFilterComposer(
+                $db: $db,
+                $table: $db.manufacturingStageOutputs,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -59078,32 +61270,6 @@ class $$ProductsTableAnnotationComposer
     return f(composer);
   }
 
-  Expression<T> manufacturingScrapsRefs<T extends Object>(
-    Expression<T> Function($$ManufacturingScrapsTableAnnotationComposer a) f,
-  ) {
-    final $$ManufacturingScrapsTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.manufacturingScraps,
-          getReferencedColumn: (t) => t.productId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$ManufacturingScrapsTableAnnotationComposer(
-                $db: $db,
-                $table: $db.manufacturingScraps,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
   Expression<T> customerMaterialReceiptItemsRefs<T extends Object>(
     Expression<T> Function(
       $$CustomerMaterialReceiptItemsTableAnnotationComposer a,
@@ -59213,6 +61379,33 @@ class $$ProductsTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> manufacturingStageOutputsRefs<T extends Object>(
+    Expression<T> Function($$ManufacturingStageOutputsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$ManufacturingStageOutputsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.manufacturingStageOutputs,
+          getReferencedColumn: (t) => t.productId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingStageOutputsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.manufacturingStageOutputs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$ProductsTableTableManager
@@ -59240,11 +61433,11 @@ class $$ProductsTableTableManager
             bool customerContainersRefs,
             bool billOfMaterialsRefs,
             bool bomItemsRefs,
-            bool manufacturingScrapsRefs,
             bool customerMaterialReceiptItemsRefs,
             bool customerStockBalancesRefs,
             bool customerStockMovementsRefs,
             bool manufacturingDeliveryItemsRefs,
+            bool manufacturingStageOutputsRefs,
           })
         > {
   $$ProductsTableTableManager(_$AppDatabase db, $ProductsTable table)
@@ -59355,11 +61548,11 @@ class $$ProductsTableTableManager
                 customerContainersRefs = false,
                 billOfMaterialsRefs = false,
                 bomItemsRefs = false,
-                manufacturingScrapsRefs = false,
                 customerMaterialReceiptItemsRefs = false,
                 customerStockBalancesRefs = false,
                 customerStockMovementsRefs = false,
                 manufacturingDeliveryItemsRefs = false,
+                manufacturingStageOutputsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -59375,13 +61568,14 @@ class $$ProductsTableTableManager
                     if (customerContainersRefs) db.customerContainers,
                     if (billOfMaterialsRefs) db.billOfMaterials,
                     if (bomItemsRefs) db.bomItems,
-                    if (manufacturingScrapsRefs) db.manufacturingScraps,
                     if (customerMaterialReceiptItemsRefs)
                       db.customerMaterialReceiptItems,
                     if (customerStockBalancesRefs) db.customerStockBalances,
                     if (customerStockMovementsRefs) db.customerStockMovements,
                     if (manufacturingDeliveryItemsRefs)
                       db.manufacturingDeliveryItems,
+                    if (manufacturingStageOutputsRefs)
+                      db.manufacturingStageOutputs,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -59617,27 +61811,6 @@ class $$ProductsTableTableManager
                               ),
                           typedResults: items,
                         ),
-                      if (manufacturingScrapsRefs)
-                        await $_getPrefetchedData<
-                          Product,
-                          $ProductsTable,
-                          ManufacturingScrap
-                        >(
-                          currentTable: table,
-                          referencedTable: $$ProductsTableReferences
-                              ._manufacturingScrapsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$ProductsTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).manufacturingScrapsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
                       if (customerMaterialReceiptItemsRefs)
                         await $_getPrefetchedData<
                           Product,
@@ -59722,6 +61895,27 @@ class $$ProductsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (manufacturingStageOutputsRefs)
+                        await $_getPrefetchedData<
+                          Product,
+                          $ProductsTable,
+                          ManufacturingStageOutput
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._manufacturingStageOutputsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).manufacturingStageOutputsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -59754,11 +61948,11 @@ typedef $$ProductsTableProcessedTableManager =
         bool customerContainersRefs,
         bool billOfMaterialsRefs,
         bool bomItemsRefs,
-        bool manufacturingScrapsRefs,
         bool customerMaterialReceiptItemsRefs,
         bool customerStockBalancesRefs,
         bool customerStockMovementsRefs,
         bool manufacturingDeliveryItemsRefs,
+        bool manufacturingStageOutputsRefs,
       })
     >;
 typedef $$CustomersTableCreateCompanionBuilder =
@@ -64166,6 +66360,34 @@ final class $$ProductVariantsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<
+    $ManufacturingStageOutputsTable,
+    List<ManufacturingStageOutput>
+  >
+  _manufacturingStageOutputsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.manufacturingStageOutputs,
+        aliasName: $_aliasNameGenerator(
+          db.productVariants.id,
+          db.manufacturingStageOutputs.variantId,
+        ),
+      );
+
+  $$ManufacturingStageOutputsTableProcessedTableManager
+  get manufacturingStageOutputsRefs {
+    final manager = $$ManufacturingStageOutputsTableTableManager(
+      $_db,
+      $_db.manufacturingStageOutputs,
+    ).filter((f) => f.variantId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _manufacturingStageOutputsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$ProductVariantsTableFilterComposer
@@ -64292,6 +66514,33 @@ class $$ProductVariantsTableFilterComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> manufacturingStageOutputsRefs(
+    Expression<bool> Function($$ManufacturingStageOutputsTableFilterComposer f)
+    f,
+  ) {
+    final $$ManufacturingStageOutputsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.manufacturingStageOutputs,
+          getReferencedColumn: (t) => t.variantId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingStageOutputsTableFilterComposer(
+                $db: $db,
+                $table: $db.manufacturingStageOutputs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 }
@@ -64482,6 +66731,33 @@ class $$ProductVariantsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> manufacturingStageOutputsRefs<T extends Object>(
+    Expression<T> Function($$ManufacturingStageOutputsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$ManufacturingStageOutputsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.manufacturingStageOutputs,
+          getReferencedColumn: (t) => t.variantId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingStageOutputsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.manufacturingStageOutputs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$ProductVariantsTableTableManager
@@ -64501,6 +66777,7 @@ class $$ProductVariantsTableTableManager
             bool productId,
             bool invoiceItemsRefs,
             bool salesReturnItemsRefs,
+            bool manufacturingStageOutputsRefs,
           })
         > {
   $$ProductVariantsTableTableManager(
@@ -64577,12 +66854,15 @@ class $$ProductVariantsTableTableManager
                 productId = false,
                 invoiceItemsRefs = false,
                 salesReturnItemsRefs = false,
+                manufacturingStageOutputsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (invoiceItemsRefs) db.invoiceItems,
                     if (salesReturnItemsRefs) db.salesReturnItems,
+                    if (manufacturingStageOutputsRefs)
+                      db.manufacturingStageOutputs,
                   ],
                   addJoins:
                       <
@@ -64662,6 +66942,27 @@ class $$ProductVariantsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (manufacturingStageOutputsRefs)
+                        await $_getPrefetchedData<
+                          ProductVariant,
+                          $ProductVariantsTable,
+                          ManufacturingStageOutput
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductVariantsTableReferences
+                              ._manufacturingStageOutputsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductVariantsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).manufacturingStageOutputsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.variantId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -64686,6 +66987,7 @@ typedef $$ProductVariantsTableProcessedTableManager =
         bool productId,
         bool invoiceItemsRefs,
         bool salesReturnItemsRefs,
+        bool manufacturingStageOutputsRefs,
       })
     >;
 typedef $$InvoiceItemsTableCreateCompanionBuilder =
@@ -91635,6 +93937,8 @@ typedef $$ManufacturingOrdersTableCreateCompanionBuilder =
       Value<String?> inputColor,
       Value<String?> inputSize,
       Value<double?> inputQuantity,
+      Value<String?> currentStageName,
+      Value<double?> targetMarginPercent,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -91666,6 +93970,8 @@ typedef $$ManufacturingOrdersTableUpdateCompanionBuilder =
       Value<String?> inputColor,
       Value<String?> inputSize,
       Value<double?> inputQuantity,
+      Value<String?> currentStageName,
+      Value<double?> targetMarginPercent,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -91912,6 +94218,67 @@ final class $$ManufacturingOrdersTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<
+    $ManufacturingStagesTable,
+    List<ManufacturingStage>
+  >
+  _manufacturingStagesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.manufacturingStages,
+        aliasName: $_aliasNameGenerator(
+          db.manufacturingOrders.id,
+          db.manufacturingStages.manufacturingOrderId,
+        ),
+      );
+
+  $$ManufacturingStagesTableProcessedTableManager get manufacturingStagesRefs {
+    final manager =
+        $$ManufacturingStagesTableTableManager(
+          $_db,
+          $_db.manufacturingStages,
+        ).filter(
+          (f) => f.manufacturingOrderId.id.sqlEquals($_itemColumn<int>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _manufacturingStagesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $ManufacturingStageOutputsTable,
+    List<ManufacturingStageOutput>
+  >
+  _manufacturingStageOutputsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.manufacturingStageOutputs,
+        aliasName: $_aliasNameGenerator(
+          db.manufacturingOrders.id,
+          db.manufacturingStageOutputs.manufacturingOrderId,
+        ),
+      );
+
+  $$ManufacturingStageOutputsTableProcessedTableManager
+  get manufacturingStageOutputsRefs {
+    final manager =
+        $$ManufacturingStageOutputsTableTableManager(
+          $_db,
+          $_db.manufacturingStageOutputs,
+        ).filter(
+          (f) => f.manufacturingOrderId.id.sqlEquals($_itemColumn<int>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _manufacturingStageOutputsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$ManufacturingOrdersTableFilterComposer
@@ -92025,6 +94392,16 @@ class $$ManufacturingOrdersTableFilterComposer
 
   ColumnFilters<double> get inputQuantity => $composableBuilder(
     column: $table.inputQuantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get currentStageName => $composableBuilder(
+    column: $table.currentStageName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get targetMarginPercent => $composableBuilder(
+    column: $table.targetMarginPercent,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -92259,6 +94636,58 @@ class $$ManufacturingOrdersTableFilterComposer
         );
     return f(composer);
   }
+
+  Expression<bool> manufacturingStagesRefs(
+    Expression<bool> Function($$ManufacturingStagesTableFilterComposer f) f,
+  ) {
+    final $$ManufacturingStagesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.manufacturingStages,
+      getReferencedColumn: (t) => t.manufacturingOrderId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturingStagesTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturingStages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> manufacturingStageOutputsRefs(
+    Expression<bool> Function($$ManufacturingStageOutputsTableFilterComposer f)
+    f,
+  ) {
+    final $$ManufacturingStageOutputsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.manufacturingStageOutputs,
+          getReferencedColumn: (t) => t.manufacturingOrderId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingStageOutputsTableFilterComposer(
+                $db: $db,
+                $table: $db.manufacturingStageOutputs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$ManufacturingOrdersTableOrderingComposer
@@ -92372,6 +94801,16 @@ class $$ManufacturingOrdersTableOrderingComposer
 
   ColumnOrderings<double> get inputQuantity => $composableBuilder(
     column: $table.inputQuantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get currentStageName => $composableBuilder(
+    column: $table.currentStageName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get targetMarginPercent => $composableBuilder(
+    column: $table.targetMarginPercent,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -92598,6 +95037,16 @@ class $$ManufacturingOrdersTableAnnotationComposer
 
   GeneratedColumn<double> get inputQuantity => $composableBuilder(
     column: $table.inputQuantity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get currentStageName => $composableBuilder(
+    column: $table.currentStageName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get targetMarginPercent => $composableBuilder(
+    column: $table.targetMarginPercent,
     builder: (column) => column,
   );
 
@@ -92830,6 +95279,59 @@ class $$ManufacturingOrdersTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> manufacturingStagesRefs<T extends Object>(
+    Expression<T> Function($$ManufacturingStagesTableAnnotationComposer a) f,
+  ) {
+    final $$ManufacturingStagesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.manufacturingStages,
+          getReferencedColumn: (t) => t.manufacturingOrderId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingStagesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.manufacturingStages,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> manufacturingStageOutputsRefs<T extends Object>(
+    Expression<T> Function($$ManufacturingStageOutputsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$ManufacturingStageOutputsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.manufacturingStageOutputs,
+          getReferencedColumn: (t) => t.manufacturingOrderId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingStageOutputsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.manufacturingStageOutputs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$ManufacturingOrdersTableTableManager
@@ -92855,6 +95357,8 @@ class $$ManufacturingOrdersTableTableManager
             bool manufacturingScrapsRefs,
             bool customerMaterialReceiptsRefs,
             bool manufacturingDeliveriesRefs,
+            bool manufacturingStagesRefs,
+            bool manufacturingStageOutputsRefs,
           })
         > {
   $$ManufacturingOrdersTableTableManager(
@@ -92904,6 +95408,8 @@ class $$ManufacturingOrdersTableTableManager
                 Value<String?> inputColor = const Value.absent(),
                 Value<String?> inputSize = const Value.absent(),
                 Value<double?> inputQuantity = const Value.absent(),
+                Value<String?> currentStageName = const Value.absent(),
+                Value<double?> targetMarginPercent = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => ManufacturingOrdersCompanion(
@@ -92933,6 +95439,8 @@ class $$ManufacturingOrdersTableTableManager
                 inputColor: inputColor,
                 inputSize: inputSize,
                 inputQuantity: inputQuantity,
+                currentStageName: currentStageName,
+                targetMarginPercent: targetMarginPercent,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -92964,6 +95472,8 @@ class $$ManufacturingOrdersTableTableManager
                 Value<String?> inputColor = const Value.absent(),
                 Value<String?> inputSize = const Value.absent(),
                 Value<double?> inputQuantity = const Value.absent(),
+                Value<String?> currentStageName = const Value.absent(),
+                Value<double?> targetMarginPercent = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => ManufacturingOrdersCompanion.insert(
@@ -92993,6 +95503,8 @@ class $$ManufacturingOrdersTableTableManager
                 inputColor: inputColor,
                 inputSize: inputSize,
                 inputQuantity: inputQuantity,
+                currentStageName: currentStageName,
+                targetMarginPercent: targetMarginPercent,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -93015,6 +95527,8 @@ class $$ManufacturingOrdersTableTableManager
                 manufacturingScrapsRefs = false,
                 customerMaterialReceiptsRefs = false,
                 manufacturingDeliveriesRefs = false,
+                manufacturingStagesRefs = false,
+                manufacturingStageOutputsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -93025,6 +95539,9 @@ class $$ManufacturingOrdersTableTableManager
                     if (customerMaterialReceiptsRefs)
                       db.customerMaterialReceipts,
                     if (manufacturingDeliveriesRefs) db.manufacturingDeliveries,
+                    if (manufacturingStagesRefs) db.manufacturingStages,
+                    if (manufacturingStageOutputsRefs)
+                      db.manufacturingStageOutputs,
                   ],
                   addJoins:
                       <
@@ -93206,6 +95723,48 @@ class $$ManufacturingOrdersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (manufacturingStagesRefs)
+                        await $_getPrefetchedData<
+                          ManufacturingOrder,
+                          $ManufacturingOrdersTable,
+                          ManufacturingStage
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ManufacturingOrdersTableReferences
+                              ._manufacturingStagesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ManufacturingOrdersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).manufacturingStagesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.manufacturingOrderId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (manufacturingStageOutputsRefs)
+                        await $_getPrefetchedData<
+                          ManufacturingOrder,
+                          $ManufacturingOrdersTable,
+                          ManufacturingStageOutput
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ManufacturingOrdersTableReferences
+                              ._manufacturingStageOutputsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ManufacturingOrdersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).manufacturingStageOutputsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.manufacturingOrderId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -93236,6 +95795,8 @@ typedef $$ManufacturingOrdersTableProcessedTableManager =
         bool manufacturingScrapsRefs,
         bool customerMaterialReceiptsRefs,
         bool manufacturingDeliveriesRefs,
+        bool manufacturingStagesRefs,
+        bool manufacturingStageOutputsRefs,
       })
     >;
 typedef $$ManufacturingCostComponentsTableCreateCompanionBuilder =
@@ -93679,6 +96240,12 @@ typedef $$ManufacturingScrapsTableCreateCompanionBuilder =
       Value<String?> compensationAction,
       Value<double?> compensationAmount,
       Value<String?> performedBy,
+      Value<int?> stageId,
+      Value<int?> variantId,
+      Value<String?> variantName,
+      Value<bool?> isSellable,
+      Value<double?> estimatedSellPrice,
+      Value<int?> scrapProductId,
       Value<DateTime> createdAt,
     });
 typedef $$ManufacturingScrapsTableUpdateCompanionBuilder =
@@ -93695,6 +96262,12 @@ typedef $$ManufacturingScrapsTableUpdateCompanionBuilder =
       Value<String?> compensationAction,
       Value<double?> compensationAmount,
       Value<String?> performedBy,
+      Value<int?> stageId,
+      Value<int?> variantId,
+      Value<String?> variantName,
+      Value<bool?> isSellable,
+      Value<double?> estimatedSellPrice,
+      Value<int?> scrapProductId,
       Value<DateTime> createdAt,
     });
 
@@ -93773,6 +96346,28 @@ final class $$ManufacturingScrapsTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static $ProductsTable _scrapProductIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(
+          db.manufacturingScraps.scrapProductId,
+          db.products.id,
+        ),
+      );
+
+  $$ProductsTableProcessedTableManager? get scrapProductId {
+    final $_column = $_itemColumn<int>('scrap_product_id');
+    if ($_column == null) return null;
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_scrapProductIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
 }
 
 class $$ManufacturingScrapsTableFilterComposer
@@ -93826,6 +96421,31 @@ class $$ManufacturingScrapsTableFilterComposer
 
   ColumnFilters<String> get performedBy => $composableBuilder(
     column: $table.performedBy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stageId => $composableBuilder(
+    column: $table.stageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get variantId => $composableBuilder(
+    column: $table.variantId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get variantName => $composableBuilder(
+    column: $table.variantName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isSellable => $composableBuilder(
+    column: $table.isSellable,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get estimatedSellPrice => $composableBuilder(
+    column: $table.estimatedSellPrice,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -93902,6 +96522,29 @@ class $$ManufacturingScrapsTableFilterComposer
     );
     return composer;
   }
+
+  $$ProductsTableFilterComposer get scrapProductId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.scrapProductId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$ManufacturingScrapsTableOrderingComposer
@@ -93955,6 +96598,31 @@ class $$ManufacturingScrapsTableOrderingComposer
 
   ColumnOrderings<String> get performedBy => $composableBuilder(
     column: $table.performedBy,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stageId => $composableBuilder(
+    column: $table.stageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get variantId => $composableBuilder(
+    column: $table.variantId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get variantName => $composableBuilder(
+    column: $table.variantName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isSellable => $composableBuilder(
+    column: $table.isSellable,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get estimatedSellPrice => $composableBuilder(
+    column: $table.estimatedSellPrice,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -94032,6 +96700,29 @@ class $$ManufacturingScrapsTableOrderingComposer
     );
     return composer;
   }
+
+  $$ProductsTableOrderingComposer get scrapProductId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.scrapProductId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$ManufacturingScrapsTableAnnotationComposer
@@ -94079,6 +96770,27 @@ class $$ManufacturingScrapsTableAnnotationComposer
 
   GeneratedColumn<String> get performedBy => $composableBuilder(
     column: $table.performedBy,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get stageId =>
+      $composableBuilder(column: $table.stageId, builder: (column) => column);
+
+  GeneratedColumn<int> get variantId =>
+      $composableBuilder(column: $table.variantId, builder: (column) => column);
+
+  GeneratedColumn<String> get variantName => $composableBuilder(
+    column: $table.variantName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isSellable => $composableBuilder(
+    column: $table.isSellable,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get estimatedSellPrice => $composableBuilder(
+    column: $table.estimatedSellPrice,
     builder: (column) => column,
   );
 
@@ -94154,6 +96866,29 @@ class $$ManufacturingScrapsTableAnnotationComposer
     );
     return composer;
   }
+
+  $$ProductsTableAnnotationComposer get scrapProductId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.scrapProductId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$ManufacturingScrapsTableTableManager
@@ -94173,6 +96908,7 @@ class $$ManufacturingScrapsTableTableManager
             bool manufacturingOrderId,
             bool productId,
             bool bomItemId,
+            bool scrapProductId,
           })
         > {
   $$ManufacturingScrapsTableTableManager(
@@ -94208,6 +96944,12 @@ class $$ManufacturingScrapsTableTableManager
                 Value<String?> compensationAction = const Value.absent(),
                 Value<double?> compensationAmount = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
+                Value<int?> stageId = const Value.absent(),
+                Value<int?> variantId = const Value.absent(),
+                Value<String?> variantName = const Value.absent(),
+                Value<bool?> isSellable = const Value.absent(),
+                Value<double?> estimatedSellPrice = const Value.absent(),
+                Value<int?> scrapProductId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => ManufacturingScrapsCompanion(
                 id: id,
@@ -94222,6 +96964,12 @@ class $$ManufacturingScrapsTableTableManager
                 compensationAction: compensationAction,
                 compensationAmount: compensationAmount,
                 performedBy: performedBy,
+                stageId: stageId,
+                variantId: variantId,
+                variantName: variantName,
+                isSellable: isSellable,
+                estimatedSellPrice: estimatedSellPrice,
+                scrapProductId: scrapProductId,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -94238,6 +96986,12 @@ class $$ManufacturingScrapsTableTableManager
                 Value<String?> compensationAction = const Value.absent(),
                 Value<double?> compensationAmount = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
+                Value<int?> stageId = const Value.absent(),
+                Value<int?> variantId = const Value.absent(),
+                Value<String?> variantName = const Value.absent(),
+                Value<bool?> isSellable = const Value.absent(),
+                Value<double?> estimatedSellPrice = const Value.absent(),
+                Value<int?> scrapProductId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => ManufacturingScrapsCompanion.insert(
                 id: id,
@@ -94252,6 +97006,12 @@ class $$ManufacturingScrapsTableTableManager
                 compensationAction: compensationAction,
                 compensationAmount: compensationAmount,
                 performedBy: performedBy,
+                stageId: stageId,
+                variantId: variantId,
+                variantName: variantName,
+                isSellable: isSellable,
+                estimatedSellPrice: estimatedSellPrice,
+                scrapProductId: scrapProductId,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -94267,6 +97027,7 @@ class $$ManufacturingScrapsTableTableManager
                 manufacturingOrderId = false,
                 productId = false,
                 bomItemId = false,
+                scrapProductId = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -94332,6 +97093,21 @@ class $$ManufacturingScrapsTableTableManager
                                   )
                                   as T;
                         }
+                        if (scrapProductId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.scrapProductId,
+                                    referencedTable:
+                                        $$ManufacturingScrapsTableReferences
+                                            ._scrapProductIdTable(db),
+                                    referencedColumn:
+                                        $$ManufacturingScrapsTableReferences
+                                            ._scrapProductIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
 
                         return state;
                       },
@@ -94360,6 +97136,7 @@ typedef $$ManufacturingScrapsTableProcessedTableManager =
         bool manufacturingOrderId,
         bool productId,
         bool bomItemId,
+        bool scrapProductId,
       })
     >;
 typedef $$CustomerMaterialReceiptsTableCreateCompanionBuilder =
@@ -97787,6 +100564,1472 @@ typedef $$ManufacturingDeliveryItemsTableProcessedTableManager =
       ManufacturingDeliveryItem,
       PrefetchHooks Function({bool deliveryId, bool productId})
     >;
+typedef $$ManufacturingStagesTableCreateCompanionBuilder =
+    ManufacturingStagesCompanion Function({
+      Value<int> id,
+      required int manufacturingOrderId,
+      required String stageName,
+      Value<int> stageOrder,
+      Value<String> status,
+      Value<double> inputQuantity,
+      Value<double> outputQuantity,
+      Value<double> scrapQuantity,
+      Value<double> stageCost,
+      Value<String?> assignedTo,
+      Value<String?> notes,
+      Value<DateTime?> startedAt,
+      Value<DateTime?> completedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$ManufacturingStagesTableUpdateCompanionBuilder =
+    ManufacturingStagesCompanion Function({
+      Value<int> id,
+      Value<int> manufacturingOrderId,
+      Value<String> stageName,
+      Value<int> stageOrder,
+      Value<String> status,
+      Value<double> inputQuantity,
+      Value<double> outputQuantity,
+      Value<double> scrapQuantity,
+      Value<double> stageCost,
+      Value<String?> assignedTo,
+      Value<String?> notes,
+      Value<DateTime?> startedAt,
+      Value<DateTime?> completedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$ManufacturingStagesTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $ManufacturingStagesTable,
+          ManufacturingStage
+        > {
+  $$ManufacturingStagesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ManufacturingOrdersTable _manufacturingOrderIdTable(
+    _$AppDatabase db,
+  ) => db.manufacturingOrders.createAlias(
+    $_aliasNameGenerator(
+      db.manufacturingStages.manufacturingOrderId,
+      db.manufacturingOrders.id,
+    ),
+  );
+
+  $$ManufacturingOrdersTableProcessedTableManager get manufacturingOrderId {
+    final $_column = $_itemColumn<int>('manufacturing_order_id')!;
+
+    final manager = $$ManufacturingOrdersTableTableManager(
+      $_db,
+      $_db.manufacturingOrders,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _manufacturingOrderIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $ManufacturingStageOutputsTable,
+    List<ManufacturingStageOutput>
+  >
+  _manufacturingStageOutputsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.manufacturingStageOutputs,
+        aliasName: $_aliasNameGenerator(
+          db.manufacturingStages.id,
+          db.manufacturingStageOutputs.stageId,
+        ),
+      );
+
+  $$ManufacturingStageOutputsTableProcessedTableManager
+  get manufacturingStageOutputsRefs {
+    final manager = $$ManufacturingStageOutputsTableTableManager(
+      $_db,
+      $_db.manufacturingStageOutputs,
+    ).filter((f) => f.stageId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _manufacturingStageOutputsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$ManufacturingStagesTableFilterComposer
+    extends Composer<_$AppDatabase, $ManufacturingStagesTable> {
+  $$ManufacturingStagesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get stageName => $composableBuilder(
+    column: $table.stageName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stageOrder => $composableBuilder(
+    column: $table.stageOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get inputQuantity => $composableBuilder(
+    column: $table.inputQuantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get outputQuantity => $composableBuilder(
+    column: $table.outputQuantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get scrapQuantity => $composableBuilder(
+    column: $table.scrapQuantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get stageCost => $composableBuilder(
+    column: $table.stageCost,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get assignedTo => $composableBuilder(
+    column: $table.assignedTo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ManufacturingOrdersTableFilterComposer get manufacturingOrderId {
+    final $$ManufacturingOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturingOrderId,
+      referencedTable: $db.manufacturingOrders,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturingOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturingOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> manufacturingStageOutputsRefs(
+    Expression<bool> Function($$ManufacturingStageOutputsTableFilterComposer f)
+    f,
+  ) {
+    final $$ManufacturingStageOutputsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.manufacturingStageOutputs,
+          getReferencedColumn: (t) => t.stageId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingStageOutputsTableFilterComposer(
+                $db: $db,
+                $table: $db.manufacturingStageOutputs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$ManufacturingStagesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ManufacturingStagesTable> {
+  $$ManufacturingStagesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get stageName => $composableBuilder(
+    column: $table.stageName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stageOrder => $composableBuilder(
+    column: $table.stageOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get inputQuantity => $composableBuilder(
+    column: $table.inputQuantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get outputQuantity => $composableBuilder(
+    column: $table.outputQuantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get scrapQuantity => $composableBuilder(
+    column: $table.scrapQuantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get stageCost => $composableBuilder(
+    column: $table.stageCost,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get assignedTo => $composableBuilder(
+    column: $table.assignedTo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ManufacturingOrdersTableOrderingComposer get manufacturingOrderId {
+    final $$ManufacturingOrdersTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.manufacturingOrderId,
+          referencedTable: $db.manufacturingOrders,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingOrdersTableOrderingComposer(
+                $db: $db,
+                $table: $db.manufacturingOrders,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+}
+
+class $$ManufacturingStagesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ManufacturingStagesTable> {
+  $$ManufacturingStagesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get stageName =>
+      $composableBuilder(column: $table.stageName, builder: (column) => column);
+
+  GeneratedColumn<int> get stageOrder => $composableBuilder(
+    column: $table.stageOrder,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<double> get inputQuantity => $composableBuilder(
+    column: $table.inputQuantity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get outputQuantity => $composableBuilder(
+    column: $table.outputQuantity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get scrapQuantity => $composableBuilder(
+    column: $table.scrapQuantity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get stageCost =>
+      $composableBuilder(column: $table.stageCost, builder: (column) => column);
+
+  GeneratedColumn<String> get assignedTo => $composableBuilder(
+    column: $table.assignedTo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$ManufacturingOrdersTableAnnotationComposer get manufacturingOrderId {
+    final $$ManufacturingOrdersTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.manufacturingOrderId,
+          referencedTable: $db.manufacturingOrders,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingOrdersTableAnnotationComposer(
+                $db: $db,
+                $table: $db.manufacturingOrders,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  Expression<T> manufacturingStageOutputsRefs<T extends Object>(
+    Expression<T> Function($$ManufacturingStageOutputsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$ManufacturingStageOutputsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.manufacturingStageOutputs,
+          getReferencedColumn: (t) => t.stageId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingStageOutputsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.manufacturingStageOutputs,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$ManufacturingStagesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ManufacturingStagesTable,
+          ManufacturingStage,
+          $$ManufacturingStagesTableFilterComposer,
+          $$ManufacturingStagesTableOrderingComposer,
+          $$ManufacturingStagesTableAnnotationComposer,
+          $$ManufacturingStagesTableCreateCompanionBuilder,
+          $$ManufacturingStagesTableUpdateCompanionBuilder,
+          (ManufacturingStage, $$ManufacturingStagesTableReferences),
+          ManufacturingStage,
+          PrefetchHooks Function({
+            bool manufacturingOrderId,
+            bool manufacturingStageOutputsRefs,
+          })
+        > {
+  $$ManufacturingStagesTableTableManager(
+    _$AppDatabase db,
+    $ManufacturingStagesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ManufacturingStagesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ManufacturingStagesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ManufacturingStagesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> manufacturingOrderId = const Value.absent(),
+                Value<String> stageName = const Value.absent(),
+                Value<int> stageOrder = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<double> inputQuantity = const Value.absent(),
+                Value<double> outputQuantity = const Value.absent(),
+                Value<double> scrapQuantity = const Value.absent(),
+                Value<double> stageCost = const Value.absent(),
+                Value<String?> assignedTo = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<DateTime?> startedAt = const Value.absent(),
+                Value<DateTime?> completedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => ManufacturingStagesCompanion(
+                id: id,
+                manufacturingOrderId: manufacturingOrderId,
+                stageName: stageName,
+                stageOrder: stageOrder,
+                status: status,
+                inputQuantity: inputQuantity,
+                outputQuantity: outputQuantity,
+                scrapQuantity: scrapQuantity,
+                stageCost: stageCost,
+                assignedTo: assignedTo,
+                notes: notes,
+                startedAt: startedAt,
+                completedAt: completedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int manufacturingOrderId,
+                required String stageName,
+                Value<int> stageOrder = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<double> inputQuantity = const Value.absent(),
+                Value<double> outputQuantity = const Value.absent(),
+                Value<double> scrapQuantity = const Value.absent(),
+                Value<double> stageCost = const Value.absent(),
+                Value<String?> assignedTo = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<DateTime?> startedAt = const Value.absent(),
+                Value<DateTime?> completedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => ManufacturingStagesCompanion.insert(
+                id: id,
+                manufacturingOrderId: manufacturingOrderId,
+                stageName: stageName,
+                stageOrder: stageOrder,
+                status: status,
+                inputQuantity: inputQuantity,
+                outputQuantity: outputQuantity,
+                scrapQuantity: scrapQuantity,
+                stageCost: stageCost,
+                assignedTo: assignedTo,
+                notes: notes,
+                startedAt: startedAt,
+                completedAt: completedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ManufacturingStagesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                manufacturingOrderId = false,
+                manufacturingStageOutputsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (manufacturingStageOutputsRefs)
+                      db.manufacturingStageOutputs,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (manufacturingOrderId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.manufacturingOrderId,
+                                    referencedTable:
+                                        $$ManufacturingStagesTableReferences
+                                            ._manufacturingOrderIdTable(db),
+                                    referencedColumn:
+                                        $$ManufacturingStagesTableReferences
+                                            ._manufacturingOrderIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (manufacturingStageOutputsRefs)
+                        await $_getPrefetchedData<
+                          ManufacturingStage,
+                          $ManufacturingStagesTable,
+                          ManufacturingStageOutput
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ManufacturingStagesTableReferences
+                              ._manufacturingStageOutputsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ManufacturingStagesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).manufacturingStageOutputsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.stageId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$ManufacturingStagesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ManufacturingStagesTable,
+      ManufacturingStage,
+      $$ManufacturingStagesTableFilterComposer,
+      $$ManufacturingStagesTableOrderingComposer,
+      $$ManufacturingStagesTableAnnotationComposer,
+      $$ManufacturingStagesTableCreateCompanionBuilder,
+      $$ManufacturingStagesTableUpdateCompanionBuilder,
+      (ManufacturingStage, $$ManufacturingStagesTableReferences),
+      ManufacturingStage,
+      PrefetchHooks Function({
+        bool manufacturingOrderId,
+        bool manufacturingStageOutputsRefs,
+      })
+    >;
+typedef $$ManufacturingStageOutputsTableCreateCompanionBuilder =
+    ManufacturingStageOutputsCompanion Function({
+      Value<int> id,
+      required int stageId,
+      required int manufacturingOrderId,
+      required int productId,
+      Value<int?> variantId,
+      Value<String?> variantName,
+      Value<double> plannedQuantity,
+      Value<double> producedQuantity,
+      Value<double> scrapQuantity,
+      Value<double?> unitCostOverride,
+      Value<double?> sellingPriceOverride,
+      Value<String?> notes,
+      Value<DateTime> createdAt,
+    });
+typedef $$ManufacturingStageOutputsTableUpdateCompanionBuilder =
+    ManufacturingStageOutputsCompanion Function({
+      Value<int> id,
+      Value<int> stageId,
+      Value<int> manufacturingOrderId,
+      Value<int> productId,
+      Value<int?> variantId,
+      Value<String?> variantName,
+      Value<double> plannedQuantity,
+      Value<double> producedQuantity,
+      Value<double> scrapQuantity,
+      Value<double?> unitCostOverride,
+      Value<double?> sellingPriceOverride,
+      Value<String?> notes,
+      Value<DateTime> createdAt,
+    });
+
+final class $$ManufacturingStageOutputsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $ManufacturingStageOutputsTable,
+          ManufacturingStageOutput
+        > {
+  $$ManufacturingStageOutputsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ManufacturingStagesTable _stageIdTable(_$AppDatabase db) =>
+      db.manufacturingStages.createAlias(
+        $_aliasNameGenerator(
+          db.manufacturingStageOutputs.stageId,
+          db.manufacturingStages.id,
+        ),
+      );
+
+  $$ManufacturingStagesTableProcessedTableManager get stageId {
+    final $_column = $_itemColumn<int>('stage_id')!;
+
+    final manager = $$ManufacturingStagesTableTableManager(
+      $_db,
+      $_db.manufacturingStages,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_stageIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ManufacturingOrdersTable _manufacturingOrderIdTable(
+    _$AppDatabase db,
+  ) => db.manufacturingOrders.createAlias(
+    $_aliasNameGenerator(
+      db.manufacturingStageOutputs.manufacturingOrderId,
+      db.manufacturingOrders.id,
+    ),
+  );
+
+  $$ManufacturingOrdersTableProcessedTableManager get manufacturingOrderId {
+    final $_column = $_itemColumn<int>('manufacturing_order_id')!;
+
+    final manager = $$ManufacturingOrdersTableTableManager(
+      $_db,
+      $_db.manufacturingOrders,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _manufacturingOrderIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(
+          db.manufacturingStageOutputs.productId,
+          db.products.id,
+        ),
+      );
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<int>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
+      db.productVariants.createAlias(
+        $_aliasNameGenerator(
+          db.manufacturingStageOutputs.variantId,
+          db.productVariants.id,
+        ),
+      );
+
+  $$ProductVariantsTableProcessedTableManager? get variantId {
+    final $_column = $_itemColumn<int>('variant_id');
+    if ($_column == null) return null;
+    final manager = $$ProductVariantsTableTableManager(
+      $_db,
+      $_db.productVariants,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_variantIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ManufacturingStageOutputsTableFilterComposer
+    extends Composer<_$AppDatabase, $ManufacturingStageOutputsTable> {
+  $$ManufacturingStageOutputsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get variantName => $composableBuilder(
+    column: $table.variantName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get plannedQuantity => $composableBuilder(
+    column: $table.plannedQuantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get producedQuantity => $composableBuilder(
+    column: $table.producedQuantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get scrapQuantity => $composableBuilder(
+    column: $table.scrapQuantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get unitCostOverride => $composableBuilder(
+    column: $table.unitCostOverride,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get sellingPriceOverride => $composableBuilder(
+    column: $table.sellingPriceOverride,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ManufacturingStagesTableFilterComposer get stageId {
+    final $$ManufacturingStagesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.stageId,
+      referencedTable: $db.manufacturingStages,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturingStagesTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturingStages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ManufacturingOrdersTableFilterComposer get manufacturingOrderId {
+    final $$ManufacturingOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.manufacturingOrderId,
+      referencedTable: $db.manufacturingOrders,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ManufacturingOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.manufacturingOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductVariantsTableFilterComposer get variantId {
+    final $$ProductVariantsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.variantId,
+      referencedTable: $db.productVariants,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductVariantsTableFilterComposer(
+            $db: $db,
+            $table: $db.productVariants,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ManufacturingStageOutputsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ManufacturingStageOutputsTable> {
+  $$ManufacturingStageOutputsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get variantName => $composableBuilder(
+    column: $table.variantName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get plannedQuantity => $composableBuilder(
+    column: $table.plannedQuantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get producedQuantity => $composableBuilder(
+    column: $table.producedQuantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get scrapQuantity => $composableBuilder(
+    column: $table.scrapQuantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get unitCostOverride => $composableBuilder(
+    column: $table.unitCostOverride,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get sellingPriceOverride => $composableBuilder(
+    column: $table.sellingPriceOverride,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ManufacturingStagesTableOrderingComposer get stageId {
+    final $$ManufacturingStagesTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.stageId,
+          referencedTable: $db.manufacturingStages,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingStagesTableOrderingComposer(
+                $db: $db,
+                $table: $db.manufacturingStages,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$ManufacturingOrdersTableOrderingComposer get manufacturingOrderId {
+    final $$ManufacturingOrdersTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.manufacturingOrderId,
+          referencedTable: $db.manufacturingOrders,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingOrdersTableOrderingComposer(
+                $db: $db,
+                $table: $db.manufacturingOrders,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductVariantsTableOrderingComposer get variantId {
+    final $$ProductVariantsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.variantId,
+      referencedTable: $db.productVariants,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductVariantsTableOrderingComposer(
+            $db: $db,
+            $table: $db.productVariants,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ManufacturingStageOutputsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ManufacturingStageOutputsTable> {
+  $$ManufacturingStageOutputsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get variantName => $composableBuilder(
+    column: $table.variantName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get plannedQuantity => $composableBuilder(
+    column: $table.plannedQuantity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get producedQuantity => $composableBuilder(
+    column: $table.producedQuantity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get scrapQuantity => $composableBuilder(
+    column: $table.scrapQuantity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get unitCostOverride => $composableBuilder(
+    column: $table.unitCostOverride,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get sellingPriceOverride => $composableBuilder(
+    column: $table.sellingPriceOverride,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ManufacturingStagesTableAnnotationComposer get stageId {
+    final $$ManufacturingStagesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.stageId,
+          referencedTable: $db.manufacturingStages,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingStagesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.manufacturingStages,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$ManufacturingOrdersTableAnnotationComposer get manufacturingOrderId {
+    final $$ManufacturingOrdersTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.manufacturingOrderId,
+          referencedTable: $db.manufacturingOrders,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ManufacturingOrdersTableAnnotationComposer(
+                $db: $db,
+                $table: $db.manufacturingOrders,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductVariantsTableAnnotationComposer get variantId {
+    final $$ProductVariantsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.variantId,
+      referencedTable: $db.productVariants,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductVariantsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.productVariants,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ManufacturingStageOutputsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ManufacturingStageOutputsTable,
+          ManufacturingStageOutput,
+          $$ManufacturingStageOutputsTableFilterComposer,
+          $$ManufacturingStageOutputsTableOrderingComposer,
+          $$ManufacturingStageOutputsTableAnnotationComposer,
+          $$ManufacturingStageOutputsTableCreateCompanionBuilder,
+          $$ManufacturingStageOutputsTableUpdateCompanionBuilder,
+          (
+            ManufacturingStageOutput,
+            $$ManufacturingStageOutputsTableReferences,
+          ),
+          ManufacturingStageOutput,
+          PrefetchHooks Function({
+            bool stageId,
+            bool manufacturingOrderId,
+            bool productId,
+            bool variantId,
+          })
+        > {
+  $$ManufacturingStageOutputsTableTableManager(
+    _$AppDatabase db,
+    $ManufacturingStageOutputsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ManufacturingStageOutputsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ManufacturingStageOutputsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ManufacturingStageOutputsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> stageId = const Value.absent(),
+                Value<int> manufacturingOrderId = const Value.absent(),
+                Value<int> productId = const Value.absent(),
+                Value<int?> variantId = const Value.absent(),
+                Value<String?> variantName = const Value.absent(),
+                Value<double> plannedQuantity = const Value.absent(),
+                Value<double> producedQuantity = const Value.absent(),
+                Value<double> scrapQuantity = const Value.absent(),
+                Value<double?> unitCostOverride = const Value.absent(),
+                Value<double?> sellingPriceOverride = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => ManufacturingStageOutputsCompanion(
+                id: id,
+                stageId: stageId,
+                manufacturingOrderId: manufacturingOrderId,
+                productId: productId,
+                variantId: variantId,
+                variantName: variantName,
+                plannedQuantity: plannedQuantity,
+                producedQuantity: producedQuantity,
+                scrapQuantity: scrapQuantity,
+                unitCostOverride: unitCostOverride,
+                sellingPriceOverride: sellingPriceOverride,
+                notes: notes,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int stageId,
+                required int manufacturingOrderId,
+                required int productId,
+                Value<int?> variantId = const Value.absent(),
+                Value<String?> variantName = const Value.absent(),
+                Value<double> plannedQuantity = const Value.absent(),
+                Value<double> producedQuantity = const Value.absent(),
+                Value<double> scrapQuantity = const Value.absent(),
+                Value<double?> unitCostOverride = const Value.absent(),
+                Value<double?> sellingPriceOverride = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => ManufacturingStageOutputsCompanion.insert(
+                id: id,
+                stageId: stageId,
+                manufacturingOrderId: manufacturingOrderId,
+                productId: productId,
+                variantId: variantId,
+                variantName: variantName,
+                plannedQuantity: plannedQuantity,
+                producedQuantity: producedQuantity,
+                scrapQuantity: scrapQuantity,
+                unitCostOverride: unitCostOverride,
+                sellingPriceOverride: sellingPriceOverride,
+                notes: notes,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ManufacturingStageOutputsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                stageId = false,
+                manufacturingOrderId = false,
+                productId = false,
+                variantId = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (stageId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.stageId,
+                                    referencedTable:
+                                        $$ManufacturingStageOutputsTableReferences
+                                            ._stageIdTable(db),
+                                    referencedColumn:
+                                        $$ManufacturingStageOutputsTableReferences
+                                            ._stageIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (manufacturingOrderId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.manufacturingOrderId,
+                                    referencedTable:
+                                        $$ManufacturingStageOutputsTableReferences
+                                            ._manufacturingOrderIdTable(db),
+                                    referencedColumn:
+                                        $$ManufacturingStageOutputsTableReferences
+                                            ._manufacturingOrderIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (productId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productId,
+                                    referencedTable:
+                                        $$ManufacturingStageOutputsTableReferences
+                                            ._productIdTable(db),
+                                    referencedColumn:
+                                        $$ManufacturingStageOutputsTableReferences
+                                            ._productIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (variantId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.variantId,
+                                    referencedTable:
+                                        $$ManufacturingStageOutputsTableReferences
+                                            ._variantIdTable(db),
+                                    referencedColumn:
+                                        $$ManufacturingStageOutputsTableReferences
+                                            ._variantIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$ManufacturingStageOutputsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ManufacturingStageOutputsTable,
+      ManufacturingStageOutput,
+      $$ManufacturingStageOutputsTableFilterComposer,
+      $$ManufacturingStageOutputsTableOrderingComposer,
+      $$ManufacturingStageOutputsTableAnnotationComposer,
+      $$ManufacturingStageOutputsTableCreateCompanionBuilder,
+      $$ManufacturingStageOutputsTableUpdateCompanionBuilder,
+      (ManufacturingStageOutput, $$ManufacturingStageOutputsTableReferences),
+      ManufacturingStageOutput,
+      PrefetchHooks Function({
+        bool stageId,
+        bool manufacturingOrderId,
+        bool productId,
+        bool variantId,
+      })
+    >;
 typedef $$AccountsTableCreateCompanionBuilder =
     AccountsCompanion Function({
       required String id,
@@ -100236,6 +104479,13 @@ class $AppDatabaseManager {
       $$ManufacturingDeliveryItemsTableTableManager(
         _db,
         _db.manufacturingDeliveryItems,
+      );
+  $$ManufacturingStagesTableTableManager get manufacturingStages =>
+      $$ManufacturingStagesTableTableManager(_db, _db.manufacturingStages);
+  $$ManufacturingStageOutputsTableTableManager get manufacturingStageOutputs =>
+      $$ManufacturingStageOutputsTableTableManager(
+        _db,
+        _db.manufacturingStageOutputs,
       );
   $$AccountsTableTableManager get accounts =>
       $$AccountsTableTableManager(_db, _db.accounts);

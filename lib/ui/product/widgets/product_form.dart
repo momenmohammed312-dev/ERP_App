@@ -9,8 +9,16 @@ import 'package:pos_offline_desktop/core/services/audit_log_service.dart';
 class ProductForm extends StatefulWidget {
   final Product? product; // لو null → إضافة، لو مش null → تعديل
   final AppDatabase db;
+  final String? initialName;
+  final String? initialProductType;
 
-  const ProductForm({super.key, this.product, required this.db});
+  const ProductForm({
+    super.key,
+    this.product,
+    required this.db,
+    this.initialName,
+    this.initialProductType,
+  });
 
   @override
   State<ProductForm> createState() => _ProductFormState();
@@ -42,7 +50,9 @@ class _ProductFormState extends State<ProductForm> {
   @override
   void initState() {
     super.initState();
-    nameCtrl = TextEditingController(text: widget.product?.name ?? '');
+    nameCtrl = TextEditingController(
+      text: widget.product?.name ?? widget.initialName ?? '',
+    );
     priceCtrl = TextEditingController(
       text: widget.product?.price.toString() ?? '',
     );
@@ -66,7 +76,8 @@ class _ProductFormState extends State<ProductForm> {
     );
     selectedStatus = widget.product?.status ?? 'Active';
     isBarneka = widget.product?.barneka ?? false;
-    selectedProductType = widget.product?.productType;
+    selectedProductType =
+        widget.product?.productType ?? widget.initialProductType;
     if (widget.product != null) _loadVariants();
   }
 
@@ -579,7 +590,9 @@ class _ProductFormState extends State<ProductForm> {
             ? _variantsTotal
             : newQuantity;
 
+        Product? savedProduct;
         if (widget.product == null) {
+          int? createdId;
           // إضافة: المنتج + أصنافه في transaction واحدة
           await widget.db.transaction(() async {
             final newId = await widget.db.productDao.insertProduct(
@@ -599,6 +612,7 @@ class _ProductFormState extends State<ProductForm> {
                 productType: Value(selectedProductType),
               ),
             );
+            createdId = newId;
             for (final d in _drafts) {
               await widget.db.productVariantDao.insertVariant(
                 ProductVariantsCompanion.insert(
@@ -611,6 +625,9 @@ class _ProductFormState extends State<ProductForm> {
               );
             }
           });
+          if (createdId != null) {
+            savedProduct = await widget.db.productDao.getProductById(createdId!);
+          }
         } else {
           // تعديل: المنتج + مزامنة أصنافه (إضافة/تعديل/حذف) في transaction واحدة
           final oldProduct = widget.product!;
@@ -630,6 +647,7 @@ class _ProductFormState extends State<ProductForm> {
             productType: Value(selectedProductType),
           );
 
+          savedProduct = updatedProduct;
           await widget.db.transaction(() async {
             await widget.db.productDao.updateProduct(updatedProduct);
             for (final v in _variants) {
@@ -669,7 +687,7 @@ class _ProductFormState extends State<ProductForm> {
         }
 
         if (mounted) {
-          Navigator.of(context).pop();
+          Navigator.of(context).pop(savedProduct);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(

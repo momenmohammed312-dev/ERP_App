@@ -452,17 +452,6 @@ class _CustomerStatementScreenState
               initialDateRange: DateTimeRange(start: _fromDate, end: _toDate),
               firstDate: DateTime(2020),
               lastDate: DateTime.now(),
-              builder: (context, child) {
-                return Theme(
-                  data: Theme.of(context).copyWith(
-                    colorScheme: ColorScheme.dark(
-                      primary: goldColor,
-                      surface: const Color(0xFF161B22),
-                    ),
-                  ),
-                  child: child!,
-                );
-              },
             );
             if (picked != null) {
               setState(() {
@@ -635,7 +624,7 @@ class _CustomerStatementScreenState
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: const BoxDecoration(
-        color: Color(0xFF1E1E2C),
+        color: Color(0xFF161B22),
         borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
       ),
       child: const Row(

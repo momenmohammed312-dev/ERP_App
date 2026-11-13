@@ -11,11 +11,21 @@ part 'product_dao.g.dart';
 class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   ProductDao(super.db);
 
+  /// Helper filter: excludes soft-deleted products AND customer custody products (أمانات عملاء)
+  /// so custody goods never pollute store inventory or retail cashier.
+  Expression<bool> _isStandardActive(Products p) =>
+      (p.status.equals('Deleted').not() | p.status.isNull()) &
+      (p.productType.equals('custody_only').not() | p.productType.isNull());
+
   Future<List<Product>> getAllProducts() => 
-      (select(products)..where((p) => p.status.equals('Deleted').not() | p.status.isNull())).get();
+      (select(products)..where((p) => _isStandardActive(p))).get();
       
   Stream<List<Product>> watchAllProducts() => 
-      (select(products)..where((p) => p.status.equals('Deleted').not() | p.status.isNull())).watch();
+      (select(products)..where((p) => _isStandardActive(p))).watch();
+
+  /// Used exclusively in customer custody and toll-manufacturing screens
+  Future<List<Product>> getAllProductsIncludingCustody() => 
+      (select(products)..where((p) => p.status.equals('Deleted').not() | p.status.isNull())).get();
       
   /// Inserts a product, stamps it with a fresh `syncId` + createdAt/updatedAt,
   /// and queues an 'insert' sync entry. The local write always succeeds even if
@@ -170,7 +180,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     final countExp = products.id.count();
     final query = selectOnly(products)
       ..addColumns([countExp])
-      ..where(products.status.equals('Deleted').not() | products.status.isNull());
+      ..where((products.status.equals('Deleted').not() | products.status.isNull()) & (products.productType.equals('custody_only').not() | products.productType.isNull()));
 
     final result = await query.getSingle();
     return result.read(countExp) ?? 0;
@@ -194,7 +204,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     return (select(products)
       ..where(
         (p) =>
-            (p.status.equals('Deleted').not() | p.status.isNull()) &
+            _isStandardActive(p) &
             (p.name.like('%$q%') | p.barcode.like('%$q%')),
       ))
         .get();
@@ -206,14 +216,14 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
       return getAllProducts();
     }
     return (select(products)
-      ..where((p) => (p.status.equals('Deleted').not() | p.status.isNull()) & p.category.equals(category))
+      ..where((p) => _isStandardActive(p) & p.category.equals(category))
     ).get();
   }
 
   /// Search products by barcode
   Future<Product?> getProductByBarcode(String barcode) {
     return (select(products)
-      ..where((p) => (p.status.equals('Deleted').not() | p.status.isNull()) & p.barcode.equals(barcode))
+      ..where((p) => _isStandardActive(p) & p.barcode.equals(barcode))
     ).getSingleOrNull();
   }
 
@@ -221,7 +231,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   Future<List<String>> getUniqueCategories() {
     final query = selectOnly(products)
       ..addColumns([products.category])
-      ..where(products.category.isNotNull() & (products.status.equals('Deleted').not() | products.status.isNull()))
+      ..where(products.category.isNotNull() & (products.status.equals('Deleted').not() | products.status.isNull()) & (products.productType.equals('custody_only').not() | products.productType.isNull()))
       ..groupBy([products.category]);
 
     return query.map((row) => row.read(products.category)!).get();
@@ -238,7 +248,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     String? unit,
     String? searchQuery,
   }) {
-    var query = select(products)..where((p) => p.status.equals('Deleted').not() | p.status.isNull());
+    var query = select(products)..where((p) => _isStandardActive(p));
 
     if (category != null && category != 'all') {
       query = query..where((p) => p.category.equals(category));

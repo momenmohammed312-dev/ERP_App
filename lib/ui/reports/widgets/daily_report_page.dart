@@ -410,9 +410,10 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 750;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF121212) : Colors.grey.shade50;
-    final cardBg = isDark ? const Color(0xFF1E1E2C) : Colors.white;
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
     final subTextColor = isDark ? Colors.white70 : Colors.black54;
     final totalSales = _dailyData.fold<double>(
@@ -479,102 +480,126 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Summary cards
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildSummaryCard(
-                          'إجمالي المبيعات',
-                          totalSales.toStringAsFixed(2),
-                          Colors.blue,
-                          cardBg,
-                          textColor,
-                          onTap: () => _showDrillDown(context, 'sales', totalSales),
-                        ),
-                      ),
-                      const Gap(12),
-                      Expanded(
-                        child: _buildSummaryCard(
-                          'مبيعات كاش',
-                          totalCash.toStringAsFixed(2),
-                          Colors.green,
-                          cardBg,
-                          textColor,
-                          onTap: () => _showDrillDown(context, 'cash', totalCash),
-                        ),
-                      ),
-                      const Gap(12),
-                      Expanded(
-                        child: _buildSummaryCard(
-                          'مبيعات آجل',
-                          totalCredit.toStringAsFixed(2),
-                          Colors.purple,
-                          cardBg,
-                          textColor,
-                          onTap: () => _showDrillDown(context, 'credit', totalCredit),
-                        ),
-                      ),
-                      const Gap(12),
-                      Expanded(
-                        child: _buildSummaryCard(
-                          'عدد الفواتير',
-                          totalInvoices.toString(),
-                          Colors.orange,
-                          cardBg,
-                          textColor,
-                          onTap: () => _showDrillDown(context, 'invoiceCount', totalInvoices.toDouble()),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Gap(12),
-                  // Second row: Returns, Net Sales, Purchases, Net Profit
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildSummaryCard(
-                          'إجمالي المرتجعات',
-                          totalReturns.toStringAsFixed(2),
-                          Colors.redAccent,
-                          cardBg,
-                          textColor,
-                          onTap: () => _showDrillDown(context, 'returns', totalReturns),
-                        ),
-                      ),
-                      const Gap(12),
-                      Expanded(
-                        child: _buildSummaryCard(
-                          'صافي المبيعات',
-                          netSales.toStringAsFixed(2),
-                          Colors.teal,
-                          cardBg,
-                          textColor,
-                          onTap: () => _showDrillDown(context, 'netSales', netSales),
-                        ),
-                      ),
-                      const Gap(12),
-                      Expanded(
-                        child: _buildSummaryCard(
-                          'إجمالي المشتريات',
-                          totalPurchases.toStringAsFixed(2),
-                          Colors.orange,
-                          cardBg,
-                          textColor,
-                          onTap: () => _showDrillDown(context, 'purchases', totalPurchases),
-                        ),
-                      ),
-                      const Gap(12),
-                      Expanded(
-                        child: _buildSummaryCard(
-                          'صافي الربح',
-                          netProfit.toStringAsFixed(2),
-                          netProfit >= 0 ? Colors.green : Colors.red,
-                          cardBg,
-                          textColor,
-                          onTap: () => _showDrillDown(context, 'netProfit', netProfit),
-                        ),
-                      ),
-                    ],
+                  // Summary cards (Responsive Grid)
+                  Builder(
+                    builder: (ctx) {
+                      final isNarrow = MediaQuery.of(ctx).size.width < 750;
+                      final cardSales = _buildSummaryCard(
+                        'إجمالي المبيعات',
+                        totalSales.toStringAsFixed(2),
+                        Colors.blue,
+                        cardBg,
+                        textColor,
+                        onTap: () => _showDrillDown(context, 'sales', totalSales),
+isNarrow: isNarrow,
+                      );
+                      final cardCash = _buildSummaryCard(
+                        'مبيعات كاش',
+                        totalCash.toStringAsFixed(2),
+                        Colors.green,
+                        cardBg,
+                        textColor,
+                        onTap: () => _showDrillDown(context, 'cash', totalCash),
+isNarrow: isNarrow,
+                      );
+                      final cardCredit = _buildSummaryCard(
+                        'مبيعات آجل',
+                        totalCredit.toStringAsFixed(2),
+                        Colors.purple,
+                        cardBg,
+                        textColor,
+                        onTap: () => _showDrillDown(context, 'credit', totalCredit),
+isNarrow: isNarrow,
+                      );
+                      final cardInvoices = _buildSummaryCard(
+                        'عدد الفواتير',
+                        totalInvoices.toString(),
+                        Colors.orange,
+                        cardBg,
+                        textColor,
+                        onTap: () => _showDrillDown(context, 'invoiceCount', totalInvoices.toDouble()),
+isNarrow: isNarrow,
+                      );
+
+                      final cardReturns = _buildSummaryCard(
+                        'إجمالي المرتجعات',
+                        totalReturns.toStringAsFixed(2),
+                        Colors.redAccent,
+                        cardBg,
+                        textColor,
+                        onTap: () => _showDrillDown(context, 'returns', totalReturns),
+isNarrow: isNarrow,
+                      );
+                      final cardNetSales = _buildSummaryCard(
+                        'صافي المبيعات',
+                        netSales.toStringAsFixed(2),
+                        Colors.teal,
+                        cardBg,
+                        textColor,
+                        onTap: () => _showDrillDown(context, 'netSales', netSales),
+isNarrow: isNarrow,
+                      );
+                      final cardPurchases = _buildSummaryCard(
+                        'إجمالي المشتريات',
+                        totalPurchases.toStringAsFixed(2),
+                        Colors.orange,
+                        cardBg,
+                        textColor,
+                        onTap: () => _showDrillDown(context, 'purchases', totalPurchases),
+isNarrow: isNarrow,
+                      );
+                      final cardNetProfit = _buildSummaryCard(
+                        'صافي الربح',
+                        netProfit.toStringAsFixed(2),
+                        netProfit >= 0 ? Colors.green : Colors.red,
+                        cardBg,
+                        textColor,
+                        onTap: () => _showDrillDown(context, 'netProfit', netProfit),
+isNarrow: isNarrow,
+                      );
+
+                      if (isNarrow) {
+                        return Column(
+                          children: [
+                            Row(children: [Expanded(child: cardSales), const Gap(8), Expanded(child: cardCash)]),
+                            const Gap(8),
+                            Row(children: [Expanded(child: cardCredit), const Gap(8), Expanded(child: cardInvoices)]),
+                            const Gap(8),
+                            Row(children: [Expanded(child: cardReturns), const Gap(8), Expanded(child: cardNetSales)]),
+                            const Gap(8),
+                            Row(children: [Expanded(child: cardPurchases), const Gap(8), Expanded(child: cardNetProfit)]),
+                          ],
+                        );
+                      }
+
+                      return Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(child: cardSales),
+                              const Gap(12),
+                              Expanded(child: cardCash),
+                              const Gap(12),
+                              Expanded(child: cardCredit),
+                              const Gap(12),
+                              Expanded(child: cardInvoices),
+                            ],
+                          ),
+                          const Gap(12),
+                          Row(
+                            children: [
+                              Expanded(child: cardReturns),
+                              const Gap(12),
+                              Expanded(child: cardNetSales),
+                              const Gap(12),
+                              Expanded(child: cardPurchases),
+                              const Gap(12),
+                              Expanded(child: cardNetProfit),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const Gap(12),
                   // Third row: Expenses + Waste
@@ -634,7 +659,10 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
                             ),
                             child: DataTable(
                               showCheckboxColumn: false,
-                              columnSpacing: 20,
+                              columnSpacing: isNarrow ? 12 : 20,
+headingRowHeight: isNarrow ? 38 : 52,
+dataRowMinHeight: isNarrow ? 38 : 48,
+dataRowMaxHeight: isNarrow ? 44 : 56,
                               headingRowColor: WidgetStateProperty.all(
                                 Theme.of(context).colorScheme.primaryContainer
                                     .withValues(alpha: 0.5),
@@ -832,6 +860,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
     Color cardBg,
     Color textColor, {
     VoidCallback? onTap,
+    bool isNarrow = false,
   }) {
     return Card(
       color: cardBg,
@@ -844,25 +873,32 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(isNarrow ? 10 : 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
                 title,
                 style: TextStyle(
                   color: color,
                   fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                  fontSize: isNarrow ? 11 : 13,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const Gap(8),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
+              Gap(isNarrow ? 4 : 8),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: isNarrow ? 17 : 22,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
                 ),
               ),
             ],
@@ -875,7 +911,7 @@ class _DailyReportPageState extends ConsumerState<DailyReportPage> {
   void _showDrillDown(BuildContext context, String metric, double total) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF121212) : Colors.grey.shade50;
-    final cardBg = isDark ? const Color(0xFF1E1E2C) : Colors.white;
+    final cardBg = isDark ? const Color(0xFF161B22) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
 
     String title;

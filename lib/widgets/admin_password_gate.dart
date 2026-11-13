@@ -31,9 +31,9 @@ Future<bool> showAdminPasswordGate(BuildContext context, AppDatabase db) async {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
           ElevatedButton(
             onPressed: () async {
-              final ok = await db.userDao.authenticate('admin', controller.text);
+              final ok = await db.userDao.authenticateAnyAdmin(controller.text);
               if (ctx.mounted) {
-                Navigator.pop(ctx, ok != null);
+                Navigator.pop(ctx, ok);
               }
             },
             child: const Text('تأكيد'),

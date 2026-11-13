@@ -27,7 +27,9 @@ jobs:
         shell: cmd
 
       - name: Build Windows Release
-        run: flutter build windows --release --dart-define=LICENSE_SECRET_KEY=${{ secrets.LICENSE_SECRET_KEY }} --dart-define=TRIAL_LICENSE_KEY=${{ secrets.TRIAL_LICENSE_KEY }}
+        # ENABLE_SMART_ANALYTICS=false: customer releases hide Smart Analytics
+        # & Smart Notifications (explicit false wins over ENABLE_ALL_FEATURES).
+        run: flutter build windows --release --dart-define=LICENSE_SECRET_KEY=${{ secrets.LICENSE_SECRET_KEY }} --dart-define=TRIAL_LICENSE_KEY=${{ secrets.TRIAL_LICENSE_KEY }} --dart-define=ENABLE_SMART_ANALYTICS=false
 
       - name: Verify build output (all plugin DLLs present)
         shell: pwsh

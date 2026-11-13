@@ -166,6 +166,11 @@ class StaffManagementService {
     await updateStaffInfo(user, staffId: staffId, status: 'terminated');
   }
 
+  Future<void> deleteStaff(User? user, String staffId) async {
+    PermissionValidator.requirePermission(user, Permission.deleteEmployee, 'حذف موظف');
+    await _dao.deleteStaff(staffId);
+  }
+
   // ATTENDANCE MANAGEMENT
 
   /// Restored old rule: worked + overtime hours are always derived from the
@@ -259,19 +264,85 @@ class StaffManagementService {
     int skipped = 0;
     await db.transaction(() async {
       for (final r in rows) {
-        if (r.checkInTime == null ||
-            r.checkOutTime == null ||
-            inPaidPeriod(r.date)) {
+        if (inPaidPeriod(r.date)) {
           skipped++;
           continue;
         }
+
+        DateTime? checkIn = r.checkInTime;
+        // Attempt to recover missing check-in from raw biometric punches
+        if (checkIn == null) {
+          final dayStart = DateTime(r.date.year, r.date.month, r.date.day);
+          final dayEnd = dayStart.add(const Duration(hours: 26));
+          final rawPunches = await _dao.attachedDatabase.attendanceDeviceDao
+              .getMatchedEventsForStaff(staffId, dayStart, dayEnd);
+          if (rawPunches.isNotEmpty) {
+            rawPunches.sort((a, b) => a.eventTime.compareTo(b.eventTime));
+            checkIn = rawPunches.first.eventTime;
+          }
+        }
+
+        if (checkIn == null) {
+          skipped++;
+          continue;
+        }
+
+        DateTime? checkOut = r.checkOutTime;
+        // Attempt to close missing early checkout from raw biometric punches
+        if (checkOut == null) {
+          final dayStart = DateTime(r.date.year, r.date.month, r.date.day);
+          final dayEnd = dayStart.add(const Duration(hours: 26));
+          final rawPunches = await _dao.attachedDatabase.attendanceDeviceDao
+              .getMatchedEventsForStaff(staffId, dayStart, dayEnd);
+          final eligible = rawPunches.where((e) =>
+              e.eventTime.isAfter(checkIn!) &&
+              e.eventTime.difference(checkIn) >= const Duration(hours: 2)
+          ).toList();
+          if (eligible.isNotEmpty) {
+            eligible.sort((a, b) => a.eventTime.compareTo(b.eventTime));
+            checkOut = eligible.last.eventTime;
+          }
+        }
+
+        if (checkOut == null) {
+          if (r.checkInTime == null) {
+            await _dao.updateAttendance(
+              r.copyWith(
+                checkInTime: Value(checkIn),
+                updatedAt: DateTime.now(),
+              ),
+            );
+            recomputed++;
+          } else {
+            skipped++;
+          }
+          continue;
+        }
+
         final calc = await _calcWorkedHours(
           staffId,
-          r.checkInTime!,
-          r.checkOutTime!,
+          checkIn,
+          checkOut,
         );
 
         String newStatus = r.status;
+        if (r.source != 'admin_override') {
+          try {
+            final engine = AttendanceCalculationEngine(
+              db,
+              db.attendanceDeviceDao,
+              _dao,
+            );
+            final sched = await engine.getScheduleForStaff(staffId);
+            final calcRes = engine.calculateAttendance(
+              checkInTime: checkIn,
+              checkOutTime: checkOut,
+              schedule: sched,
+            );
+            newStatus = calcRes.status;
+          } catch (_) {}
+        }
+
         String? newLeaveType = r.leaveType;
         final notesText = r.notes ?? '';
         final mentionsExcuse =
@@ -292,6 +363,8 @@ class StaffManagementService {
 
         await _dao.updateAttendance(
           r.copyWith(
+            checkInTime: Value(checkIn),
+            checkOutTime: Value(checkOut),
             status: newStatus,
             leaveType: Value(newLeaveType),
             workingHours: Value(calc.workingHours),
@@ -819,6 +892,8 @@ class StaffManagementService {
     required double amount,
     required String reason,
     int? installmentMonths,
+    String? deductOnPeriod,
+    String status = 'approved',
   }) async {
     PermissionValidator.requirePermission(user, Permission.manageSalaries, 'طلب سلفة');
     await _dao.addAdvance(
@@ -827,15 +902,35 @@ class StaffManagementService {
         amount: amount,
         reason: Value(reason),
         requestDate: DateTime.now(),
-        status: 'pending',
+        status: status,
+        approvedBy: status == 'approved'
+            ? Value(user?.fullName ?? user?.username ?? 'admin')
+            : const Value.absent(),
+        approvedAt: status == 'approved'
+            ? Value(DateTime.now())
+            : const Value.absent(),
         installmentMonths: Value(installmentMonths),
         monthlyDeduction: installmentMonths != null
             ? Value(amount / installmentMonths)
             : const Value.absent(),
+        deductOnPeriod: Value(deductOnPeriod),
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),
     );
+  }
+
+  Future<void> approveAdvance(User? user, int advanceId) async {
+    PermissionValidator.requirePermission(user, Permission.manageSalaries, 'اعتماد سلفة');
+    await _dao.approveAdvance(
+      advanceId,
+      user?.fullName ?? user?.username ?? 'admin',
+    );
+  }
+
+  Future<void> rejectAdvance(User? user, int advanceId, [String? reason]) async {
+    PermissionValidator.requirePermission(user, Permission.manageSalaries, 'رفض سلفة');
+    await _dao.rejectAdvance(advanceId, reason);
   }
 
   // PAYROLL MANAGEMENT
@@ -860,20 +955,30 @@ class StaffManagementService {
       periodEnd,
     );
 
-    // Get advances to deduct (approved or paid advances, respecting installments and the payroll period)
+    // Get advances to deduct (approved, paid, or pending advances, respecting installments and the payroll period)
     final advances = await _dao.getAdvancesByStaff(staffId);
     final eligibleAdvances = advances.where((a) {
-      if (a.status != 'approved' && a.status != 'paid') return false;
+      if (a.status == 'rejected') return false;
 
       final effectiveDate = a.paymentDate ?? a.requestDate;
 
-      // Installment advances: deduct over installmentMonths starting from the advance month
+      int? dedYear;
+      int? dedMonth;
+      if (a.deductOnPeriod != null && a.deductOnPeriod!.trim().isNotEmpty) {
+        final parts = a.deductOnPeriod!.trim().split('-');
+        if (parts.length >= 2) {
+          dedYear = int.tryParse(parts[0]);
+          dedMonth = int.tryParse(parts[1]);
+        }
+      }
+
+      // Installment advances: deduct over installmentMonths starting from the advance month (or deductOnPeriod)
       if (a.installmentMonths != null &&
           a.installmentMonths! > 1 &&
           a.monthlyDeduction != null &&
           a.monthlyDeduction! > 0) {
-        final startYear = effectiveDate.year;
-        final startMonth = effectiveDate.month;
+        final startYear = dedYear ?? effectiveDate.year;
+        final startMonth = dedMonth ?? effectiveDate.month;
         final currentYear = periodStart.year;
         final currentMonth = periodStart.month;
         final monthsDiff =
@@ -881,7 +986,18 @@ class StaffManagementService {
         return monthsDiff >= 0 && monthsDiff < a.installmentMonths!;
       }
 
-      // Single advance: must fall within this payroll period
+      // Single advance:
+      if (dedYear != null && dedMonth != null) {
+        if (payrollPeriod.contains('-W')) {
+          if (a.deductOnPeriod == payrollPeriod) return true;
+          final w1Code = '$dedYear-${dedMonth.toString().padLeft(2, '0')}-W1';
+          return payrollPeriod == w1Code;
+        } else {
+          return periodStart.year == dedYear && periodStart.month == dedMonth;
+        }
+      }
+
+      // Fallback for legacy advances without deductOnPeriod: must fall within this payroll period
       return !effectiveDate.isBefore(periodStart) &&
           !effectiveDate.isAfter(periodEnd);
     }).toList();
@@ -1019,6 +1135,11 @@ class StaffManagementService {
       standardHoursPerDay:
           schedule?.standardHoursPerDay ??
           AttendanceDeductionRules.defaultStandardHoursPerDay,
+      restBreakEnabled: schedule?.restBreakEnabled ?? false,
+      restBreakStartMinutes:
+          schedule?.restBreakStartMinutesSinceMidnight ?? 13 * 60,
+      restBreakEndMinutes:
+          schedule?.restBreakEndMinutesSinceMidnight ?? 14 * 60,
     );
     final hourlyBase = deduction.hourly;
 

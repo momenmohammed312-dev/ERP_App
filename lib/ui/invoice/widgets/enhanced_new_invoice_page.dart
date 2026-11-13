@@ -100,6 +100,7 @@ class _EnhancedNewInvoicePageState
   bool _showInvoiceTypeModal = true;
   Timer? _searchDebounce;
   String? _invoiceNumber;
+  int _selectedMobileTabIndex = 0; // 0 = المنتجات, 1 = الفاتورة والسلة
 
   // Vegetable-flavor: record empty crates issued to the customer on sale.
   bool _registerEmptyBarnika = true;
@@ -1108,11 +1109,17 @@ class _EnhancedNewInvoicePageState
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final isDesktop = MediaQuery.of(context).size.width >= 800;
+
     // Main invoice interface
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('فاتورة جديدة'),
+        title: Text(
+          !isDesktop
+              ? (_selectedMobileTabIndex == 0 ? 'إضافة منتجات' : 'سلة الفاتورة')
+              : 'فاتورة جديدة',
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
@@ -1124,30 +1131,139 @@ class _EnhancedNewInvoicePageState
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
+        bottom: !isDesktop
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(46),
+                child: Container(
+                  height: 38,
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() => _selectedMobileTabIndex = 0),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: _selectedMobileTabIndex == 0
+                                  ? const Color(0xFFC9A84C)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            alignment: Alignment.center,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.grid_view_rounded,
+                                  size: 16,
+                                  color: _selectedMobileTabIndex == 0
+                                      ? Colors.black
+                                      : Theme.of(context).colorScheme.onSurface,
+                                ),
+                                const Gap(6),
+                                Flexible(
+                                  child: Text(
+                                    'المنتجات',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: _selectedMobileTabIndex == 0
+                                        ? Colors.black
+                                        : Theme.of(context).colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() => _selectedMobileTabIndex = 1),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: _selectedMobileTabIndex == 1
+                                  ? const Color(0xFFC9A84C)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            alignment: Alignment.center,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.shopping_cart_outlined,
+                                  size: 16,
+                                  color: _selectedMobileTabIndex == 1
+                                      ? Colors.black
+                                      : Theme.of(context).colorScheme.onSurface,
+                                ),
+                                const Gap(6),
+                                Flexible(
+                                  child: Text(
+                                    'الفاتورة (${_productEntries.length})',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: _selectedMobileTabIndex == 1
+                                        ? Colors.black
+                                        : Theme.of(context).colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : null,
       ),
       body: Form(
         key: _formKey,
-        child: Row(
-          children: [
-            // Products Panel (2/3 width)
-            Expanded(flex: 2, child: _buildProductsPanel()),
-            const VerticalDivider(width: 1),
-            // Invoice Details Panel (1/3 width)
-            Expanded(flex: 1, child: _buildDetailsPanel()),
-          ],
-        ),
+        child: isDesktop
+            ? Row(
+                children: [
+                  Expanded(flex: 5, child: _buildProductsPanel(isDesktop: true)),
+                  const VerticalDivider(width: 1),
+                  Expanded(flex: 3, child: _buildDetailsPanel(isDesktop: true)),
+                ],
+              )
+            : (_selectedMobileTabIndex == 0
+                ? _buildProductsPanel(isDesktop: false)
+                : _buildDetailsPanel(isDesktop: false)),
       ),
     );
   }
 
-  Widget _buildProductsPanel() {
+  Widget _buildProductsPanel({required bool isDesktop}) {
+    final width = MediaQuery.of(context).size.width;
+    final int crossAxisCount = isDesktop ? 4 : (width >= 600 ? 3 : 2);
+    final double childAspectRatio = isDesktop ? 1.2 : 0.88;
+
     return Container(
       color: Theme.of(context).colorScheme.surface,
       child: Column(
         children: [
           // Search bar
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.all(isDesktop ? 16.0 : 10.0),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
@@ -1157,6 +1273,10 @@ class _EnhancedNewInvoicePageState
                   icon: const Icon(Icons.qr_code_scanner),
                   onPressed: _scanBarcode,
                 ),
+                isDense: !isDesktop,
+                contentPadding: isDesktop
+                    ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+                    : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide(color: Theme.of(context).dividerColor),
@@ -1171,73 +1291,142 @@ class _EnhancedNewInvoicePageState
             ),
           ),
 
-          const Gap(10),
+          Gap(isDesktop ? 10 : 4),
 
           // Products grid
           Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(16),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                childAspectRatio: 1.2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              itemCount: _filteredProducts.length,
-              itemBuilder: (context, index) {
-                final product = _filteredProducts[index];
-                return ProductCard(
-                  product: product,
-                  onTap: () => _showProductSelectionModal(product),
-                );
-              },
-            ),
+            child: _filteredProducts.isEmpty
+                ? Center(
+                    child: Text(
+                      'لا توجد منتجات مطابقة للبحث',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                        fontSize: 14,
+                      ),
+                    ),
+                  )
+                : GridView.builder(
+                    padding: EdgeInsets.all(isDesktop ? 16 : 8),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossAxisCount,
+                      childAspectRatio: childAspectRatio,
+                      crossAxisSpacing: isDesktop ? 12 : 8,
+                      mainAxisSpacing: isDesktop ? 12 : 8,
+                    ),
+                    itemCount: _filteredProducts.length,
+                    itemBuilder: (context, index) {
+                      final product = _filteredProducts[index];
+                      return ProductCard(
+                        product: product,
+                        onTap: () => _showProductSelectionModal(product),
+                      );
+                    },
+                  ),
           ),
+
+          // Quick floating summary bar on mobile
+          if (!isDesktop && _productEntries.isNotEmpty)
+            SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 6,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${_productEntries.length} منتجات في السلة',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            'المجموع: ${_grandTotal.toStringAsFixed(2)} ج.م',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () => setState(() => _selectedMobileTabIndex = 1),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.arrow_forward, size: 16),
+                      label: const Text('متابعة الفاتورة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildDetailsPanel() {
+  Widget _buildDetailsPanel({required bool isDesktop}) {
     return Container(
       color: Theme.of(context).colorScheme.surface,
       child: Column(
         children: [
           // Invoice header
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
               color: Theme.of(
                 context,
-              ).colorScheme.primary.withValues(alpha: 0.1),
+              ).colorScheme.primary.withValues(alpha: 0.08),
               border: Border(
                 bottom: BorderSide(color: Theme.of(context).dividerColor),
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  _invoiceNumber ?? 'جاري الإنشاء...',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _invoiceNumber ?? 'فاتورة جديدة',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Gap(2),
+                    Text(
+                      DateTime.now().toString().substring(0, 19),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
                 ),
-                const Gap(4),
-                Text(
-                  DateTime.now().toString().substring(0, 19),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-                const Gap(8),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
+                    horizontal: 10,
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
@@ -1248,7 +1437,7 @@ class _EnhancedNewInvoicePageState
                         : Theme.of(
                             context,
                           ).colorScheme.secondary.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: _invoiceType == InvoiceType.cash
                           ? Theme.of(context).colorScheme.primary
@@ -1258,7 +1447,7 @@ class _EnhancedNewInvoicePageState
                   child: Text(
                     _invoiceType.name.toUpperCase(),
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
                       color: _invoiceType == InvoiceType.cash
                           ? Theme.of(context).colorScheme.primary
@@ -1273,15 +1462,17 @@ class _EnhancedNewInvoicePageState
           // Customer selection and Invoice Date
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  flex: 3,
+                SizedBox(
+                  height: 44,
                   child: DropdownButtonFormField<String>(
                     initialValue: _selectedCustomerId,
+                    isDense: true,
                     decoration: InputDecoration(
                       labelText: 'العميل',
-                      prefixIcon: const Icon(Icons.person),
+                      prefixIcon: const Icon(Icons.person, size: 18),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(color: Theme.of(context).dividerColor),
@@ -1303,7 +1494,7 @@ class _EnhancedNewInvoicePageState
                     items: _customers.map((customer) {
                       return DropdownMenuItem(
                         value: customer.id,
-                        child: Text(customer.name),
+                        child: Text(customer.name, style: const TextStyle(fontSize: 13)),
                       );
                     }).toList(),
                     onChanged: (customerId) {
@@ -1313,39 +1504,35 @@ class _EnhancedNewInvoicePageState
                     },
                   ),
                 ),
-                const Gap(12),
-                Expanded(
-                  flex: 2,
-                  child: InkWell(
-                    onTap: _pickInvoiceDate,
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: 'تاريخ الفاتورة',
-                        prefixIcon: const Icon(Icons.calendar_today, size: 20),
-                        suffixIcon: const Icon(Icons.edit_calendar, size: 16),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Theme.of(context).dividerColor),
+                const Gap(8),
+                InkWell(
+                  onTap: _pickInvoiceDate,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.calendar_today_outlined, size: 16, color: Theme.of(context).colorScheme.primary),
+                        const Gap(8),
+                        Text(
+                          'تاريخ الفاتورة: ',
+                          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
                         ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Theme.of(context).dividerColor),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(
-                            color: Theme.of(context).colorScheme.primary,
-                            width: 2,
+                        Expanded(
+                          child: Text(
+                            DateFormat('yyyy/MM/dd - hh:mm a').format(_invoiceDate),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.surface,
-                      ),
-                      child: Text(
-                        DateFormat('yyyy/MM/dd HH:mm').format(_invoiceDate),
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        Icon(Icons.edit_calendar_outlined, size: 16, color: Theme.of(context).colorScheme.primary),
+                      ],
                     ),
                   ),
                 ),
@@ -1386,6 +1573,14 @@ class _EnhancedNewInvoicePageState
                             fontSize: 16,
                           ),
                         ),
+                        if (!isDesktop) ...[
+                          const Gap(12),
+                          OutlinedButton.icon(
+                            onPressed: () => setState(() => _selectedMobileTabIndex = 0),
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('إضافة منتجات من القائمة'),
+                          ),
+                        ],
                       ],
                     ),
                   )
@@ -1413,94 +1608,140 @@ class _EnhancedNewInvoicePageState
                   ),
           ),
 
-          // Totals and payment
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              border: Border(
-                top: BorderSide(color: Theme.of(context).dividerColor),
-              ),
-            ),
-            child: Column(
-              children: [
-                // Totals summary
-                _buildTotalsSummary(),
-                const Gap(16),
-
-                // Payment method (cash only)
-                if (_invoiceType == InvoiceType.cash) ...[
-                  DropdownButtonFormField<PaymentMethod>(
-                    initialValue: _paymentMethod,
-                    decoration: const InputDecoration(
-                      labelText: 'طريقة الدفع',
-                      prefixIcon: Icon(Icons.payment),
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: PaymentMethod.cash,
-                        child: Text('نقدي'),
-                      ),
-                      DropdownMenuItem(
-                        value: PaymentMethod.visa,
-                        child: Text('فيزا'),
-                      ),
-                      DropdownMenuItem(
-                        value: PaymentMethod.mastercard,
-                        child: Text('ماستر كارد'),
-                      ),
-                      DropdownMenuItem(
-                        value: PaymentMethod.transfer,
-                        child: Text('تحويل بنكي'),
-                      ),
-                      DropdownMenuItem(
-                        value: PaymentMethod.wallet,
-                        child: Text('محفظة إلكترونية'),
-                      ),
-                      DropdownMenuItem(
-                        value: PaymentMethod.other,
-                        child: Text('أخرى'),
-                      ),
-                    ],
-                    onChanged: (method) {
-                      setState(() {
-                        _paymentMethod = method!;
-                      });
-                    },
+          // Totals and payment - Docked section with SafeArea
+          SafeArea(
+            top: false,
+            child: Container(
+              padding: EdgeInsets.fromLTRB(14, 10, 14, isDesktop ? 10 : 20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                  top: BorderSide(color: Theme.of(context).dividerColor),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 4,
+                    offset: const Offset(0, -2),
                   ),
-                  const Gap(12),
                 ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                // Compact Totals Summary Bar
+                _buildTotalsSummary(),
+                const Gap(8),
 
-                // Paid amount (credit only)
-                if (_invoiceType == InvoiceType.credit) ...[
-                  TextFormField(
-                    controller: _paidAmountController,
-                    decoration: const InputDecoration(
-                      labelText: 'المدفوع',
-                      prefixIcon: Icon(Icons.attach_money),
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                        RegExp(r'^\d+\.?\d{0,2}'),
+                // Payment Method & Quick Options Row
+                Row(
+                  children: [
+                    // Payment method (cash only)
+                    if (_invoiceType == InvoiceType.cash)
+                      Expanded(
+                        child: SizedBox(
+                          height: 38,
+                          child: DropdownButtonFormField<PaymentMethod>(
+                            initialValue: _paymentMethod,
+                            isDense: true,
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              labelText: 'طريقة الدفع',
+                              labelStyle: const TextStyle(fontSize: 12),
+                              prefixIcon: const Icon(Icons.payment, size: 16),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: PaymentMethod.cash, child: Text('نقدي', style: TextStyle(fontSize: 12))),
+                              DropdownMenuItem(value: PaymentMethod.visa, child: Text('فيزا', style: TextStyle(fontSize: 12))),
+                              DropdownMenuItem(value: PaymentMethod.mastercard, child: Text('ماستر كارد', style: TextStyle(fontSize: 12))),
+                              DropdownMenuItem(value: PaymentMethod.transfer, child: Text('تحويل', style: TextStyle(fontSize: 12))),
+                              DropdownMenuItem(value: PaymentMethod.wallet, child: Text('محفظة', style: TextStyle(fontSize: 12))),
+                              DropdownMenuItem(value: PaymentMethod.other, child: Text('أخرى', style: TextStyle(fontSize: 12))),
+                            ],
+                            onChanged: (method) {
+                              if (method != null) {
+                                setState(() => _paymentMethod = method);
+                              }
+                            },
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                  const Gap(8),
+
+                    // Paid amount (credit only)
+                    if (_invoiceType == InvoiceType.credit)
+                      Expanded(
+                        child: SizedBox(
+                          height: 38,
+                          child: TextFormField(
+                            controller: _paidAmountController,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              labelText: 'المدفوع',
+                              labelStyle: const TextStyle(fontSize: 12),
+                              prefixIcon: const Icon(Icons.attach_money, size: 16),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
+                          ),
+                        ),
+                      ),
+
+                    const Gap(8),
+
+                    // Quick Notes Button (compact icon button)
+                    SizedBox(
+                      height: 38,
+                      width: 40,
+                      child: IconButton.outlined(
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: Icon(
+                          _notesController.text.isNotEmpty ? Icons.speaker_notes : Icons.notes,
+                          size: 18,
+                          color: _notesController.text.isNotEmpty ? Theme.of(context).colorScheme.primary : null,
+                        ),
+                        tooltip: 'ملاحظات',
+                        onPressed: _showNotesDialog,
+                      ),
+                    ),
+
+                    const Gap(6),
+
+                    // Quick Expense Button (compact icon button)
+                    SizedBox(
+                      height: 38,
+                      width: 40,
+                      child: IconButton.outlined(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red[600],
+                          side: BorderSide(color: Colors.red.shade200),
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: _showAddExpenseDialog,
+                        icon: const Icon(Icons.add_circle_outline, size: 18),
+                        tooltip: 'إضافة مصروف',
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Remaining balance for credit invoice
+                if (_invoiceType == InvoiceType.credit) ...[
+                  const Gap(6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'المتبقي:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      const Text('المتبقي:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       Text(
                         '${_remainingAmount.toStringAsFixed(2)} ج.م',
                         style: TextStyle(
+                          fontSize: 12,
                           fontWeight: FontWeight.bold,
                           color: _remainingAmount > 0
                               ? Theme.of(context).colorScheme.error
@@ -1509,93 +1750,43 @@ class _EnhancedNewInvoicePageState
                       ),
                     ],
                   ),
-                  const Gap(12),
                 ],
 
-                // Compact Notes Button
-                SizedBox(
-                  height: 40,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.notes, size: 16),
-                    label: Text(
-                      'ملاحظات${_notesController.text.isNotEmpty ? ' (${_notesController.text.length})' : ''}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('الملاحظات'),
-                          content: TextField(
-                            controller: _notesController,
-                            maxLines: 4,
-                            decoration: const InputDecoration(
-                              hintText: 'اكتب ملاحظاتك هنا...',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('إلغاء'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                setState(() {});
-                              },
-                              child: const Text('حفظ'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const Gap(16),
+                const Gap(8),
 
-                // Quick expense button
-                SizedBox(
-                  width: double.infinity,
-                  height: 40,
-                  child: OutlinedButton.icon(
-                    onPressed: _showAddExpenseDialog,
-                    icon: const Icon(Icons.add_circle_outline, size: 18),
-                    label: const Text('إضافة مصروف جديد'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red[700],
-                      side: BorderSide(color: Colors.red.shade200),
-                    ),
-                  ),
-                ),
-                const Gap(12),
-
-                // Action buttons
+                // Main Action Buttons
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton(
-                        onPressed: _saveDraft,
-                        child: const Text('حفظ المسودة'),
+                      flex: 1,
+                      child: SizedBox(
+                        height: 42,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: _saveDraft,
+                          child: const Text('حفظ المسودة', style: TextStyle(fontSize: 12)),
+                        ),
                       ),
                     ),
-                    const Gap(12),
+                    const Gap(8),
                     Expanded(
                       flex: 2,
-                      child: ElevatedButton(
-                        onPressed: _completeInvoice,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.primary,
-                          foregroundColor: Theme.of(
-                            context,
-                          ).colorScheme.onPrimary,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                        ),
-                        child: const Text(
-                          'إكمال والطباعة',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                      child: SizedBox(
+                        height: isDesktop ? 42 : 48,
+                        child: ElevatedButton.icon(
+                          onPressed: _completeInvoice,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(Icons.print_rounded, size: 18),
+                          label: const Text(
+                            'إكمال والطباعة',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
                         ),
                       ),
                     ),
@@ -1604,6 +1795,37 @@ class _EnhancedNewInvoicePageState
               ],
             ),
           ),
+        ),
+        ],
+      ),
+    );
+  }
+
+  void _showNotesDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('الملاحظات'),
+        content: TextField(
+          controller: _notesController,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: 'اكتب ملاحظاتك هنا...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {});
+            },
+            child: const Text('حفظ'),
+          ),
         ],
       ),
     );
@@ -1611,7 +1833,7 @@ class _EnhancedNewInvoicePageState
 
   Widget _buildTotalsSummary() {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(8),
@@ -1619,68 +1841,95 @@ class _EnhancedNewInvoicePageState
       ),
       child: Column(
         children: [
-          _buildTotalRow('الإجمالي الفرعي:', _subtotal),
-          if (_totalDiscount > 0)
-            _buildTotalRow(
-              'الخصم:',
-              -_totalDiscount,
-              color: Theme.of(context).colorScheme.error,
-            ),
-          if (_totalTax > 0)
-            _buildTotalRow(
-              'الضريبة:',
-              _totalTax,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          const Divider(),
-          _buildTotalRow(
-            'الإجمالي الكلي:',
-            _grandTotal,
-            color: Theme.of(context).colorScheme.onSurface,
-            isBold: true,
-            fontSize: 18,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'الإجمالي الفرعي: ${_subtotal.toStringAsFixed(2)} ج.م',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+              ),
+              if (_totalDiscount > 0) ...[
+                const Gap(4),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'الخصم: -${_totalDiscount.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              if (_totalTax > 0) ...[
+                const Gap(4),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'الضريبة: +${_totalTax.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const Gap(4),
+          Divider(color: Theme.of(context).dividerColor, height: 1),
+          const Gap(4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'الإجمالي الكلي:',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              const Gap(8),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${_grandTotal.toStringAsFixed(2)} ج.م',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           if (AppFeatures.hasShipmentTracking && _totalSupplierDue > 0) ...[
-            const Divider(),
-            _buildTotalRow(
-              'مستحق للموردين (عمولات):',
-              _totalSupplierDue,
-              color: Colors.purple.shade700,
-              isBold: true,
+            const Gap(2),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'مستحق للموردين:',
+                  style: TextStyle(fontSize: 11, color: Colors.purple.shade700, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  '${_totalSupplierDue.toStringAsFixed(2)} ج.م',
+                  style: TextStyle(fontSize: 11, color: Colors.purple.shade700, fontWeight: FontWeight.bold),
+                ),
+              ],
             ),
           ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTotalRow(
-    String label,
-    double amount, {
-    Color? color,
-    bool isBold = false,
-    double fontSize = 14,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-          Text(
-            amount.toStringAsFixed(2),
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-              color: color,
-            ),
-          ),
         ],
       ),
     );
