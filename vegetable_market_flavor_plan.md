@@ -51,34 +51,34 @@
 ## مراحل التنفيذ (مرحلة بمرحلة)
 
 ### Phase A — Build منفصل وإخفاء الموديولات + GitHub Actions Cloud APK
-- [ ] إضافة `productFlavors` (`base` و `vegetable`) في `android/app/build.gradle.kts` بـ `applicationIdSuffix = ".vegetable"` واسم تطبيق «سوق الخضار - مِدار».
-- [ ] تحديث `lib/core/config/app_features.dart` وإخفاء الموديولات غير المطلوبة في `Flavor.vegetable` فقط.
-- [ ] إضافة GitHub Actions workflow (`.github/workflows/build-vegetable-apk.yml`) لبناء الـ APK سحابياً على GitHub مع كل push على فرع `feat/vegetable-market-flavor` بحيث يمكن تحميله مباشرة من الهاتف في أي وقت.
+- [x] إضافة `productFlavors` (`base` و `vegetable`) في `android/app/build.gradle.kts` بـ `applicationIdSuffix = ".vegetable"` واسم تطبيق «سوق الخضار - مِدار».
+- [x] تحديث `lib/core/config/app_features.dart` وإخفاء الموديولات غير المطلوبة في `Flavor.vegetable` فقط.
+- [x] إضافة GitHub Actions workflow (`.github/workflows/build-vegetable-apk.yml`) لبناء الـ APK سحابياً على GitHub مع كل push على فرع `feat/vegetable-market-flavor` بحيث يمكن تحميله مباشرة من الهاتف في أي وقت.
 
 ### Phase B — Database Schema Migration (v82 — Append-Only)
-- [ ] ترقية `schemaVersion` من `81` إلى `82` في `lib/core/database/app_database.dart`.
-- [ ] إضافة أعمدة `status` (`open`/`closed`)، `toppingCount`، `toppingReason`، `closedAt` لجدول `vegetable_shipments`.
-- [ ] إضافة أعمدة `shipmentId` و `scope` (`shipment`/`shop`) لجدول `expenses`.
-- [ ] إضافة عمود `invoiceId` لجدول `empty_barnika_tracking`.
-- [ ] تشغيل `dart run build_runner build --delete-conflicting-outputs` واختبار الـ migration.
+- [x] ترقية `schemaVersion` من `81` إلى `82` في `lib/core/database/app_database.dart`.
+- [x] إضافة أعمدة `status` (`open`/`closed`)، `toppingCount`، `toppingReason`، `closedAt` لجدول `vegetable_shipments`.
+- [x] إضافة أعمدة `shipmentId` و `scope` (`shipment`/`shop`) لجدول `expenses`.
+- [x] إضافة عمود `invoiceId` لجدول `empty_barnika_tracking`.
+- [x] تشغيل `dart run build_runner build --delete-conflicting-outputs` واختبار الـ migration.
 
 ### Phase C — منطق العمل (Business Logic & Services)
-- [ ] تحديث `ShipmentAllocationService`: حساب المتاح شاملة `toppingCount` ومنع البيع الزائد.
-- [ ] إنشاء `ShipmentSettlementService`: حساب كشف الشحنة (المبيعات − العمولة − النولون) وتسجيل قيود المورد في `LedgerTransactions`.
-- [ ] تحديث `InvoiceService`: تسجيل عهدة البرانيك الفارغة والمستلم منها ذرياً مع الفاتورة.
-- [ ] إضافة أداة تطبيع الأسماء العربية للبحث والتنبيه عند إضافة زبون أو مورد.
-- [ ] كتابة اختبارات الوحدة (`test/unit/services/`).
+- [x] تحديث `ShipmentAllocationService`: حساب المتاح شاملة `toppingCount` ومنع البيع الزائد.
+- [x] إنشاء `ShipmentSettlementService`: حساب كشف الشحنة (المبيعات − العمولة − النولون) وتسجيل قيود المورد في `LedgerTransactions`.
+- [x] تحديث `InvoiceService`: تسجيل عهدة البرانيك الفارغة والمستلم منها ذرياً مع الفاتورة.
+- [x] إضافة أداة تطبيع الأسماء العربية للبحث والتنبيه عند إضافة زبون أو مورد.
+- [x] كتابة اختبارات الوحدة (`test/unit/services/`).
 
 ### Phase D — واجهات الموبايل (Mobile-First Screens)
-- [ ] شاشة البيع السريع للموبايل (زبون ← شحنة ← عدد ← سعر يدوي ← مدفوع/خصم ← برانيك مستلمة).
-- [ ] تحديث شاشة الشحنات وتفاصيل الشحنة (تسجيل التكميل، قفل الشحنة، كشف حساب المورد، تسجيل دفعة للمورد).
-- [ ] تحديث شاشة المصروفات (ربط مصروف نولون بشحنة أو مصروف محل عام).
-- [ ] تحديث شاشة الزباين والتحصيل والبرانيك الفاضية وتقفيل اليوم.
+- [x] شاشة البيع السريع للموبايل (زبون ← شحنة ← عدد ← سعر يدوي ← مدفوع/خصم ← برانيك مستلمة).
+- [x] تحديث شاشة الشحنات وتفاصيل الشحنة (تسجيل التكميل، قفل الشحنة، كشف حساب المورد، تسجيل دفعة للمورد).
+- [x] تحديث شاشة المصروفات (ربط مصروف نولون بشحنة أو مصروف محل عام).
+- [x] تحديث شاشة الزباين والتحصيل والبرانيك الفاضية وتقفيل اليوم.
 
 ### Phase E — استيراد الأرصدة الافتتاحية وتصدير الإكسل
-- [ ] إصلاح `VegetableMarketImportService` و `ExcelImportScreen` لقراءة ملفات `.xlsx` مباشرة بدلاً من `json.decode`.
-- [ ] إضافة تصدير إكسل شامل (الشحنات، مديونيات الزباين، أرصدة البرانيك، المصروفات).
+- [x] إصلاح `VegetableMarketImportService` و `ExcelImportScreen` لقراءة ملفات `.xlsx` مباشرة بدلاً من `json.decode`.
+- [x] إضافة تصدير إكسل شامل (الشحنات، مديونيات الزباين، أرصدة البرانيك، المصروفات).
 
 ### Phase F — الاختبار الشامل والـ Build النهائي
-- [ ] تشغيل `fvm flutter analyze` وجميع اختبارات الوحدة والـ migration.
-- [ ] التحقق من عدم تأثر `Flavor.base` وبناء الـ APK النهائي قبل الدمج في `integration/all-agents`.
+- [x] تشغيل `flutter analyze` وجميع اختبارات الوحدة والواجهة والـ migration والتحقق (`test/verification/`).
+- [x] التحقق من عدم تأثر `Flavor.base` وتجهيز الكود والـ workflow لبناء الـ APK على GitHub Actions عند الدفع إلى `feat/vegetable-market-flavor`.
