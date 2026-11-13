@@ -233,7 +233,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 81;
+  int get schemaVersion => 82;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -245,6 +245,7 @@ class AppDatabase extends _$AppDatabase {
       await _ensureAttendanceUniqueIndex();
       await _ensureV80IndexesAndSeed();
       await _ensureV81Indexes();
+      await _ensureV82Indexes();
     },
     onUpgrade: (Migrator m, int from, int to) async {
       log('Migration: from $from to $to');
@@ -446,6 +447,13 @@ class AppDatabase extends _$AppDatabase {
       // Schema v81 — Manufacturing stages, multi-variant outputs, sellable scrap
       if (from < 81) {
         await _runV81ManufacturingStagesAndVariants(m);
+      }
+
+      // Schema v82 — Vegetable market overhaul (FEAT-038):
+      // shipment status/topping columns, expense scope/shipment link,
+      // invoice link on empty barnika tracking, and default unknown supplier.
+      if (from < 82) {
+        await _runV82VegetableMarketOverhaul(m);
       }
 
       // 6. Special data fixes
@@ -1852,6 +1860,14 @@ class AppDatabase extends _$AppDatabase {
       {'table': 'sales_return_items', 'column': 'variant_id', 'type': 'INTEGER REFERENCES product_variants(id)'},
       {'table': 'staff_advances', 'column': 'paid_amount', 'type': 'REAL NOT NULL DEFAULT 0.0'},
       {'table': 'staff_advances', 'column': 'deduct_on_period', 'type': 'TEXT'},
+      // Schema v82 vegetable market overhaul columns
+      {'table': 'vegetable_shipments', 'column': 'status', 'type': "TEXT NOT NULL DEFAULT 'open'"},
+      {'table': 'vegetable_shipments', 'column': 'topping_count', 'type': 'INTEGER NOT NULL DEFAULT 0'},
+      {'table': 'vegetable_shipments', 'column': 'topping_reason', 'type': 'TEXT'},
+      {'table': 'vegetable_shipments', 'column': 'closed_at', 'type': 'INTEGER'},
+      {'table': 'expenses', 'column': 'shipment_id', 'type': 'INTEGER REFERENCES vegetable_shipments(id)'},
+      {'table': 'expenses', 'column': 'scope', 'type': "TEXT NOT NULL DEFAULT 'shop'"},
+      {'table': 'empty_barnika_tracking', 'column': 'invoice_id', 'type': 'INTEGER REFERENCES invoices(id)'},
     ];
 
     for (final check in columnChecks) {
@@ -4191,6 +4207,119 @@ class AppDatabase extends _$AppDatabase {
       ''');
     } catch (e) {
       log('v81: _ensureV81Indexes warning: $e');
+    }
+  }
+
+  /// Schema v82 — Vegetable market overhaul (FEAT-038):
+  /// - `vegetable_shipments`: `status`, `topping_count`, `topping_reason`, `closed_at`
+  /// - `expenses`: `shipment_id`, `scope`
+  /// - `empty_barnika_tracking`: `invoice_id`
+  /// - Indexes and default unknown supplier ('مورد غير محدد')
+  Future<void> _runV82VegetableMarketOverhaul(Migrator m) async {
+    await _logMigrationStep(82, 'v82_vegetable_market_overhaul', 'started');
+    try {
+      Future<void> safeAddColumn(
+        String table,
+        String column,
+        String typeDef,
+      ) async {
+        try {
+          final pragma = await customSelect('PRAGMA table_info($table)').get();
+          if (pragma.isEmpty) {
+            log('v82: table $table missing, skipping column $column');
+            return;
+          }
+          final exists = pragma.any((col) => col.data['name'] == column);
+          if (!exists) {
+            await customStatement(
+              'ALTER TABLE $table ADD COLUMN $column $typeDef;',
+            );
+          }
+        } catch (e) {
+          log('v82: safeAddColumn ($table.$column) error: $e');
+        }
+      }
+
+      await safeAddColumn(
+        'vegetable_shipments',
+        'status',
+        "TEXT NOT NULL DEFAULT 'open'",
+      );
+      await safeAddColumn(
+        'vegetable_shipments',
+        'topping_count',
+        'INTEGER NOT NULL DEFAULT 0',
+      );
+      await safeAddColumn(
+        'vegetable_shipments',
+        'topping_reason',
+        'TEXT',
+      );
+      await safeAddColumn(
+        'vegetable_shipments',
+        'closed_at',
+        'INTEGER',
+      );
+
+      await safeAddColumn(
+        'expenses',
+        'shipment_id',
+        'INTEGER REFERENCES vegetable_shipments(id)',
+      );
+      await safeAddColumn(
+        'expenses',
+        'scope',
+        "TEXT NOT NULL DEFAULT 'shop'",
+      );
+
+      await safeAddColumn(
+        'empty_barnika_tracking',
+        'invoice_id',
+        'INTEGER REFERENCES invoices(id)',
+      );
+
+      await _ensureV82Indexes();
+
+      await _logMigrationStep(82, 'v82_vegetable_market_overhaul', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        82,
+        'v82_vegetable_market_overhaul',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  /// Ensures v82 indexes exist. Default fallback supplier ('مورد غير محدد')
+  /// is created lazily via `SupplierDao.ensureUnknownSupplier()` when needed.
+  Future<void> _ensureV82Indexes() async {
+    try {
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_expenses_shipment
+        ON expenses(shipment_id);
+      ''');
+    } catch (e) {
+      log('v82: idx_expenses_shipment warning: $e');
+    }
+
+    try {
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_empty_barnika_invoice
+        ON empty_barnika_tracking(invoice_id);
+      ''');
+    } catch (e) {
+      log('v82: idx_empty_barnika_invoice warning: $e');
+    }
+
+    try {
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_veg_shipments_status
+        ON vegetable_shipments(status);
+      ''');
+    } catch (e) {
+      log('v82: idx_veg_shipments_status warning: $e');
     }
   }
 

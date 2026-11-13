@@ -11,6 +11,14 @@ abstract final class ShipmentPricingMode {
   static const all = [perUnit, lumpSum, commission];
 }
 
+/// Lifecycle status of a vegetable-market shipment.
+abstract final class VegetableShipmentStatus {
+  static const open = 'open';
+  static const closed = 'closed';
+
+  static const all = [open, closed];
+}
+
 class VegetableShipments extends Table {
   IntColumn get id => integer().autoIncrement()();
 
@@ -46,4 +54,17 @@ class VegetableShipments extends Table {
   IntColumn get barnikaRemainingCount => integer()();
 
   TextColumn get notes => text().nullable()();
+
+  /// [VegetableShipmentStatus.open] | [VegetableShipmentStatus.closed]
+  TextColumn get status =>
+      text().withDefault(const Constant(VegetableShipmentStatus.open))();
+
+  /// Crates emptied to top up the weight of remaining crates (with supplier knowledge).
+  IntColumn get toppingCount => integer().withDefault(const Constant(0))();
+
+  /// Optional reason/note explaining topping-up crates.
+  TextColumn get toppingReason => text().nullable()();
+
+  /// Timestamp when shipment was closed & settled.
+  DateTimeColumn get closedAt => dateTime().nullable()();
 }

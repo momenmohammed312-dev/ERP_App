@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import 'customer_table.dart';
+import 'invoice_table.dart';
 
 abstract final class EmptyBarnikaStatus {
   static const outstanding = 'outstanding';
@@ -26,4 +27,8 @@ class EmptyBarnikaTracking extends Table {
   /// [EmptyBarnikaStatus.returned]
   TextColumn get status =>
       text().withDefault(const Constant(EmptyBarnikaStatus.outstanding))();
+
+  /// Linked sales invoice id when custody is created atomically with a sale.
+  IntColumn get invoiceId =>
+      integer().nullable().references(Invoices, #id)();
 }

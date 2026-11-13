@@ -97,6 +97,30 @@ class ExpenseDao extends DatabaseAccessor<AppDatabase> with _$ExpenseDaoMixin {
     return total;
   }
 
+  Future<List<Expense>> getExpensesByShipment(int shipmentId) =>
+      (select(expenses)
+            ..where((tbl) => tbl.shipmentId.equals(shipmentId))
+            ..orderBy([
+              (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
+            ]))
+          .get();
+
+  Future<double> getTotalExpensesByShipment(int shipmentId) async {
+    final query = selectOnly(expenses)
+      ..addColumns([expenses.amount.sum()])
+      ..where(expenses.shipmentId.equals(shipmentId));
+    final row = await query.getSingle();
+    return row.read(expenses.amount.sum()) ?? 0.0;
+  }
+
+  Future<List<Expense>> getExpensesByScope(String scope) =>
+      (select(expenses)
+            ..where((tbl) => tbl.scope.equals(scope))
+            ..orderBy([
+              (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
+            ]))
+          .get();
+
   // Stream methods for real-time updates
   Stream<List<Expense>> watchAllExpenses() {
     return (select(expenses)..orderBy([

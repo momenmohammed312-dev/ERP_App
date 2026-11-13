@@ -19,6 +19,22 @@ class SupplierDao extends DatabaseAccessor<AppDatabase>
   Future<List<Supplier>> getActiveSuppliers() =>
       (select(suppliers)..where((tbl) => tbl.status.equals('Active'))).get();
 
+  /// Lazily ensures the fixed fallback supplier («مورد غير محدد») exists when
+  /// a vegetable-market shipment arrives without a named supplier, keeping
+  /// Flavor.base and empty-DB tests clean until actually needed.
+  Future<String> ensureUnknownSupplier() async {
+    final existing = await getSupplierById(DefaultSupplier.unknownId);
+    if (existing != null) return existing.id;
+    await into(suppliers).insertOnConflictUpdate(
+      SuppliersCompanion.insert(
+        id: DefaultSupplier.unknownId,
+        name: DefaultSupplier.unknownName,
+        status: const Value('Active'),
+      ),
+    );
+    return DefaultSupplier.unknownId;
+  }
+
   /// Identity normalization shared by UI guards and import reconciliation.
   /// Names: trimmed, inner whitespace collapsed, case-insensitive.
   /// Phones: digits only (strips spaces, dashes, leading trunk/plus).

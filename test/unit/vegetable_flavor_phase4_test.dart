@@ -261,4 +261,8 @@ VegetableShipment _baseRow({
       barnikaSoldCount: 0,
       barnikaRemainingCount: total,
       notes: null,
+      status: VegetableShipmentStatus.open,
+      toppingCount: 0,
+      toppingReason: null,
+      closedAt: null,
     );

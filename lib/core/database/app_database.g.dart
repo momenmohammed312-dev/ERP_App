@@ -3104,6 +3104,50 @@ class $VegetableShipmentsTable extends VegetableShipments
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(VegetableShipmentStatus.open),
+  );
+  static const VerificationMeta _toppingCountMeta = const VerificationMeta(
+    'toppingCount',
+  );
+  @override
+  late final GeneratedColumn<int> toppingCount = GeneratedColumn<int>(
+    'topping_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _toppingReasonMeta = const VerificationMeta(
+    'toppingReason',
+  );
+  @override
+  late final GeneratedColumn<String> toppingReason = GeneratedColumn<String>(
+    'topping_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _closedAtMeta = const VerificationMeta(
+    'closedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
+    'closed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3120,6 +3164,10 @@ class $VegetableShipmentsTable extends VegetableShipments
     barnikaSoldCount,
     barnikaRemainingCount,
     notes,
+    status,
+    toppingCount,
+    toppingReason,
+    closedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3253,6 +3301,36 @@ class $VegetableShipmentsTable extends VegetableShipments
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
       );
     }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('topping_count')) {
+      context.handle(
+        _toppingCountMeta,
+        toppingCount.isAcceptableOrUnknown(
+          data['topping_count']!,
+          _toppingCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('topping_reason')) {
+      context.handle(
+        _toppingReasonMeta,
+        toppingReason.isAcceptableOrUnknown(
+          data['topping_reason']!,
+          _toppingReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('closed_at')) {
+      context.handle(
+        _closedAtMeta,
+        closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
+      );
+    }
     return context;
   }
 
@@ -3318,6 +3396,22 @@ class $VegetableShipmentsTable extends VegetableShipments
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      toppingCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}topping_count'],
+      )!,
+      toppingReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}topping_reason'],
+      ),
+      closedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}closed_at'],
+      ),
     );
   }
 
@@ -3354,6 +3448,18 @@ class VegetableShipment extends DataClass
   final int barnikaSoldCount;
   final int barnikaRemainingCount;
   final String? notes;
+
+  /// [VegetableShipmentStatus.open] | [VegetableShipmentStatus.closed]
+  final String status;
+
+  /// Crates emptied to top up the weight of remaining crates (with supplier knowledge).
+  final int toppingCount;
+
+  /// Optional reason/note explaining topping-up crates.
+  final String? toppingReason;
+
+  /// Timestamp when shipment was closed & settled.
+  final DateTime? closedAt;
   const VegetableShipment({
     required this.id,
     required this.supplierId,
@@ -3369,6 +3475,10 @@ class VegetableShipment extends DataClass
     required this.barnikaSoldCount,
     required this.barnikaRemainingCount,
     this.notes,
+    required this.status,
+    required this.toppingCount,
+    this.toppingReason,
+    this.closedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3396,6 +3506,14 @@ class VegetableShipment extends DataClass
     map['barnika_remaining_count'] = Variable<int>(barnikaRemainingCount);
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
+    }
+    map['status'] = Variable<String>(status);
+    map['topping_count'] = Variable<int>(toppingCount);
+    if (!nullToAbsent || toppingReason != null) {
+      map['topping_reason'] = Variable<String>(toppingReason);
+    }
+    if (!nullToAbsent || closedAt != null) {
+      map['closed_at'] = Variable<DateTime>(closedAt);
     }
     return map;
   }
@@ -3426,6 +3544,14 @@ class VegetableShipment extends DataClass
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
+      status: Value(status),
+      toppingCount: Value(toppingCount),
+      toppingReason: toppingReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(toppingReason),
+      closedAt: closedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedAt),
     );
   }
 
@@ -3455,6 +3581,10 @@ class VegetableShipment extends DataClass
         json['barnikaRemainingCount'],
       ),
       notes: serializer.fromJson<String?>(json['notes']),
+      status: serializer.fromJson<String>(json['status']),
+      toppingCount: serializer.fromJson<int>(json['toppingCount']),
+      toppingReason: serializer.fromJson<String?>(json['toppingReason']),
+      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
     );
   }
   @override
@@ -3475,6 +3605,10 @@ class VegetableShipment extends DataClass
       'barnikaSoldCount': serializer.toJson<int>(barnikaSoldCount),
       'barnikaRemainingCount': serializer.toJson<int>(barnikaRemainingCount),
       'notes': serializer.toJson<String?>(notes),
+      'status': serializer.toJson<String>(status),
+      'toppingCount': serializer.toJson<int>(toppingCount),
+      'toppingReason': serializer.toJson<String?>(toppingReason),
+      'closedAt': serializer.toJson<DateTime?>(closedAt),
     };
   }
 
@@ -3493,6 +3627,10 @@ class VegetableShipment extends DataClass
     int? barnikaSoldCount,
     int? barnikaRemainingCount,
     Value<String?> notes = const Value.absent(),
+    String? status,
+    int? toppingCount,
+    Value<String?> toppingReason = const Value.absent(),
+    Value<DateTime?> closedAt = const Value.absent(),
   }) => VegetableShipment(
     id: id ?? this.id,
     supplierId: supplierId ?? this.supplierId,
@@ -3514,6 +3652,12 @@ class VegetableShipment extends DataClass
     barnikaSoldCount: barnikaSoldCount ?? this.barnikaSoldCount,
     barnikaRemainingCount: barnikaRemainingCount ?? this.barnikaRemainingCount,
     notes: notes.present ? notes.value : this.notes,
+    status: status ?? this.status,
+    toppingCount: toppingCount ?? this.toppingCount,
+    toppingReason: toppingReason.present
+        ? toppingReason.value
+        : this.toppingReason,
+    closedAt: closedAt.present ? closedAt.value : this.closedAt,
   );
   VegetableShipment copyWithCompanion(VegetableShipmentsCompanion data) {
     return VegetableShipment(
@@ -3551,6 +3695,14 @@ class VegetableShipment extends DataClass
           ? data.barnikaRemainingCount.value
           : this.barnikaRemainingCount,
       notes: data.notes.present ? data.notes.value : this.notes,
+      status: data.status.present ? data.status.value : this.status,
+      toppingCount: data.toppingCount.present
+          ? data.toppingCount.value
+          : this.toppingCount,
+      toppingReason: data.toppingReason.present
+          ? data.toppingReason.value
+          : this.toppingReason,
+      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
     );
   }
 
@@ -3570,7 +3722,11 @@ class VegetableShipment extends DataClass
           ..write('totalCost: $totalCost, ')
           ..write('barnikaSoldCount: $barnikaSoldCount, ')
           ..write('barnikaRemainingCount: $barnikaRemainingCount, ')
-          ..write('notes: $notes')
+          ..write('notes: $notes, ')
+          ..write('status: $status, ')
+          ..write('toppingCount: $toppingCount, ')
+          ..write('toppingReason: $toppingReason, ')
+          ..write('closedAt: $closedAt')
           ..write(')'))
         .toString();
   }
@@ -3591,6 +3747,10 @@ class VegetableShipment extends DataClass
     barnikaSoldCount,
     barnikaRemainingCount,
     notes,
+    status,
+    toppingCount,
+    toppingReason,
+    closedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -3609,7 +3769,11 @@ class VegetableShipment extends DataClass
           other.totalCost == this.totalCost &&
           other.barnikaSoldCount == this.barnikaSoldCount &&
           other.barnikaRemainingCount == this.barnikaRemainingCount &&
-          other.notes == this.notes);
+          other.notes == this.notes &&
+          other.status == this.status &&
+          other.toppingCount == this.toppingCount &&
+          other.toppingReason == this.toppingReason &&
+          other.closedAt == this.closedAt);
 }
 
 class VegetableShipmentsCompanion extends UpdateCompanion<VegetableShipment> {
@@ -3627,6 +3791,10 @@ class VegetableShipmentsCompanion extends UpdateCompanion<VegetableShipment> {
   final Value<int> barnikaSoldCount;
   final Value<int> barnikaRemainingCount;
   final Value<String?> notes;
+  final Value<String> status;
+  final Value<int> toppingCount;
+  final Value<String?> toppingReason;
+  final Value<DateTime?> closedAt;
   const VegetableShipmentsCompanion({
     this.id = const Value.absent(),
     this.supplierId = const Value.absent(),
@@ -3642,6 +3810,10 @@ class VegetableShipmentsCompanion extends UpdateCompanion<VegetableShipment> {
     this.barnikaSoldCount = const Value.absent(),
     this.barnikaRemainingCount = const Value.absent(),
     this.notes = const Value.absent(),
+    this.status = const Value.absent(),
+    this.toppingCount = const Value.absent(),
+    this.toppingReason = const Value.absent(),
+    this.closedAt = const Value.absent(),
   });
   VegetableShipmentsCompanion.insert({
     this.id = const Value.absent(),
@@ -3658,6 +3830,10 @@ class VegetableShipmentsCompanion extends UpdateCompanion<VegetableShipment> {
     this.barnikaSoldCount = const Value.absent(),
     required int barnikaRemainingCount,
     this.notes = const Value.absent(),
+    this.status = const Value.absent(),
+    this.toppingCount = const Value.absent(),
+    this.toppingReason = const Value.absent(),
+    this.closedAt = const Value.absent(),
   }) : supplierId = Value(supplierId),
        shipmentNumber = Value(shipmentNumber),
        pricingMode = Value(pricingMode),
@@ -3679,6 +3855,10 @@ class VegetableShipmentsCompanion extends UpdateCompanion<VegetableShipment> {
     Expression<int>? barnikaSoldCount,
     Expression<int>? barnikaRemainingCount,
     Expression<String>? notes,
+    Expression<String>? status,
+    Expression<int>? toppingCount,
+    Expression<String>? toppingReason,
+    Expression<DateTime>? closedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -3698,6 +3878,10 @@ class VegetableShipmentsCompanion extends UpdateCompanion<VegetableShipment> {
       if (barnikaRemainingCount != null)
         'barnika_remaining_count': barnikaRemainingCount,
       if (notes != null) 'notes': notes,
+      if (status != null) 'status': status,
+      if (toppingCount != null) 'topping_count': toppingCount,
+      if (toppingReason != null) 'topping_reason': toppingReason,
+      if (closedAt != null) 'closed_at': closedAt,
     });
   }
 
@@ -3716,6 +3900,10 @@ class VegetableShipmentsCompanion extends UpdateCompanion<VegetableShipment> {
     Value<int>? barnikaSoldCount,
     Value<int>? barnikaRemainingCount,
     Value<String?>? notes,
+    Value<String>? status,
+    Value<int>? toppingCount,
+    Value<String?>? toppingReason,
+    Value<DateTime?>? closedAt,
   }) {
     return VegetableShipmentsCompanion(
       id: id ?? this.id,
@@ -3733,6 +3921,10 @@ class VegetableShipmentsCompanion extends UpdateCompanion<VegetableShipment> {
       barnikaRemainingCount:
           barnikaRemainingCount ?? this.barnikaRemainingCount,
       notes: notes ?? this.notes,
+      status: status ?? this.status,
+      toppingCount: toppingCount ?? this.toppingCount,
+      toppingReason: toppingReason ?? this.toppingReason,
+      closedAt: closedAt ?? this.closedAt,
     );
   }
 
@@ -3787,6 +3979,18 @@ class VegetableShipmentsCompanion extends UpdateCompanion<VegetableShipment> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (toppingCount.present) {
+      map['topping_count'] = Variable<int>(toppingCount.value);
+    }
+    if (toppingReason.present) {
+      map['topping_reason'] = Variable<String>(toppingReason.value);
+    }
+    if (closedAt.present) {
+      map['closed_at'] = Variable<DateTime>(closedAt.value);
+    }
     return map;
   }
 
@@ -3806,7 +4010,11 @@ class VegetableShipmentsCompanion extends UpdateCompanion<VegetableShipment> {
           ..write('totalCost: $totalCost, ')
           ..write('barnikaSoldCount: $barnikaSoldCount, ')
           ..write('barnikaRemainingCount: $barnikaRemainingCount, ')
-          ..write('notes: $notes')
+          ..write('notes: $notes, ')
+          ..write('status: $status, ')
+          ..write('toppingCount: $toppingCount, ')
+          ..write('toppingReason: $toppingReason, ')
+          ..write('closedAt: $closedAt')
           ..write(')'))
         .toString();
   }
@@ -7222,6 +7430,30 @@ class $ExpensesTable extends Expenses with TableInfo<$ExpensesTable, Expense> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _shipmentIdMeta = const VerificationMeta(
+    'shipmentId',
+  );
+  @override
+  late final GeneratedColumn<int> shipmentId = GeneratedColumn<int>(
+    'shipment_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES vegetable_shipments (id)',
+    ),
+  );
+  static const VerificationMeta _scopeMeta = const VerificationMeta('scope');
+  @override
+  late final GeneratedColumn<String> scope = GeneratedColumn<String>(
+    'scope',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(ExpenseScope.shop),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -7236,6 +7468,8 @@ class $ExpensesTable extends Expenses with TableInfo<$ExpensesTable, Expense> {
     createdAt,
     userId,
     dayId,
+    shipmentId,
+    scope,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7335,6 +7569,18 @@ class $ExpensesTable extends Expenses with TableInfo<$ExpensesTable, Expense> {
         dayId.isAcceptableOrUnknown(data['day_id']!, _dayIdMeta),
       );
     }
+    if (data.containsKey('shipment_id')) {
+      context.handle(
+        _shipmentIdMeta,
+        shipmentId.isAcceptableOrUnknown(data['shipment_id']!, _shipmentIdMeta),
+      );
+    }
+    if (data.containsKey('scope')) {
+      context.handle(
+        _scopeMeta,
+        scope.isAcceptableOrUnknown(data['scope']!, _scopeMeta),
+      );
+    }
     return context;
   }
 
@@ -7392,6 +7638,14 @@ class $ExpensesTable extends Expenses with TableInfo<$ExpensesTable, Expense> {
         DriftSqlType.string,
         data['${effectivePrefix}day_id'],
       ),
+      shipmentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shipment_id'],
+      ),
+      scope: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}scope'],
+      )!,
     );
   }
 
@@ -7414,6 +7668,12 @@ class Expense extends DataClass implements Insertable<Expense> {
   final DateTime createdAt;
   final String? userId;
   final String? dayId;
+
+  /// Linked shipment id when [scope] == [ExpenseScope.shipment] (e.g. النولون / المشال).
+  final int? shipmentId;
+
+  /// [ExpenseScope.shop] | [ExpenseScope.shipment]
+  final String scope;
   const Expense({
     required this.id,
     required this.description,
@@ -7427,6 +7687,8 @@ class Expense extends DataClass implements Insertable<Expense> {
     required this.createdAt,
     this.userId,
     this.dayId,
+    this.shipmentId,
+    required this.scope,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7453,6 +7715,10 @@ class Expense extends DataClass implements Insertable<Expense> {
     if (!nullToAbsent || dayId != null) {
       map['day_id'] = Variable<String>(dayId);
     }
+    if (!nullToAbsent || shipmentId != null) {
+      map['shipment_id'] = Variable<int>(shipmentId);
+    }
+    map['scope'] = Variable<String>(scope);
     return map;
   }
 
@@ -7480,6 +7746,10 @@ class Expense extends DataClass implements Insertable<Expense> {
       dayId: dayId == null && nullToAbsent
           ? const Value.absent()
           : Value(dayId),
+      shipmentId: shipmentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shipmentId),
+      scope: Value(scope),
     );
   }
 
@@ -7501,6 +7771,8 @@ class Expense extends DataClass implements Insertable<Expense> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       userId: serializer.fromJson<String?>(json['userId']),
       dayId: serializer.fromJson<String?>(json['dayId']),
+      shipmentId: serializer.fromJson<int?>(json['shipmentId']),
+      scope: serializer.fromJson<String>(json['scope']),
     );
   }
   @override
@@ -7519,6 +7791,8 @@ class Expense extends DataClass implements Insertable<Expense> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'userId': serializer.toJson<String?>(userId),
       'dayId': serializer.toJson<String?>(dayId),
+      'shipmentId': serializer.toJson<int?>(shipmentId),
+      'scope': serializer.toJson<String>(scope),
     };
   }
 
@@ -7535,6 +7809,8 @@ class Expense extends DataClass implements Insertable<Expense> {
     DateTime? createdAt,
     Value<String?> userId = const Value.absent(),
     Value<String?> dayId = const Value.absent(),
+    Value<int?> shipmentId = const Value.absent(),
+    String? scope,
   }) => Expense(
     id: id ?? this.id,
     description: description ?? this.description,
@@ -7550,6 +7826,8 @@ class Expense extends DataClass implements Insertable<Expense> {
     createdAt: createdAt ?? this.createdAt,
     userId: userId.present ? userId.value : this.userId,
     dayId: dayId.present ? dayId.value : this.dayId,
+    shipmentId: shipmentId.present ? shipmentId.value : this.shipmentId,
+    scope: scope ?? this.scope,
   );
   Expense copyWithCompanion(ExpensesCompanion data) {
     return Expense(
@@ -7573,6 +7851,10 @@ class Expense extends DataClass implements Insertable<Expense> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       userId: data.userId.present ? data.userId.value : this.userId,
       dayId: data.dayId.present ? data.dayId.value : this.dayId,
+      shipmentId: data.shipmentId.present
+          ? data.shipmentId.value
+          : this.shipmentId,
+      scope: data.scope.present ? data.scope.value : this.scope,
     );
   }
 
@@ -7590,7 +7872,9 @@ class Expense extends DataClass implements Insertable<Expense> {
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
           ..write('userId: $userId, ')
-          ..write('dayId: $dayId')
+          ..write('dayId: $dayId, ')
+          ..write('shipmentId: $shipmentId, ')
+          ..write('scope: $scope')
           ..write(')'))
         .toString();
   }
@@ -7609,6 +7893,8 @@ class Expense extends DataClass implements Insertable<Expense> {
     createdAt,
     userId,
     dayId,
+    shipmentId,
+    scope,
   );
   @override
   bool operator ==(Object other) =>
@@ -7625,7 +7911,9 @@ class Expense extends DataClass implements Insertable<Expense> {
           other.notes == this.notes &&
           other.createdAt == this.createdAt &&
           other.userId == this.userId &&
-          other.dayId == this.dayId);
+          other.dayId == this.dayId &&
+          other.shipmentId == this.shipmentId &&
+          other.scope == this.scope);
 }
 
 class ExpensesCompanion extends UpdateCompanion<Expense> {
@@ -7641,6 +7929,8 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
   final Value<DateTime> createdAt;
   final Value<String?> userId;
   final Value<String?> dayId;
+  final Value<int?> shipmentId;
+  final Value<String> scope;
   final Value<int> rowid;
   const ExpensesCompanion({
     this.id = const Value.absent(),
@@ -7655,6 +7945,8 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
     this.createdAt = const Value.absent(),
     this.userId = const Value.absent(),
     this.dayId = const Value.absent(),
+    this.shipmentId = const Value.absent(),
+    this.scope = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ExpensesCompanion.insert({
@@ -7670,6 +7962,8 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
     this.createdAt = const Value.absent(),
     this.userId = const Value.absent(),
     this.dayId = const Value.absent(),
+    this.shipmentId = const Value.absent(),
+    this.scope = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        description = Value(description),
@@ -7688,6 +7982,8 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
     Expression<DateTime>? createdAt,
     Expression<String>? userId,
     Expression<String>? dayId,
+    Expression<int>? shipmentId,
+    Expression<String>? scope,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7703,6 +7999,8 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
       if (createdAt != null) 'created_at': createdAt,
       if (userId != null) 'user_id': userId,
       if (dayId != null) 'day_id': dayId,
+      if (shipmentId != null) 'shipment_id': shipmentId,
+      if (scope != null) 'scope': scope,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7720,6 +8018,8 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
     Value<DateTime>? createdAt,
     Value<String?>? userId,
     Value<String?>? dayId,
+    Value<int?>? shipmentId,
+    Value<String>? scope,
     Value<int>? rowid,
   }) {
     return ExpensesCompanion(
@@ -7735,6 +8035,8 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
       createdAt: createdAt ?? this.createdAt,
       userId: userId ?? this.userId,
       dayId: dayId ?? this.dayId,
+      shipmentId: shipmentId ?? this.shipmentId,
+      scope: scope ?? this.scope,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7778,6 +8080,12 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
     if (dayId.present) {
       map['day_id'] = Variable<String>(dayId.value);
     }
+    if (shipmentId.present) {
+      map['shipment_id'] = Variable<int>(shipmentId.value);
+    }
+    if (scope.present) {
+      map['scope'] = Variable<String>(scope.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7799,6 +8107,8 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
           ..write('createdAt: $createdAt, ')
           ..write('userId: $userId, ')
           ..write('dayId: $dayId, ')
+          ..write('shipmentId: $shipmentId, ')
+          ..write('scope: $scope, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -43869,6 +44179,20 @@ class $EmptyBarnikaTrackingTable extends EmptyBarnikaTracking
     requiredDuringInsert: false,
     defaultValue: const Constant(EmptyBarnikaStatus.outstanding),
   );
+  static const VerificationMeta _invoiceIdMeta = const VerificationMeta(
+    'invoiceId',
+  );
+  @override
+  late final GeneratedColumn<int> invoiceId = GeneratedColumn<int>(
+    'invoice_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES invoices (id)',
+    ),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -43878,6 +44202,7 @@ class $EmptyBarnikaTrackingTable extends EmptyBarnikaTracking
     dateReturned,
     quantityReturned,
     status,
+    invoiceId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -43945,6 +44270,12 @@ class $EmptyBarnikaTrackingTable extends EmptyBarnikaTracking
         status.isAcceptableOrUnknown(data['status']!, _statusMeta),
       );
     }
+    if (data.containsKey('invoice_id')) {
+      context.handle(
+        _invoiceIdMeta,
+        invoiceId.isAcceptableOrUnknown(data['invoice_id']!, _invoiceIdMeta),
+      );
+    }
     return context;
   }
 
@@ -43985,6 +44316,10 @@ class $EmptyBarnikaTrackingTable extends EmptyBarnikaTracking
         DriftSqlType.string,
         data['${effectivePrefix}status'],
       )!,
+      invoiceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}invoice_id'],
+      ),
     );
   }
 
@@ -44006,6 +44341,9 @@ class EmptyBarnikaTrackingData extends DataClass
   /// [EmptyBarnikaStatus.outstanding] | [EmptyBarnikaStatus.partial] |
   /// [EmptyBarnikaStatus.returned]
   final String status;
+
+  /// Linked sales invoice id when custody is created atomically with a sale.
+  final int? invoiceId;
   const EmptyBarnikaTrackingData({
     required this.id,
     required this.customerId,
@@ -44014,6 +44352,7 @@ class EmptyBarnikaTrackingData extends DataClass
     this.dateReturned,
     required this.quantityReturned,
     required this.status,
+    this.invoiceId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -44027,6 +44366,9 @@ class EmptyBarnikaTrackingData extends DataClass
     }
     map['quantity_returned'] = Variable<int>(quantityReturned);
     map['status'] = Variable<String>(status);
+    if (!nullToAbsent || invoiceId != null) {
+      map['invoice_id'] = Variable<int>(invoiceId);
+    }
     return map;
   }
 
@@ -44041,6 +44383,9 @@ class EmptyBarnikaTrackingData extends DataClass
           : Value(dateReturned),
       quantityReturned: Value(quantityReturned),
       status: Value(status),
+      invoiceId: invoiceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(invoiceId),
     );
   }
 
@@ -44057,6 +44402,7 @@ class EmptyBarnikaTrackingData extends DataClass
       dateReturned: serializer.fromJson<DateTime?>(json['dateReturned']),
       quantityReturned: serializer.fromJson<int>(json['quantityReturned']),
       status: serializer.fromJson<String>(json['status']),
+      invoiceId: serializer.fromJson<int?>(json['invoiceId']),
     );
   }
   @override
@@ -44070,6 +44416,7 @@ class EmptyBarnikaTrackingData extends DataClass
       'dateReturned': serializer.toJson<DateTime?>(dateReturned),
       'quantityReturned': serializer.toJson<int>(quantityReturned),
       'status': serializer.toJson<String>(status),
+      'invoiceId': serializer.toJson<int?>(invoiceId),
     };
   }
 
@@ -44081,6 +44428,7 @@ class EmptyBarnikaTrackingData extends DataClass
     Value<DateTime?> dateReturned = const Value.absent(),
     int? quantityReturned,
     String? status,
+    Value<int?> invoiceId = const Value.absent(),
   }) => EmptyBarnikaTrackingData(
     id: id ?? this.id,
     customerId: customerId ?? this.customerId,
@@ -44089,6 +44437,7 @@ class EmptyBarnikaTrackingData extends DataClass
     dateReturned: dateReturned.present ? dateReturned.value : this.dateReturned,
     quantityReturned: quantityReturned ?? this.quantityReturned,
     status: status ?? this.status,
+    invoiceId: invoiceId.present ? invoiceId.value : this.invoiceId,
   );
   EmptyBarnikaTrackingData copyWithCompanion(
     EmptyBarnikaTrackingCompanion data,
@@ -44109,6 +44458,7 @@ class EmptyBarnikaTrackingData extends DataClass
           ? data.quantityReturned.value
           : this.quantityReturned,
       status: data.status.present ? data.status.value : this.status,
+      invoiceId: data.invoiceId.present ? data.invoiceId.value : this.invoiceId,
     );
   }
 
@@ -44121,7 +44471,8 @@ class EmptyBarnikaTrackingData extends DataClass
           ..write('quantityOut: $quantityOut, ')
           ..write('dateReturned: $dateReturned, ')
           ..write('quantityReturned: $quantityReturned, ')
-          ..write('status: $status')
+          ..write('status: $status, ')
+          ..write('invoiceId: $invoiceId')
           ..write(')'))
         .toString();
   }
@@ -44135,6 +44486,7 @@ class EmptyBarnikaTrackingData extends DataClass
     dateReturned,
     quantityReturned,
     status,
+    invoiceId,
   );
   @override
   bool operator ==(Object other) =>
@@ -44146,7 +44498,8 @@ class EmptyBarnikaTrackingData extends DataClass
           other.quantityOut == this.quantityOut &&
           other.dateReturned == this.dateReturned &&
           other.quantityReturned == this.quantityReturned &&
-          other.status == this.status);
+          other.status == this.status &&
+          other.invoiceId == this.invoiceId);
 }
 
 class EmptyBarnikaTrackingCompanion
@@ -44158,6 +44511,7 @@ class EmptyBarnikaTrackingCompanion
   final Value<DateTime?> dateReturned;
   final Value<int> quantityReturned;
   final Value<String> status;
+  final Value<int?> invoiceId;
   const EmptyBarnikaTrackingCompanion({
     this.id = const Value.absent(),
     this.customerId = const Value.absent(),
@@ -44166,6 +44520,7 @@ class EmptyBarnikaTrackingCompanion
     this.dateReturned = const Value.absent(),
     this.quantityReturned = const Value.absent(),
     this.status = const Value.absent(),
+    this.invoiceId = const Value.absent(),
   });
   EmptyBarnikaTrackingCompanion.insert({
     this.id = const Value.absent(),
@@ -44175,6 +44530,7 @@ class EmptyBarnikaTrackingCompanion
     this.dateReturned = const Value.absent(),
     this.quantityReturned = const Value.absent(),
     this.status = const Value.absent(),
+    this.invoiceId = const Value.absent(),
   }) : customerId = Value(customerId),
        dateOut = Value(dateOut),
        quantityOut = Value(quantityOut);
@@ -44186,6 +44542,7 @@ class EmptyBarnikaTrackingCompanion
     Expression<DateTime>? dateReturned,
     Expression<int>? quantityReturned,
     Expression<String>? status,
+    Expression<int>? invoiceId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -44195,6 +44552,7 @@ class EmptyBarnikaTrackingCompanion
       if (dateReturned != null) 'date_returned': dateReturned,
       if (quantityReturned != null) 'quantity_returned': quantityReturned,
       if (status != null) 'status': status,
+      if (invoiceId != null) 'invoice_id': invoiceId,
     });
   }
 
@@ -44206,6 +44564,7 @@ class EmptyBarnikaTrackingCompanion
     Value<DateTime?>? dateReturned,
     Value<int>? quantityReturned,
     Value<String>? status,
+    Value<int?>? invoiceId,
   }) {
     return EmptyBarnikaTrackingCompanion(
       id: id ?? this.id,
@@ -44215,6 +44574,7 @@ class EmptyBarnikaTrackingCompanion
       dateReturned: dateReturned ?? this.dateReturned,
       quantityReturned: quantityReturned ?? this.quantityReturned,
       status: status ?? this.status,
+      invoiceId: invoiceId ?? this.invoiceId,
     );
   }
 
@@ -44242,6 +44602,9 @@ class EmptyBarnikaTrackingCompanion
     if (status.present) {
       map['status'] = Variable<String>(status.value);
     }
+    if (invoiceId.present) {
+      map['invoice_id'] = Variable<int>(invoiceId.value);
+    }
     return map;
   }
 
@@ -44254,7 +44617,8 @@ class EmptyBarnikaTrackingCompanion
           ..write('quantityOut: $quantityOut, ')
           ..write('dateReturned: $dateReturned, ')
           ..write('quantityReturned: $quantityReturned, ')
-          ..write('status: $status')
+          ..write('status: $status, ')
+          ..write('invoiceId: $invoiceId')
           ..write(')'))
         .toString();
   }
@@ -59930,10 +60294,7 @@ final class $$ProductsTableReferences
   static MultiTypedResultKey<$ProductVariantsTable, List<ProductVariant>>
   _productVariantsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.productVariants,
-    aliasName: $_aliasNameGenerator(
-      db.products.id,
-      db.productVariants.productId,
-    ),
+    aliasName: 'products__id__product_variants__product_id',
   );
 
   $$ProductVariantsTableProcessedTableManager get productVariantsRefs {
@@ -59953,7 +60314,7 @@ final class $$ProductsTableReferences
   static MultiTypedResultKey<$InvoiceItemsTable, List<InvoiceItem>>
   _invoiceItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.invoiceItems,
-    aliasName: $_aliasNameGenerator(db.products.id, db.invoiceItems.productId),
+    aliasName: 'products__id__invoice_items__product_id',
   );
 
   $$InvoiceItemsTableProcessedTableManager get invoiceItemsRefs {
@@ -59975,10 +60336,7 @@ final class $$ProductsTableReferences
   _enhancedPurchaseItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.enhancedPurchaseItems,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.enhancedPurchaseItems.productId,
-        ),
+        aliasName: 'products__id__enhanced_purchase_items__product_id',
       );
 
   $$EnhancedPurchaseItemsTableProcessedTableManager
@@ -60000,10 +60358,7 @@ final class $$ProductsTableReferences
   _inventoryMovementsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.inventoryMovements,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.inventoryMovements.productId,
-        ),
+        aliasName: 'products__id__inventory_movements__product_id',
       );
 
   $$InventoryMovementsTableProcessedTableManager get inventoryMovementsRefs {
@@ -60024,10 +60379,7 @@ final class $$ProductsTableReferences
   _purchaseOrderItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseOrderItems,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.purchaseOrderItems.productId,
-        ),
+        aliasName: 'products__id__purchase_order_items__product_id',
       );
 
   $$PurchaseOrderItemsTableProcessedTableManager get purchaseOrderItemsRefs {
@@ -60051,10 +60403,7 @@ final class $$ProductsTableReferences
   _purchaseReturnItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturnItems,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.purchaseReturnItems.productId,
-        ),
+        aliasName: 'products__id__purchase_return_items__product_id',
       );
 
   $$PurchaseReturnItemsTableProcessedTableManager get purchaseReturnItemsRefs {
@@ -60074,7 +60423,7 @@ final class $$ProductsTableReferences
   static MultiTypedResultKey<$DamagedItemsTable, List<DamagedItem>>
   _damagedItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.damagedItems,
-    aliasName: $_aliasNameGenerator(db.products.id, db.damagedItems.productId),
+    aliasName: 'products__id__damaged_items__product_id',
   );
 
   $$DamagedItemsTableProcessedTableManager get damagedItemsRefs {
@@ -60092,10 +60441,7 @@ final class $$ProductsTableReferences
   static MultiTypedResultKey<$SalesReturnItemsTable, List<SalesReturnItem>>
   _salesReturnItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.salesReturnItems,
-    aliasName: $_aliasNameGenerator(
-      db.products.id,
-      db.salesReturnItems.productId,
-    ),
+    aliasName: 'products__id__sales_return_items__product_id',
   );
 
   $$SalesReturnItemsTableProcessedTableManager get salesReturnItemsRefs {
@@ -60116,10 +60462,7 @@ final class $$ProductsTableReferences
   _customerContainersRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.customerContainers,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.customerContainers.productId,
-        ),
+        aliasName: 'products__id__customer_containers__product_id',
       );
 
   $$CustomerContainersTableProcessedTableManager get customerContainersRefs {
@@ -60139,10 +60482,7 @@ final class $$ProductsTableReferences
   static MultiTypedResultKey<$BillOfMaterialsTable, List<BillOfMaterial>>
   _billOfMaterialsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.billOfMaterials,
-    aliasName: $_aliasNameGenerator(
-      db.products.id,
-      db.billOfMaterials.finishedProductId,
-    ),
+    aliasName: 'products__id__bill_of_materials__finished_product_id',
   );
 
   $$BillOfMaterialsTableProcessedTableManager get billOfMaterialsRefs {
@@ -60163,10 +60503,7 @@ final class $$ProductsTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.bomItems,
-    aliasName: $_aliasNameGenerator(
-      db.products.id,
-      db.bomItems.rawMaterialProductId,
-    ),
+    aliasName: 'products__id__bom_items__raw_material_product_id',
   );
 
   $$BomItemsTableProcessedTableManager get bomItemsRefs {
@@ -60187,10 +60524,7 @@ final class $$ProductsTableReferences
   _customerMaterialReceiptItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.customerMaterialReceiptItems,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.customerMaterialReceiptItems.productId,
-        ),
+        aliasName: 'products__id__customer_material_receipt_items__product_id',
       );
 
   $$CustomerMaterialReceiptItemsTableProcessedTableManager
@@ -60215,10 +60549,7 @@ final class $$ProductsTableReferences
   _customerStockBalancesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.customerStockBalances,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.customerStockBalances.productId,
-        ),
+        aliasName: 'products__id__customer_stock_balances__product_id',
       );
 
   $$CustomerStockBalancesTableProcessedTableManager
@@ -60243,10 +60574,7 @@ final class $$ProductsTableReferences
   _customerStockMovementsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.customerStockMovements,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.customerStockMovements.productId,
-        ),
+        aliasName: 'products__id__customer_stock_movements__product_id',
       );
 
   $$CustomerStockMovementsTableProcessedTableManager
@@ -60271,10 +60599,7 @@ final class $$ProductsTableReferences
   _manufacturingDeliveryItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.manufacturingDeliveryItems,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.manufacturingDeliveryItems.productId,
-        ),
+        aliasName: 'products__id__manufacturing_delivery_items__product_id',
       );
 
   $$ManufacturingDeliveryItemsTableProcessedTableManager
@@ -60299,10 +60624,7 @@ final class $$ProductsTableReferences
   _manufacturingStageOutputsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.manufacturingStageOutputs,
-        aliasName: $_aliasNameGenerator(
-          db.products.id,
-          db.manufacturingStageOutputs.productId,
-        ),
+        aliasName: 'products__id__manufacturing_stage_outputs__product_id',
       );
 
   $$ManufacturingStageOutputsTableProcessedTableManager
@@ -61530,7 +61852,7 @@ class $$ProductsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$ProductsTable, Product>(table),
                   $$ProductsTableReferences(db, table, e),
                 ),
               )
@@ -61595,10 +61917,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).productVariantsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (invoiceItemsRefs)
@@ -61616,10 +61936,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).invoiceItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (enhancedPurchaseItemsRefs)
@@ -61637,10 +61955,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).enhancedPurchaseItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (inventoryMovementsRefs)
@@ -61658,10 +61974,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).inventoryMovementsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (purchaseOrderItemsRefs)
@@ -61679,10 +61993,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).purchaseOrderItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (purchaseReturnItemsRefs)
@@ -61700,10 +62012,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).purchaseReturnItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (damagedItemsRefs)
@@ -61721,10 +62031,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).damagedItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (salesReturnItemsRefs)
@@ -61742,10 +62050,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).salesReturnItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (customerContainersRefs)
@@ -61763,10 +62069,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).customerContainersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (billOfMaterialsRefs)
@@ -61784,10 +62088,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).billOfMaterialsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.finishedProductId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.finishedProductId == item.id),
                           typedResults: items,
                         ),
                       if (bomItemsRefs)
@@ -61805,10 +62107,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).bomItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.rawMaterialProductId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.rawMaterialProductId == item.id),
                           typedResults: items,
                         ),
                       if (customerMaterialReceiptItemsRefs)
@@ -61826,10 +62126,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).customerMaterialReceiptItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (customerStockBalancesRefs)
@@ -61847,10 +62145,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).customerStockBalancesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (customerStockMovementsRefs)
@@ -61868,10 +62164,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).customerStockMovementsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (manufacturingDeliveryItemsRefs)
@@ -61889,10 +62183,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).manufacturingDeliveryItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                       if (manufacturingStageOutputsRefs)
@@ -61910,10 +62202,8 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).manufacturingStageOutputsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.productId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.productId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -62003,10 +62293,7 @@ final class $$CustomersTableReferences
   _emptyBarnikaTrackingRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.emptyBarnikaTracking,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.emptyBarnikaTracking.customerId,
-        ),
+        aliasName: 'customers__id__empty_barnika_tracking__customer_id',
       );
 
   $$EmptyBarnikaTrackingTableProcessedTableManager
@@ -62031,10 +62318,7 @@ final class $$CustomersTableReferences
   _manufacturingOrdersRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.manufacturingOrders,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.manufacturingOrders.customerId,
-        ),
+        aliasName: 'customers__id__manufacturing_orders__customer_id',
       );
 
   $$ManufacturingOrdersTableProcessedTableManager get manufacturingOrdersRefs {
@@ -62058,10 +62342,7 @@ final class $$CustomersTableReferences
   _customerMaterialReceiptsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.customerMaterialReceipts,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.customerMaterialReceipts.customerId,
-        ),
+        aliasName: 'customers__id__customer_material_receipts__customer_id',
       );
 
   $$CustomerMaterialReceiptsTableProcessedTableManager
@@ -62086,10 +62367,7 @@ final class $$CustomersTableReferences
   _customerStockBalancesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.customerStockBalances,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.customerStockBalances.customerId,
-        ),
+        aliasName: 'customers__id__customer_stock_balances__customer_id',
       );
 
   $$CustomerStockBalancesTableProcessedTableManager
@@ -62114,10 +62392,7 @@ final class $$CustomersTableReferences
   _customerStockMovementsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.customerStockMovements,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.customerStockMovements.customerId,
-        ),
+        aliasName: 'customers__id__customer_stock_movements__customer_id',
       );
 
   $$CustomerStockMovementsTableProcessedTableManager
@@ -62142,10 +62417,7 @@ final class $$CustomersTableReferences
   _manufacturingDeliveriesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.manufacturingDeliveries,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.manufacturingDeliveries.customerId,
-        ),
+        aliasName: 'customers__id__manufacturing_deliveries__customer_id',
       );
 
   $$ManufacturingDeliveriesTableProcessedTableManager
@@ -62797,7 +63069,7 @@ class $$CustomersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$CustomersTable, Customer>(table),
                   $$CustomersTableReferences(db, table, e),
                 ),
               )
@@ -62840,10 +63112,8 @@ class $$CustomersTableTableManager
                                 table,
                                 p0,
                               ).emptyBarnikaTrackingRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.customerId == item.id),
                           typedResults: items,
                         ),
                       if (manufacturingOrdersRefs)
@@ -62861,10 +63131,8 @@ class $$CustomersTableTableManager
                                 table,
                                 p0,
                               ).manufacturingOrdersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.customerId == item.id),
                           typedResults: items,
                         ),
                       if (customerMaterialReceiptsRefs)
@@ -62882,10 +63150,8 @@ class $$CustomersTableTableManager
                                 table,
                                 p0,
                               ).customerMaterialReceiptsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.customerId == item.id),
                           typedResults: items,
                         ),
                       if (customerStockBalancesRefs)
@@ -62903,10 +63169,8 @@ class $$CustomersTableTableManager
                                 table,
                                 p0,
                               ).customerStockBalancesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.customerId == item.id),
                           typedResults: items,
                         ),
                       if (customerStockMovementsRefs)
@@ -62924,10 +63188,8 @@ class $$CustomersTableTableManager
                                 table,
                                 p0,
                               ).customerStockMovementsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.customerId == item.id),
                           typedResults: items,
                         ),
                       if (manufacturingDeliveriesRefs)
@@ -62945,10 +63207,8 @@ class $$CustomersTableTableManager
                                 table,
                                 p0,
                               ).manufacturingDeliveriesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.customerId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -63011,10 +63271,7 @@ final class $$SuppliersTableReferences
   _vegetableShipmentsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.vegetableShipments,
-        aliasName: $_aliasNameGenerator(
-          db.suppliers.id,
-          db.vegetableShipments.supplierId,
-        ),
+        aliasName: 'suppliers__id__vegetable_shipments__supplier_id',
       );
 
   $$VegetableShipmentsTableProcessedTableManager get vegetableShipmentsRefs {
@@ -63275,7 +63532,7 @@ class $$SuppliersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$SuppliersTable, Supplier>(table),
                   $$SuppliersTableReferences(db, table, e),
                 ),
               )
@@ -63656,7 +63913,18 @@ class $$LedgerTransactionsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$LedgerTransactionsTable, LedgerTransaction>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $LedgerTransactionsTable,
+                    LedgerTransaction
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -63700,6 +63968,10 @@ typedef $$VegetableShipmentsTableCreateCompanionBuilder =
       Value<int> barnikaSoldCount,
       required int barnikaRemainingCount,
       Value<String?> notes,
+      Value<String> status,
+      Value<int> toppingCount,
+      Value<String?> toppingReason,
+      Value<DateTime?> closedAt,
     });
 typedef $$VegetableShipmentsTableUpdateCompanionBuilder =
     VegetableShipmentsCompanion Function({
@@ -63717,6 +63989,10 @@ typedef $$VegetableShipmentsTableUpdateCompanionBuilder =
       Value<int> barnikaSoldCount,
       Value<int> barnikaRemainingCount,
       Value<String?> notes,
+      Value<String> status,
+      Value<int> toppingCount,
+      Value<String?> toppingReason,
+      Value<DateTime?> closedAt,
     });
 
 final class $$VegetableShipmentsTableReferences
@@ -63732,10 +64008,8 @@ final class $$VegetableShipmentsTableReferences
     super.$_typedResult,
   );
 
-  static $SuppliersTable _supplierIdTable(_$AppDatabase db) =>
-      db.suppliers.createAlias(
-        $_aliasNameGenerator(db.vegetableShipments.supplierId, db.suppliers.id),
-      );
+  static $SuppliersTable _supplierIdTable(_$AppDatabase db) => db.suppliers
+      .createAlias('vegetable_shipments__supplier_id__suppliers__id');
 
   $$SuppliersTableProcessedTableManager get supplierId {
     final $_column = $_itemColumn<String>('supplier_id')!;
@@ -63755,10 +64029,7 @@ final class $$VegetableShipmentsTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.invoices,
-    aliasName: $_aliasNameGenerator(
-      db.vegetableShipments.id,
-      db.invoices.shipmentId,
-    ),
+    aliasName: 'vegetable_shipments__id__invoices__shipment_id',
   );
 
   $$InvoicesTableProcessedTableManager get invoicesRefs {
@@ -63776,10 +64047,7 @@ final class $$VegetableShipmentsTableReferences
   static MultiTypedResultKey<$InvoiceItemsTable, List<InvoiceItem>>
   _invoiceItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.invoiceItems,
-    aliasName: $_aliasNameGenerator(
-      db.vegetableShipments.id,
-      db.invoiceItems.shipmentId,
-    ),
+    aliasName: 'vegetable_shipments__id__invoice_items__shipment_id',
   );
 
   $$InvoiceItemsTableProcessedTableManager get invoiceItemsRefs {
@@ -63794,13 +64062,29 @@ final class $$VegetableShipmentsTableReferences
     );
   }
 
+  static MultiTypedResultKey<$ExpensesTable, List<Expense>> _expensesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.expenses,
+    aliasName: 'vegetable_shipments__id__expenses__shipment_id',
+  );
+
+  $$ExpensesTableProcessedTableManager get expensesRefs {
+    final manager = $$ExpensesTableTableManager(
+      $_db,
+      $_db.expenses,
+    ).filter((f) => f.shipmentId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_expensesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$SalesReturnItemsTable, List<SalesReturnItem>>
   _salesReturnItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.salesReturnItems,
-    aliasName: $_aliasNameGenerator(
-      db.vegetableShipments.id,
-      db.salesReturnItems.shipmentId,
-    ),
+    aliasName: 'vegetable_shipments__id__sales_return_items__shipment_id',
   );
 
   $$SalesReturnItemsTableProcessedTableManager get salesReturnItemsRefs {
@@ -63892,6 +64176,26 @@ class $$VegetableShipmentsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get toppingCount => $composableBuilder(
+    column: $table.toppingCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get toppingReason => $composableBuilder(
+    column: $table.toppingReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$SuppliersTableFilterComposer get supplierId {
     final $$SuppliersTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -63956,6 +64260,31 @@ class $$VegetableShipmentsTableFilterComposer
           }) => $$InvoiceItemsTableFilterComposer(
             $db: $db,
             $table: $db.invoiceItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> expensesRefs(
+    Expression<bool> Function($$ExpensesTableFilterComposer f) f,
+  ) {
+    final $$ExpensesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.expenses,
+      getReferencedColumn: (t) => t.shipmentId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ExpensesTableFilterComposer(
+            $db: $db,
+            $table: $db.expenses,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -64065,6 +64394,26 @@ class $$VegetableShipmentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get toppingCount => $composableBuilder(
+    column: $table.toppingCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get toppingReason => $composableBuilder(
+    column: $table.toppingReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$SuppliersTableOrderingComposer get supplierId {
     final $$SuppliersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -64155,6 +64504,22 @@ class $$VegetableShipmentsTableAnnotationComposer
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get toppingCount => $composableBuilder(
+    column: $table.toppingCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get toppingReason => $composableBuilder(
+    column: $table.toppingReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get closedAt =>
+      $composableBuilder(column: $table.closedAt, builder: (column) => column);
+
   $$SuppliersTableAnnotationComposer get supplierId {
     final $$SuppliersTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -64228,6 +64593,31 @@ class $$VegetableShipmentsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> expensesRefs<T extends Object>(
+    Expression<T> Function($$ExpensesTableAnnotationComposer a) f,
+  ) {
+    final $$ExpensesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.expenses,
+      getReferencedColumn: (t) => t.shipmentId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ExpensesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.expenses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> salesReturnItemsRefs<T extends Object>(
     Expression<T> Function($$SalesReturnItemsTableAnnotationComposer a) f,
   ) {
@@ -64271,6 +64661,7 @@ class $$VegetableShipmentsTableTableManager
             bool supplierId,
             bool invoicesRefs,
             bool invoiceItemsRefs,
+            bool expensesRefs,
             bool salesReturnItemsRefs,
           })
         > {
@@ -64306,6 +64697,10 @@ class $$VegetableShipmentsTableTableManager
                 Value<int> barnikaSoldCount = const Value.absent(),
                 Value<int> barnikaRemainingCount = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int> toppingCount = const Value.absent(),
+                Value<String?> toppingReason = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
               }) => VegetableShipmentsCompanion(
                 id: id,
                 supplierId: supplierId,
@@ -64321,6 +64716,10 @@ class $$VegetableShipmentsTableTableManager
                 barnikaSoldCount: barnikaSoldCount,
                 barnikaRemainingCount: barnikaRemainingCount,
                 notes: notes,
+                status: status,
+                toppingCount: toppingCount,
+                toppingReason: toppingReason,
+                closedAt: closedAt,
               ),
           createCompanionCallback:
               ({
@@ -64338,6 +64737,10 @@ class $$VegetableShipmentsTableTableManager
                 Value<int> barnikaSoldCount = const Value.absent(),
                 required int barnikaRemainingCount,
                 Value<String?> notes = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int> toppingCount = const Value.absent(),
+                Value<String?> toppingReason = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
               }) => VegetableShipmentsCompanion.insert(
                 id: id,
                 supplierId: supplierId,
@@ -64353,11 +64756,17 @@ class $$VegetableShipmentsTableTableManager
                 barnikaSoldCount: barnikaSoldCount,
                 barnikaRemainingCount: barnikaRemainingCount,
                 notes: notes,
+                status: status,
+                toppingCount: toppingCount,
+                toppingReason: toppingReason,
+                closedAt: closedAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$VegetableShipmentsTable, VegetableShipment>(
+                    table,
+                  ),
                   $$VegetableShipmentsTableReferences(db, table, e),
                 ),
               )
@@ -64367,6 +64776,7 @@ class $$VegetableShipmentsTableTableManager
                 supplierId = false,
                 invoicesRefs = false,
                 invoiceItemsRefs = false,
+                expensesRefs = false,
                 salesReturnItemsRefs = false,
               }) {
                 return PrefetchHooks(
@@ -64374,6 +64784,7 @@ class $$VegetableShipmentsTableTableManager
                   explicitlyWatchedTables: [
                     if (invoicesRefs) db.invoices,
                     if (invoiceItemsRefs) db.invoiceItems,
+                    if (expensesRefs) db.expenses,
                     if (salesReturnItemsRefs) db.salesReturnItems,
                   ],
                   addJoins:
@@ -64427,10 +64838,8 @@ class $$VegetableShipmentsTableTableManager
                                 table,
                                 p0,
                               ).invoicesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.shipmentId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.shipmentId == item.id),
                           typedResults: items,
                         ),
                       if (invoiceItemsRefs)
@@ -64448,10 +64857,27 @@ class $$VegetableShipmentsTableTableManager
                                 table,
                                 p0,
                               ).invoiceItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.shipmentId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.shipmentId == item.id),
+                          typedResults: items,
+                        ),
+                      if (expensesRefs)
+                        await $_getPrefetchedData<
+                          VegetableShipment,
+                          $VegetableShipmentsTable,
+                          Expense
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VegetableShipmentsTableReferences
+                              ._expensesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VegetableShipmentsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).expensesRefs,
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.shipmentId == item.id),
                           typedResults: items,
                         ),
                       if (salesReturnItemsRefs)
@@ -64469,10 +64895,8 @@ class $$VegetableShipmentsTableTableManager
                                 table,
                                 p0,
                               ).salesReturnItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.shipmentId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.shipmentId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -64499,6 +64923,7 @@ typedef $$VegetableShipmentsTableProcessedTableManager =
         bool supplierId,
         bool invoicesRefs,
         bool invoiceItemsRefs,
+        bool expensesRefs,
         bool salesReturnItemsRefs,
       })
     >;
@@ -64561,10 +64986,9 @@ final class $$InvoicesTableReferences
     extends BaseReferences<_$AppDatabase, $InvoicesTable, Invoice> {
   $$InvoicesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $VegetableShipmentsTable _shipmentIdTable(_$AppDatabase db) =>
-      db.vegetableShipments.createAlias(
-        $_aliasNameGenerator(db.invoices.shipmentId, db.vegetableShipments.id),
-      );
+  static $VegetableShipmentsTable _shipmentIdTable(_$AppDatabase db) => db
+      .vegetableShipments
+      .createAlias('invoices__shipment_id__vegetable_shipments__id');
 
   $$VegetableShipmentsTableProcessedTableManager? get shipmentId {
     final $_column = $_itemColumn<int>('shipment_id');
@@ -64584,7 +65008,7 @@ final class $$InvoicesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.sales,
-    aliasName: $_aliasNameGenerator(db.invoices.id, db.sales.invoiceId),
+    aliasName: 'invoices__id__sales__invoice_id',
   );
 
   $$SalesTableProcessedTableManager get salesRefs {
@@ -64602,7 +65026,7 @@ final class $$InvoicesTableReferences
   static MultiTypedResultKey<$InvoiceItemsTable, List<InvoiceItem>>
   _invoiceItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.invoiceItems,
-    aliasName: $_aliasNameGenerator(db.invoices.id, db.invoiceItems.invoiceId),
+    aliasName: 'invoices__id__invoice_items__invoice_id',
   );
 
   $$InvoiceItemsTableProcessedTableManager get invoiceItemsRefs {
@@ -64620,7 +65044,7 @@ final class $$InvoicesTableReferences
   static MultiTypedResultKey<$CreditPaymentsTable, List<CreditPayment>>
   _creditPaymentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.creditPayments,
-    aliasName: $_aliasNameGenerator(db.invoices.id, db.creditPayments.saleId),
+    aliasName: 'invoices__id__credit_payments__sale_id',
   );
 
   $$CreditPaymentsTableProcessedTableManager get creditPaymentsRefs {
@@ -64638,10 +65062,7 @@ final class $$InvoicesTableReferences
   static MultiTypedResultKey<$InvoicePaymentsTable, List<InvoicePayment>>
   _invoicePaymentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.invoicePayments,
-    aliasName: $_aliasNameGenerator(
-      db.invoices.id,
-      db.invoicePayments.invoiceId,
-    ),
+    aliasName: 'invoices__id__invoice_payments__invoice_id',
   );
 
   $$InvoicePaymentsTableProcessedTableManager get invoicePaymentsRefs {
@@ -64661,10 +65082,7 @@ final class $$InvoicesTableReferences
   static MultiTypedResultKey<$SalesReturnsTable, List<SalesReturn>>
   _salesReturnsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.salesReturns,
-    aliasName: $_aliasNameGenerator(
-      db.invoices.id,
-      db.salesReturns.originalInvoiceId,
-    ),
+    aliasName: 'invoices__id__sales_returns__original_invoice_id',
   );
 
   $$SalesReturnsTableProcessedTableManager get salesReturnsRefs {
@@ -64682,10 +65100,7 @@ final class $$InvoicesTableReferences
   static MultiTypedResultKey<$ReturnRefundsTable, List<ReturnRefund>>
   _returnRefundsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.returnRefunds,
-    aliasName: $_aliasNameGenerator(
-      db.invoices.id,
-      db.returnRefunds.applyToInvoiceId,
-    ),
+    aliasName: 'invoices__id__return_refunds__apply_to_invoice_id',
   );
 
   $$ReturnRefundsTableProcessedTableManager get returnRefundsRefs {
@@ -64701,16 +65116,38 @@ final class $$InvoicesTableReferences
   }
 
   static MultiTypedResultKey<
+    $EmptyBarnikaTrackingTable,
+    List<EmptyBarnikaTrackingData>
+  >
+  _emptyBarnikaTrackingRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.emptyBarnikaTracking,
+        aliasName: 'invoices__id__empty_barnika_tracking__invoice_id',
+      );
+
+  $$EmptyBarnikaTrackingTableProcessedTableManager
+  get emptyBarnikaTrackingRefs {
+    final manager = $$EmptyBarnikaTrackingTableTableManager(
+      $_db,
+      $_db.emptyBarnikaTracking,
+    ).filter((f) => f.invoiceId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _emptyBarnikaTrackingRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
     $ManufacturingOrdersTable,
     List<ManufacturingOrder>
   >
   _manufacturingOrdersRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.manufacturingOrders,
-        aliasName: $_aliasNameGenerator(
-          db.invoices.id,
-          db.manufacturingOrders.invoiceId,
-        ),
+        aliasName: 'invoices__id__manufacturing_orders__invoice_id',
       );
 
   $$ManufacturingOrdersTableProcessedTableManager get manufacturingOrdersRefs {
@@ -65016,6 +65453,31 @@ class $$InvoicesTableFilterComposer
           }) => $$ReturnRefundsTableFilterComposer(
             $db: $db,
             $table: $db.returnRefunds,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> emptyBarnikaTrackingRefs(
+    Expression<bool> Function($$EmptyBarnikaTrackingTableFilterComposer f) f,
+  ) {
+    final $$EmptyBarnikaTrackingTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.emptyBarnikaTracking,
+      getReferencedColumn: (t) => t.invoiceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EmptyBarnikaTrackingTableFilterComposer(
+            $db: $db,
+            $table: $db.emptyBarnikaTracking,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -65479,6 +65941,32 @@ class $$InvoicesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> emptyBarnikaTrackingRefs<T extends Object>(
+    Expression<T> Function($$EmptyBarnikaTrackingTableAnnotationComposer a) f,
+  ) {
+    final $$EmptyBarnikaTrackingTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.emptyBarnikaTracking,
+          getReferencedColumn: (t) => t.invoiceId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$EmptyBarnikaTrackingTableAnnotationComposer(
+                $db: $db,
+                $table: $db.emptyBarnikaTracking,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> manufacturingOrdersRefs<T extends Object>(
     Expression<T> Function($$ManufacturingOrdersTableAnnotationComposer a) f,
   ) {
@@ -65527,6 +66015,7 @@ class $$InvoicesTableTableManager
             bool invoicePaymentsRefs,
             bool salesReturnsRefs,
             bool returnRefundsRefs,
+            bool emptyBarnikaTrackingRefs,
             bool manufacturingOrdersRefs,
           })
         > {
@@ -65648,7 +66137,7 @@ class $$InvoicesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$InvoicesTable, Invoice>(table),
                   $$InvoicesTableReferences(db, table, e),
                 ),
               )
@@ -65662,6 +66151,7 @@ class $$InvoicesTableTableManager
                 invoicePaymentsRefs = false,
                 salesReturnsRefs = false,
                 returnRefundsRefs = false,
+                emptyBarnikaTrackingRefs = false,
                 manufacturingOrdersRefs = false,
               }) {
                 return PrefetchHooks(
@@ -65673,6 +66163,7 @@ class $$InvoicesTableTableManager
                     if (invoicePaymentsRefs) db.invoicePayments,
                     if (salesReturnsRefs) db.salesReturns,
                     if (returnRefundsRefs) db.returnRefunds,
+                    if (emptyBarnikaTrackingRefs) db.emptyBarnikaTracking,
                     if (manufacturingOrdersRefs) db.manufacturingOrders,
                   ],
                   addJoins:
@@ -65724,10 +66215,8 @@ class $$InvoicesTableTableManager
                                 table,
                                 p0,
                               ).salesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.invoiceId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.invoiceId == item.id),
                           typedResults: items,
                         ),
                       if (invoiceItemsRefs)
@@ -65745,10 +66234,8 @@ class $$InvoicesTableTableManager
                                 table,
                                 p0,
                               ).invoiceItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.invoiceId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.invoiceId == item.id),
                           typedResults: items,
                         ),
                       if (creditPaymentsRefs)
@@ -65766,10 +66253,8 @@ class $$InvoicesTableTableManager
                                 table,
                                 p0,
                               ).creditPaymentsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.saleId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.saleId == item.id),
                           typedResults: items,
                         ),
                       if (invoicePaymentsRefs)
@@ -65787,10 +66272,8 @@ class $$InvoicesTableTableManager
                                 table,
                                 p0,
                               ).invoicePaymentsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.invoiceId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.invoiceId == item.id),
                           typedResults: items,
                         ),
                       if (salesReturnsRefs)
@@ -65808,10 +66291,8 @@ class $$InvoicesTableTableManager
                                 table,
                                 p0,
                               ).salesReturnsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.originalInvoiceId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.originalInvoiceId == item.id),
                           typedResults: items,
                         ),
                       if (returnRefundsRefs)
@@ -65829,10 +66310,27 @@ class $$InvoicesTableTableManager
                                 table,
                                 p0,
                               ).returnRefundsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.applyToInvoiceId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.applyToInvoiceId == item.id),
+                          typedResults: items,
+                        ),
+                      if (emptyBarnikaTrackingRefs)
+                        await $_getPrefetchedData<
+                          Invoice,
+                          $InvoicesTable,
+                          EmptyBarnikaTrackingData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$InvoicesTableReferences
+                              ._emptyBarnikaTrackingRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$InvoicesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).emptyBarnikaTrackingRefs,
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.invoiceId == item.id),
                           typedResults: items,
                         ),
                       if (manufacturingOrdersRefs)
@@ -65850,10 +66348,8 @@ class $$InvoicesTableTableManager
                                 table,
                                 p0,
                               ).manufacturingOrdersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.invoiceId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.invoiceId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -65884,6 +66380,7 @@ typedef $$InvoicesTableProcessedTableManager =
         bool invoicePaymentsRefs,
         bool salesReturnsRefs,
         bool returnRefundsRefs,
+        bool emptyBarnikaTrackingRefs,
         bool manufacturingOrdersRefs,
       })
     >;
@@ -65916,8 +66413,8 @@ final class $$SalesTableReferences
     extends BaseReferences<_$AppDatabase, $SalesTable, Sale> {
   $$SalesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $InvoicesTable _invoiceIdTable(_$AppDatabase db) => db.invoices
-      .createAlias($_aliasNameGenerator(db.sales.invoiceId, db.invoices.id));
+  static $InvoicesTable _invoiceIdTable(_$AppDatabase db) =>
+      db.invoices.createAlias('sales__invoice_id__invoices__id');
 
   $$InvoicesTableProcessedTableManager? get invoiceId {
     final $_column = $_itemColumn<int>('invoice_id');
@@ -66199,8 +66696,10 @@ class $$SalesTableTableManager
               ),
           withReferenceMapper: (p0) => p0
               .map(
-                (e) =>
-                    (e.readTable(table), $$SalesTableReferences(db, table, e)),
+                (e) => (
+                  e.readTable<$SalesTable, Sale>(table),
+                  $$SalesTableReferences(db, table, e),
+                ),
               )
               .toList(),
           prefetchHooksCallback: ({invoiceId = false}) {
@@ -66299,9 +66798,7 @@ final class $$ProductVariantsTableReferences
   );
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.productVariants.productId, db.products.id),
-      );
+      db.products.createAlias('product_variants__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -66320,10 +66817,7 @@ final class $$ProductVariantsTableReferences
   static MultiTypedResultKey<$InvoiceItemsTable, List<InvoiceItem>>
   _invoiceItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.invoiceItems,
-    aliasName: $_aliasNameGenerator(
-      db.productVariants.id,
-      db.invoiceItems.variantId,
-    ),
+    aliasName: 'product_variants__id__invoice_items__variant_id',
   );
 
   $$InvoiceItemsTableProcessedTableManager get invoiceItemsRefs {
@@ -66341,10 +66835,7 @@ final class $$ProductVariantsTableReferences
   static MultiTypedResultKey<$SalesReturnItemsTable, List<SalesReturnItem>>
   _salesReturnItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.salesReturnItems,
-    aliasName: $_aliasNameGenerator(
-      db.productVariants.id,
-      db.salesReturnItems.variantId,
-    ),
+    aliasName: 'product_variants__id__sales_return_items__variant_id',
   );
 
   $$SalesReturnItemsTableProcessedTableManager get salesReturnItemsRefs {
@@ -66368,10 +66859,8 @@ final class $$ProductVariantsTableReferences
   _manufacturingStageOutputsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.manufacturingStageOutputs,
-        aliasName: $_aliasNameGenerator(
-          db.productVariants.id,
-          db.manufacturingStageOutputs.variantId,
-        ),
+        aliasName:
+            'product_variants__id__manufacturing_stage_outputs__variant_id',
       );
 
   $$ManufacturingStageOutputsTableProcessedTableManager
@@ -66844,7 +67333,7 @@ class $$ProductVariantsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$ProductVariantsTable, ProductVariant>(table),
                   $$ProductVariantsTableReferences(db, table, e),
                 ),
               )
@@ -66915,10 +67404,8 @@ class $$ProductVariantsTableTableManager
                                 table,
                                 p0,
                               ).invoiceItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.variantId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.variantId == item.id),
                           typedResults: items,
                         ),
                       if (salesReturnItemsRefs)
@@ -66936,10 +67423,8 @@ class $$ProductVariantsTableTableManager
                                 table,
                                 p0,
                               ).salesReturnItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.variantId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.variantId == item.id),
                           typedResults: items,
                         ),
                       if (manufacturingStageOutputsRefs)
@@ -66957,10 +67442,8 @@ class $$ProductVariantsTableTableManager
                                 table,
                                 p0,
                               ).manufacturingStageOutputsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.variantId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.variantId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -67030,9 +67513,7 @@ final class $$InvoiceItemsTableReferences
   $$InvoiceItemsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $InvoicesTable _invoiceIdTable(_$AppDatabase db) =>
-      db.invoices.createAlias(
-        $_aliasNameGenerator(db.invoiceItems.invoiceId, db.invoices.id),
-      );
+      db.invoices.createAlias('invoice_items__invoice_id__invoices__id');
 
   $$InvoicesTableProcessedTableManager get invoiceId {
     final $_column = $_itemColumn<int>('invoice_id')!;
@@ -67049,9 +67530,7 @@ final class $$InvoiceItemsTableReferences
   }
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.invoiceItems.productId, db.products.id),
-      );
+      db.products.createAlias('invoice_items__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -67067,10 +67546,9 @@ final class $$InvoiceItemsTableReferences
     );
   }
 
-  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
-      db.productVariants.createAlias(
-        $_aliasNameGenerator(db.invoiceItems.variantId, db.productVariants.id),
-      );
+  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) => db
+      .productVariants
+      .createAlias('invoice_items__variant_id__product_variants__id');
 
   $$ProductVariantsTableProcessedTableManager? get variantId {
     final $_column = $_itemColumn<int>('variant_id');
@@ -67086,13 +67564,9 @@ final class $$InvoiceItemsTableReferences
     );
   }
 
-  static $VegetableShipmentsTable _shipmentIdTable(_$AppDatabase db) =>
-      db.vegetableShipments.createAlias(
-        $_aliasNameGenerator(
-          db.invoiceItems.shipmentId,
-          db.vegetableShipments.id,
-        ),
-      );
+  static $VegetableShipmentsTable _shipmentIdTable(_$AppDatabase db) => db
+      .vegetableShipments
+      .createAlias('invoice_items__shipment_id__vegetable_shipments__id');
 
   $$VegetableShipmentsTableProcessedTableManager? get shipmentId {
     final $_column = $_itemColumn<int>('shipment_id');
@@ -67111,10 +67585,7 @@ final class $$InvoiceItemsTableReferences
   static MultiTypedResultKey<$SalesReturnItemsTable, List<SalesReturnItem>>
   _salesReturnItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.salesReturnItems,
-    aliasName: $_aliasNameGenerator(
-      db.invoiceItems.id,
-      db.salesReturnItems.invoiceItemId,
-    ),
+    aliasName: 'invoice_items__id__sales_return_items__invoice_item_id',
   );
 
   $$SalesReturnItemsTableProcessedTableManager get salesReturnItemsRefs {
@@ -67722,7 +68193,7 @@ class $$InvoiceItemsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$InvoiceItemsTable, InvoiceItem>(table),
                   $$InvoiceItemsTableReferences(db, table, e),
                 ),
               )
@@ -67836,10 +68307,8 @@ class $$InvoiceItemsTableTableManager
                                 table,
                                 p0,
                               ).salesReturnItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.invoiceItemId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.invoiceItemId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -67884,6 +68353,8 @@ typedef $$ExpensesTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<String?> userId,
       Value<String?> dayId,
+      Value<int?> shipmentId,
+      Value<String> scope,
       Value<int> rowid,
     });
 typedef $$ExpensesTableUpdateCompanionBuilder =
@@ -67900,8 +68371,33 @@ typedef $$ExpensesTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<String?> userId,
       Value<String?> dayId,
+      Value<int?> shipmentId,
+      Value<String> scope,
       Value<int> rowid,
     });
+
+final class $$ExpensesTableReferences
+    extends BaseReferences<_$AppDatabase, $ExpensesTable, Expense> {
+  $$ExpensesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $VegetableShipmentsTable _shipmentIdTable(_$AppDatabase db) => db
+      .vegetableShipments
+      .createAlias('expenses__shipment_id__vegetable_shipments__id');
+
+  $$VegetableShipmentsTableProcessedTableManager? get shipmentId {
+    final $_column = $_itemColumn<int>('shipment_id');
+    if ($_column == null) return null;
+    final manager = $$VegetableShipmentsTableTableManager(
+      $_db,
+      $_db.vegetableShipments,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_shipmentIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
 
 class $$ExpensesTableFilterComposer
     extends Composer<_$AppDatabase, $ExpensesTable> {
@@ -67971,6 +68467,34 @@ class $$ExpensesTableFilterComposer
     column: $table.dayId,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<String> get scope => $composableBuilder(
+    column: $table.scope,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$VegetableShipmentsTableFilterComposer get shipmentId {
+    final $$VegetableShipmentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shipmentId,
+      referencedTable: $db.vegetableShipments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VegetableShipmentsTableFilterComposer(
+            $db: $db,
+            $table: $db.vegetableShipments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$ExpensesTableOrderingComposer
@@ -68041,6 +68565,34 @@ class $$ExpensesTableOrderingComposer
     column: $table.dayId,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get scope => $composableBuilder(
+    column: $table.scope,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$VegetableShipmentsTableOrderingComposer get shipmentId {
+    final $$VegetableShipmentsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shipmentId,
+      referencedTable: $db.vegetableShipments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VegetableShipmentsTableOrderingComposer(
+            $db: $db,
+            $table: $db.vegetableShipments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$ExpensesTableAnnotationComposer
@@ -68095,6 +68647,33 @@ class $$ExpensesTableAnnotationComposer
 
   GeneratedColumn<String> get dayId =>
       $composableBuilder(column: $table.dayId, builder: (column) => column);
+
+  GeneratedColumn<String> get scope =>
+      $composableBuilder(column: $table.scope, builder: (column) => column);
+
+  $$VegetableShipmentsTableAnnotationComposer get shipmentId {
+    final $$VegetableShipmentsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.shipmentId,
+          referencedTable: $db.vegetableShipments,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$VegetableShipmentsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.vegetableShipments,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
 }
 
 class $$ExpensesTableTableManager
@@ -68108,9 +68687,9 @@ class $$ExpensesTableTableManager
           $$ExpensesTableAnnotationComposer,
           $$ExpensesTableCreateCompanionBuilder,
           $$ExpensesTableUpdateCompanionBuilder,
-          (Expense, BaseReferences<_$AppDatabase, $ExpensesTable, Expense>),
+          (Expense, $$ExpensesTableReferences),
           Expense,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool shipmentId})
         > {
   $$ExpensesTableTableManager(_$AppDatabase db, $ExpensesTable table)
     : super(
@@ -68137,6 +68716,8 @@ class $$ExpensesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<String?> userId = const Value.absent(),
                 Value<String?> dayId = const Value.absent(),
+                Value<int?> shipmentId = const Value.absent(),
+                Value<String> scope = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ExpensesCompanion(
                 id: id,
@@ -68151,6 +68732,8 @@ class $$ExpensesTableTableManager
                 createdAt: createdAt,
                 userId: userId,
                 dayId: dayId,
+                shipmentId: shipmentId,
+                scope: scope,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -68167,6 +68750,8 @@ class $$ExpensesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<String?> userId = const Value.absent(),
                 Value<String?> dayId = const Value.absent(),
+                Value<int?> shipmentId = const Value.absent(),
+                Value<String> scope = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ExpensesCompanion.insert(
                 id: id,
@@ -68181,12 +68766,59 @@ class $$ExpensesTableTableManager
                 createdAt: createdAt,
                 userId: userId,
                 dayId: dayId,
+                shipmentId: shipmentId,
+                scope: scope,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$ExpensesTable, Expense>(table),
+                  $$ExpensesTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({shipmentId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (shipmentId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.shipmentId,
+                                referencedTable: $$ExpensesTableReferences
+                                    ._shipmentIdTable(db),
+                                referencedColumn: $$ExpensesTableReferences
+                                    ._shipmentIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -68201,9 +68833,9 @@ typedef $$ExpensesTableProcessedTableManager =
       $$ExpensesTableAnnotationComposer,
       $$ExpensesTableCreateCompanionBuilder,
       $$ExpensesTableUpdateCompanionBuilder,
-      (Expense, BaseReferences<_$AppDatabase, $ExpensesTable, Expense>),
+      (Expense, $$ExpensesTableReferences),
       Expense,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool shipmentId})
     >;
 typedef $$DaysTableCreateCompanionBuilder =
     DaysCompanion Function({
@@ -68511,7 +69143,12 @@ class $$DaysTableTableManager
                 reopenedBy: reopenedBy,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$DaysTable, Day>(table),
+                  BaseReferences<_$AppDatabase, $DaysTable, Day>(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -68871,7 +69508,16 @@ class $$PurchasesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$PurchasesTable, Purchase>(table),
+                  BaseReferences<_$AppDatabase, $PurchasesTable, Purchase>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -69249,7 +69895,16 @@ class $$PurchaseItemsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$PurchaseItemsTable, PurchaseItem>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $PurchaseItemsTable,
+                    PurchaseItem
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -69299,9 +69954,7 @@ final class $$CreditPaymentsTableReferences
   );
 
   static $InvoicesTable _saleIdTable(_$AppDatabase db) =>
-      db.invoices.createAlias(
-        $_aliasNameGenerator(db.creditPayments.saleId, db.invoices.id),
-      );
+      db.invoices.createAlias('credit_payments__sale_id__invoices__id');
 
   $$InvoicesTableProcessedTableManager get saleId {
     final $_column = $_itemColumn<int>('sale_id')!;
@@ -69532,7 +70185,7 @@ class $$CreditPaymentsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$CreditPaymentsTable, CreditPayment>(table),
                   $$CreditPaymentsTableReferences(db, table, e),
                 ),
               )
@@ -69808,7 +70461,16 @@ class $$EmployeesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$EmployeesTable, Employee>(table),
+                  BaseReferences<_$AppDatabase, $EmployeesTable, Employee>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -69881,10 +70543,7 @@ final class $$EnhancedSuppliersTableReferences
   _enhancedPurchasesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.enhancedPurchases,
-        aliasName: $_aliasNameGenerator(
-          db.enhancedSuppliers.id,
-          db.enhancedPurchases.supplierId,
-        ),
+        aliasName: 'enhanced_suppliers__id__enhanced_purchases__supplier_id',
       );
 
   $$EnhancedPurchasesTableProcessedTableManager get enhancedPurchasesRefs {
@@ -69904,10 +70563,7 @@ final class $$EnhancedSuppliersTableReferences
   static MultiTypedResultKey<$SupplierPaymentsTable, List<SupplierPayment>>
   _supplierPaymentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.supplierPayments,
-    aliasName: $_aliasNameGenerator(
-      db.enhancedSuppliers.id,
-      db.supplierPayments.supplierId,
-    ),
+    aliasName: 'enhanced_suppliers__id__supplier_payments__supplier_id',
   );
 
   $$SupplierPaymentsTableProcessedTableManager get supplierPaymentsRefs {
@@ -69927,10 +70583,7 @@ final class $$EnhancedSuppliersTableReferences
   static MultiTypedResultKey<$PurchaseOrdersTable, List<PurchaseOrder>>
   _purchaseOrdersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchaseOrders,
-    aliasName: $_aliasNameGenerator(
-      db.enhancedSuppliers.id,
-      db.purchaseOrders.supplierId,
-    ),
+    aliasName: 'enhanced_suppliers__id__purchase_orders__supplier_id',
   );
 
   $$PurchaseOrdersTableProcessedTableManager get purchaseOrdersRefs {
@@ -69948,10 +70601,7 @@ final class $$EnhancedSuppliersTableReferences
   static MultiTypedResultKey<$PurchaseReturnsTable, List<PurchaseReturn>>
   _purchaseReturnsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchaseReturns,
-    aliasName: $_aliasNameGenerator(
-      db.enhancedSuppliers.id,
-      db.purchaseReturns.supplierId,
-    ),
+    aliasName: 'enhanced_suppliers__id__purchase_returns__supplier_id',
   );
 
   $$PurchaseReturnsTableProcessedTableManager get purchaseReturnsRefs {
@@ -69971,10 +70621,7 @@ final class $$EnhancedSuppliersTableReferences
   static MultiTypedResultKey<$PurchaseRefundsTable, List<PurchaseRefund>>
   _purchaseRefundsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchaseRefunds,
-    aliasName: $_aliasNameGenerator(
-      db.enhancedSuppliers.id,
-      db.purchaseRefunds.supplierId,
-    ),
+    aliasName: 'enhanced_suppliers__id__purchase_refunds__supplier_id',
   );
 
   $$PurchaseRefundsTableProcessedTableManager get purchaseRefundsRefs {
@@ -70567,7 +71214,7 @@ class $$EnhancedSuppliersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$EnhancedSuppliersTable, EnhancedSupplier>(table),
                   $$EnhancedSuppliersTableReferences(db, table, e),
                 ),
               )
@@ -70607,10 +71254,8 @@ class $$EnhancedSuppliersTableTableManager
                                 table,
                                 p0,
                               ).enhancedPurchasesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.supplierId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.supplierId == item.id),
                           typedResults: items,
                         ),
                       if (supplierPaymentsRefs)
@@ -70628,10 +71273,8 @@ class $$EnhancedSuppliersTableTableManager
                                 table,
                                 p0,
                               ).supplierPaymentsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.supplierId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.supplierId == item.id),
                           typedResults: items,
                         ),
                       if (purchaseOrdersRefs)
@@ -70649,10 +71292,8 @@ class $$EnhancedSuppliersTableTableManager
                                 table,
                                 p0,
                               ).purchaseOrdersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.supplierId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.supplierId == item.id),
                           typedResults: items,
                         ),
                       if (purchaseReturnsRefs)
@@ -70670,10 +71311,8 @@ class $$EnhancedSuppliersTableTableManager
                                 table,
                                 p0,
                               ).purchaseReturnsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.supplierId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.supplierId == item.id),
                           typedResults: items,
                         ),
                       if (purchaseRefundsRefs)
@@ -70691,10 +71330,8 @@ class $$EnhancedSuppliersTableTableManager
                                 table,
                                 p0,
                               ).purchaseRefundsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.supplierId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.supplierId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -70781,13 +71418,9 @@ final class $$EnhancedPurchasesTableReferences
     super.$_typedResult,
   );
 
-  static $EnhancedSuppliersTable _supplierIdTable(_$AppDatabase db) =>
-      db.enhancedSuppliers.createAlias(
-        $_aliasNameGenerator(
-          db.enhancedPurchases.supplierId,
-          db.enhancedSuppliers.id,
-        ),
-      );
+  static $EnhancedSuppliersTable _supplierIdTable(_$AppDatabase db) => db
+      .enhancedSuppliers
+      .createAlias('enhanced_purchases__supplier_id__enhanced_suppliers__id');
 
   $$EnhancedSuppliersTableProcessedTableManager get supplierId {
     final $_column = $_itemColumn<int>('supplier_id')!;
@@ -70810,10 +71443,8 @@ final class $$EnhancedPurchasesTableReferences
   _enhancedPurchaseItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.enhancedPurchaseItems,
-        aliasName: $_aliasNameGenerator(
-          db.enhancedPurchases.id,
-          db.enhancedPurchaseItems.purchaseId,
-        ),
+        aliasName:
+            'enhanced_purchases__id__enhanced_purchase_items__purchase_id',
       );
 
   $$EnhancedPurchaseItemsTableProcessedTableManager
@@ -70834,10 +71465,7 @@ final class $$EnhancedPurchasesTableReferences
   static MultiTypedResultKey<$SupplierPaymentsTable, List<SupplierPayment>>
   _supplierPaymentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.supplierPayments,
-    aliasName: $_aliasNameGenerator(
-      db.enhancedPurchases.id,
-      db.supplierPayments.purchaseId,
-    ),
+    aliasName: 'enhanced_purchases__id__supplier_payments__purchase_id',
   );
 
   $$SupplierPaymentsTableProcessedTableManager get supplierPaymentsRefs {
@@ -70858,10 +71486,7 @@ final class $$EnhancedPurchasesTableReferences
   _budgetTransactionsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.budgetTransactions,
-        aliasName: $_aliasNameGenerator(
-          db.enhancedPurchases.id,
-          db.budgetTransactions.purchaseId,
-        ),
+        aliasName: 'enhanced_purchases__id__budget_transactions__purchase_id',
       );
 
   $$BudgetTransactionsTableProcessedTableManager get budgetTransactionsRefs {
@@ -70881,10 +71506,7 @@ final class $$EnhancedPurchasesTableReferences
   static MultiTypedResultKey<$PurchaseReturnsTable, List<PurchaseReturn>>
   _purchaseReturnsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchaseReturns,
-    aliasName: $_aliasNameGenerator(
-      db.enhancedPurchases.id,
-      db.purchaseReturns.originalPurchaseId,
-    ),
+    aliasName: 'enhanced_purchases__id__purchase_returns__original_purchase_id',
   );
 
   $$PurchaseReturnsTableProcessedTableManager get purchaseReturnsRefs {
@@ -71566,7 +72188,7 @@ class $$EnhancedPurchasesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$EnhancedPurchasesTable, EnhancedPurchase>(table),
                   $$EnhancedPurchasesTableReferences(db, table, e),
                 ),
               )
@@ -71638,10 +72260,8 @@ class $$EnhancedPurchasesTableTableManager
                                 table,
                                 p0,
                               ).enhancedPurchaseItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.purchaseId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.purchaseId == item.id),
                           typedResults: items,
                         ),
                       if (supplierPaymentsRefs)
@@ -71659,10 +72279,8 @@ class $$EnhancedPurchasesTableTableManager
                                 table,
                                 p0,
                               ).supplierPaymentsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.purchaseId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.purchaseId == item.id),
                           typedResults: items,
                         ),
                       if (budgetTransactionsRefs)
@@ -71680,10 +72298,8 @@ class $$EnhancedPurchasesTableTableManager
                                 table,
                                 p0,
                               ).budgetTransactionsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.purchaseId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.purchaseId == item.id),
                           typedResults: items,
                         ),
                       if (purchaseReturnsRefs)
@@ -71701,10 +72317,8 @@ class $$EnhancedPurchasesTableTableManager
                                 table,
                                 p0,
                               ).purchaseReturnsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.originalPurchaseId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.originalPurchaseId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -71781,10 +72395,7 @@ final class $$EnhancedPurchaseItemsTableReferences
 
   static $EnhancedPurchasesTable _purchaseIdTable(_$AppDatabase db) =>
       db.enhancedPurchases.createAlias(
-        $_aliasNameGenerator(
-          db.enhancedPurchaseItems.purchaseId,
-          db.enhancedPurchases.id,
-        ),
+        'enhanced_purchase_items__purchase_id__enhanced_purchases__id',
       );
 
   $$EnhancedPurchasesTableProcessedTableManager get purchaseId {
@@ -71801,13 +72412,8 @@ final class $$EnhancedPurchaseItemsTableReferences
     );
   }
 
-  static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(
-          db.enhancedPurchaseItems.productId,
-          db.products.id,
-        ),
-      );
+  static $ProductsTable _productIdTable(_$AppDatabase db) => db.products
+      .createAlias('enhanced_purchase_items__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -72225,7 +72831,10 @@ class $$EnhancedPurchaseItemsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<
+                    $EnhancedPurchaseItemsTable,
+                    EnhancedPurchaseItem
+                  >(table),
                   $$EnhancedPurchaseItemsTableReferences(db, table, e),
                 ),
               )
@@ -72342,13 +72951,9 @@ final class $$SupplierPaymentsTableReferences
     super.$_typedResult,
   );
 
-  static $EnhancedSuppliersTable _supplierIdTable(_$AppDatabase db) =>
-      db.enhancedSuppliers.createAlias(
-        $_aliasNameGenerator(
-          db.supplierPayments.supplierId,
-          db.enhancedSuppliers.id,
-        ),
-      );
+  static $EnhancedSuppliersTable _supplierIdTable(_$AppDatabase db) => db
+      .enhancedSuppliers
+      .createAlias('supplier_payments__supplier_id__enhanced_suppliers__id');
 
   $$EnhancedSuppliersTableProcessedTableManager get supplierId {
     final $_column = $_itemColumn<int>('supplier_id')!;
@@ -72364,13 +72969,9 @@ final class $$SupplierPaymentsTableReferences
     );
   }
 
-  static $EnhancedPurchasesTable _purchaseIdTable(_$AppDatabase db) =>
-      db.enhancedPurchases.createAlias(
-        $_aliasNameGenerator(
-          db.supplierPayments.purchaseId,
-          db.enhancedPurchases.id,
-        ),
-      );
+  static $EnhancedPurchasesTable _purchaseIdTable(_$AppDatabase db) => db
+      .enhancedPurchases
+      .createAlias('supplier_payments__purchase_id__enhanced_purchases__id');
 
   $$EnhancedPurchasesTableProcessedTableManager? get purchaseId {
     final $_column = $_itemColumn<int>('purchase_id');
@@ -72748,7 +73349,7 @@ class $$SupplierPaymentsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$SupplierPaymentsTable, SupplierPayment>(table),
                   $$SupplierPaymentsTableReferences(db, table, e),
                 ),
               )
@@ -72878,10 +73479,7 @@ final class $$PurchaseBudgetsTableReferences
   static MultiTypedResultKey<$BudgetCategoriesTable, List<BudgetCategory>>
   _budgetCategoriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.budgetCategories,
-    aliasName: $_aliasNameGenerator(
-      db.purchaseBudgets.id,
-      db.budgetCategories.budgetId,
-    ),
+    aliasName: 'purchase_budgets__id__budget_categories__budget_id',
   );
 
   $$BudgetCategoriesTableProcessedTableManager get budgetCategoriesRefs {
@@ -72902,10 +73500,7 @@ final class $$PurchaseBudgetsTableReferences
   _budgetTransactionsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.budgetTransactions,
-        aliasName: $_aliasNameGenerator(
-          db.purchaseBudgets.id,
-          db.budgetTransactions.budgetId,
-        ),
+        aliasName: 'purchase_budgets__id__budget_transactions__budget_id',
       );
 
   $$BudgetTransactionsTableProcessedTableManager get budgetTransactionsRefs {
@@ -72925,10 +73520,7 @@ final class $$PurchaseBudgetsTableReferences
   static MultiTypedResultKey<$BudgetAlertsTable, List<BudgetAlert>>
   _budgetAlertsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.budgetAlerts,
-    aliasName: $_aliasNameGenerator(
-      db.purchaseBudgets.id,
-      db.budgetAlerts.budgetId,
-    ),
+    aliasName: 'purchase_budgets__id__budget_alerts__budget_id',
   );
 
   $$BudgetAlertsTableProcessedTableManager get budgetAlertsRefs {
@@ -73437,7 +74029,7 @@ class $$PurchaseBudgetsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$PurchaseBudgetsTable, PurchaseBudget>(table),
                   $$PurchaseBudgetsTableReferences(db, table, e),
                 ),
               )
@@ -73473,10 +74065,8 @@ class $$PurchaseBudgetsTableTableManager
                                 table,
                                 p0,
                               ).budgetCategoriesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.budgetId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.budgetId == item.id),
                           typedResults: items,
                         ),
                       if (budgetTransactionsRefs)
@@ -73494,10 +74084,8 @@ class $$PurchaseBudgetsTableTableManager
                                 table,
                                 p0,
                               ).budgetTransactionsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.budgetId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.budgetId == item.id),
                           typedResults: items,
                         ),
                       if (budgetAlertsRefs)
@@ -73515,10 +74103,8 @@ class $$PurchaseBudgetsTableTableManager
                                 table,
                                 p0,
                               ).budgetAlertsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.budgetId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.budgetId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -73581,13 +74167,9 @@ final class $$BudgetCategoriesTableReferences
     super.$_typedResult,
   );
 
-  static $PurchaseBudgetsTable _budgetIdTable(_$AppDatabase db) =>
-      db.purchaseBudgets.createAlias(
-        $_aliasNameGenerator(
-          db.budgetCategories.budgetId,
-          db.purchaseBudgets.id,
-        ),
-      );
+  static $PurchaseBudgetsTable _budgetIdTable(_$AppDatabase db) => db
+      .purchaseBudgets
+      .createAlias('budget_categories__budget_id__purchase_budgets__id');
 
   $$PurchaseBudgetsTableProcessedTableManager get budgetId {
     final $_column = $_itemColumn<int>('budget_id')!;
@@ -73607,10 +74189,7 @@ final class $$BudgetCategoriesTableReferences
   _budgetTransactionsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.budgetTransactions,
-        aliasName: $_aliasNameGenerator(
-          db.budgetCategories.id,
-          db.budgetTransactions.categoryId,
-        ),
+        aliasName: 'budget_categories__id__budget_transactions__category_id',
       );
 
   $$BudgetTransactionsTableProcessedTableManager get budgetTransactionsRefs {
@@ -73630,10 +74209,7 @@ final class $$BudgetCategoriesTableReferences
   static MultiTypedResultKey<$BudgetAlertsTable, List<BudgetAlert>>
   _budgetAlertsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.budgetAlerts,
-    aliasName: $_aliasNameGenerator(
-      db.budgetCategories.id,
-      db.budgetAlerts.categoryId,
-    ),
+    aliasName: 'budget_categories__id__budget_alerts__category_id',
   );
 
   $$BudgetAlertsTableProcessedTableManager get budgetAlertsRefs {
@@ -74042,7 +74618,7 @@ class $$BudgetCategoriesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$BudgetCategoriesTable, BudgetCategory>(table),
                   $$BudgetCategoriesTableReferences(db, table, e),
                 ),
               )
@@ -74110,10 +74686,8 @@ class $$BudgetCategoriesTableTableManager
                                 table,
                                 p0,
                               ).budgetTransactionsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.categoryId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.categoryId == item.id),
                           typedResults: items,
                         ),
                       if (budgetAlertsRefs)
@@ -74131,10 +74705,8 @@ class $$BudgetCategoriesTableTableManager
                                 table,
                                 p0,
                               ).budgetAlertsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.categoryId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.categoryId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -74207,13 +74779,9 @@ final class $$BudgetTransactionsTableReferences
     super.$_typedResult,
   );
 
-  static $PurchaseBudgetsTable _budgetIdTable(_$AppDatabase db) =>
-      db.purchaseBudgets.createAlias(
-        $_aliasNameGenerator(
-          db.budgetTransactions.budgetId,
-          db.purchaseBudgets.id,
-        ),
-      );
+  static $PurchaseBudgetsTable _budgetIdTable(_$AppDatabase db) => db
+      .purchaseBudgets
+      .createAlias('budget_transactions__budget_id__purchase_budgets__id');
 
   $$PurchaseBudgetsTableProcessedTableManager get budgetId {
     final $_column = $_itemColumn<int>('budget_id')!;
@@ -74229,13 +74797,9 @@ final class $$BudgetTransactionsTableReferences
     );
   }
 
-  static $BudgetCategoriesTable _categoryIdTable(_$AppDatabase db) =>
-      db.budgetCategories.createAlias(
-        $_aliasNameGenerator(
-          db.budgetTransactions.categoryId,
-          db.budgetCategories.id,
-        ),
-      );
+  static $BudgetCategoriesTable _categoryIdTable(_$AppDatabase db) => db
+      .budgetCategories
+      .createAlias('budget_transactions__category_id__budget_categories__id');
 
   $$BudgetCategoriesTableProcessedTableManager? get categoryId {
     final $_column = $_itemColumn<int>('category_id');
@@ -74251,13 +74815,9 @@ final class $$BudgetTransactionsTableReferences
     );
   }
 
-  static $EnhancedPurchasesTable _purchaseIdTable(_$AppDatabase db) =>
-      db.enhancedPurchases.createAlias(
-        $_aliasNameGenerator(
-          db.budgetTransactions.purchaseId,
-          db.enhancedPurchases.id,
-        ),
-      );
+  static $EnhancedPurchasesTable _purchaseIdTable(_$AppDatabase db) => db
+      .enhancedPurchases
+      .createAlias('budget_transactions__purchase_id__enhanced_purchases__id');
 
   $$EnhancedPurchasesTableProcessedTableManager? get purchaseId {
     final $_column = $_itemColumn<int>('purchase_id');
@@ -74731,7 +75291,9 @@ class $$BudgetTransactionsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$BudgetTransactionsTable, BudgetTransaction>(
+                    table,
+                  ),
                   $$BudgetTransactionsTableReferences(db, table, e),
                 ),
               )
@@ -74861,10 +75423,9 @@ final class $$BudgetAlertsTableReferences
     extends BaseReferences<_$AppDatabase, $BudgetAlertsTable, BudgetAlert> {
   $$BudgetAlertsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $PurchaseBudgetsTable _budgetIdTable(_$AppDatabase db) =>
-      db.purchaseBudgets.createAlias(
-        $_aliasNameGenerator(db.budgetAlerts.budgetId, db.purchaseBudgets.id),
-      );
+  static $PurchaseBudgetsTable _budgetIdTable(_$AppDatabase db) => db
+      .purchaseBudgets
+      .createAlias('budget_alerts__budget_id__purchase_budgets__id');
 
   $$PurchaseBudgetsTableProcessedTableManager get budgetId {
     final $_column = $_itemColumn<int>('budget_id')!;
@@ -74880,13 +75441,9 @@ final class $$BudgetAlertsTableReferences
     );
   }
 
-  static $BudgetCategoriesTable _categoryIdTable(_$AppDatabase db) =>
-      db.budgetCategories.createAlias(
-        $_aliasNameGenerator(
-          db.budgetAlerts.categoryId,
-          db.budgetCategories.id,
-        ),
-      );
+  static $BudgetCategoriesTable _categoryIdTable(_$AppDatabase db) => db
+      .budgetCategories
+      .createAlias('budget_alerts__category_id__budget_categories__id');
 
   $$BudgetCategoriesTableProcessedTableManager? get categoryId {
     final $_column = $_itemColumn<int>('category_id');
@@ -75277,7 +75834,7 @@ class $$BudgetAlertsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$BudgetAlertsTable, BudgetAlert>(table),
                   $$BudgetAlertsTableReferences(db, table, e),
                 ),
               )
@@ -75405,9 +75962,7 @@ final class $$InventoryMovementsTableReferences
   );
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.inventoryMovements.productId, db.products.id),
-      );
+      db.products.createAlias('inventory_movements__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -75821,7 +76376,9 @@ class $$InventoryMovementsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$InventoryMovementsTable, InventoryMovement>(
+                    table,
+                  ),
                   $$InventoryMovementsTableReferences(db, table, e),
                 ),
               )
@@ -76160,7 +76717,16 @@ class $$AuditLogTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$AuditLogTable, AuditLogData>(table),
+                  BaseReferences<_$AppDatabase, $AuditLogTable, AuditLogData>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -76374,7 +76940,16 @@ class $$CategoriesTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$CategoriesTable, Category>(table),
+                  BaseReferences<_$AppDatabase, $CategoriesTable, Category>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -76437,7 +77012,7 @@ final class $$UsersTableReferences
   static MultiTypedResultKey<$UserActivityLogTable, List<UserActivityLogData>>
   _userActivityLogRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.userActivityLog,
-    aliasName: $_aliasNameGenerator(db.users.id, db.userActivityLog.userId),
+    aliasName: 'users__id__user_activity_log__user_id',
   );
 
   $$UserActivityLogTableProcessedTableManager get userActivityLogRefs {
@@ -76816,8 +77391,10 @@ class $$UsersTableTableManager
               ),
           withReferenceMapper: (p0) => p0
               .map(
-                (e) =>
-                    (e.readTable(table), $$UsersTableReferences(db, table, e)),
+                (e) => (
+                  e.readTable<$UsersTable, AppUser>(table),
+                  $$UsersTableReferences(db, table, e),
+                ),
               )
               .toList(),
           prefetchHooksCallback: ({userActivityLogRefs = false}) {
@@ -77499,7 +78076,16 @@ class $$StaffTableTableTableManager
                 useDefaultSchedule: useDefaultSchedule,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$StaffTableTable, Staff>(table),
+                  BaseReferences<_$AppDatabase, $StaffTableTable, Staff>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -78081,7 +78667,16 @@ class $$AttendanceTableTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$AttendanceTableTable, Attendance>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AttendanceTableTable,
+                    Attendance
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -78474,7 +79069,16 @@ class $$VacationsTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$VacationsTable, Vacation>(table),
+                  BaseReferences<_$AppDatabase, $VacationsTable, Vacation>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -78934,7 +79538,16 @@ class $$StaffAdvancesTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$StaffAdvancesTable, StaffAdvance>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $StaffAdvancesTable,
+                    StaffAdvance
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -79840,7 +80453,16 @@ class $$PayrollTableTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$PayrollTableTable, Payroll>(table),
+                  BaseReferences<_$AppDatabase, $PayrollTableTable, Payroll>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -80254,7 +80876,16 @@ class $$RewardsPenaltiesTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$RewardsPenaltiesTable, RewardPenalty>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $RewardsPenaltiesTable,
+                    RewardPenalty
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -80810,7 +81441,18 @@ class $$PerformanceReviewsTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$PerformanceReviewsTable, PerformanceReview>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $PerformanceReviewsTable,
+                    PerformanceReview
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -81229,7 +81871,16 @@ class $$StaffDocumentsTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$StaffDocumentsTable, StaffDocument>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $StaffDocumentsTable,
+                    StaffDocument
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -81300,13 +81951,9 @@ final class $$PurchaseOrdersTableReferences
     super.$_typedResult,
   );
 
-  static $EnhancedSuppliersTable _supplierIdTable(_$AppDatabase db) =>
-      db.enhancedSuppliers.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseOrders.supplierId,
-          db.enhancedSuppliers.id,
-        ),
-      );
+  static $EnhancedSuppliersTable _supplierIdTable(_$AppDatabase db) => db
+      .enhancedSuppliers
+      .createAlias('purchase_orders__supplier_id__enhanced_suppliers__id');
 
   $$EnhancedSuppliersTableProcessedTableManager get supplierId {
     final $_column = $_itemColumn<int>('supplier_id')!;
@@ -81326,10 +81973,7 @@ final class $$PurchaseOrdersTableReferences
   _purchaseOrderItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseOrderItems,
-        aliasName: $_aliasNameGenerator(
-          db.purchaseOrders.id,
-          db.purchaseOrderItems.orderId,
-        ),
+        aliasName: 'purchase_orders__id__purchase_order_items__order_id',
       );
 
   $$PurchaseOrderItemsTableProcessedTableManager get purchaseOrderItemsRefs {
@@ -81353,10 +81997,7 @@ final class $$PurchaseOrdersTableReferences
   _purchaseOrderStatusesRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseOrderStatuses,
-        aliasName: $_aliasNameGenerator(
-          db.purchaseOrders.id,
-          db.purchaseOrderStatuses.orderId,
-        ),
+        aliasName: 'purchase_orders__id__purchase_order_statuses__order_id',
       );
 
   $$PurchaseOrderStatusesTableProcessedTableManager
@@ -81890,7 +82531,7 @@ class $$PurchaseOrdersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$PurchaseOrdersTable, PurchaseOrder>(table),
                   $$PurchaseOrdersTableReferences(db, table, e),
                 ),
               )
@@ -81958,10 +82599,8 @@ class $$PurchaseOrdersTableTableManager
                                 table,
                                 p0,
                               ).purchaseOrderItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.orderId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.orderId == item.id),
                           typedResults: items,
                         ),
                       if (purchaseOrderStatusesRefs)
@@ -81979,10 +82618,8 @@ class $$PurchaseOrdersTableTableManager
                                 table,
                                 p0,
                               ).purchaseOrderStatusesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.orderId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.orderId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -82053,13 +82690,9 @@ final class $$PurchaseOrderItemsTableReferences
     super.$_typedResult,
   );
 
-  static $PurchaseOrdersTable _orderIdTable(_$AppDatabase db) =>
-      db.purchaseOrders.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseOrderItems.orderId,
-          db.purchaseOrders.id,
-        ),
-      );
+  static $PurchaseOrdersTable _orderIdTable(_$AppDatabase db) => db
+      .purchaseOrders
+      .createAlias('purchase_order_items__order_id__purchase_orders__id');
 
   $$PurchaseOrdersTableProcessedTableManager get orderId {
     final $_column = $_itemColumn<int>('order_id')!;
@@ -82076,9 +82709,7 @@ final class $$PurchaseOrderItemsTableReferences
   }
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.purchaseOrderItems.productId, db.products.id),
-      );
+      db.products.createAlias('purchase_order_items__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -82472,7 +83103,9 @@ class $$PurchaseOrderItemsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$PurchaseOrderItemsTable, PurchaseOrderItem>(
+                    table,
+                  ),
                   $$PurchaseOrderItemsTableReferences(db, table, e),
                 ),
               )
@@ -82585,13 +83218,9 @@ final class $$PurchaseOrderStatusesTableReferences
     super.$_typedResult,
   );
 
-  static $PurchaseOrdersTable _orderIdTable(_$AppDatabase db) =>
-      db.purchaseOrders.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseOrderStatuses.orderId,
-          db.purchaseOrders.id,
-        ),
-      );
+  static $PurchaseOrdersTable _orderIdTable(_$AppDatabase db) => db
+      .purchaseOrders
+      .createAlias('purchase_order_statuses__order_id__purchase_orders__id');
 
   $$PurchaseOrdersTableProcessedTableManager get orderId {
     final $_column = $_itemColumn<int>('order_id')!;
@@ -82846,7 +83475,9 @@ class $$PurchaseOrderStatusesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$PurchaseOrderStatusesTable, PurchaseOrderStatus>(
+                    table,
+                  ),
                   $$PurchaseOrderStatusesTableReferences(db, table, e),
                 ),
               )
@@ -82962,10 +83593,7 @@ final class $$PurchaseReturnsTableReferences
 
   static $EnhancedPurchasesTable _originalPurchaseIdTable(_$AppDatabase db) =>
       db.enhancedPurchases.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseReturns.originalPurchaseId,
-          db.enhancedPurchases.id,
-        ),
+        'purchase_returns__original_purchase_id__enhanced_purchases__id',
       );
 
   $$EnhancedPurchasesTableProcessedTableManager get originalPurchaseId {
@@ -82982,13 +83610,9 @@ final class $$PurchaseReturnsTableReferences
     );
   }
 
-  static $EnhancedSuppliersTable _supplierIdTable(_$AppDatabase db) =>
-      db.enhancedSuppliers.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseReturns.supplierId,
-          db.enhancedSuppliers.id,
-        ),
-      );
+  static $EnhancedSuppliersTable _supplierIdTable(_$AppDatabase db) => db
+      .enhancedSuppliers
+      .createAlias('purchase_returns__supplier_id__enhanced_suppliers__id');
 
   $$EnhancedSuppliersTableProcessedTableManager get supplierId {
     final $_column = $_itemColumn<int>('supplier_id')!;
@@ -83011,10 +83635,7 @@ final class $$PurchaseReturnsTableReferences
   _purchaseReturnItemsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.purchaseReturnItems,
-        aliasName: $_aliasNameGenerator(
-          db.purchaseReturns.id,
-          db.purchaseReturnItems.returnId,
-        ),
+        aliasName: 'purchase_returns__id__purchase_return_items__return_id',
       );
 
   $$PurchaseReturnItemsTableProcessedTableManager get purchaseReturnItemsRefs {
@@ -83034,10 +83655,7 @@ final class $$PurchaseReturnsTableReferences
   static MultiTypedResultKey<$PurchaseRefundsTable, List<PurchaseRefund>>
   _purchaseRefundsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchaseRefunds,
-    aliasName: $_aliasNameGenerator(
-      db.purchaseReturns.id,
-      db.purchaseRefunds.returnId,
-    ),
+    aliasName: 'purchase_returns__id__purchase_refunds__return_id',
   );
 
   $$PurchaseRefundsTableProcessedTableManager get purchaseRefundsRefs {
@@ -83628,7 +84246,7 @@ class $$PurchaseReturnsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$PurchaseReturnsTable, PurchaseReturn>(table),
                   $$PurchaseReturnsTableReferences(db, table, e),
                 ),
               )
@@ -83712,10 +84330,8 @@ class $$PurchaseReturnsTableTableManager
                                 table,
                                 p0,
                               ).purchaseReturnItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.returnId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.returnId == item.id),
                           typedResults: items,
                         ),
                       if (purchaseRefundsRefs)
@@ -83733,10 +84349,8 @@ class $$PurchaseReturnsTableTableManager
                                 table,
                                 p0,
                               ).purchaseRefundsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.returnId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.returnId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -83808,13 +84422,9 @@ final class $$PurchaseReturnItemsTableReferences
     super.$_typedResult,
   );
 
-  static $PurchaseReturnsTable _returnIdTable(_$AppDatabase db) =>
-      db.purchaseReturns.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseReturnItems.returnId,
-          db.purchaseReturns.id,
-        ),
-      );
+  static $PurchaseReturnsTable _returnIdTable(_$AppDatabase db) => db
+      .purchaseReturns
+      .createAlias('purchase_return_items__return_id__purchase_returns__id');
 
   $$PurchaseReturnsTableProcessedTableManager get returnId {
     final $_column = $_itemColumn<int>('return_id')!;
@@ -83830,10 +84440,8 @@ final class $$PurchaseReturnItemsTableReferences
     );
   }
 
-  static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.purchaseReturnItems.productId, db.products.id),
-      );
+  static $ProductsTable _productIdTable(_$AppDatabase db) => db.products
+      .createAlias('purchase_return_items__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -84232,7 +84840,9 @@ class $$PurchaseReturnItemsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$PurchaseReturnItemsTable, PurchaseReturnItem>(
+                    table,
+                  ),
                   $$PurchaseReturnItemsTableReferences(db, table, e),
                 ),
               )
@@ -84349,13 +84959,9 @@ final class $$PurchaseRefundsTableReferences
     super.$_typedResult,
   );
 
-  static $PurchaseReturnsTable _returnIdTable(_$AppDatabase db) =>
-      db.purchaseReturns.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseRefunds.returnId,
-          db.purchaseReturns.id,
-        ),
-      );
+  static $PurchaseReturnsTable _returnIdTable(_$AppDatabase db) => db
+      .purchaseReturns
+      .createAlias('purchase_refunds__return_id__purchase_returns__id');
 
   $$PurchaseReturnsTableProcessedTableManager get returnId {
     final $_column = $_itemColumn<int>('return_id')!;
@@ -84371,13 +84977,9 @@ final class $$PurchaseRefundsTableReferences
     );
   }
 
-  static $EnhancedSuppliersTable _supplierIdTable(_$AppDatabase db) =>
-      db.enhancedSuppliers.createAlias(
-        $_aliasNameGenerator(
-          db.purchaseRefunds.supplierId,
-          db.enhancedSuppliers.id,
-        ),
-      );
+  static $EnhancedSuppliersTable _supplierIdTable(_$AppDatabase db) => db
+      .enhancedSuppliers
+      .createAlias('purchase_refunds__supplier_id__enhanced_suppliers__id');
 
   $$EnhancedSuppliersTableProcessedTableManager get supplierId {
     final $_column = $_itemColumn<int>('supplier_id')!;
@@ -84756,7 +85358,7 @@ class $$PurchaseRefundsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$PurchaseRefundsTable, PurchaseRefund>(table),
                   $$PurchaseRefundsTableReferences(db, table, e),
                 ),
               )
@@ -84879,9 +85481,8 @@ final class $$UserActivityLogTableReferences
     super.$_typedResult,
   );
 
-  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
-    $_aliasNameGenerator(db.userActivityLog.userId, db.users.id),
-  );
+  static $UsersTable _userIdTable(_$AppDatabase db) =>
+      db.users.createAlias('user_activity_log__user_id__users__id');
 
   $$UsersTableProcessedTableManager get userId {
     final $_column = $_itemColumn<int>('user_id')!;
@@ -85214,7 +85815,9 @@ class $$UserActivityLogTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$UserActivityLogTable, UserActivityLogData>(
+                    table,
+                  ),
                   $$UserActivityLogTableReferences(db, table, e),
                 ),
               )
@@ -85616,7 +86219,16 @@ class $$CashSessionsTableTableManager
                 settlementAmount: settlementAmount,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$CashSessionsTable, CashSession>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $CashSessionsTable,
+                    CashSession
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -85835,7 +86447,16 @@ class $$AppNotificationsTableTableManager
                 sent: sent,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$AppNotificationsTable, AppNotification>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AppNotificationsTable,
+                    AppNotification
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -85888,9 +86509,7 @@ final class $$InvoicePaymentsTableReferences
   );
 
   static $InvoicesTable _invoiceIdTable(_$AppDatabase db) =>
-      db.invoices.createAlias(
-        $_aliasNameGenerator(db.invoicePayments.invoiceId, db.invoices.id),
-      );
+      db.invoices.createAlias('invoice_payments__invoice_id__invoices__id');
 
   $$InvoicesTableProcessedTableManager get invoiceId {
     final $_column = $_itemColumn<int>('invoice_id')!;
@@ -86136,7 +86755,7 @@ class $$InvoicePaymentsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$InvoicePaymentsTable, InvoicePayment>(table),
                   $$InvoicePaymentsTableReferences(db, table, e),
                 ),
               )
@@ -86234,9 +86853,7 @@ final class $$DamagedItemsTableReferences
   $$DamagedItemsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.damagedItems.productId, db.products.id),
-      );
+      db.products.createAlias('damaged_items__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -86550,7 +87167,7 @@ class $$DamagedItemsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$DamagedItemsTable, DamagedItem>(table),
                   $$DamagedItemsTableReferences(db, table, e),
                 ),
               )
@@ -86657,10 +87274,8 @@ final class $$SalesReturnsTableReferences
     extends BaseReferences<_$AppDatabase, $SalesReturnsTable, SalesReturn> {
   $$SalesReturnsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $InvoicesTable _originalInvoiceIdTable(_$AppDatabase db) =>
-      db.invoices.createAlias(
-        $_aliasNameGenerator(db.salesReturns.originalInvoiceId, db.invoices.id),
-      );
+  static $InvoicesTable _originalInvoiceIdTable(_$AppDatabase db) => db.invoices
+      .createAlias('sales_returns__original_invoice_id__invoices__id');
 
   $$InvoicesTableProcessedTableManager get originalInvoiceId {
     final $_column = $_itemColumn<int>('original_invoice_id')!;
@@ -86679,10 +87294,7 @@ final class $$SalesReturnsTableReferences
   static MultiTypedResultKey<$SalesReturnItemsTable, List<SalesReturnItem>>
   _salesReturnItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.salesReturnItems,
-    aliasName: $_aliasNameGenerator(
-      db.salesReturns.id,
-      db.salesReturnItems.returnId,
-    ),
+    aliasName: 'sales_returns__id__sales_return_items__return_id',
   );
 
   $$SalesReturnItemsTableProcessedTableManager get salesReturnItemsRefs {
@@ -86702,10 +87314,7 @@ final class $$SalesReturnsTableReferences
   static MultiTypedResultKey<$ReturnRefundsTable, List<ReturnRefund>>
   _returnRefundsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.returnRefunds,
-    aliasName: $_aliasNameGenerator(
-      db.salesReturns.id,
-      db.returnRefunds.returnId,
-    ),
+    aliasName: 'sales_returns__id__return_refunds__return_id',
   );
 
   $$ReturnRefundsTableProcessedTableManager get returnRefundsRefs {
@@ -87240,7 +87849,7 @@ class $$SalesReturnsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$SalesReturnsTable, SalesReturn>(table),
                   $$SalesReturnsTableReferences(db, table, e),
                 ),
               )
@@ -87308,10 +87917,8 @@ class $$SalesReturnsTableTableManager
                                 table,
                                 p0,
                               ).salesReturnItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.returnId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.returnId == item.id),
                           typedResults: items,
                         ),
                       if (returnRefundsRefs)
@@ -87329,10 +87936,8 @@ class $$SalesReturnsTableTableManager
                                 table,
                                 p0,
                               ).returnRefundsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.returnId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.returnId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -87413,10 +88018,8 @@ final class $$SalesReturnItemsTableReferences
     super.$_typedResult,
   );
 
-  static $SalesReturnsTable _returnIdTable(_$AppDatabase db) =>
-      db.salesReturns.createAlias(
-        $_aliasNameGenerator(db.salesReturnItems.returnId, db.salesReturns.id),
-      );
+  static $SalesReturnsTable _returnIdTable(_$AppDatabase db) => db.salesReturns
+      .createAlias('sales_return_items__return_id__sales_returns__id');
 
   $$SalesReturnsTableProcessedTableManager get returnId {
     final $_column = $_itemColumn<int>('return_id')!;
@@ -87433,9 +88036,7 @@ final class $$SalesReturnItemsTableReferences
   }
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.salesReturnItems.productId, db.products.id),
-      );
+      db.products.createAlias('sales_return_items__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -87451,13 +88052,9 @@ final class $$SalesReturnItemsTableReferences
     );
   }
 
-  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
-      db.productVariants.createAlias(
-        $_aliasNameGenerator(
-          db.salesReturnItems.variantId,
-          db.productVariants.id,
-        ),
-      );
+  static $ProductVariantsTable _variantIdTable(_$AppDatabase db) => db
+      .productVariants
+      .createAlias('sales_return_items__variant_id__product_variants__id');
 
   $$ProductVariantsTableProcessedTableManager? get variantId {
     final $_column = $_itemColumn<int>('variant_id');
@@ -87473,13 +88070,9 @@ final class $$SalesReturnItemsTableReferences
     );
   }
 
-  static $InvoiceItemsTable _invoiceItemIdTable(_$AppDatabase db) =>
-      db.invoiceItems.createAlias(
-        $_aliasNameGenerator(
-          db.salesReturnItems.invoiceItemId,
-          db.invoiceItems.id,
-        ),
-      );
+  static $InvoiceItemsTable _invoiceItemIdTable(_$AppDatabase db) => db
+      .invoiceItems
+      .createAlias('sales_return_items__invoice_item_id__invoice_items__id');
 
   $$InvoiceItemsTableProcessedTableManager? get invoiceItemId {
     final $_column = $_itemColumn<int>('invoice_item_id');
@@ -87495,13 +88088,9 @@ final class $$SalesReturnItemsTableReferences
     );
   }
 
-  static $VegetableShipmentsTable _shipmentIdTable(_$AppDatabase db) =>
-      db.vegetableShipments.createAlias(
-        $_aliasNameGenerator(
-          db.salesReturnItems.shipmentId,
-          db.vegetableShipments.id,
-        ),
-      );
+  static $VegetableShipmentsTable _shipmentIdTable(_$AppDatabase db) => db
+      .vegetableShipments
+      .createAlias('sales_return_items__shipment_id__vegetable_shipments__id');
 
   $$VegetableShipmentsTableProcessedTableManager? get shipmentId {
     final $_column = $_itemColumn<int>('shipment_id');
@@ -88192,7 +88781,7 @@ class $$SalesReturnItemsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$SalesReturnItemsTable, SalesReturnItem>(table),
                   $$SalesReturnItemsTableReferences(db, table, e),
                 ),
               )
@@ -88378,10 +88967,8 @@ final class $$ReturnRefundsTableReferences
     super.$_typedResult,
   );
 
-  static $SalesReturnsTable _returnIdTable(_$AppDatabase db) =>
-      db.salesReturns.createAlias(
-        $_aliasNameGenerator(db.returnRefunds.returnId, db.salesReturns.id),
-      );
+  static $SalesReturnsTable _returnIdTable(_$AppDatabase db) => db.salesReturns
+      .createAlias('return_refunds__return_id__sales_returns__id');
 
   $$SalesReturnsTableProcessedTableManager get returnId {
     final $_column = $_itemColumn<int>('return_id')!;
@@ -88397,10 +88984,8 @@ final class $$ReturnRefundsTableReferences
     );
   }
 
-  static $InvoicesTable _applyToInvoiceIdTable(_$AppDatabase db) =>
-      db.invoices.createAlias(
-        $_aliasNameGenerator(db.returnRefunds.applyToInvoiceId, db.invoices.id),
-      );
+  static $InvoicesTable _applyToInvoiceIdTable(_$AppDatabase db) => db.invoices
+      .createAlias('return_refunds__apply_to_invoice_id__invoices__id');
 
   $$InvoicesTableProcessedTableManager? get applyToInvoiceId {
     final $_column = $_itemColumn<int>('apply_to_invoice_id');
@@ -88876,7 +89461,7 @@ class $$ReturnRefundsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$ReturnRefundsTable, ReturnRefund>(table),
                   $$ReturnRefundsTableReferences(db, table, e),
                 ),
               )
@@ -88995,9 +89580,7 @@ final class $$CustomerContainersTableReferences
   );
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.customerContainers.productId, db.products.id),
-      );
+      db.products.createAlias('customer_containers__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -89271,7 +89854,9 @@ class $$CustomerContainersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$CustomerContainersTable, CustomerContainer>(
+                    table,
+                  ),
                   $$CustomerContainersTableReferences(db, table, e),
                 ),
               )
@@ -89753,7 +90338,16 @@ class $$BiometricDevicesTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$BiometricDevicesTable, BiometricDevice>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $BiometricDevicesTable,
+                    BiometricDevice
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -90128,7 +90722,19 @@ class $$StaffBiometricMappingsTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<
+                    $StaffBiometricMappingsTable,
+                    StaffBiometricMapping
+                  >(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $StaffBiometricMappingsTable,
+                    StaffBiometricMapping
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -90523,7 +91129,18 @@ class $$AttendanceRawEventsTableTableManager
                 processedAt: processedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$AttendanceRawEventsTable, AttendanceRawEvent>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AttendanceRawEventsTable,
+                    AttendanceRawEvent
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -90879,7 +91496,18 @@ class $$AttendanceSyncLogsTableTableManager
                 triggeredBy: triggeredBy,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$AttendanceSyncLogsTable, AttendanceSyncLog>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AttendanceSyncLogsTable,
+                    AttendanceSyncLog
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -91111,7 +91739,18 @@ class $$AttendanceSettingsTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$AttendanceSettingsTable, AttendanceSetting>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AttendanceSettingsTable,
+                    AttendanceSetting
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -91148,6 +91787,7 @@ typedef $$EmptyBarnikaTrackingTableCreateCompanionBuilder =
       Value<DateTime?> dateReturned,
       Value<int> quantityReturned,
       Value<String> status,
+      Value<int?> invoiceId,
     });
 typedef $$EmptyBarnikaTrackingTableUpdateCompanionBuilder =
     EmptyBarnikaTrackingCompanion Function({
@@ -91158,6 +91798,7 @@ typedef $$EmptyBarnikaTrackingTableUpdateCompanionBuilder =
       Value<DateTime?> dateReturned,
       Value<int> quantityReturned,
       Value<String> status,
+      Value<int?> invoiceId,
     });
 
 final class $$EmptyBarnikaTrackingTableReferences
@@ -91173,13 +91814,8 @@ final class $$EmptyBarnikaTrackingTableReferences
     super.$_typedResult,
   );
 
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-        $_aliasNameGenerator(
-          db.emptyBarnikaTracking.customerId,
-          db.customers.id,
-        ),
-      );
+  static $CustomersTable _customerIdTable(_$AppDatabase db) => db.customers
+      .createAlias('empty_barnika_tracking__customer_id__customers__id');
 
   $$CustomersTableProcessedTableManager get customerId {
     final $_column = $_itemColumn<String>('customer_id')!;
@@ -91189,6 +91825,23 @@ final class $$EmptyBarnikaTrackingTableReferences
       $_db.customers,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_customerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $InvoicesTable _invoiceIdTable(_$AppDatabase db) => db.invoices
+      .createAlias('empty_barnika_tracking__invoice_id__invoices__id');
+
+  $$InvoicesTableProcessedTableManager? get invoiceId {
+    final $_column = $_itemColumn<int>('invoice_id');
+    if ($_column == null) return null;
+    final manager = $$InvoicesTableTableManager(
+      $_db,
+      $_db.invoices,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_invoiceIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -91249,6 +91902,29 @@ class $$EmptyBarnikaTrackingTableFilterComposer
           }) => $$CustomersTableFilterComposer(
             $db: $db,
             $table: $db.customers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$InvoicesTableFilterComposer get invoiceId {
+    final $$InvoicesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceId,
+      referencedTable: $db.invoices,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoicesTableFilterComposer(
+            $db: $db,
+            $table: $db.invoices,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -91320,6 +91996,29 @@ class $$EmptyBarnikaTrackingTableOrderingComposer
     );
     return composer;
   }
+
+  $$InvoicesTableOrderingComposer get invoiceId {
+    final $$InvoicesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceId,
+      referencedTable: $db.invoices,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoicesTableOrderingComposer(
+            $db: $db,
+            $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$EmptyBarnikaTrackingTableAnnotationComposer
@@ -91377,6 +92076,29 @@ class $$EmptyBarnikaTrackingTableAnnotationComposer
     );
     return composer;
   }
+
+  $$InvoicesTableAnnotationComposer get invoiceId {
+    final $$InvoicesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceId,
+      referencedTable: $db.invoices,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoicesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$EmptyBarnikaTrackingTableTableManager
@@ -91392,7 +92114,7 @@ class $$EmptyBarnikaTrackingTableTableManager
           $$EmptyBarnikaTrackingTableUpdateCompanionBuilder,
           (EmptyBarnikaTrackingData, $$EmptyBarnikaTrackingTableReferences),
           EmptyBarnikaTrackingData,
-          PrefetchHooks Function({bool customerId})
+          PrefetchHooks Function({bool customerId, bool invoiceId})
         > {
   $$EmptyBarnikaTrackingTableTableManager(
     _$AppDatabase db,
@@ -91422,6 +92144,7 @@ class $$EmptyBarnikaTrackingTableTableManager
                 Value<DateTime?> dateReturned = const Value.absent(),
                 Value<int> quantityReturned = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<int?> invoiceId = const Value.absent(),
               }) => EmptyBarnikaTrackingCompanion(
                 id: id,
                 customerId: customerId,
@@ -91430,6 +92153,7 @@ class $$EmptyBarnikaTrackingTableTableManager
                 dateReturned: dateReturned,
                 quantityReturned: quantityReturned,
                 status: status,
+                invoiceId: invoiceId,
               ),
           createCompanionCallback:
               ({
@@ -91440,6 +92164,7 @@ class $$EmptyBarnikaTrackingTableTableManager
                 Value<DateTime?> dateReturned = const Value.absent(),
                 Value<int> quantityReturned = const Value.absent(),
                 Value<String> status = const Value.absent(),
+                Value<int?> invoiceId = const Value.absent(),
               }) => EmptyBarnikaTrackingCompanion.insert(
                 id: id,
                 customerId: customerId,
@@ -91448,16 +92173,20 @@ class $$EmptyBarnikaTrackingTableTableManager
                 dateReturned: dateReturned,
                 quantityReturned: quantityReturned,
                 status: status,
+                invoiceId: invoiceId,
               ),
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<
+                    $EmptyBarnikaTrackingTable,
+                    EmptyBarnikaTrackingData
+                  >(table),
                   $$EmptyBarnikaTrackingTableReferences(db, table, e),
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({customerId = false}) {
+          prefetchHooksCallback: ({customerId = false, invoiceId = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [],
@@ -91492,6 +92221,21 @@ class $$EmptyBarnikaTrackingTableTableManager
                               )
                               as T;
                     }
+                    if (invoiceId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.invoiceId,
+                                referencedTable:
+                                    $$EmptyBarnikaTrackingTableReferences
+                                        ._invoiceIdTable(db),
+                                referencedColumn:
+                                    $$EmptyBarnikaTrackingTableReferences
+                                        ._invoiceIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
 
                     return state;
                   },
@@ -91516,7 +92260,7 @@ typedef $$EmptyBarnikaTrackingTableProcessedTableManager =
       $$EmptyBarnikaTrackingTableUpdateCompanionBuilder,
       (EmptyBarnikaTrackingData, $$EmptyBarnikaTrackingTableReferences),
       EmptyBarnikaTrackingData,
-      PrefetchHooks Function({bool customerId})
+      PrefetchHooks Function({bool customerId, bool invoiceId})
     >;
 typedef $$SyncQueueTableCreateCompanionBuilder =
     SyncQueueCompanion Function({
@@ -91791,7 +92535,16 @@ class $$SyncQueueTableTableManager
                 deviceName: deviceName,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SyncQueueTable, SyncQueueData>(table),
+                  BaseReferences<_$AppDatabase, $SyncQueueTable, SyncQueueData>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -91863,10 +92616,7 @@ final class $$CashCustodiesTableReferences
   static MultiTypedResultKey<$CustodyExpensesTable, List<CustodyExpense>>
   _custodyExpensesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.custodyExpenses,
-    aliasName: $_aliasNameGenerator(
-      db.cashCustodies.id,
-      db.custodyExpenses.custodyId,
-    ),
+    aliasName: 'cash_custodies__id__custody_expenses__custody_id',
   );
 
   $$CustodyExpensesTableProcessedTableManager get custodyExpensesRefs {
@@ -92264,7 +93014,7 @@ class $$CashCustodiesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$CashCustodiesTable, CashCustody>(table),
                   $$CashCustodiesTableReferences(db, table, e),
                 ),
               )
@@ -92349,10 +93099,9 @@ final class $$CustodyExpensesTableReferences
     super.$_typedResult,
   );
 
-  static $CashCustodiesTable _custodyIdTable(_$AppDatabase db) =>
-      db.cashCustodies.createAlias(
-        $_aliasNameGenerator(db.custodyExpenses.custodyId, db.cashCustodies.id),
-      );
+  static $CashCustodiesTable _custodyIdTable(_$AppDatabase db) => db
+      .cashCustodies
+      .createAlias('custody_expenses__custody_id__cash_custodies__id');
 
   $$CashCustodiesTableProcessedTableManager get custodyId {
     final $_column = $_itemColumn<int>('custody_id')!;
@@ -92615,7 +93364,7 @@ class $$CustodyExpensesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$CustodyExpensesTable, CustodyExpense>(table),
                   $$CustodyExpensesTableReferences(db, table, e),
                 ),
               )
@@ -92719,13 +93468,8 @@ final class $$BillOfMaterialsTableReferences
     super.$_typedResult,
   );
 
-  static $ProductsTable _finishedProductIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(
-          db.billOfMaterials.finishedProductId,
-          db.products.id,
-        ),
-      );
+  static $ProductsTable _finishedProductIdTable(_$AppDatabase db) => db.products
+      .createAlias('bill_of_materials__finished_product_id__products__id');
 
   $$ProductsTableProcessedTableManager get finishedProductId {
     final $_column = $_itemColumn<int>('finished_product_id')!;
@@ -92745,7 +93489,7 @@ final class $$BillOfMaterialsTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.bomItems,
-    aliasName: $_aliasNameGenerator(db.billOfMaterials.id, db.bomItems.bomId),
+    aliasName: 'bill_of_materials__id__bom_items__bom_id',
   );
 
   $$BomItemsTableProcessedTableManager get bomItemsRefs {
@@ -92767,10 +93511,7 @@ final class $$BillOfMaterialsTableReferences
   _manufacturingOrdersRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.manufacturingOrders,
-        aliasName: $_aliasNameGenerator(
-          db.billOfMaterials.id,
-          db.manufacturingOrders.bomId,
-        ),
+        aliasName: 'bill_of_materials__id__manufacturing_orders__bom_id',
       );
 
   $$ManufacturingOrdersTableProcessedTableManager get manufacturingOrdersRefs {
@@ -93209,7 +93950,7 @@ class $$BillOfMaterialsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$BillOfMaterialsTable, BillOfMaterial>(table),
                   $$BillOfMaterialsTableReferences(db, table, e),
                 ),
               )
@@ -93277,10 +94018,8 @@ class $$BillOfMaterialsTableTableManager
                                 table,
                                 p0,
                               ).bomItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.bomId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.bomId == item.id),
                           typedResults: items,
                         ),
                       if (manufacturingOrdersRefs)
@@ -93298,10 +94037,8 @@ class $$BillOfMaterialsTableTableManager
                                 table,
                                 p0,
                               ).manufacturingOrdersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.bomId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.bomId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -93357,10 +94094,9 @@ final class $$BomItemsTableReferences
     extends BaseReferences<_$AppDatabase, $BomItemsTable, BomItem> {
   $$BomItemsTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $BillOfMaterialsTable _bomIdTable(_$AppDatabase db) =>
-      db.billOfMaterials.createAlias(
-        $_aliasNameGenerator(db.bomItems.bomId, db.billOfMaterials.id),
-      );
+  static $BillOfMaterialsTable _bomIdTable(_$AppDatabase db) => db
+      .billOfMaterials
+      .createAlias('bom_items__bom_id__bill_of_materials__id');
 
   $$BillOfMaterialsTableProcessedTableManager get bomId {
     final $_column = $_itemColumn<int>('bom_id')!;
@@ -93376,10 +94112,9 @@ final class $$BomItemsTableReferences
     );
   }
 
-  static $ProductsTable _rawMaterialProductIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.bomItems.rawMaterialProductId, db.products.id),
-      );
+  static $ProductsTable _rawMaterialProductIdTable(_$AppDatabase db) => db
+      .products
+      .createAlias('bom_items__raw_material_product_id__products__id');
 
   $$ProductsTableProcessedTableManager get rawMaterialProductId {
     final $_column = $_itemColumn<int>('raw_material_product_id')!;
@@ -93404,10 +94139,7 @@ final class $$BomItemsTableReferences
   _manufacturingScrapsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.manufacturingScraps,
-        aliasName: $_aliasNameGenerator(
-          db.bomItems.id,
-          db.manufacturingScraps.bomItemId,
-        ),
+        aliasName: 'bom_items__id__manufacturing_scrap__bom_item_id',
       );
 
   $$ManufacturingScrapsTableProcessedTableManager get manufacturingScrapsRefs {
@@ -93799,7 +94531,7 @@ class $$BomItemsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$BomItemsTable, BomItem>(table),
                   $$BomItemsTableReferences(db, table, e),
                 ),
               )
@@ -93877,10 +94609,8 @@ class $$BomItemsTableTableManager
                                 table,
                                 p0,
                               ).manufacturingScrapsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.bomItemId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.bomItemId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -93989,13 +94719,9 @@ final class $$ManufacturingOrdersTableReferences
     super.$_typedResult,
   );
 
-  static $BillOfMaterialsTable _bomIdTable(_$AppDatabase db) =>
-      db.billOfMaterials.createAlias(
-        $_aliasNameGenerator(
-          db.manufacturingOrders.bomId,
-          db.billOfMaterials.id,
-        ),
-      );
+  static $BillOfMaterialsTable _bomIdTable(_$AppDatabase db) => db
+      .billOfMaterials
+      .createAlias('manufacturing_orders__bom_id__bill_of_materials__id');
 
   $$BillOfMaterialsTableProcessedTableManager get bomId {
     final $_column = $_itemColumn<int>('bom_id')!;
@@ -94011,13 +94737,8 @@ final class $$ManufacturingOrdersTableReferences
     );
   }
 
-  static $ProductsTable _finishedProductIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(
-          db.manufacturingOrders.finishedProductId,
-          db.products.id,
-        ),
-      );
+  static $ProductsTable _finishedProductIdTable(_$AppDatabase db) => db.products
+      .createAlias('manufacturing_orders__finished_product_id__products__id');
 
   $$ProductsTableProcessedTableManager get finishedProductId {
     final $_column = $_itemColumn<int>('finished_product_id')!;
@@ -94033,13 +94754,8 @@ final class $$ManufacturingOrdersTableReferences
     );
   }
 
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-        $_aliasNameGenerator(
-          db.manufacturingOrders.customerId,
-          db.customers.id,
-        ),
-      );
+  static $CustomersTable _customerIdTable(_$AppDatabase db) => db.customers
+      .createAlias('manufacturing_orders__customer_id__customers__id');
 
   $$CustomersTableProcessedTableManager? get customerId {
     final $_column = $_itemColumn<String>('customer_id');
@@ -94056,9 +94772,7 @@ final class $$ManufacturingOrdersTableReferences
   }
 
   static $InvoicesTable _invoiceIdTable(_$AppDatabase db) =>
-      db.invoices.createAlias(
-        $_aliasNameGenerator(db.manufacturingOrders.invoiceId, db.invoices.id),
-      );
+      db.invoices.createAlias('manufacturing_orders__invoice_id__invoices__id');
 
   $$InvoicesTableProcessedTableManager? get invoiceId {
     final $_column = $_itemColumn<int>('invoice_id');
@@ -94074,13 +94788,8 @@ final class $$ManufacturingOrdersTableReferences
     );
   }
 
-  static $ProductsTable _inputProductIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(
-          db.manufacturingOrders.inputProductId,
-          db.products.id,
-        ),
-      );
+  static $ProductsTable _inputProductIdTable(_$AppDatabase db) => db.products
+      .createAlias('manufacturing_orders__input_product_id__products__id');
 
   $$ProductsTableProcessedTableManager? get inputProductId {
     final $_column = $_itemColumn<int>('input_product_id');
@@ -94100,14 +94809,13 @@ final class $$ManufacturingOrdersTableReferences
     $ManufacturingCostComponentsTable,
     List<ManufacturingCostComponent>
   >
-  _manufacturingCostComponentsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.manufacturingCostComponents,
-        aliasName: $_aliasNameGenerator(
-          db.manufacturingOrders.id,
-          db.manufacturingCostComponents.manufacturingOrderId,
-        ),
-      );
+  _manufacturingCostComponentsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.manufacturingCostComponents,
+    aliasName:
+        'manufacturing_orders__id__manufacturing_cost_components__manufacturing_order_id',
+  );
 
   $$ManufacturingCostComponentsTableProcessedTableManager
   get manufacturingCostComponentsRefs {
@@ -94131,14 +94839,13 @@ final class $$ManufacturingOrdersTableReferences
     $ManufacturingScrapsTable,
     List<ManufacturingScrap>
   >
-  _manufacturingScrapsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.manufacturingScraps,
-        aliasName: $_aliasNameGenerator(
-          db.manufacturingOrders.id,
-          db.manufacturingScraps.manufacturingOrderId,
-        ),
-      );
+  _manufacturingScrapsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.manufacturingScraps,
+    aliasName:
+        'manufacturing_orders__id__manufacturing_scrap__manufacturing_order_id',
+  );
 
   $$ManufacturingScrapsTableProcessedTableManager get manufacturingScrapsRefs {
     final manager =
@@ -94161,14 +94868,13 @@ final class $$ManufacturingOrdersTableReferences
     $CustomerMaterialReceiptsTable,
     List<CustomerMaterialReceipt>
   >
-  _customerMaterialReceiptsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.customerMaterialReceipts,
-        aliasName: $_aliasNameGenerator(
-          db.manufacturingOrders.id,
-          db.customerMaterialReceipts.manufacturingOrderId,
-        ),
-      );
+  _customerMaterialReceiptsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.customerMaterialReceipts,
+    aliasName:
+        'manufacturing_orders__id__customer_material_receipts__manufacturing_order_id',
+  );
 
   $$CustomerMaterialReceiptsTableProcessedTableManager
   get customerMaterialReceiptsRefs {
@@ -94192,14 +94898,13 @@ final class $$ManufacturingOrdersTableReferences
     $ManufacturingDeliveriesTable,
     List<ManufacturingDelivery>
   >
-  _manufacturingDeliveriesRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.manufacturingDeliveries,
-        aliasName: $_aliasNameGenerator(
-          db.manufacturingOrders.id,
-          db.manufacturingDeliveries.manufacturingOrderId,
-        ),
-      );
+  _manufacturingDeliveriesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.manufacturingDeliveries,
+    aliasName:
+        'manufacturing_orders__id__manufacturing_deliveries__manufacturing_order_id',
+  );
 
   $$ManufacturingDeliveriesTableProcessedTableManager
   get manufacturingDeliveriesRefs {
@@ -94223,14 +94928,13 @@ final class $$ManufacturingOrdersTableReferences
     $ManufacturingStagesTable,
     List<ManufacturingStage>
   >
-  _manufacturingStagesRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.manufacturingStages,
-        aliasName: $_aliasNameGenerator(
-          db.manufacturingOrders.id,
-          db.manufacturingStages.manufacturingOrderId,
-        ),
-      );
+  _manufacturingStagesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.manufacturingStages,
+    aliasName:
+        'manufacturing_orders__id__manufacturing_stages__manufacturing_order_id',
+  );
 
   $$ManufacturingStagesTableProcessedTableManager get manufacturingStagesRefs {
     final manager =
@@ -94253,14 +94957,13 @@ final class $$ManufacturingOrdersTableReferences
     $ManufacturingStageOutputsTable,
     List<ManufacturingStageOutput>
   >
-  _manufacturingStageOutputsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.manufacturingStageOutputs,
-        aliasName: $_aliasNameGenerator(
-          db.manufacturingOrders.id,
-          db.manufacturingStageOutputs.manufacturingOrderId,
-        ),
-      );
+  _manufacturingStageOutputsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.manufacturingStageOutputs,
+    aliasName:
+        'manufacturing_orders__id__manufacturing_stage_outputs__manufacturing_order_id',
+  );
 
   $$ManufacturingStageOutputsTableProcessedTableManager
   get manufacturingStageOutputsRefs {
@@ -95511,7 +96214,9 @@ class $$ManufacturingOrdersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$ManufacturingOrdersTable, ManufacturingOrder>(
+                    table,
+                  ),
                   $$ManufacturingOrdersTableReferences(db, table, e),
                 ),
               )
@@ -95654,10 +96359,8 @@ class $$ManufacturingOrdersTableTableManager
                                 table,
                                 p0,
                               ).manufacturingCostComponentsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.manufacturingOrderId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.manufacturingOrderId == item.id),
                           typedResults: items,
                         ),
                       if (manufacturingScrapsRefs)
@@ -95675,10 +96378,8 @@ class $$ManufacturingOrdersTableTableManager
                                 table,
                                 p0,
                               ).manufacturingScrapsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.manufacturingOrderId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.manufacturingOrderId == item.id),
                           typedResults: items,
                         ),
                       if (customerMaterialReceiptsRefs)
@@ -95696,10 +96397,8 @@ class $$ManufacturingOrdersTableTableManager
                                 table,
                                 p0,
                               ).customerMaterialReceiptsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.manufacturingOrderId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.manufacturingOrderId == item.id),
                           typedResults: items,
                         ),
                       if (manufacturingDeliveriesRefs)
@@ -95717,10 +96416,8 @@ class $$ManufacturingOrdersTableTableManager
                                 table,
                                 p0,
                               ).manufacturingDeliveriesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.manufacturingOrderId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.manufacturingOrderId == item.id),
                           typedResults: items,
                         ),
                       if (manufacturingStagesRefs)
@@ -95738,10 +96435,8 @@ class $$ManufacturingOrdersTableTableManager
                                 table,
                                 p0,
                               ).manufacturingStagesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.manufacturingOrderId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.manufacturingOrderId == item.id),
                           typedResults: items,
                         ),
                       if (manufacturingStageOutputsRefs)
@@ -95759,10 +96454,8 @@ class $$ManufacturingOrdersTableTableManager
                                 table,
                                 p0,
                               ).manufacturingStageOutputsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.manufacturingOrderId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.manufacturingOrderId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -95840,10 +96533,7 @@ final class $$ManufacturingCostComponentsTableReferences
   static $ManufacturingOrdersTable _manufacturingOrderIdTable(
     _$AppDatabase db,
   ) => db.manufacturingOrders.createAlias(
-    $_aliasNameGenerator(
-      db.manufacturingCostComponents.manufacturingOrderId,
-      db.manufacturingOrders.id,
-    ),
+    'manufacturing_cost_components__manufacturing_order_id__manufacturing_orders__id',
   );
 
   $$ManufacturingOrdersTableProcessedTableManager get manufacturingOrderId {
@@ -96157,7 +96847,10 @@ class $$ManufacturingCostComponentsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<
+                    $ManufacturingCostComponentsTable,
+                    ManufacturingCostComponent
+                  >(table),
                   $$ManufacturingCostComponentsTableReferences(db, table, e),
                 ),
               )
@@ -96287,10 +96980,7 @@ final class $$ManufacturingScrapsTableReferences
   static $ManufacturingOrdersTable _manufacturingOrderIdTable(
     _$AppDatabase db,
   ) => db.manufacturingOrders.createAlias(
-    $_aliasNameGenerator(
-      db.manufacturingScraps.manufacturingOrderId,
-      db.manufacturingOrders.id,
-    ),
+    'manufacturing_scrap__manufacturing_order_id__manufacturing_orders__id',
   );
 
   $$ManufacturingOrdersTableProcessedTableManager get manufacturingOrderId {
@@ -96310,9 +97000,7 @@ final class $$ManufacturingScrapsTableReferences
   }
 
   static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(db.manufacturingScraps.productId, db.products.id),
-      );
+      db.products.createAlias('manufacturing_scrap__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -96328,10 +97016,8 @@ final class $$ManufacturingScrapsTableReferences
     );
   }
 
-  static $BomItemsTable _bomItemIdTable(_$AppDatabase db) =>
-      db.bomItems.createAlias(
-        $_aliasNameGenerator(db.manufacturingScraps.bomItemId, db.bomItems.id),
-      );
+  static $BomItemsTable _bomItemIdTable(_$AppDatabase db) => db.bomItems
+      .createAlias('manufacturing_scrap__bom_item_id__bom_items__id');
 
   $$BomItemsTableProcessedTableManager? get bomItemId {
     final $_column = $_itemColumn<int>('bom_item_id');
@@ -96347,13 +97033,8 @@ final class $$ManufacturingScrapsTableReferences
     );
   }
 
-  static $ProductsTable _scrapProductIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(
-          db.manufacturingScraps.scrapProductId,
-          db.products.id,
-        ),
-      );
+  static $ProductsTable _scrapProductIdTable(_$AppDatabase db) => db.products
+      .createAlias('manufacturing_scrap__scrap_product_id__products__id');
 
   $$ProductsTableProcessedTableManager? get scrapProductId {
     final $_column = $_itemColumn<int>('scrap_product_id');
@@ -97017,7 +97698,9 @@ class $$ManufacturingScrapsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$ManufacturingScrapsTable, ManufacturingScrap>(
+                    table,
+                  ),
                   $$ManufacturingScrapsTableReferences(db, table, e),
                 ),
               )
@@ -97179,13 +97862,8 @@ final class $$CustomerMaterialReceiptsTableReferences
     super.$_typedResult,
   );
 
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-        $_aliasNameGenerator(
-          db.customerMaterialReceipts.customerId,
-          db.customers.id,
-        ),
-      );
+  static $CustomersTable _customerIdTable(_$AppDatabase db) => db.customers
+      .createAlias('customer_material_receipts__customer_id__customers__id');
 
   $$CustomersTableProcessedTableManager get customerId {
     final $_column = $_itemColumn<String>('customer_id')!;
@@ -97204,10 +97882,7 @@ final class $$CustomerMaterialReceiptsTableReferences
   static $ManufacturingOrdersTable _manufacturingOrderIdTable(
     _$AppDatabase db,
   ) => db.manufacturingOrders.createAlias(
-    $_aliasNameGenerator(
-      db.customerMaterialReceipts.manufacturingOrderId,
-      db.manufacturingOrders.id,
-    ),
+    'customer_material_receipts__manufacturing_order_id__manufacturing_orders__id',
   );
 
   $$ManufacturingOrdersTableProcessedTableManager? get manufacturingOrderId {
@@ -97230,14 +97905,13 @@ final class $$CustomerMaterialReceiptsTableReferences
     $CustomerMaterialReceiptItemsTable,
     List<CustomerMaterialReceiptItem>
   >
-  _customerMaterialReceiptItemsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.customerMaterialReceiptItems,
-        aliasName: $_aliasNameGenerator(
-          db.customerMaterialReceipts.id,
-          db.customerMaterialReceiptItems.receiptId,
-        ),
-      );
+  _customerMaterialReceiptItemsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.customerMaterialReceiptItems,
+    aliasName:
+        'customer_material_receipts__id__customer_material_receipt_items__receipt_id',
+  );
 
   $$CustomerMaterialReceiptItemsTableProcessedTableManager
   get customerMaterialReceiptItemsRefs {
@@ -97685,7 +98359,10 @@ class $$CustomerMaterialReceiptsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<
+                    $CustomerMaterialReceiptsTable,
+                    CustomerMaterialReceipt
+                  >(table),
                   $$CustomerMaterialReceiptsTableReferences(db, table, e),
                 ),
               )
@@ -97769,10 +98446,8 @@ class $$CustomerMaterialReceiptsTableTableManager
                                 table,
                                 p0,
                               ).customerMaterialReceiptItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.receiptId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.receiptId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -97843,13 +98518,11 @@ final class $$CustomerMaterialReceiptItemsTableReferences
     super.$_typedResult,
   );
 
-  static $CustomerMaterialReceiptsTable _receiptIdTable(_$AppDatabase db) =>
-      db.customerMaterialReceipts.createAlias(
-        $_aliasNameGenerator(
-          db.customerMaterialReceiptItems.receiptId,
-          db.customerMaterialReceipts.id,
-        ),
-      );
+  static $CustomerMaterialReceiptsTable _receiptIdTable(
+    _$AppDatabase db,
+  ) => db.customerMaterialReceipts.createAlias(
+    'customer_material_receipt_items__receipt_id__customer_material_receipts__id',
+  );
 
   $$CustomerMaterialReceiptsTableProcessedTableManager get receiptId {
     final $_column = $_itemColumn<int>('receipt_id')!;
@@ -97865,13 +98538,8 @@ final class $$CustomerMaterialReceiptItemsTableReferences
     );
   }
 
-  static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(
-          db.customerMaterialReceiptItems.productId,
-          db.products.id,
-        ),
-      );
+  static $ProductsTable _productIdTable(_$AppDatabase db) => db.products
+      .createAlias('customer_material_receipt_items__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -98279,7 +98947,10 @@ class $$CustomerMaterialReceiptItemsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<
+                    $CustomerMaterialReceiptItemsTable,
+                    CustomerMaterialReceiptItem
+                  >(table),
                   $$CustomerMaterialReceiptItemsTableReferences(db, table, e),
                 ),
               )
@@ -98399,13 +99070,8 @@ final class $$CustomerStockBalancesTableReferences
     super.$_typedResult,
   );
 
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-        $_aliasNameGenerator(
-          db.customerStockBalances.customerId,
-          db.customers.id,
-        ),
-      );
+  static $CustomersTable _customerIdTable(_$AppDatabase db) => db.customers
+      .createAlias('customer_stock_balances__customer_id__customers__id');
 
   $$CustomersTableProcessedTableManager get customerId {
     final $_column = $_itemColumn<String>('customer_id')!;
@@ -98421,13 +99087,8 @@ final class $$CustomerStockBalancesTableReferences
     );
   }
 
-  static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(
-          db.customerStockBalances.productId,
-          db.products.id,
-        ),
-      );
+  static $ProductsTable _productIdTable(_$AppDatabase db) => db.products
+      .createAlias('customer_stock_balances__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -98774,7 +99435,10 @@ class $$CustomerStockBalancesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<
+                    $CustomerStockBalancesTable,
+                    CustomerStockBalance
+                  >(table),
                   $$CustomerStockBalancesTableReferences(db, table, e),
                 ),
               )
@@ -98899,13 +99563,8 @@ final class $$CustomerStockMovementsTableReferences
     super.$_typedResult,
   );
 
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-        $_aliasNameGenerator(
-          db.customerStockMovements.customerId,
-          db.customers.id,
-        ),
-      );
+  static $CustomersTable _customerIdTable(_$AppDatabase db) => db.customers
+      .createAlias('customer_stock_movements__customer_id__customers__id');
 
   $$CustomersTableProcessedTableManager get customerId {
     final $_column = $_itemColumn<String>('customer_id')!;
@@ -98921,13 +99580,8 @@ final class $$CustomerStockMovementsTableReferences
     );
   }
 
-  static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(
-          db.customerStockMovements.productId,
-          db.products.id,
-        ),
-      );
+  static $ProductsTable _productIdTable(_$AppDatabase db) => db.products
+      .createAlias('customer_stock_movements__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -99346,7 +100000,10 @@ class $$CustomerStockMovementsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<
+                    $CustomerStockMovementsTable,
+                    CustomerStockMovement
+                  >(table),
                   $$CustomerStockMovementsTableReferences(db, table, e),
                 ),
               )
@@ -99470,10 +100127,7 @@ final class $$ManufacturingDeliveriesTableReferences
   static $ManufacturingOrdersTable _manufacturingOrderIdTable(
     _$AppDatabase db,
   ) => db.manufacturingOrders.createAlias(
-    $_aliasNameGenerator(
-      db.manufacturingDeliveries.manufacturingOrderId,
-      db.manufacturingOrders.id,
-    ),
+    'manufacturing_deliveries__manufacturing_order_id__manufacturing_orders__id',
   );
 
   $$ManufacturingOrdersTableProcessedTableManager get manufacturingOrderId {
@@ -99492,13 +100146,8 @@ final class $$ManufacturingDeliveriesTableReferences
     );
   }
 
-  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
-      db.customers.createAlias(
-        $_aliasNameGenerator(
-          db.manufacturingDeliveries.customerId,
-          db.customers.id,
-        ),
-      );
+  static $CustomersTable _customerIdTable(_$AppDatabase db) => db.customers
+      .createAlias('manufacturing_deliveries__customer_id__customers__id');
 
   $$CustomersTableProcessedTableManager get customerId {
     final $_column = $_itemColumn<String>('customer_id')!;
@@ -99518,14 +100167,13 @@ final class $$ManufacturingDeliveriesTableReferences
     $ManufacturingDeliveryItemsTable,
     List<ManufacturingDeliveryItem>
   >
-  _manufacturingDeliveryItemsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.manufacturingDeliveryItems,
-        aliasName: $_aliasNameGenerator(
-          db.manufacturingDeliveries.id,
-          db.manufacturingDeliveryItems.deliveryId,
-        ),
-      );
+  _manufacturingDeliveryItemsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.manufacturingDeliveryItems,
+    aliasName:
+        'manufacturing_deliveries__id__manufacturing_delivery_items__delivery_id',
+  );
 
   $$ManufacturingDeliveryItemsTableProcessedTableManager
   get manufacturingDeliveryItemsRefs {
@@ -99973,7 +100621,10 @@ class $$ManufacturingDeliveriesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<
+                    $ManufacturingDeliveriesTable,
+                    ManufacturingDelivery
+                  >(table),
                   $$ManufacturingDeliveriesTableReferences(db, table, e),
                 ),
               )
@@ -100057,10 +100708,8 @@ class $$ManufacturingDeliveriesTableTableManager
                                 table,
                                 p0,
                               ).manufacturingDeliveryItemsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.deliveryId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.deliveryId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -100123,13 +100772,11 @@ final class $$ManufacturingDeliveryItemsTableReferences
     super.$_typedResult,
   );
 
-  static $ManufacturingDeliveriesTable _deliveryIdTable(_$AppDatabase db) =>
-      db.manufacturingDeliveries.createAlias(
-        $_aliasNameGenerator(
-          db.manufacturingDeliveryItems.deliveryId,
-          db.manufacturingDeliveries.id,
-        ),
-      );
+  static $ManufacturingDeliveriesTable _deliveryIdTable(
+    _$AppDatabase db,
+  ) => db.manufacturingDeliveries.createAlias(
+    'manufacturing_delivery_items__delivery_id__manufacturing_deliveries__id',
+  );
 
   $$ManufacturingDeliveriesTableProcessedTableManager get deliveryId {
     final $_column = $_itemColumn<int>('delivery_id')!;
@@ -100145,13 +100792,8 @@ final class $$ManufacturingDeliveryItemsTableReferences
     );
   }
 
-  static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(
-          db.manufacturingDeliveryItems.productId,
-          db.products.id,
-        ),
-      );
+  static $ProductsTable _productIdTable(_$AppDatabase db) => db.products
+      .createAlias('manufacturing_delivery_items__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -100483,7 +101125,10 @@ class $$ManufacturingDeliveryItemsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<
+                    $ManufacturingDeliveryItemsTable,
+                    ManufacturingDeliveryItem
+                  >(table),
                   $$ManufacturingDeliveryItemsTableReferences(db, table, e),
                 ),
               )
@@ -100617,10 +101262,7 @@ final class $$ManufacturingStagesTableReferences
   static $ManufacturingOrdersTable _manufacturingOrderIdTable(
     _$AppDatabase db,
   ) => db.manufacturingOrders.createAlias(
-    $_aliasNameGenerator(
-      db.manufacturingStages.manufacturingOrderId,
-      db.manufacturingOrders.id,
-    ),
+    'manufacturing_stages__manufacturing_order_id__manufacturing_orders__id',
   );
 
   $$ManufacturingOrdersTableProcessedTableManager get manufacturingOrderId {
@@ -100646,10 +101288,8 @@ final class $$ManufacturingStagesTableReferences
   _manufacturingStageOutputsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.manufacturingStageOutputs,
-        aliasName: $_aliasNameGenerator(
-          db.manufacturingStages.id,
-          db.manufacturingStageOutputs.stageId,
-        ),
+        aliasName:
+            'manufacturing_stages__id__manufacturing_stage_outputs__stage_id',
       );
 
   $$ManufacturingStageOutputsTableProcessedTableManager
@@ -101125,7 +101765,9 @@ class $$ManufacturingStagesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$ManufacturingStagesTable, ManufacturingStage>(
+                    table,
+                  ),
                   $$ManufacturingStagesTableReferences(db, table, e),
                 ),
               )
@@ -101192,10 +101834,8 @@ class $$ManufacturingStagesTableTableManager
                                 table,
                                 p0,
                               ).manufacturingStageOutputsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.stageId == item.id,
-                              ),
+                          referencedItemsForCurrentItem: (item, referencedItems) =>
+                              referencedItems.where((e) => e.stageId == item.id),
                           typedResults: items,
                         ),
                     ];
@@ -101271,10 +101911,7 @@ final class $$ManufacturingStageOutputsTableReferences
 
   static $ManufacturingStagesTable _stageIdTable(_$AppDatabase db) =>
       db.manufacturingStages.createAlias(
-        $_aliasNameGenerator(
-          db.manufacturingStageOutputs.stageId,
-          db.manufacturingStages.id,
-        ),
+        'manufacturing_stage_outputs__stage_id__manufacturing_stages__id',
       );
 
   $$ManufacturingStagesTableProcessedTableManager get stageId {
@@ -101294,10 +101931,7 @@ final class $$ManufacturingStageOutputsTableReferences
   static $ManufacturingOrdersTable _manufacturingOrderIdTable(
     _$AppDatabase db,
   ) => db.manufacturingOrders.createAlias(
-    $_aliasNameGenerator(
-      db.manufacturingStageOutputs.manufacturingOrderId,
-      db.manufacturingOrders.id,
-    ),
+    'manufacturing_stage_outputs__manufacturing_order_id__manufacturing_orders__id',
   );
 
   $$ManufacturingOrdersTableProcessedTableManager get manufacturingOrderId {
@@ -101316,13 +101950,8 @@ final class $$ManufacturingStageOutputsTableReferences
     );
   }
 
-  static $ProductsTable _productIdTable(_$AppDatabase db) =>
-      db.products.createAlias(
-        $_aliasNameGenerator(
-          db.manufacturingStageOutputs.productId,
-          db.products.id,
-        ),
-      );
+  static $ProductsTable _productIdTable(_$AppDatabase db) => db.products
+      .createAlias('manufacturing_stage_outputs__product_id__products__id');
 
   $$ProductsTableProcessedTableManager get productId {
     final $_column = $_itemColumn<int>('product_id')!;
@@ -101340,10 +101969,7 @@ final class $$ManufacturingStageOutputsTableReferences
 
   static $ProductVariantsTable _variantIdTable(_$AppDatabase db) =>
       db.productVariants.createAlias(
-        $_aliasNameGenerator(
-          db.manufacturingStageOutputs.variantId,
-          db.productVariants.id,
-        ),
+        'manufacturing_stage_outputs__variant_id__product_variants__id',
       );
 
   $$ProductVariantsTableProcessedTableManager? get variantId {
@@ -101908,7 +102534,10 @@ class $$ManufacturingStageOutputsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<
+                    $ManufacturingStageOutputsTable,
+                    ManufacturingStageOutput
+                  >(table),
                   $$ManufacturingStageOutputsTableReferences(db, table, e),
                 ),
               )
@@ -102064,7 +102693,7 @@ final class $$AccountsTableReferences
   static MultiTypedResultKey<$JournalLinesTable, List<JournalLine>>
   _journalLinesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.journalLines,
-    aliasName: $_aliasNameGenerator(db.accounts.id, db.journalLines.accountId),
+    aliasName: 'accounts__id__journal_lines__account_id',
   );
 
   $$JournalLinesTableProcessedTableManager get journalLinesRefs {
@@ -102356,7 +102985,7 @@ class $$AccountsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$AccountsTable, Account>(table),
                   $$AccountsTableReferences(db, table, e),
                 ),
               )
@@ -102450,10 +103079,7 @@ final class $$JournalEntriesTableReferences
   static MultiTypedResultKey<$JournalLinesTable, List<JournalLine>>
   _journalLinesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.journalLines,
-    aliasName: $_aliasNameGenerator(
-      db.journalEntries.id,
-      db.journalLines.journalEntryId,
-    ),
+    aliasName: 'journal_entries__id__journal_lines__journal_entry_id',
   );
 
   $$JournalLinesTableProcessedTableManager get journalLinesRefs {
@@ -102789,7 +103415,7 @@ class $$JournalEntriesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$JournalEntriesTable, JournalEntry>(table),
                   $$JournalEntriesTableReferences(db, table, e),
                 ),
               )
@@ -102817,9 +103443,7 @@ class $$JournalEntriesTableTableManager
                             p0,
                           ).journalLinesRefs,
                       referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where(
-                            (e) => e.journalEntryId == item.id,
-                          ),
+                          referencedItems.where((e) => e.journalEntryId == item.id),
                       typedResults: items,
                     ),
                 ];
@@ -102869,13 +103493,9 @@ final class $$JournalLinesTableReferences
     extends BaseReferences<_$AppDatabase, $JournalLinesTable, JournalLine> {
   $$JournalLinesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $JournalEntriesTable _journalEntryIdTable(_$AppDatabase db) =>
-      db.journalEntries.createAlias(
-        $_aliasNameGenerator(
-          db.journalLines.journalEntryId,
-          db.journalEntries.id,
-        ),
-      );
+  static $JournalEntriesTable _journalEntryIdTable(_$AppDatabase db) => db
+      .journalEntries
+      .createAlias('journal_lines__journal_entry_id__journal_entries__id');
 
   $$JournalEntriesTableProcessedTableManager get journalEntryId {
     final $_column = $_itemColumn<String>('journal_entry_id')!;
@@ -102892,9 +103512,7 @@ final class $$JournalLinesTableReferences
   }
 
   static $AccountsTable _accountIdTable(_$AppDatabase db) =>
-      db.accounts.createAlias(
-        $_aliasNameGenerator(db.journalLines.accountId, db.accounts.id),
-      );
+      db.accounts.createAlias('journal_lines__account_id__accounts__id');
 
   $$AccountsTableProcessedTableManager get accountId {
     final $_column = $_itemColumn<String>('account_id')!;
@@ -103196,7 +103814,7 @@ class $$JournalLinesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$JournalLinesTable, JournalLine>(table),
                   $$JournalLinesTableReferences(db, table, e),
                 ),
               )
@@ -103302,10 +103920,7 @@ final class $$PartnersTableReferences
   _equityTransactionsRefsTable(_$AppDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.equityTransactions,
-        aliasName: $_aliasNameGenerator(
-          db.partners.id,
-          db.equityTransactions.partnerId,
-        ),
+        aliasName: 'partners__id__equity_transactions__partner_id',
       );
 
   $$EquityTransactionsTableProcessedTableManager get equityTransactionsRefs {
@@ -103549,7 +104164,7 @@ class $$PartnersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$PartnersTable, Partner>(table),
                   $$PartnersTableReferences(db, table, e),
                 ),
               )
@@ -103642,9 +104257,7 @@ final class $$EquityTransactionsTableReferences
   );
 
   static $PartnersTable _partnerIdTable(_$AppDatabase db) =>
-      db.partners.createAlias(
-        $_aliasNameGenerator(db.equityTransactions.partnerId, db.partners.id),
-      );
+      db.partners.createAlias('equity_transactions__partner_id__partners__id');
 
   $$PartnersTableProcessedTableManager get partnerId {
     final $_column = $_itemColumn<String>('partner_id')!;
@@ -103933,7 +104546,9 @@ class $$EquityTransactionsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$EquityTransactionsTable, EquityTransaction>(
+                    table,
+                  ),
                   $$EquityTransactionsTableReferences(db, table, e),
                 ),
               )
@@ -104285,7 +104900,19 @@ class $$MonthlyAttendanceSummaryTableTableTableManager
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<
+                    $MonthlyAttendanceSummaryTableTable,
+                    MonthlyAttendanceSummary
+                  >(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $MonthlyAttendanceSummaryTableTable,
+                    MonthlyAttendanceSummary
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),

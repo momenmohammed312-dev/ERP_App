@@ -4,6 +4,9 @@ part of 'expense_dao.dart';
 
 // ignore_for_file: type=lint
 mixin _$ExpenseDaoMixin on DatabaseAccessor<AppDatabase> {
+  $SuppliersTable get suppliers => attachedDatabase.suppliers;
+  $VegetableShipmentsTable get vegetableShipments =>
+      attachedDatabase.vegetableShipments;
   $ExpensesTable get expenses => attachedDatabase.expenses;
   ExpenseDaoManager get managers => ExpenseDaoManager(this);
 }
@@ -11,6 +14,13 @@ mixin _$ExpenseDaoMixin on DatabaseAccessor<AppDatabase> {
 class ExpenseDaoManager {
   final _$ExpenseDaoMixin _db;
   ExpenseDaoManager(this._db);
+  $$SuppliersTableTableManager get suppliers =>
+      $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
+  $$VegetableShipmentsTableTableManager get vegetableShipments =>
+      $$VegetableShipmentsTableTableManager(
+        _db.attachedDatabase,
+        _db.vegetableShipments,
+      );
   $$ExpensesTableTableManager get expenses =>
       $$ExpensesTableTableManager(_db.attachedDatabase, _db.expenses);
 }

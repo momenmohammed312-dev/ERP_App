@@ -1,5 +1,15 @@
 import 'package:drift/drift.dart';
 
+import 'vegetable_shipments_table.dart';
+
+/// Scope of an expense in the vegetable-market & general ERP ledger.
+abstract final class ExpenseScope {
+  static const shop = 'shop';
+  static const shipment = 'shipment';
+
+  static const all = [shop, shipment];
+}
+
 class Expenses extends Table {
   TextColumn get id => text()(); // Primary key
 
@@ -30,6 +40,14 @@ class Expenses extends Table {
 
   TextColumn get userId => text().nullable()(); // Who added this expense
   TextColumn get dayId => text().nullable()(); // Which business day
+
+  /// Linked shipment id when [scope] == [ExpenseScope.shipment] (e.g. النولون / المشال).
+  IntColumn get shipmentId =>
+      integer().nullable().references(VegetableShipments, #id)();
+
+  /// [ExpenseScope.shop] | [ExpenseScope.shipment]
+  TextColumn get scope =>
+      text().withDefault(const Constant(ExpenseScope.shop))();
 
   @override
   Set<Column> get primaryKey => {id};

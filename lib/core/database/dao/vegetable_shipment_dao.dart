@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/tables/supplier_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
 
 part 'vegetable_shipment_dao.g.dart';
@@ -24,7 +25,11 @@ class VegetableShipmentDao extends DatabaseAccessor<AppDatabase>
   /// Open shipments with remaining barnikas, oldest first (FIFO order).
   Future<List<VegetableShipment>> getOpenShipmentsFifo() =>
       (select(vegetableShipments)
-            ..where((s) => s.barnikaRemainingCount.isBiggerThanValue(0))
+            ..where(
+              (s) =>
+                  s.status.equals(VegetableShipmentStatus.open) &
+                  s.barnikaRemainingCount.isBiggerThanValue(0),
+            )
             ..orderBy([(s) => OrderingTerm.asc(s.date)]))
           .get();
 
@@ -36,12 +41,15 @@ class VegetableShipmentDao extends DatabaseAccessor<AppDatabase>
   Future<int> getTotalRemainingBarnikas() async {
     final query = selectOnly(vegetableShipments)
       ..addColumns([vegetableShipments.barnikaRemainingCount.sum()])
-      ..where(vegetableShipments.barnikaRemainingCount.isBiggerThanValue(0));
+      ..where(
+        vegetableShipments.status.equals(VegetableShipmentStatus.open) &
+            vegetableShipments.barnikaRemainingCount.isBiggerThanValue(0),
+      );
     final row = await query.getSingle();
     return row.read(vegetableShipments.barnikaRemainingCount.sum()) ?? 0;
   }
 
-  Future<int> insertShipment(VegetableShipmentsCompanion entry) {
+  Future<int> insertShipment(VegetableShipmentsCompanion entry) async {
     validatePricingFields(
       pricingMode: entry.pricingMode.value,
       costPricePerBarnika: entry.costPricePerBarnika.present
@@ -54,6 +62,15 @@ class VegetableShipmentDao extends DatabaseAccessor<AppDatabase>
           : null,
     );
 
+    final supplierId = entry.supplierId.present &&
+            entry.supplierId.value.trim().isNotEmpty
+        ? entry.supplierId.value
+        : DefaultSupplier.unknownId;
+
+    if (supplierId == DefaultSupplier.unknownId) {
+      await db.supplierDao.ensureUnknownSupplier();
+    }
+
     final total = entry.totalBarnikaCount.value;
     final remaining = entry.barnikaRemainingCount.present
         ? entry.barnikaRemainingCount.value
@@ -61,6 +78,7 @@ class VegetableShipmentDao extends DatabaseAccessor<AppDatabase>
 
     return into(vegetableShipments).insert(
       entry.copyWith(
+        supplierId: Value(supplierId),
         barnikaRemainingCount: Value(remaining),
         barnikaSoldCount: entry.barnikaSoldCount.present
             ? entry.barnikaSoldCount
