@@ -1,6 +1,7 @@
 // database/dao/customer_dao.dart
 import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_table.dart';
+import 'package:pos_offline_desktop/core/utils/arabic_name_normalizer.dart';
 import '../app_database.dart';
 import 'package:flutter/foundation.dart';
 
@@ -48,15 +49,34 @@ class CustomerDao extends DatabaseAccessor<AppDatabase>
     return (select(customers)..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
-  /// Search customers by name or phone
-  Future<List<Customer>> searchCustomers(String query) {
-    final searchTerm = '%${query.toLowerCase()}%';
-    return (select(customers)..where(
-          (t) =>
-              t.isActive.equals(true) &
-              (t.name.lower().like(searchTerm) | t.phone.like(searchTerm)),
-        ))
-        .get();
+  /// Search active customers by normalized Arabic/Latin name or phone.
+  Future<List<Customer>> searchCustomers(String query) async {
+    final allActive = await getAllActiveCustomers();
+    final q = query.trim();
+    if (q.isEmpty) return allActive;
+    return allActive
+        .where(
+          (c) => ArabicNameNormalizer.matchesQuery(
+            candidate: c.name,
+            query: q,
+            candidatePhone: c.phone,
+          ),
+        )
+        .toList();
+  }
+
+  /// Returns active customers whose normalized Arabic/Latin name matches [name]
+  /// (used to warn against typos / duplicate entries before saving).
+  Future<List<Customer>> findSimilarCustomers({
+    required String name,
+    String? excludeId,
+  }) async {
+    if (ArabicNameNormalizer.normalize(name).isEmpty) return const [];
+    final allActive = await getAllActiveCustomers();
+    return allActive.where((c) {
+      if (excludeId != null && c.id == excludeId) return false;
+      return ArabicNameNormalizer.areEquivalent(c.name, name);
+    }).toList();
   }
 
   /// Find an active (non soft-deleted) customer by exact name.

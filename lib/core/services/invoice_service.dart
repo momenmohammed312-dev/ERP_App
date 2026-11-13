@@ -1,8 +1,10 @@
 import 'dart:math';
 import 'package:drift/drift.dart';
 import '../database/app_database.dart';
+import '../database/tables/empty_barnika_tracking_table.dart';
 import '../database/tables/vegetable_shipments_table.dart';
 import 'invoice_number_formatter.dart';
+import 'shipment_allocation_service.dart';
 import 'shipment_pricing_service.dart';
 
 class InvoiceItemParams {
@@ -59,6 +61,8 @@ class InvoiceService {
     List<SplitPaymentEntry>? splitPayments,
     int? primaryShipmentId,
     DateTime? invoiceDate,
+    int? emptyBarnikaOutCount,
+    int? emptyBarnikaReturnedCount,
   }) async {
     // Bug 3: no timestamp numbering. A caller-supplied value is preserved
     // as legacy; otherwise the canonical display number derives from the
@@ -86,9 +90,6 @@ class InvoiceService {
         ),
       );
 
-      // Track supplier commission totals per shipment for ledger entries.
-      final supplierCommissions = <int, _SupplierCommissionAccumulator>{};
-
       for (final item in items) {
         final product = await _db.productDao.getProductById(item.productId);
 
@@ -100,18 +101,45 @@ class InvoiceService {
         // كمية الأب بعد بيع صنف = مجموع الأصناف (تحافظ على التقارير وتنبيه النواقص).
         await _applySaleStock(product, item.quantity, item.variantId);
 
-        // Auto-calculate commission for commission-based shipments.
-        var itemCommission = item.commission;
-        if (item.shipmentId != null && itemCommission == 0) {
-          final shipment = await _db.vegetableShipmentDao.getById(item.shipmentId!);
-          if (shipment != null &&
-              shipment.pricingMode == ShipmentPricingMode.commission &&
-              shipment.commissionPercentage != null) {
-            itemCommission = ShipmentPricingService.calculateCommission(
-              item.price * item.quantity,
-              shipment.commissionPercentage!,
+        VegetableShipment? shipment;
+        if (item.shipmentId != null) {
+          shipment = await _db.vegetableShipmentDao.getById(item.shipmentId!);
+          if (shipment == null) {
+            throw Exception('الشحنة #${item.shipmentId} غير موجودة');
+          }
+          if (shipment.status != VegetableShipmentStatus.open) {
+            throw Exception(
+              'الشحنة #${shipment.shipmentNumber} مقفولة ولا يمكن البيع منها',
             );
           }
+
+          final available = ShipmentAllocationService.effectiveRemaining(shipment);
+          if (item.quantity > available) {
+            throw Exception(
+              'الشحنة #${item.shipmentId} لا تحتوي على كمية كافية '
+              '(متبقي: $available, مطلوب: ${item.quantity})',
+            );
+          }
+
+          await _db.vegetableShipmentDao.updateShipment(
+            shipment.copyWith(
+              barnikaSoldCount: shipment.barnikaSoldCount + item.quantity,
+              barnikaRemainingCount: available - item.quantity,
+            ),
+          );
+        }
+
+        // Auto-calculate commission for commission-based shipments.
+        var itemCommission = item.commission;
+        if (shipment != null &&
+            itemCommission == 0 &&
+            shipment.pricingMode == ShipmentPricingMode.commission &&
+            shipment.commissionPercentage != null) {
+          final netLine = max(0.0, (item.price * item.quantity) - item.discount);
+          itemCommission = ShipmentPricingService.calculateCommission(
+            netLine,
+            shipment.commissionPercentage!,
+          );
         }
 
         await _db.invoiceDao.insertInvoiceItem(
@@ -128,38 +156,6 @@ class InvoiceService {
             variantId: Value(item.variantId),
           ),
         );
-
-        // Update shipment barnika counts.
-        if (item.shipmentId != null) {
-          final shipment = await _db.vegetableShipmentDao.getById(item.shipmentId!);
-          if (shipment == null) {
-            throw Exception('الشحنة #${item.shipmentId} غير موجودة');
-          }
-
-          final newSold = shipment.barnikaSoldCount + item.quantity;
-          final newRemaining = shipment.barnikaRemainingCount - item.quantity;
-          if (newRemaining < 0) {
-            throw Exception(
-              'الشحنة #${item.shipmentId} لا تحتوي على كمية كافية '
-              '(متبقي: ${shipment.barnikaRemainingCount}, مطلوب: ${item.quantity})',
-            );
-          }
-
-          await _db.vegetableShipmentDao.updateShipment(
-            shipment.copyWith(
-              barnikaSoldCount: newSold,
-              barnikaRemainingCount: newRemaining,
-            ),
-          );
-
-          // Accumulate supplier commission for ledger entry.
-          if (itemCommission > 0) {
-            supplierCommissions.putIfAbsent(
-              item.shipmentId!,
-              () => _SupplierCommissionAccumulator(shipment.supplierId),
-            ).add(item.price * item.quantity, itemCommission);
-          }
-        }
       }
 
       if (splitPayments != null) {
@@ -223,26 +219,15 @@ class InvoiceService {
         }
       }
 
-      // Create supplier ledger entries for commission-based shipments.
-      for (final entry in supplierCommissions.entries) {
-        final acc = entry.value;
-        final supplierDue = acc.sellAmount - acc.commissionAmount;
-        final ledgerIdSupplier =
-            '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_supplier';
-        await _db.ledgerDao.insertTransaction(
-          LedgerTransactionsCompanion.insert(
-            id: ledgerIdSupplier,
-            entityType: 'Supplier',
-            refId: acc.supplierId,
-            date: resolvedDate,
-            description: 'عمولة $actualInvoiceNumber',
-            debit: Value(supplierDue),
-            credit: const Value(0.0),
-            origin: 'sale',
-            receiptNumber: Value('INV$invoiceId'),
-          ),
-        );
-      }
+      // Atomically record empty barnika custody & immediate returns linked to this sale.
+      await _applyEmptyBarnikaForInvoice(
+        invoiceId: invoiceId,
+        customerId: customerId,
+        resolvedDate: resolvedDate,
+        items: items,
+        emptyBarnikaOutCount: emptyBarnikaOutCount,
+        emptyBarnikaReturnedCount: emptyBarnikaReturnedCount,
+      );
 
       final invoice = await (_db.select(_db.invoices)
           ..where((t) => t.id.equals(invoiceId)))
@@ -369,6 +354,8 @@ class InvoiceService {
     required List<InvoiceItemParams> items,
     int? primaryShipmentId,
     DateTime? invoiceDate,
+    int? emptyBarnikaOutCount,
+    int? emptyBarnikaReturnedCount,
   }) async {
     final original = await getInvoiceById(invoiceId);
     if (original == null) throw Exception('الفاتورة غير موجودة');
@@ -389,6 +376,13 @@ class InvoiceService {
 
     return _db.transaction(() async {
       final originalItems = await _db.invoiceDao.getItemsByInvoiceId(invoiceId);
+      final existingBarnikas =
+          await _db.emptyBarnikaTrackingDao.getByInvoiceId(invoiceId);
+      final prevBarnikaReturned = existingBarnikas.fold<int>(
+        0,
+        (s, e) => s + e.quantityReturned,
+      );
+      final hadBarnikaRow = existingBarnikas.isNotEmpty;
 
       // 1a. Reverse original stock + shipment counts.
       for (final item in originalItems) {
@@ -397,25 +391,34 @@ class InvoiceService {
           final shipment =
               await _db.vegetableShipmentDao.getById(item.shipmentId!);
           if (shipment != null) {
+            if (shipment.status == VegetableShipmentStatus.closed) {
+              throw Exception(
+                'الشحنة #${shipment.shipmentNumber} مقفولة ولا يمكن تعديل فواتيرها',
+              );
+            }
+            final restoredSold =
+                (shipment.barnikaSoldCount - item.quantity).clamp(0, 1 << 30);
+            final restoredRemaining = (shipment.totalBarnikaCount -
+                    restoredSold -
+                    shipment.toppingCount)
+                .clamp(0, 1 << 30);
             await _db.vegetableShipmentDao.updateShipment(
               shipment.copyWith(
-                barnikaSoldCount:
-                    (shipment.barnikaSoldCount - item.quantity).clamp(0, 1 << 62),
-                barnikaRemainingCount:
-                    shipment.barnikaRemainingCount + item.quantity,
+                barnikaSoldCount: restoredSold,
+                barnikaRemainingCount: restoredRemaining,
               ),
             );
           }
         }
       }
 
-      // 1b. Reverse original ledger rows + line items for this invoice.
+      // 1b. Reverse original ledger rows, line items, and linked empty barnikas.
+      await _db.emptyBarnikaTrackingDao.deleteByInvoiceId(invoiceId);
       await _db.ledgerDao
           .deleteTransactionsByReceiptNumber('INV$invoiceId');
       await _db.invoiceDao.deleteInvoiceItemsByInvoice(invoiceId);
 
       // 2a. Re-apply edited items.
-      final supplierCommissions = <int, _SupplierCommissionAccumulator>{};
       for (final item in items) {
         final product = await _db.productDao.getProductById(item.productId);
         if (product == null) {
@@ -424,18 +427,43 @@ class InvoiceService {
 
         await _applySaleStock(product, item.quantity, item.variantId);
 
-        var itemCommission = item.commission;
-        if (item.shipmentId != null && itemCommission == 0) {
-          final shipment =
-              await _db.vegetableShipmentDao.getById(item.shipmentId!);
-          if (shipment != null &&
-              shipment.pricingMode == ShipmentPricingMode.commission &&
-              shipment.commissionPercentage != null) {
-            itemCommission = ShipmentPricingService.calculateCommission(
-              item.price * item.quantity,
-              shipment.commissionPercentage!,
+        VegetableShipment? shipment;
+        if (item.shipmentId != null) {
+          shipment = await _db.vegetableShipmentDao.getById(item.shipmentId!);
+          if (shipment == null) {
+            throw Exception('الشحنة #${item.shipmentId} غير موجودة');
+          }
+          if (shipment.status != VegetableShipmentStatus.open) {
+            throw Exception(
+              'الشحنة #${shipment.shipmentNumber} مقفولة ولا يمكن البيع منها',
             );
           }
+
+          final available = ShipmentAllocationService.effectiveRemaining(shipment);
+          if (item.quantity > available) {
+            throw Exception(
+              'الشحنة #${item.shipmentId} لا تحتوي على كمية كافية '
+              '(متبقي: $available, مطلوب: ${item.quantity})',
+            );
+          }
+          await _db.vegetableShipmentDao.updateShipment(
+            shipment.copyWith(
+              barnikaSoldCount: shipment.barnikaSoldCount + item.quantity,
+              barnikaRemainingCount: available - item.quantity,
+            ),
+          );
+        }
+
+        var itemCommission = item.commission;
+        if (shipment != null &&
+            itemCommission == 0 &&
+            shipment.pricingMode == ShipmentPricingMode.commission &&
+            shipment.commissionPercentage != null) {
+          final netLine = max(0.0, (item.price * item.quantity) - item.discount);
+          itemCommission = ShipmentPricingService.calculateCommission(
+            netLine,
+            shipment.commissionPercentage!,
+          );
         }
 
         await _db.invoiceDao.insertInvoiceItem(
@@ -452,36 +480,6 @@ class InvoiceService {
             variantId: Value(item.variantId),
           ),
         );
-
-        if (item.shipmentId != null) {
-          final shipment =
-              await _db.vegetableShipmentDao.getById(item.shipmentId!);
-          if (shipment == null) {
-            throw Exception('الشحنة #${item.shipmentId} غير موجودة');
-          }
-          final newSold = shipment.barnikaSoldCount + item.quantity;
-          final newRemaining = shipment.barnikaRemainingCount - item.quantity;
-          if (newRemaining < 0) {
-            throw Exception(
-              'الشحنة #${item.shipmentId} لا تحتوي على كمية كافية '
-              '(متبقي: ${shipment.barnikaRemainingCount}, مطلوب: ${item.quantity})',
-            );
-          }
-          await _db.vegetableShipmentDao.updateShipment(
-            shipment.copyWith(
-              barnikaSoldCount: newSold,
-              barnikaRemainingCount: newRemaining,
-            ),
-          );
-          if (itemCommission > 0) {
-            supplierCommissions
-                .putIfAbsent(
-                  item.shipmentId!,
-                  () => _SupplierCommissionAccumulator(shipment.supplierId),
-                )
-                .add(item.price * item.quantity, itemCommission);
-          }
-        }
       }
 
       // 2b. Update invoice header totals.
@@ -566,23 +564,24 @@ class InvoiceService {
         }
       }
 
-      // 2d. Supplier commission ledger entries.
-      for (final entry in supplierCommissions.entries) {
-        final acc = entry.value;
-        final supplierDue = acc.sellAmount - acc.commissionAmount;
-        await _db.ledgerDao.insertTransaction(
-          LedgerTransactionsCompanion.insert(
-            id:
-                '${DateTime.now().millisecondsSinceEpoch}_${rand.nextInt(999999)}_supplier',
-            entityType: 'Supplier',
-            refId: acc.supplierId,
-            date: resolvedDate,
-            description: 'عمولة $actualInvoiceNumber',
-            debit: Value(supplierDue),
-            credit: const Value(0.0),
-            origin: 'sale',
-            receiptNumber: Value('INV$invoiceId'),
-          ),
+      // 2d. Re-apply invoice-linked empty barnika custody.
+      if (emptyBarnikaOutCount != null ||
+          emptyBarnikaReturnedCount != null ||
+          hadBarnikaRow ||
+          items.any((i) => i.shipmentId != null)) {
+        final shipmentQty = items
+            .where((i) => i.shipmentId != null)
+            .fold<int>(0, (s, i) => s + i.quantity);
+        final nextOut = emptyBarnikaOutCount ?? shipmentQty;
+        final nextReturned = emptyBarnikaReturnedCount ??
+            (hadBarnikaRow ? min(prevBarnikaReturned, nextOut) : 0);
+        await _applyEmptyBarnikaForInvoice(
+          invoiceId: invoiceId,
+          customerId: customerId,
+          resolvedDate: resolvedDate,
+          items: items,
+          emptyBarnikaOutCount: nextOut,
+          emptyBarnikaReturnedCount: nextReturned,
         );
       }
 
@@ -590,6 +589,72 @@ class InvoiceService {
       if (updated == null) throw Exception('فشل في تحديث الفاتورة');
       return updated;
     });
+  }
+
+  /// Records outgoing empty barnika custody and immediate returns atomically
+  /// inside the invoice transaction.
+  Future<void> _applyEmptyBarnikaForInvoice({
+    required int invoiceId,
+    required String? customerId,
+    required DateTime resolvedDate,
+    required List<InvoiceItemParams> items,
+    required int? emptyBarnikaOutCount,
+    required int? emptyBarnikaReturnedCount,
+  }) async {
+    final hasCustomer =
+        customerId != null && customerId != 'cash' && customerId.isNotEmpty;
+    final shipmentQty = items
+        .where((i) => i.shipmentId != null)
+        .fold<int>(0, (sum, i) => sum + i.quantity);
+
+    final outCount = emptyBarnikaOutCount ?? (hasCustomer ? shipmentQty : 0);
+    final returnedCount = emptyBarnikaReturnedCount ?? 0;
+
+    if (outCount < 0 || returnedCount < 0) {
+      throw ArgumentError('عدد البرانيك لا يمكن أن يكون سالباً');
+    }
+    if ((outCount > 0 || returnedCount > 0) && !hasCustomer) {
+      throw ArgumentError(
+        'يجب تحديد العميل لتسجيل عهدة أو استلام البرانيك الفارغة',
+      );
+    }
+    if (!hasCustomer) return;
+
+    if (outCount > 0) {
+      final appliedOnCurrent = min(returnedCount, outCount);
+      final excessReturned = returnedCount - appliedOnCurrent;
+      final custodyStatus = appliedOnCurrent <= 0
+          ? EmptyBarnikaStatus.outstanding
+          : (appliedOnCurrent >= outCount
+              ? EmptyBarnikaStatus.returned
+              : EmptyBarnikaStatus.partial);
+
+      await _db.emptyBarnikaTrackingDao.insertRecord(
+        EmptyBarnikaTrackingCompanion.insert(
+          customerId: customerId,
+          dateOut: resolvedDate,
+          quantityOut: outCount,
+          quantityReturned: Value(appliedOnCurrent),
+          dateReturned: Value(appliedOnCurrent > 0 ? resolvedDate : null),
+          status: Value(custodyStatus),
+          invoiceId: Value(invoiceId),
+        ),
+      );
+
+      if (excessReturned > 0) {
+        await _db.emptyBarnikaTrackingDao.recordCustomerReturnFifo(
+          customerId: customerId,
+          quantityReturned: excessReturned,
+          dateReturned: resolvedDate,
+        );
+      }
+    } else if (returnedCount > 0) {
+      await _db.emptyBarnikaTrackingDao.recordCustomerReturnFifo(
+        customerId: customerId,
+        quantityReturned: returnedCount,
+        dateReturned: resolvedDate,
+      );
+    }
   }
 
   Future<void> voidInvoice(int invoiceId, String reason, String voidedBy) async {
@@ -611,20 +676,4 @@ class SplitPaymentEntry {
   final double amount;
 
   SplitPaymentEntry({required this.method, required this.amount});
-}
-
-/// Accumulates sell amount and commission for a single supplier across
-/// multiple invoice items from the same shipment (or different shipments
-/// of the same supplier).
-class _SupplierCommissionAccumulator {
-  final String supplierId;
-  double sellAmount = 0;
-  double commissionAmount = 0;
-
-  _SupplierCommissionAccumulator(this.supplierId);
-
-  void add(double sell, double commission) {
-    sellAmount += sell;
-    commissionAmount += commission;
-  }
 }

@@ -56,6 +56,73 @@ class EmptyBarnikaTrackingDao extends DatabaseAccessor<AppDatabase>
   Future<int> insertRecord(EmptyBarnikaTrackingCompanion entry) =>
       into(emptyBarnikaTracking).insert(entry);
 
+  Future<List<EmptyBarnikaTrackingData>> getByInvoiceId(int invoiceId) =>
+      (select(emptyBarnikaTracking)
+            ..where((t) => t.invoiceId.equals(invoiceId)))
+          .get();
+
+  Future<int> deleteByInvoiceId(int invoiceId) =>
+      (delete(emptyBarnikaTracking)
+            ..where((t) => t.invoiceId.equals(invoiceId)))
+          .go();
+
+  /// Total unreturned empty barnikas currently held by [customerId].
+  Future<int> getCustomerOutstandingBalance(String customerId) async {
+    final rows = await getOutstandingByCustomer(customerId);
+    return rows.fold<int>(
+      0,
+      (sum, r) => sum + (r.quantityOut - r.quantityReturned).clamp(0, 1 << 30),
+    );
+  }
+
+  /// Applies [quantityReturned] empty barnikas across [customerId]'s
+  /// outstanding tracking records oldest-first (FIFO).
+  Future<void> recordCustomerReturnFifo({
+    required String customerId,
+    required int quantityReturned,
+    DateTime? dateReturned,
+  }) async {
+    if (quantityReturned <= 0) {
+      throw ArgumentError('quantityReturned must be positive');
+    }
+    final outstanding = await (select(emptyBarnikaTracking)
+          ..where(
+            (t) =>
+                t.customerId.equals(customerId) &
+                t.status.isNotValue(EmptyBarnikaStatus.returned),
+          )
+          ..orderBy([
+            (t) => OrderingTerm.asc(t.dateOut),
+            (t) => OrderingTerm.asc(t.id),
+          ]))
+        .get();
+
+    final totalRemaining = outstanding.fold<int>(
+      0,
+      (sum, r) => sum + (r.quantityOut - r.quantityReturned).clamp(0, 1 << 30),
+    );
+    if (quantityReturned > totalRemaining) {
+      throw ArgumentError(
+        'البرانيك المستلمة ($quantityReturned) تتجاوز العهدة المتبقية على العميل ($totalRemaining)',
+      );
+    }
+
+    var toApply = quantityReturned;
+    final resolvedDate = dateReturned ?? DateTime.now();
+    for (final rec in outstanding) {
+      if (toApply <= 0) break;
+      final remaining = (rec.quantityOut - rec.quantityReturned).clamp(0, 1 << 30);
+      if (remaining <= 0) continue;
+      final apply = toApply <= remaining ? toApply : remaining;
+      await recordReturn(
+        id: rec.id,
+        quantityReturned: apply,
+        dateReturned: resolvedDate,
+      );
+      toApply -= apply;
+    }
+  }
+
   Future<void> recordReturn({
     required int id,
     required int quantityReturned,

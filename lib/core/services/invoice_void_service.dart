@@ -299,6 +299,9 @@ final items = await _db.invoiceDao.getItemsByInvoiceId(invoiceId);
         );
       }
 
+      // ---------- 3.5) حذف عهدة البرانيك الفارغة المرتبطة بالفاتورة ----------
+      await _db.emptyBarnikaTrackingDao.deleteByInvoiceId(invoiceId);
+
       // ---------- 4) عكس قيود الـledger ----------
       // كل صف بيع/سداد/عمولة ليه receiptNumber = 'INV<id>'. بنمسحهم كلهم
       // عشان الرصيد يبقى 0 بالظبط من غير تعديل على أي تقرير موجود.

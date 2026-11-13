@@ -316,13 +316,18 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
     });
   }
 
-  /// إجمالي الرصيد المستحق للموردين عبر كل الفترات (شحنات عمولة + مشتريات)
-  /// = SUM(debit − credit). يستخدم في تسوية نهاية اليوم للمعرض فقط — عرض فقط.
+  /// إجمالي الرصيد المستحق للموردين عبر كل الفترات = SUM(opening_balance + credit - debit)
+  /// للموردين النشطين. يستخدم في ملخص تقفيل اليوم لسوق الخضار — عرض فقط.
   Future<double> getSupplierOutstandingBalance() async {
     final row = await customSelect(
-      'SELECT COALESCE(SUM(debit - credit), 0) as total FROM ledger_transactions '
-      "WHERE entity_type = 'Supplier'",
-      readsFrom: {ledgerTransactions},
+      'SELECT COALESCE(SUM(balance), 0) as total FROM ('
+      '  SELECT s.opening_balance + COALESCE(SUM(COALESCE(l.credit, 0) - COALESCE(l.debit, 0)), 0) as balance '
+      '  FROM suppliers s '
+      "  LEFT JOIN ledger_transactions l ON l.ref_id = s.id AND l.entity_type = 'Supplier' "
+      "  WHERE s.status = 'Active' "
+      '  GROUP BY s.id'
+      ')',
+      readsFrom: {db.suppliers, ledgerTransactions},
     ).getSingle();
 
     return row.read<double>('total');
@@ -355,12 +360,12 @@ class LedgerDao extends DatabaseAccessor<AppDatabase> with _$LedgerDaoMixin {
     return row.readNullable<double>('total') ?? 0.0;
   }
 
-  /// المستحق للموردين من شحنات العمولة — مجموع (debit - credit) لكل
-  /// `LedgerTransactions` فيها `origin = 'sale'` و `entityType = 'Supplier'`.
+  /// المستحق للموردين من شحنات العمولة وعمليات التسوية (credit - debit).
   Future<double> getSupplierCommissionDue() async {
     final rows = await customSelect(
-      'SELECT COALESCE(SUM(debit - credit), 0) as total '
-      "FROM ledger_transactions WHERE origin = 'sale' AND entity_type = 'Supplier'",
+      'SELECT COALESCE(SUM(credit - debit), 0) as total '
+      "FROM ledger_transactions WHERE entity_type = 'Supplier' "
+      "AND origin IN ('shipment_settlement', 'payment', 'sale')",
       readsFrom: {ledgerTransactions},
     ).get();
     return (rows.first.data['total'] as num?)?.toDouble() ?? 0.0;

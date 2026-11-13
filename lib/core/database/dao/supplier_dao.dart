@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../utils/arabic_name_normalizer.dart';
 import '../tables/supplier_table.dart';
 import '../app_database.dart';
 
@@ -36,16 +37,47 @@ class SupplierDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Identity normalization shared by UI guards and import reconciliation.
-  /// Names: trimmed, inner whitespace collapsed, case-insensitive.
-  /// Phones: digits only (strips spaces, dashes, leading trunk/plus).
-  /// Empty values never match anything.
+  /// Normalizes Arabic variants (أ/إ/آ, ى/ي, ة/ه, الـ), collapses whitespace,
+  /// and lowercases ASCII characters.
   static String normalizeSupplierName(String name) =>
-      name.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+      ArabicNameNormalizer.normalize(name);
 
   static String normalizeSupplierPhone(String? phone) {
     if (phone == null) return '';
     final digits = phone.replaceAll(RegExp(r'\D'), '');
     return digits.replaceFirst(RegExp(r'^0+'), '');
+  }
+
+  /// Searches suppliers by normalized Arabic/Latin name or phone.
+  Future<List<Supplier>> searchSuppliers(
+    String query, {
+    bool activeOnly = true,
+  }) async {
+    final rows = activeOnly ? await getActiveSuppliers() : await getAllSuppliers();
+    final q = query.trim();
+    if (q.isEmpty) return rows;
+    return rows
+        .where(
+          (s) => ArabicNameNormalizer.matchesQuery(
+            candidate: s.name,
+            query: q,
+            candidatePhone: s.phone,
+          ),
+        )
+        .toList();
+  }
+
+  /// Returns active suppliers whose normalized Arabic/Latin name matches [name].
+  Future<List<Supplier>> findSimilarSuppliers({
+    required String name,
+    String? excludeId,
+  }) async {
+    if (ArabicNameNormalizer.normalize(name).isEmpty) return const [];
+    final rows = await getActiveSuppliers();
+    return rows.where((s) {
+      if (excludeId != null && s.id == excludeId) return false;
+      return ArabicNameNormalizer.areEquivalent(s.name, name);
+    }).toList();
   }
 
   /// Finds existing suppliers that collide with a candidate identity.
