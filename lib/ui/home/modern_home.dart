@@ -1,29 +1,32 @@
+import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:pos_offline_desktop/core/config/app_features.dart';
+import 'package:pos_offline_desktop/core/config/app_flavor.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
-import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
+import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
+import 'package:pos_offline_desktop/core/provider/smart_advisor_provider.dart';
+import 'package:pos_offline_desktop/core/services/business_date_service.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
-import 'package:pos_offline_desktop/ui/product/product.dart';
 import 'package:pos_offline_desktop/ui/cashier/cashier_page.dart';
+import 'package:pos_offline_desktop/ui/custody/custody_page.dart';
+import 'package:pos_offline_desktop/ui/day/close_day_dialog.dart';
 import 'package:pos_offline_desktop/ui/home/widgets/customer_transactions_widget.dart';
 import 'package:pos_offline_desktop/ui/home/widgets/suppliers_widget.dart';
-import 'package:pos_offline_desktop/ui/reports/reports_page.dart';
+import 'package:pos_offline_desktop/ui/invoice/quick_sale_screen.dart';
 import 'package:pos_offline_desktop/ui/invoice/widgets/enhanced_new_invoice_page.dart';
-import 'package:pos_offline_desktop/ui/staff/employee_dashboard_page.dart';
-import 'package:pos_offline_desktop/ui/custody/custody_page.dart';
-import 'package:pos_offline_desktop/ui/setting/settings.dart';
-import 'package:pos_offline_desktop/core/provider/smart_advisor_provider.dart';
 import 'package:pos_offline_desktop/ui/notifications/smart_notifications_screen.dart';
 import 'package:pos_offline_desktop/ui/notifications/widgets/smart_floating_toast.dart';
+import 'package:pos_offline_desktop/ui/product/product.dart';
+import 'package:pos_offline_desktop/ui/reports/reports_page.dart';
+import 'package:pos_offline_desktop/ui/setting/settings.dart';
+import 'package:pos_offline_desktop/ui/staff/employee_dashboard_page.dart';
 import 'package:pos_offline_desktop/widgets/license/feature_guard.dart';
-import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
-import 'package:pos_offline_desktop/core/config/app_features.dart';
-import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
-import 'package:pos_offline_desktop/core/services/business_date_service.dart';
-import 'package:drift/drift.dart' as drift;
 
 class ModernHomeScreen extends ConsumerStatefulWidget {
   final AppDatabase db;
@@ -786,9 +789,15 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                 Expanded(
                   child: _buildActionStripButton(
                     context,
-                    title: 'فاتورة جديدة',
-                    subtitle: 'إنشاء وطباعة فاتورة بيع',
-                    icon: Icons.receipt_long_rounded,
+                    title: AppFeatures.flavor == Flavor.vegetable
+                        ? 'بيع سريع'
+                        : 'فاتورة جديدة',
+                    subtitle: AppFeatures.flavor == Flavor.vegetable
+                        ? 'تسجيل بيعة، شحنة، وبرنيكة بيد واحدة'
+                        : 'إنشاء وطباعة فاتورة بيع',
+                    icon: AppFeatures.flavor == Flavor.vegetable
+                        ? Icons.flash_on_rounded
+                        : Icons.receipt_long_rounded,
                     color: MadarColors.gold,
                     onTap: _onNewInvoiceTap,
                     isPrimary: true,
@@ -842,9 +851,15 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
               children: [
                 _buildActionStripButton(
                   context,
-                  title: 'فاتورة جديدة',
-                  subtitle: 'إنشاء وطباعة فاتورة بيع',
-                  icon: Icons.receipt_long_rounded,
+                  title: AppFeatures.flavor == Flavor.vegetable
+                      ? 'بيع سريع'
+                      : 'فاتورة جديدة',
+                  subtitle: AppFeatures.flavor == Flavor.vegetable
+                      ? 'تسجيل بيعة، شحنة، وبرنيكة بيد واحدة'
+                      : 'إنشاء وطباعة فاتورة بيع',
+                  icon: AppFeatures.flavor == Flavor.vegetable
+                      ? Icons.flash_on_rounded
+                      : Icons.receipt_long_rounded,
                   color: MadarColors.gold,
                   onTap: _onNewInvoiceTap,
                   isPrimary: true,
@@ -973,6 +988,16 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
   }
 
   Future<void> _onNewInvoiceTap() async {
+    if (AppFeatures.flavor == Flavor.vegetable) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => QuickSaleScreen(db: widget.db),
+        ),
+      );
+      return;
+    }
+
     final isOpen = await widget.db.dayDao.isDayOpen();
     if (!mounted) return;
     if (!isOpen) {
@@ -1056,7 +1081,8 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
               () => context.push('/manufacturing/orders'),
             ),
           ),
-        if (AppFeatures.hasEmptyContainerTracking)
+        if (AppFeatures.hasEmptyContainerTracking &&
+            AppFeatures.flavor != Flavor.vegetable)
           _buildFlavorChip(
             context,
             'البرنيكه',
@@ -1083,10 +1109,45 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
         if (AppFeatures.hasShipmentTracking)
           _buildFlavorChip(
             context,
-            'مديونيات العملاء',
+            'مديونيات والتحصيل',
             Icons.account_balance_wallet,
             Colors.red.shade700,
             () => context.push('/customer-debts'),
+          ),
+        if (AppFeatures.hasShipmentTracking)
+          _buildFlavorChip(
+            context,
+            'المصروفات',
+            Icons.receipt_long,
+            Colors.indigo,
+            () => context.push('/expenses'),
+          ),
+        if (AppFeatures.hasDaySettlement)
+          _buildFlavorChip(
+            context,
+            'تقفيل اليوم',
+            Icons.lock_clock,
+            Colors.deepOrange,
+            () async {
+              final isOpen = await widget.db.dayDao.isDayOpen();
+              if (!context.mounted) return;
+              if (!isOpen) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text('اليوم مغلق بالفعل — افتح يوم من الكاشير'),
+                    action: SnackBarAction(
+                      label: 'الكاشير',
+                      onPressed: () => _tabController.animateTo(_cashierTabIndex),
+                    ),
+                  ),
+                );
+                return;
+              }
+              await showDialog(
+                context: context,
+                builder: (_) => const CloseDayDialog(),
+              );
+            },
           ),
         if (AppFeatures.hasShipmentTracking)
           _buildFlavorChip(
@@ -1170,6 +1231,8 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
   double _receivablesDue = 0;
   double _expectedCash = 0;
   double _supplierCommissionDue = 0;
+  double _todayCommissions = 0;
+  double _todayShopExpenses = 0;
 
   @override
   void initState() {
@@ -1233,6 +1296,8 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
       double receivablesDue = 0;
       double expectedCash = 0;
       double supplierCommissionDue = 0;
+      double todayCommissions = 0;
+      double todayShopExpenses = 0;
 
       if (AppFeatures.hasShipmentTracking) {
         remainingBarnikas = await widget.db.vegetableShipmentDao
@@ -1241,6 +1306,39 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
         expectedCash = await BusinessDateService(widget.db).getExpectedCash();
         supplierCommissionDue = await widget.db.ledgerDao
             .getSupplierCommissionDue();
+
+        final commResult = await widget.db
+            .customSelect(
+              '''
+          SELECT COALESCE(SUM(ii.commission), 0) as total
+          FROM invoice_items ii
+          INNER JOIN invoices inv ON inv.id = ii.invoice_id
+          WHERE inv.date BETWEEN ? AND ? AND inv.status != 'voided'
+        ''',
+              variables: [
+                drift.Variable.withDateTime(start),
+                drift.Variable.withDateTime(end),
+              ],
+            )
+            .getSingle();
+        todayCommissions =
+            (commResult.data['total'] as num?)?.toDouble() ?? 0;
+
+        final shopExpResult = await widget.db
+            .customSelect(
+              '''
+          SELECT COALESCE(SUM(amount), 0) as total
+          FROM expenses
+          WHERE date BETWEEN ? AND ? AND (scope IS NULL OR scope != 'shipment')
+        ''',
+              variables: [
+                drift.Variable.withDateTime(start),
+                drift.Variable.withDateTime(end),
+              ],
+            )
+            .getSingle();
+        todayShopExpenses =
+            (shopExpResult.data['total'] as num?)?.toDouble() ?? 0;
       }
 
       if (mounted) {
@@ -1252,6 +1350,8 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
           _receivablesDue = receivablesDue;
           _expectedCash = expectedCash;
           _supplierCommissionDue = supplierCommissionDue;
+          _todayCommissions = todayCommissions;
+          _todayShopExpenses = todayShopExpenses;
           _isLoading = false;
         });
       }
@@ -1269,56 +1369,106 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
       );
     }
     final isDesktop = MediaQuery.of(context).size.width >= 720;
+    final isVegetableFlavor = AppFeatures.flavor == Flavor.vegetable;
     final netProfit = _todaySales - _todayPurchases - _todayExpenses;
+    final vegetableShopProfit = _todayCommissions - _todayShopExpenses;
 
     if (isDesktop) {
-      final baseCardsRow = Row(
-        children: [
-          Expanded(
-            child: _buildCard(
-              context,
-              'مبيعات اليوم',
-              _todaySales,
-              Colors.green,
-              Icons.trending_up,
-              isMobile: false,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildCard(
-              context,
-              'مشتريات',
-              _todayPurchases,
-              Colors.orange,
-              Icons.shopping_cart,
-              isMobile: false,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildCard(
-              context,
-              'مصروفات',
-              _todayExpenses,
-              Colors.redAccent,
-              Icons.receipt_long,
-              isMobile: false,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _buildCard(
-              context,
-              'صافي الربح',
-              netProfit,
-              netProfit >= 0 ? Colors.blue : Colors.red,
-              Icons.account_balance,
-              isMobile: false,
-            ),
-          ),
-        ],
-      );
+      final baseCardsRow = isVegetableFlavor
+          ? Row(
+              children: [
+                Expanded(
+                  child: _buildCard(
+                    context,
+                    'مبيعات اليوم',
+                    _todaySales,
+                    Colors.green,
+                    Icons.trending_up,
+                    isMobile: false,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCard(
+                    context,
+                    'عمولات اليوم',
+                    _todayCommissions,
+                    Colors.blue,
+                    Icons.percent,
+                    isMobile: false,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCard(
+                    context,
+                    'مصروفات المحل',
+                    _todayShopExpenses,
+                    Colors.redAccent,
+                    Icons.receipt_long,
+                    isMobile: false,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCard(
+                    context,
+                    'صافي ربح المحل',
+                    vegetableShopProfit,
+                    vegetableShopProfit >= 0 ? Colors.teal : Colors.red,
+                    Icons.account_balance,
+                    isMobile: false,
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(
+                  child: _buildCard(
+                    context,
+                    'مبيعات اليوم',
+                    _todaySales,
+                    Colors.green,
+                    Icons.trending_up,
+                    isMobile: false,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCard(
+                    context,
+                    'مشتريات',
+                    _todayPurchases,
+                    Colors.orange,
+                    Icons.shopping_cart,
+                    isMobile: false,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCard(
+                    context,
+                    'مصروفات',
+                    _todayExpenses,
+                    Colors.redAccent,
+                    Icons.receipt_long,
+                    isMobile: false,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCard(
+                    context,
+                    'صافي الربح',
+                    netProfit,
+                    netProfit >= 0 ? Colors.blue : Colors.red,
+                    Icons.account_balance,
+                    isMobile: false,
+                  ),
+                ),
+              ],
+            );
 
       if (!AppFeatures.hasShipmentTracking) {
         return SizedBox(height: 100, child: baseCardsRow);
@@ -1383,41 +1533,92 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
       );
     }
 
-    // Mobile / Compact Layout: exactly 4 core cards (Sales, Net Profit, Purchases, Expenses)
-    final mobileCards = <Widget>[
-      _buildCard(
-        context,
-        'مبيعات اليوم',
-        _todaySales,
-        Colors.green,
-        Icons.trending_up,
-        isMobile: true,
-      ),
-      _buildCard(
-        context,
-        'صافي الربح',
-        netProfit,
-        netProfit >= 0 ? Colors.blue : Colors.red,
-        Icons.account_balance,
-        isMobile: true,
-      ),
-      _buildCard(
-        context,
-        'مشتريات',
-        _todayPurchases,
-        Colors.orange,
-        Icons.shopping_cart,
-        isMobile: true,
-      ),
-      _buildCard(
-        context,
-        'مصروفات',
-        _todayExpenses,
-        Colors.redAccent,
-        Icons.receipt_long,
-        isMobile: true,
-      ),
-    ];
+    // Mobile / Compact Layout
+    final mobileCards = isVegetableFlavor
+        ? <Widget>[
+            _buildCard(
+              context,
+              'مبيعات اليوم',
+              _todaySales,
+              Colors.green,
+              Icons.trending_up,
+              isMobile: true,
+            ),
+            _buildCard(
+              context,
+              'عمولات المحل',
+              _todayCommissions,
+              Colors.blue,
+              Icons.percent,
+              isMobile: true,
+            ),
+            _buildCard(
+              context,
+              'مصروفات المحل',
+              _todayShopExpenses,
+              Colors.redAccent,
+              Icons.receipt_long,
+              isMobile: true,
+            ),
+            _buildCard(
+              context,
+              'صافي ربح المحل',
+              vegetableShopProfit,
+              vegetableShopProfit >= 0 ? Colors.teal : Colors.red,
+              Icons.account_balance,
+              isMobile: true,
+            ),
+            _buildCard(
+              context,
+              'برانيك بالمخزن',
+              _remainingBarnikas.toDouble(),
+              Colors.teal.shade700,
+              Icons.eco,
+              isMobile: true,
+            ),
+            _buildCard(
+              context,
+              'كاش متوقع',
+              _expectedCash,
+              Colors.indigo,
+              Icons.payments,
+              isMobile: true,
+            ),
+          ]
+        : <Widget>[
+            _buildCard(
+              context,
+              'مبيعات اليوم',
+              _todaySales,
+              Colors.green,
+              Icons.trending_up,
+              isMobile: true,
+            ),
+            _buildCard(
+              context,
+              'صافي الربح',
+              netProfit,
+              netProfit >= 0 ? Colors.blue : Colors.red,
+              Icons.account_balance,
+              isMobile: true,
+            ),
+            _buildCard(
+              context,
+              'مشتريات',
+              _todayPurchases,
+              Colors.orange,
+              Icons.shopping_cart,
+              isMobile: true,
+            ),
+            _buildCard(
+              context,
+              'مصروفات',
+              _todayExpenses,
+              Colors.redAccent,
+              Icons.receipt_long,
+              isMobile: true,
+            ),
+          ];
 
     return GridView.builder(
       shrinkWrap: true,

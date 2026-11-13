@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
-
 import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/empty_barnika_tracking_table.dart';
+import 'package:pos_offline_desktop/core/utils/arabic_name_normalizer.dart';
 
 /// شاشة تتبع وإرجاع البرانيك الفاضية للعملاء.
 ///
@@ -22,6 +22,8 @@ class EmptyBarnikaScreen extends StatefulWidget {
 class _EmptyBarnikaScreenState extends State<EmptyBarnikaScreen> {
   Map<String, Customer> _customerMap = {};
   bool _loadingCustomers = true;
+  String _searchQuery = '';
+  final _searchCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -29,20 +31,111 @@ class _EmptyBarnikaScreenState extends State<EmptyBarnikaScreen> {
     _loadCustomers();
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadCustomers() async {
     try {
       final customers = await widget.db.customerDao.getAllActiveCustomers();
+      if (!mounted) return;
       setState(() {
         _customerMap = {for (final c in customers) c.id: c};
         _loadingCustomers = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() => _loadingCustomers = false);
     }
   }
 
   String _customerName(String customerId) =>
       _customerMap[customerId]?.name ?? 'عميل #$customerId';
+
+  Future<void> _quickFifoReturn({
+    required String customerId,
+    required String customerName,
+    required int totalOutstanding,
+  }) async {
+    final ctrl = TextEditingController(text: '$totalOutstanding');
+    final qty = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('استلام برانيك من: $customerName'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('الرصيد المستحق على العميل: $totalOutstanding برنيكة'),
+            const Gap(12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              decoration: const InputDecoration(
+                labelText: 'عدد البرانيك المستلمة',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final n = int.tryParse(ctrl.text.trim());
+              if (n == null || n <= 0 || n > totalOutstanding) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text('أدخل عدداً من 1 إلى $totalOutstanding'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(ctx, n);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('تأكيد الاستلام'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+
+    if (qty == null || !mounted) return;
+    try {
+      await widget.db.transaction(() async {
+        await widget.db.emptyBarnikaTrackingDao.recordCustomerReturnFifo(
+          customerId: customerId,
+          quantityReturned: qty,
+        );
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم استلام $qty برنيكة من $customerName بنجاح'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('فشل تسجيل الاستلام: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,136 +158,188 @@ class _EmptyBarnikaScreenState extends State<EmptyBarnikaScreen> {
           ),
         ],
       ),
-      body: StreamBuilder<List<EmptyBarnikaTrackingData>>(
-        stream: widget.db.emptyBarnikaTrackingDao.watchAllOutstanding(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('حدث خطأ في تحميل البيانات: ${snapshot.error}'),
-            );
-          }
-
-          if (!snapshot.hasData || _loadingCustomers) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final records = snapshot.data!;
-
-          // تجميع السجلات المستحقة لكل عميل
-          final grouped = <String, List<EmptyBarnikaTrackingData>>{};
-          for (final r in records) {
-            grouped.putIfAbsent(r.customerId, () => []).add(r);
-          }
-
-          if (grouped.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.assignment_return_outlined,
-                      size: 64, color: Colors.grey.shade400),
-                  const Gap(16),
-                  Text(
-                    'لا توجد برانيك مستحقة حالياً',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(color: Colors.grey.shade600),
-                  ),
-                ],
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+            child: TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                labelText: 'بحث ذكي باسم العميل أو الهاتف',
+                prefixIcon: const Icon(Icons.search),
+                border: const OutlineInputBorder(),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
               ),
-            );
-          }
+              onChanged: (v) => setState(() => _searchQuery = v),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<List<EmptyBarnikaTrackingData>>(
+              stream: widget.db.emptyBarnikaTrackingDao.watchAllOutstanding(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text('حدث خطأ في تحميل البيانات: ${snapshot.error}'),
+                  );
+                }
 
-          final customers = grouped.keys.toList()
-            ..sort((a, b) => _customerName(a).compareTo(_customerName(b)));
+                if (!snapshot.hasData || _loadingCustomers) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            itemCount: customers.length,
-            itemBuilder: (context, index) {
-              final customerId = customers[index];
-              final customerRecords = grouped[customerId]!;
-              final totalOutstanding = customerRecords.fold<int>(
-                0,
-                (sum, r) => sum + (r.quantityOut - r.quantityReturned),
-              );
+                final records = snapshot.data!;
+                final grouped = <String, List<EmptyBarnikaTrackingData>>{};
+                for (final r in records) {
+                  grouped.putIfAbsent(r.customerId, () => []).add(r);
+                }
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 2,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => EmptyBarnikaCustomerScreen(
-                          db: widget.db,
-                          customerId: customerId,
-                          customerName: _customerName(customerId),
-                        ),
-                      ),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
+                if (grouped.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        CircleAvatar(
-                          backgroundColor: theme.colorScheme.primaryContainer,
-                          child: Icon(
-                            Icons.person,
-                            color: theme.colorScheme.primary,
-                          ),
+                        Icon(
+                          Icons.assignment_return_outlined,
+                          size: 64,
+                          color: Colors.grey.shade400,
                         ),
-                        const Gap(12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _customerName(customerId),
-                                style: theme.textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.bold),
+                        const Gap(16),
+                        Text(
+                          'لا توجد برانيك مستحقة حالياً',
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final customers = grouped.keys.where((cid) {
+                  final customer = _customerMap[cid];
+                  return ArabicNameNormalizer.matchesQuery(
+                    candidate: customer?.name ?? _customerName(cid),
+                    query: _searchQuery,
+                    candidatePhone: customer?.phone,
+                  );
+                }).toList()
+                  ..sort(
+                    (a, b) => _customerName(a).compareTo(_customerName(b)),
+                  );
+
+                if (customers.isEmpty) {
+                  return const Center(
+                    child: Text('لا توجد نتائج مطابقة للبحث'),
+                  );
+                }
+
+                return ListView.builder(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  itemCount: customers.length,
+                  itemBuilder: (context, index) {
+                    final customerId = customers[index];
+                    final customerRecords = grouped[customerId]!;
+                    final totalOutstanding = customerRecords.fold<int>(
+                      0,
+                      (sum, r) => sum + (r.quantityOut - r.quantityReturned),
+                    );
+                    final name = _customerName(customerId);
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => EmptyBarnikaCustomerScreen(
+                                db: widget.db,
+                                customerId: customerId,
+                                customerName: name,
                               ),
-                              Text(
-                                '${customerRecords.length} عملية مستحقة',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey.shade700,
+                            ),
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor:
+                                    theme.colorScheme.primaryContainer,
+                                child: Icon(
+                                  Icons.person,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              const Gap(12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(fontWeight: FontWeight.bold),
+                                    ),
+                                    Text(
+                                      '${customerRecords.length} عملية • متبقي: $totalOutstanding برنيكة',
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color: Colors.orange.shade900,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Gap(6),
+                              ElevatedButton.icon(
+                                onPressed: () => _quickFifoReturn(
+                                  customerId: customerId,
+                                  customerName: name,
+                                  totalOutstanding: totalOutstanding,
+                                ),
+                                icon: const Icon(
+                                  Icons.assignment_return_outlined,
+                                  size: 16,
+                                ),
+                                label: const Text(
+                                  'استلام',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.teal,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.orange),
-                          ),
-                          child: Text(
-                            'متبقي: $totalOutstanding',
-                            style: const TextStyle(
-                              color: Colors.orange,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        const Gap(8),
-                        const Icon(Icons.chevron_left),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
-        },
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

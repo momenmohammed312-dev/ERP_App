@@ -1,8 +1,11 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:drift/drift.dart' hide Column;
+import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/tables/supplier_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
 
 class ShipmentFormDialog extends StatefulWidget {
@@ -42,8 +45,11 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
   @override
   void initState() {
     super.initState();
-    _pricingMode = widget.shipment?.pricingMode ?? ShipmentPricingMode.perUnit;
-    
+    _pricingMode = widget.shipment?.pricingMode ??
+        (AppFeatures.hasCommissionPricing
+            ? ShipmentPricingMode.commission
+            : ShipmentPricingMode.perUnit);
+
     if (widget.shipment != null) {
       final s = widget.shipment!;
       _shipmentNumberCtrl.text = s.shipmentNumber;
@@ -65,7 +71,8 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
       }
       _selectedDate = s.date;
     } else {
-      _shipmentNumberCtrl.text = 'SHP-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+      _shipmentNumberCtrl.text =
+          'SHP-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
     }
 
     _loadSuppliers();
@@ -73,15 +80,31 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
 
   Future<void> _loadSuppliers() async {
     try {
-      final suppliers = await widget.db.supplierDao.getAllSuppliers();
+      final dbSuppliers = await widget.db.supplierDao.getActiveSuppliers();
+      final unknownPlaceholder = Supplier(
+        id: DefaultSupplier.unknownId,
+        name: DefaultSupplier.unknownName,
+        phone: null,
+        address: null,
+        openingBalance: 0.0,
+        createdAt: DateTime.now(),
+        status: 'Active',
+      );
+      final list = <Supplier>[
+        unknownPlaceholder,
+        ...dbSuppliers.where((s) => s.id != DefaultSupplier.unknownId),
+      ];
       setState(() {
-        _suppliers = suppliers;
+        _suppliers = list;
         _loadingSuppliers = false;
         if (widget.shipment != null) {
-          final matches = suppliers.where((s) => s.id == widget.shipment!.supplierId);
-          _selectedSupplier = matches.isNotEmpty ? matches.first : (suppliers.isNotEmpty ? suppliers.first : null);
-        } else if (suppliers.isNotEmpty) {
-          _selectedSupplier = suppliers.first;
+          final matches =
+              list.where((s) => s.id == widget.shipment!.supplierId);
+          _selectedSupplier =
+              matches.isNotEmpty ? matches.first : list.first;
+        } else {
+          // Default to «مورد غير محدد» so supplier is optional on arrival
+          _selectedSupplier = list.first;
         }
       });
     } catch (e) {
@@ -123,10 +146,6 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedSupplier == null) {
-      setState(() => _errorMessage = 'يرجى اختيار المورد');
-      return;
-    }
 
     setState(() {
       _isSubmitting = true;
@@ -137,7 +156,8 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
 
     // Check shipment number uniqueness on creation
     if (widget.shipment == null) {
-      final existing = await widget.db.vegetableShipmentDao.getByShipmentNumber(number);
+      final existing =
+          await widget.db.vegetableShipmentDao.getByShipmentNumber(number);
       if (existing != null) {
         setState(() {
           _isSubmitting = false;
@@ -150,6 +170,9 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
     final totalCount = int.parse(_totalBarnikaCtrl.text.trim());
     final totalCost = _calculateTotalCost();
     final containerPrice = double.tryParse(_containerPriceCtrl.text.trim());
+    final supplierId = _selectedSupplier?.id ?? DefaultSupplier.unknownId;
+    final supplierName =
+        _selectedSupplier?.name ?? DefaultSupplier.unknownName;
 
     double? costPerBarnika;
     double? lumpSumCost;
@@ -163,14 +186,15 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
         lumpSumCost = double.parse(_lumpSumCostCtrl.text.trim());
         break;
       case ShipmentPricingMode.commission:
-        commissionPercentage = double.parse(_commissionPercentageCtrl.text.trim());
+        commissionPercentage =
+            double.parse(_commissionPercentageCtrl.text.trim());
         break;
     }
 
     try {
       if (widget.shipment == null) {
         final companion = VegetableShipmentsCompanion(
-          supplierId: Value(_selectedSupplier!.id),
+          supplierId: Value(supplierId),
           shipmentNumber: Value(number),
           date: Value(_selectedDate),
           pricingMode: Value(_pricingMode),
@@ -181,12 +205,13 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
           commissionPercentage: Value(commissionPercentage),
           containerPrice: Value(containerPrice),
           totalCost: Value(totalCost),
-          notes: Value(_notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim()),
+          notes: Value(
+              _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim()),
         );
-        final shipmentId = await widget.db.vegetableShipmentDao.insertShipment(companion);
+        await widget.db.vegetableShipmentDao.insertShipment(companion);
 
         // Vegetable flavor: auto-create product for this shipment (barnika/crate)
-        final productName = 'برنيكة ${_selectedSupplier!.name} - $number';
+        final productName = 'برنيكة $supplierName - $number';
         await widget.db.productDao.insertProduct(
           ProductsCompanion(
             name: Value(productName),
@@ -202,18 +227,27 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
           ),
         );
       } else {
-        final updated = widget.shipment!.copyWith(
-          supplierId: _selectedSupplier!.id,
+        if (supplierId == DefaultSupplier.unknownId) {
+          await widget.db.supplierDao.ensureUnknownSupplier();
+        }
+        final s = widget.shipment!;
+        final newRemaining =
+            (totalCount - s.barnikaSoldCount - s.toppingCount)
+                .clamp(0, 1 << 30);
+        final updated = s.copyWith(
+          supplierId: supplierId,
           shipmentNumber: number,
           date: _selectedDate,
           pricingMode: _pricingMode,
           totalBarnikaCount: totalCount,
+          barnikaRemainingCount: newRemaining,
           costPricePerBarnika: Value(costPerBarnika),
           lumpSumCost: Value(lumpSumCost),
           commissionPercentage: Value(commissionPercentage),
           containerPrice: Value(containerPrice),
           totalCost: totalCost,
-          notes: Value(_notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim()),
+          notes: Value(
+              _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim()),
         );
         await widget.db.vegetableShipmentDao.updateShipment(updated);
       }
@@ -232,12 +266,15 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dialogWidth =
+        math.min(540.0, MediaQuery.of(context).size.width * 0.94);
 
     return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 540,
-        padding: const EdgeInsets.all(24),
+        width: dialogWidth,
+        padding: const EdgeInsets.all(18),
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
@@ -250,14 +287,18 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
                     Icon(
                       widget.shipment == null ? Icons.add_business : Icons.edit,
                       color: theme.colorScheme.primary,
-                      size: 28,
+                      size: 26,
                     ),
-                    const Gap(12),
-                    Text(
-                      widget.shipment == null ? 'إضافة شحنة جديدة' : 'تعديل بيانات الشحنة',
-                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    const Gap(10),
+                    Expanded(
+                      child: Text(
+                        widget.shipment == null
+                            ? 'استلام شحنة جديدة'
+                            : 'تعديل بيانات الشحنة',
+                        style: theme.textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
                     ),
-                    const Spacer(),
                     IconButton(
                       icon: const Icon(Icons.close),
                       onPressed: () => Navigator.of(context).pop(),
@@ -275,31 +316,41 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
                     ),
                     child: Text(
                       _errorMessage!,
-                      style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                      style:
+                          TextStyle(color: theme.colorScheme.onErrorContainer),
                     ),
                   ),
                   const Gap(16),
                 ],
 
-                // Supplier picker
+                // Supplier picker (optional on arrival — defaults to «مورد غير محدد»)
                 if (_loadingSuppliers)
                   const Center(child: CircularProgressIndicator())
                 else
                   DropdownButtonFormField<Supplier>(
                     initialValue: _selectedSupplier,
+                    isExpanded: true,
                     decoration: const InputDecoration(
-                      labelText: 'المورد *',
+                      labelText: 'المورد (اختياري وقت الاستلام)',
+                      helperText:
+                          'يمكن تركه «مورد غير محدد» وتعيينه لاحقاً قبل قفل الشحنة',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.person),
                     ),
                     items: _suppliers
-                        .map((s) => DropdownMenuItem(
-                              value: s,
-                              child: Text('${s.name} (${s.phone ?? "بدون هاتف"})'),
-                            ))
+                        .map(
+                          (s) => DropdownMenuItem(
+                            value: s,
+                            child: Text(
+                              s.id == DefaultSupplier.unknownId
+                                  ? '${s.name} (تحديد لاحقاً)'
+                                  : '${s.name}${s.phone != null ? ' (${s.phone})' : ''}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
                         .toList(),
                     onChanged: (val) => setState(() => _selectedSupplier = val),
-                    validator: (val) => val == null ? 'يرجى اختيار المورد' : null,
                   ),
                 const Gap(16),
 
@@ -475,11 +526,15 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'التكلفة الإجمالية المحسوبة:',
+                              _pricingMode == ShipmentPricingMode.commission
+                                  ? 'نظام التحاسب:'
+                                  : 'التكلفة الإجمالية المحسوبة:',
                               style: theme.textTheme.bodySmall,
                             ),
                             Text(
-                              '${_calculateTotalCost().toStringAsFixed(2)} ج.م',
+                              _pricingMode == ShipmentPricingMode.commission
+                                  ? 'عمولة من إجمالي البيع'
+                                  : '${_calculateTotalCost().toStringAsFixed(2)} ج.م',
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: theme.colorScheme.primary,

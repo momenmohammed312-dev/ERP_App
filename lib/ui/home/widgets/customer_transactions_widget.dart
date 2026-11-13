@@ -5,14 +5,16 @@ import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
-import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
+import 'package:pos_offline_desktop/core/services/customer_collection_service.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
-import 'package:pos_offline_desktop/ui/customer/services/enhanced_customer_statement_generator.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
+import 'package:pos_offline_desktop/core/utils/arabic_name_normalizer.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
-import 'customers_summary_widget.dart';
+import 'package:pos_offline_desktop/ui/customer/services/enhanced_customer_statement_generator.dart';
 import '../../customer/add_edit_customer_page.dart';
-import 'transaction_expansion_tile.dart';
+import 'customers_summary_widget.dart';
 import 'transaction_detail_dialog.dart';
+import 'transaction_expansion_tile.dart';
 
 class CustomerTransactionsWidget extends ConsumerStatefulWidget {
   final AppDatabase db;
@@ -143,11 +145,12 @@ class _CustomerTransactionsWidgetState
           }
 
           final allCustomers = snapshot.data ?? [];
-          final query = _searchQuery.toLowerCase();
           final filteredCustomers = allCustomers.where((customer) {
-            final name = customer.name.toLowerCase();
-            final phone = (customer.phone ?? '').toLowerCase();
-            return name.contains(query) || phone.contains(query);
+            return ArabicNameNormalizer.matchesQuery(
+              candidate: customer.name,
+              query: _searchQuery,
+              candidatePhone: customer.phone,
+            );
           }).toList();
 
           if (filteredCustomers.isEmpty) {
@@ -294,95 +297,131 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
 
   void _showPaymentDialog(Customer customer) {
     final amountController = TextEditingController();
+    final discountController = TextEditingController();
     final noteController = TextEditingController();
+    String paymentMethod = 'cash';
 
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('سداد قيمة للعميل: ${customer.name}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amountController,
-              decoration: const InputDecoration(
-                labelText: 'المبلغ',
-                border: OutlineInputBorder(),
-                prefixText: 'ج.م ',
-              ),
-              keyboardType: TextInputType.number,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text('تحصيل من العميل: ${customer.name}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: amountController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'المبلغ المحصّل',
+                    border: OutlineInputBorder(),
+                    prefixText: 'ج.م ',
+                  ),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const Gap(12),
+                TextField(
+                  controller: discountController,
+                  decoration: const InputDecoration(
+                    labelText: 'خصم عند التحصيل (اختياري)',
+                    border: OutlineInputBorder(),
+                    prefixText: 'ج.م ',
+                  ),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const Gap(12),
+                DropdownButtonFormField<String>(
+                  initialValue: paymentMethod,
+                  decoration: const InputDecoration(
+                    labelText: 'طريقة التحصيل',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'cash', child: Text('نقدي (كاش)')),
+                    DropdownMenuItem(value: 'bank', child: Text('تحويل بنكي')),
+                    DropdownMenuItem(value: 'card', child: Text('بطاقة')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setDialogState(() => paymentMethod = v);
+                  },
+                ),
+                const Gap(12),
+                TextField(
+                  controller: noteController,
+                  decoration: const InputDecoration(
+                    labelText: 'ملاحظة / سبب (اختياري)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
             ),
-            const Gap(16),
-            TextField(
-              controller: noteController,
-              decoration: const InputDecoration(
-                labelText: 'ملاحظة / سبب (اختياري)',
-                border: OutlineInputBorder(),
-              ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final amount =
+                    double.tryParse(amountController.text.trim()) ?? 0.0;
+                final discount =
+                    double.tryParse(discountController.text.trim()) ?? 0.0;
+                if (amount < 0 || discount < 0 || (amount + discount) <= 0) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('الرجاء إدخال مبلغ أو خصم أكبر من صفر'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+
+                try {
+                  final result = await CustomerCollectionService(widget.db)
+                      .collectPayment(
+                    customerId: customer.id,
+                    paidAmount: amount,
+                    discountAmount: discount,
+                    paymentMethod: paymentMethod,
+                    notes: noteController.text.trim().isEmpty
+                        ? null
+                        : noteController.text.trim(),
+                  );
+
+                  if (!mounted || !dialogContext.mounted) return;
+                  Navigator.pop(dialogContext);
+                  _loadRecentTransactions();
+
+                  final allocNote = result.allocations.isNotEmpty
+                      ? ' (FIFO على ${result.allocations.length} فواتير)'
+                      : '';
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'تم تسجيل التحصيل بنجاح$allocNote',
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('خطأ في تسجيل السداد: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              child: const Text('تأكيد التحصيل'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final amount = double.tryParse(amountController.text);
-              if (amount == null || amount <= 0) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('الرجاء إدخال مبلغ صحيح'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-                return;
-              }
-
-              try {
-                await widget.db.ledgerDao.insertTransaction(
-                  LedgerTransactionsCompanion.insert(
-                    id: '${DateTime.now().millisecondsSinceEpoch}_customer_payment',
-                    entityType: 'Customer',
-                    refId: customer.id,
-                    date: DateTime.now(),
-                    description: noteController.text.isNotEmpty
-                        ? noteController.text
-                        : 'سداد قيمة',
-                    debit: const Value(0.0),
-                    credit: Value(amount),
-                    origin: 'payment',
-                    paymentMethod: const Value('cash'),
-                  ),
-                );
-
-                if (!mounted) return;
-                if (!dialogContext.mounted) return;
-                Navigator.pop(dialogContext);
-                _loadRecentTransactions();
-
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('تم تسجيل السداد بنجاح'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              } catch (e) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('خطأ في تسجيل السداد: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            child: const Text('تأكيد السداد'),
-          ),
-        ],
       ),
     );
   }
@@ -553,14 +592,45 @@ class _CustomerTransactionCardState extends State<_CustomerTransactionCard> {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  if (nameController.text.isEmpty) return;
+                  final trimmedName = nameController.text.trim();
+                  if (trimmedName.isEmpty) return;
                   try {
+                    final similar =
+                        await widget.db.customerDao.findSimilarCustomers(
+                      name: trimmedName,
+                      excludeId: customer.id,
+                    );
+                    if (similar.isNotEmpty && dialogContext.mounted) {
+                      final proceed = await showDialog<bool>(
+                        context: dialogContext,
+                        builder: (warnCtx) => AlertDialog(
+                          title: const Text('تنبيه: اسم عميل مشابه'),
+                          content: Text(
+                            'يوجد عميل باسم مطابق أو مشابه:\n'
+                            '«${similar.map((c) => c.name).take(3).join("»، «")}»\n\n'
+                            'هل تريد المتابعة وحفظ الاسم؟',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(warnCtx, false),
+                              child: const Text('مراجعة'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(warnCtx, true),
+                              child: const Text('متابعة'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (proceed != true) return;
+                    }
+
                     final openingBalance =
                         double.tryParse(openingBalanceController.text) ?? 0.0;
                     await widget.db.customerDao.updateCustomer(
                       CustomersCompanion(
                         id: Value(customer.id),
-                        name: Value(nameController.text.trim()),
+                        name: Value(trimmedName),
                         phone: phoneController.text.isNotEmpty
                             ? Value(phoneController.text.trim())
                             : const Value.absent(),

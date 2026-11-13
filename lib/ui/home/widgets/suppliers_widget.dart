@@ -4,14 +4,15 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
-import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
-import 'package:pos_offline_desktop/core/services/export_service.dart';
-import 'package:pos_offline_desktop/core/utils/app_utils.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
+import 'package:pos_offline_desktop/core/services/export_service.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
+import 'package:pos_offline_desktop/core/utils/app_utils.dart';
+import 'package:pos_offline_desktop/core/utils/arabic_name_normalizer.dart';
+import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 import 'package:pos_offline_desktop/ui/purchase/widgets/purchase_detail_dialog.dart';
 import 'package:pos_offline_desktop/ui/purchase/widgets/void_purchase_dialog.dart';
 import 'package:pos_offline_desktop/ui/supplier/widgets/edit_supplier_transaction_dialog.dart';
-import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 
 /// List filter for the suppliers screen. Defaults to active only so that
 /// deactivated (soft-deleted) suppliers disappear while their financial
@@ -367,13 +368,15 @@ class SuppliersWidget extends ConsumerWidget {
                 );
               }
               final allSuppliers = snapshot.data ?? [];
-              final q = searchQuery.toLowerCase().trim();
+              final q = searchQuery.trim();
               final suppliers = q.isEmpty
                   ? allSuppliers
                   : allSuppliers.where((s) {
-                      final name = s.name.toLowerCase();
-                      final phone = (s.phone ?? '').toLowerCase();
-                      return name.contains(q) || phone.contains(q);
+                      return ArabicNameNormalizer.matchesQuery(
+                        candidate: s.name,
+                        query: q,
+                        candidatePhone: s.phone,
+                      );
                     }).toList();
 
               if (suppliers.isEmpty) {
@@ -610,6 +613,33 @@ class SuppliersWidget extends ConsumerWidget {
                         );
                       }
                       return;
+                    }
+                    final similar = await db.supplierDao.findSimilarSuppliers(
+                      name: nameController.text.trim(),
+                    );
+                    if (similar.isNotEmpty && dialogContext.mounted) {
+                      final proceed = await showDialog<bool>(
+                        context: dialogContext,
+                        builder: (warnCtx) => AlertDialog(
+                          title: const Text('تنبيه: اسم مورد مشابه'),
+                          content: Text(
+                            'يوجد مورد باسم مطابق أو مشابه:\n'
+                            '«${similar.map((s) => s.name).take(3).join("»، «")}»\n\n'
+                            'هل تريد المتابعة وحفظ المورد على أي حال؟',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(warnCtx, false),
+                              child: const Text('مراجعة'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(warnCtx, true),
+                              child: const Text('متابعة'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (proceed != true) return;
                     }
                     // Add supplier to database
                     await db.supplierDao.insertSupplier(

@@ -1,17 +1,20 @@
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:drift/drift.dart' as drift;
+import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/tables/expenses_table.dart';
+import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
-import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/services/backup_service.dart';
 import 'package:pos_offline_desktop/core/services/export_service.dart';
 import 'package:pos_offline_desktop/core/services/validation/permission_validator.dart';
 import 'package:pos_offline_desktop/core/utils/logger.dart';
-import 'dart:async';
 
 class CloseDayDialog extends ConsumerStatefulWidget {
   const CloseDayDialog({super.key});
@@ -36,6 +39,9 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
   double _cashSales = 0;
   double _creditCollections = 0;
   double _expenses = 0;
+  double _shopExpenses = 0;
+  double _shipmentExpenses = 0;
+  double _todayCommissions = 0;
   double _expectedNetCash = 0;
   double _supplierOwed = 0;
 
@@ -86,6 +92,9 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
         _cashSales = settlement['cash_sales']!;
         _creditCollections = settlement['credit_collections']!;
         _expenses = settlement['expenses']!;
+        _shopExpenses = settlement['shop_expenses']!;
+        _shipmentExpenses = settlement['shipment_expenses']!;
+        _todayCommissions = settlement['shop_commissions']!;
         _expectedNetCash = settlement['expected_net_cash']!;
         _supplierOwed = settlement['supplier_owed']!;
         expectedBalance = _expectedNetCash;
@@ -290,42 +299,74 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
     final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
     // ['refunded'] استردادات نقدية خرجت من الصندوق (مرتجعات) — تخصم.
-      final cashRefunds = await db.returnRefundsDao
-          .getCashRefundsBetween(startOfDay, endOfDay);
+    final cashRefunds = await db.returnRefundsDao
+        .getCashRefundsBetween(startOfDay, endOfDay);
 
-      final cashSales = await db.invoiceDao.getTotalCashSalesForDate(now);
-      final creditCollections = await db.invoicePaymentsDao
-          .getTotalByMethodAndDateRange('cash', startOfDay, endOfDay);
-      final expenses = await db.expenseDao.getTotalExpensesForDate(now);
-      final supplierOwed = await db.ledgerDao.getSupplierOutstandingBalance();
+    final cashSales = await db.invoiceDao.getTotalCashSalesForDate(now);
+    final creditCollections = await db.invoicePaymentsDao
+        .getTotalByMethodAndDateRange('cash', startOfDay, endOfDay);
+    final expenses = await db.expenseDao.getTotalExpensesForDate(now);
+    final supplierOwed = await db.ledgerDao.getSupplierOutstandingBalance();
 
-      // [MONEY] حركات العُهد النقدية
-      final custodyRows = await (db.select(db.ledgerTransactions)
-            ..where((t) =>
-                t.origin.equals('custody') &
-                t.paymentMethod.equals('cash') &
-                t.date.isBetweenValues(startOfDay, endOfDay)))
-          .get();
-      double custodyDisbursed = 0.0;
-      double custodyReturned = 0.0;
-      for (final r in custodyRows) {
-        custodyDisbursed += r.debit;
-        custodyReturned += r.credit;
+    final dayExpenses = await db.expenseDao.getExpensesByDateRange(
+      startOfDay,
+      endOfDay,
+    );
+    double shopExpenses = 0.0;
+    double shipmentExpenses = 0.0;
+    for (final e in dayExpenses) {
+      if (e.scope == ExpenseScope.shipment) {
+        shipmentExpenses += e.amount;
+      } else {
+        shopExpenses += e.amount;
       }
-      final netCustody = custodyDisbursed - custodyReturned;
-
-      final expectedNetCash =
-          cashSales + creditCollections - cashRefunds - expenses - netCustody;
-
-      return {
-        'cash_sales': cashSales,
-        'credit_collections': creditCollections,
-        'refunded': cashRefunds,
-        'expenses': expenses,
-        'expected_net_cash': expectedNetCash,
-        'supplier_owed': supplierOwed,
-      };
     }
+
+    final commRow = await db.customSelect(
+      '''
+      SELECT COALESCE(SUM(ii.commission), 0) as total
+      FROM invoice_items ii
+      INNER JOIN invoices inv ON inv.id = ii.invoice_id
+      WHERE inv.date >= ? AND inv.date <= ? AND inv.status != 'voided'
+      ''',
+      variables: [
+        drift.Variable.withDateTime(startOfDay),
+        drift.Variable.withDateTime(endOfDay),
+      ],
+    ).getSingle();
+    final shopCommissions =
+        (commRow.data['total'] as num?)?.toDouble() ?? 0.0;
+
+    // [MONEY] حركات العُهد النقدية
+    final custodyRows = await (db.select(db.ledgerTransactions)
+          ..where((t) =>
+              t.origin.equals('custody') &
+              t.paymentMethod.equals('cash') &
+              t.date.isBetweenValues(startOfDay, endOfDay)))
+        .get();
+    double custodyDisbursed = 0.0;
+    double custodyReturned = 0.0;
+    for (final r in custodyRows) {
+      custodyDisbursed += r.debit;
+      custodyReturned += r.credit;
+    }
+    final netCustody = custodyDisbursed - custodyReturned;
+
+    final expectedNetCash =
+        cashSales + creditCollections - cashRefunds - expenses - netCustody;
+
+    return {
+      'cash_sales': cashSales,
+      'credit_collections': creditCollections,
+      'refunded': cashRefunds,
+      'expenses': expenses,
+      'shop_expenses': shopExpenses,
+      'shipment_expenses': shipmentExpenses,
+      'shop_commissions': shopCommissions,
+      'expected_net_cash': expectedNetCash,
+      'supplier_owed': supplierOwed,
+    };
+  }
 
   void _calculateDifference() {
     setState(() {});
@@ -469,7 +510,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
 
     return Dialog(
       child: SizedBox(
-        width: MediaQuery.of(context).size.width * 0.8,
+        width: math.min(720.0, MediaQuery.of(context).size.width * 0.94),
         height: MediaQuery.of(context).size.height * 0.9,
         child: Column(
           children: [
@@ -757,6 +798,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
 
             // Actions
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
@@ -765,24 +807,24 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
                   bottomRight: Radius.circular(12),
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  if (_isVegetable) ...[
+                  if (_isVegetable)
                     OutlinedButton.icon(
                       onPressed: _isLoading ? null : _exportSettlementSummary,
                       icon: const Icon(Icons.print),
                       label: const Text('طباعة / تصدير الملخص'),
                     ),
-                    const SizedBox(width: 8),
-                  ],
                   TextButton(
                     onPressed: _isLoading
                         ? null
                         : () => Navigator.of(context).pop(),
                     child: const Text('إلغاء'),
                   ),
-                  const SizedBox(width: 8),
                   ElevatedButton(
                     onPressed: _isLoading ? null : _closeDay,
                     style: ElevatedButton.styleFrom(
@@ -843,6 +885,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
 
   /// Vegetable flavor auto-computed settlement summary (read-only).
   Widget _buildSettlementSummaryBlock() {
+    final shopNetProfit = _todayCommissions - _shopExpenses;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -875,8 +918,28 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
           children: [
             Expanded(
               child: _buildSummaryCard(
-                'المصروفات',
-                '${_expenses.toStringAsFixed(2)} ج.م',
+                'عمولات اليوم',
+                '${_todayCommissions.toStringAsFixed(2)} ج.م',
+                Colors.blue,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildSummaryCard(
+                'ربح المحل اليوم',
+                '${shopNetProfit.toStringAsFixed(2)} ج.م',
+                shopNetProfit >= 0 ? Colors.deepPurple : Colors.red,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildSummaryCard(
+                'مصروفات (محل / شحنة)',
+                '${_shopExpenses.toStringAsFixed(0)} / ${_shipmentExpenses.toStringAsFixed(0)} ج.م',
                 Colors.red,
               ),
             ),
@@ -929,11 +992,16 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
     final settlementAmount = double.tryParse(
       _settlementAmountController.text,
     );
+    final shopNetProfit = _todayCommissions - _shopExpenses;
 
     final data = [
       {'item': 'مبيعات كاش', 'amount': _cashSales},
       {'item': 'تحصيل آجل (كاش)', 'amount': _creditCollections},
-      {'item': 'المصروفات', 'amount': _expenses},
+      {'item': 'عمولات اليوم', 'amount': _todayCommissions},
+      {'item': 'مصروفات المحل', 'amount': _shopExpenses},
+      {'item': 'مصروفات الشحنات (نولون)', 'amount': _shipmentExpenses},
+      {'item': 'ربح المحل (عمولات − مصروف محل)', 'amount': shopNetProfit},
+      {'item': 'إجمالي المصروفات', 'amount': _expenses},
       {'item': 'صافي الكاش المتوقع', 'amount': _expectedNetCash},
       {'item': 'مستحق للموردين - للعرض فقط', 'amount': _supplierOwed},
       if (settlementAmount != null)

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/config/app_features.dart';
 import '../core/models/user_model.dart';
 import '../core/provider/auth_provider.dart';
 
@@ -20,6 +21,10 @@ class PermissionGuard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!AppFeatures.hasMultiUser) {
+      return child;
+    }
+
     final hasPermission = ref.watch(
       authProvider.select((user) => user?.hasPermission(permission) ?? false),
     );
@@ -91,6 +96,10 @@ class PermissionListGuard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!AppFeatures.hasMultiUser) {
+      return child;
+    }
+
     final hasPermission = ref.watch(
       authProvider.select((user) {
         if (user == null) return false;

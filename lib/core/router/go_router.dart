@@ -31,6 +31,7 @@ import 'package:pos_offline_desktop/ui/manufacturing/mo_list_screen.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/customer_material_receipt_list_screen.dart';
 import 'package:pos_offline_desktop/services/license_entitlement.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/reports/manufacturing_reports_screen.dart';
+import 'package:pos_offline_desktop/ui/invoice/quick_sale_screen.dart';
 
 final firstRunCompleteProvider = FutureProvider<bool>((ref) async {
   return SettingsService.isFirstRunComplete();
@@ -225,6 +226,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
           return ShipmentDetailScreen(db: db, shipmentId: id);
         },
+      ),
+      GoRoute(
+        path: '/quick-sale',
+        builder: (context, state) => QuickSaleScreen(db: db),
       ),
     ],
   );

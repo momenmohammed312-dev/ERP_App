@@ -500,12 +500,51 @@ class _AddEditCustomerPageState extends ConsumerState<AddEditCustomerPage> {
 
     try {
       final database = ref.read(appDatabaseProvider);
+      final trimmedName = _nameController.text.trim();
+
+      final similar = await database.customerDao.findSimilarCustomers(
+        name: trimmedName,
+        excludeId: widget.customer?.id,
+      );
+      if (similar.isNotEmpty && mounted) {
+        final proceed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                Gap(8),
+                Text('تنبيه: اسم عميل مشابه'),
+              ],
+            ),
+            content: Text(
+              'يوجد عميل مسجل باسم مطابق أو مشابه:\n'
+              '«${similar.map((c) => c.name).take(3).join("»، «")}»\n\n'
+              'هل تريد المتابعة وحفظ هذا الاسم على أي حال؟',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('مراجعة الاسم'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('حفظ على أي حال'),
+              ),
+            ],
+          ),
+        );
+        if (proceed != true) {
+          if (mounted) setState(() => _isLoading = false);
+          return;
+        }
+      }
 
       if (_isEditing) {
         // تحديث
         final updated = CustomersCompanion(
           id: Value(widget.customer!.id),
-          name: Value(_nameController.text.trim()),
+          name: Value(trimmedName),
           phone: Value(_phoneController.text.trim().isEmpty ? null : _phoneController.text.trim()),
           address: Value(_addressController.text.trim().isEmpty ? null : _addressController.text.trim()),
           email: Value(_emailController.text.trim().isEmpty ? null : _emailController.text.trim()),
