@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/empty_barnika_tracking_table.dart';
+import 'package:pos_offline_desktop/core/services/vegetable_excel_export_service.dart';
 import 'package:pos_offline_desktop/core/utils/arabic_name_normalizer.dart';
 
 /// شاشة تتبع وإرجاع البرانيك الفاضية للعملاء.
@@ -151,6 +152,33 @@ class _EmptyBarnikaScreenState extends State<EmptyBarnikaScreen> {
       appBar: AppBar(
         title: const Text('البرانيك المستحقة'),
         actions: [
+          if (AppFeatures.hasShipmentTracking)
+            IconButton(
+              icon: const Icon(Icons.table_view_outlined),
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  final p = await VegetableExcelExportService(widget.db)
+                      .exportAndShareWorkbook();
+                  if (!mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('تم تصدير ملف الإكسل: $p'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('فشل التصدير: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              tooltip: 'تصدير إكسل شامل',
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadCustomers,

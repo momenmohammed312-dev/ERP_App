@@ -3,6 +3,7 @@ import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/customer_collection_service.dart';
+import 'package:pos_offline_desktop/core/services/vegetable_excel_export_service.dart';
 import 'package:pos_offline_desktop/core/utils/arabic_name_normalizer.dart';
 import 'package:pos_offline_desktop/ui/customer/customer_statement_screen.dart';
 import 'package:pos_offline_desktop/ui/empty_barnika/empty_barnika_screen.dart';
@@ -170,6 +171,33 @@ class _CustomerDebtListScreenState extends State<CustomerDebtListScreen> {
       appBar: AppBar(
         title: const Text('مديونيات العملاء والتحصيل'),
         actions: [
+          if (AppFeatures.hasShipmentTracking)
+            IconButton(
+              icon: const Icon(Icons.table_view_outlined),
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  final p = await VegetableExcelExportService(widget.db)
+                      .exportAndShareWorkbook();
+                  if (!mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('تم تصدير ملف الإكسل: $p'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('فشل التصدير: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              tooltip: 'تصدير إكسل شامل',
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _load,

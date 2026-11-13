@@ -1,9 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:drift/drift.dart';
+import 'package:excel/excel.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+
 import '../database/app_database.dart';
+import '../database/tables/empty_barnika_tracking_table.dart';
+import '../database/tables/supplier_table.dart';
+import '../utils/arabic_name_normalizer.dart';
 
 class ImportResult {
   final int suppliers;
@@ -14,6 +20,9 @@ class ImportResult {
   final int collections;
   final int emptyBarnika;
   final List<String> errors;
+  final int skippedDuplicates;
+  final List<String> duplicateDetails;
+  final List<String> warnings;
 
   ImportResult({
     required this.suppliers,
@@ -24,10 +33,93 @@ class ImportResult {
     required this.collections,
     required this.emptyBarnika,
     required this.errors,
+    this.skippedDuplicates = 0,
+    this.duplicateDetails = const [],
+    this.warnings = const [],
   });
 
   int get total =>
       suppliers + customers + shipments + sales + expenses + collections + emptyBarnika;
+}
+
+class OpeningBalanceCustomerRow {
+  final int rowNumber;
+  final String name;
+  final String? phone;
+  final String? address;
+  final double openingDebt;
+  final int openingBarnikas;
+  final String? notes;
+
+  const OpeningBalanceCustomerRow({
+    required this.rowNumber,
+    required this.name,
+    this.phone,
+    this.address,
+    this.openingDebt = 0.0,
+    this.openingBarnikas = 0,
+    this.notes,
+  });
+}
+
+class OpeningBalanceSupplierRow {
+  final int rowNumber;
+  final String name;
+  final String? phone;
+  final String? address;
+  final double openingCredit;
+  final String? notes;
+
+  const OpeningBalanceSupplierRow({
+    required this.rowNumber,
+    required this.name,
+    this.phone,
+    this.address,
+    this.openingCredit = 0.0,
+    this.notes,
+  });
+}
+
+class VegetableExcelPreview {
+  final List<OpeningBalanceCustomerRow> customers;
+  final List<OpeningBalanceSupplierRow> suppliers;
+  final int shipmentsCount;
+  final int salesCount;
+  final int expensesCount;
+  final int collectionsCount;
+  final int emptyBarnikaRecordsCount;
+  final List<String> duplicateWarnings;
+  final List<String> detectedSheets;
+
+  const VegetableExcelPreview({
+    required this.customers,
+    required this.suppliers,
+    this.shipmentsCount = 0,
+    this.salesCount = 0,
+    this.expensesCount = 0,
+    this.collectionsCount = 0,
+    this.emptyBarnikaRecordsCount = 0,
+    this.duplicateWarnings = const [],
+    this.detectedSheets = const [],
+  });
+
+  double get customersOpeningDebtTotal =>
+      customers.fold(0.0, (sum, r) => sum + r.openingDebt);
+
+  int get openingBarnikaTotal =>
+      customers.fold(0, (sum, r) => sum + r.openingBarnikas);
+
+  double get suppliersOpeningCreditTotal =>
+      suppliers.fold(0.0, (sum, r) => sum + r.openingCredit);
+
+  int get totalRows =>
+      customers.length +
+      suppliers.length +
+      shipmentsCount +
+      salesCount +
+      expensesCount +
+      collectionsCount +
+      emptyBarnikaRecordsCount;
 }
 
 class VegetableMarketImportService {
@@ -41,13 +133,591 @@ class VegetableMarketImportService {
 
   VegetableMarketImportService(this._db);
 
+  static bool _isExcelPayload(String filePath, Uint8List bytes) {
+    final lower = filePath.toLowerCase();
+    if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) return true;
+    // PK\x03\x04 zip magic header for .xlsx
+    return bytes.length >= 4 &&
+        bytes[0] == 0x50 &&
+        bytes[1] == 0x4B &&
+        bytes[2] == 0x03 &&
+        bytes[3] == 0x04;
+  }
+
+  /// Generates a ready-to-fill Arabic `.xlsx` opening-balance template with
+  /// `العملاء` and `الموردين` sheets.
+  static Uint8List generateOpeningBalanceTemplateBytes() {
+    final excel = Excel.createExcel();
+
+    final customersSheet = excel['العملاء'];
+    customersSheet.appendRow([
+      TextCellValue('الاسم'),
+      TextCellValue('الهاتف'),
+      TextCellValue('العنوان'),
+      TextCellValue('رصيد الآجل الافتتاحي'),
+      TextCellValue('رصيد البرانيك الفارغة'),
+      TextCellValue('ملاحظات'),
+    ]);
+    customersSheet.appendRow([
+      TextCellValue('الحاج إبراهيم (مثال)'),
+      TextCellValue('01001234567'),
+      TextCellValue('سوق العبور'),
+      DoubleCellValue(1500.0),
+      IntCellValue(10),
+      TextCellValue('عميل جملة'),
+    ]);
+
+    final suppliersSheet = excel['الموردين'];
+    suppliersSheet.appendRow([
+      TextCellValue('الاسم'),
+      TextCellValue('الهاتف'),
+      TextCellValue('العنوان'),
+      TextCellValue('الرصيد الافتتاحي'),
+      TextCellValue('ملاحظات'),
+    ]);
+    suppliersSheet.appendRow([
+      TextCellValue('مزارع النور (مثال)'),
+      TextCellValue('01112345678'),
+      TextCellValue('بنها'),
+      DoubleCellValue(5000.0),
+      TextCellValue('مورد طماطم'),
+    ]);
+
+    if (excel.tables.containsKey('Sheet1')) {
+      excel.delete('Sheet1');
+    }
+    excel.setDefaultSheet('العملاء');
+
+    final encoded = excel.encode();
+    if (encoded == null) {
+      throw StateError('تعذر إنشاء ملف القالب');
+    }
+    return Uint8List.fromList(encoded);
+  }
+
+  Future<VegetableExcelPreview> previewExcelBytes(Uint8List bytes) async {
+    final parsed = _parseExcelWorkbook(bytes);
+    final duplicateWarnings = await _detectDuplicates(
+      parsed.customers,
+      parsed.suppliers,
+    );
+    return VegetableExcelPreview(
+      customers: parsed.customers,
+      suppliers: parsed.suppliers,
+      shipmentsCount: parsed.legacyShipments.length,
+      salesCount: parsed.legacySales.length,
+      expensesCount: parsed.legacyExpenses.length,
+      collectionsCount: parsed.legacyCollections.length,
+      emptyBarnikaRecordsCount: parsed.legacyEmptyBarnika.length,
+      duplicateWarnings: duplicateWarnings,
+      detectedSheets: parsed.detectedSheets,
+    );
+  }
+
   Future<ImportResult> importFromFile(String filePath) async {
     final file = File(filePath);
     if (!await file.exists()) {
       throw FileSystemException('Import file not found', filePath);
     }
-    final contents = await file.readAsString();
+    final bytes = await file.readAsBytes();
+    if (_isExcelPayload(filePath, bytes)) {
+      return importFromExcelBytes(bytes);
+    }
+    final contents = utf8.decode(bytes);
     return _importData(json.decode(contents) as Map<String, dynamic>);
+  }
+
+  Future<ImportResult> importFromExcelBytes(
+    Uint8List bytes, {
+    bool importCustomers = true,
+    bool importSuppliers = true,
+  }) async {
+    final parsed = _parseExcelWorkbook(bytes);
+    final errors = <String>[];
+    final duplicateDetails = <String>[];
+    final warnings = <String>[];
+
+    var cCount = 0;
+    var sCount = 0;
+    var ebCount = 0;
+    var skippedDuplicates = 0;
+
+    final existingCustomers = await _db.customerDao.getAllCustomers();
+    final existingSuppliers = (await _db.supplierDao.getAllSuppliers())
+        .where((s) => s.id != DefaultSupplier.unknownId)
+        .toList();
+
+    final knownCustomers = existingCustomers
+        .map((c) => (name: c.name, phone: c.phone))
+        .toList();
+    final knownSuppliers = existingSuppliers
+        .map((s) => (name: s.name, phone: s.phone))
+        .toList();
+
+    final now = DateTime.now();
+
+    await _db.transaction(() async {
+      if (importSuppliers) {
+        for (final row in parsed.suppliers) {
+          try {
+            final match = _findMatchingEntry(
+              name: row.name,
+              phone: row.phone,
+              existing: knownSuppliers,
+            );
+            if (match != null) {
+              skippedDuplicates++;
+              final msg =
+                  'مورد (صف ${row.rowNumber}): "${row.name}" مطابق للموجود "$match" — تم التخطي';
+              duplicateDetails.add(msg);
+              warnings.add(msg);
+              continue;
+            }
+            final id = _uuid.v4();
+            await _db.into(_db.suppliers).insert(
+                  SuppliersCompanion.insert(
+                    id: id,
+                    name: row.name,
+                    phone: Value(row.phone),
+                    address: Value(row.address),
+                    openingBalance: Value(row.openingCredit),
+                  ),
+                );
+            knownSuppliers.add((name: row.name, phone: row.phone));
+            sCount++;
+          } catch (e) {
+            errors.add('مورد صف ${row.rowNumber} "${row.name}": $e');
+          }
+        }
+      }
+
+      if (importCustomers) {
+        for (final row in parsed.customers) {
+          try {
+            final match = _findMatchingEntry(
+              name: row.name,
+              phone: row.phone,
+              existing: knownCustomers,
+            );
+            if (match != null) {
+              skippedDuplicates++;
+              final msg =
+                  'عميل (صف ${row.rowNumber}): "${row.name}" مطابق للموجود "$match" — تم التخطي';
+              duplicateDetails.add(msg);
+              warnings.add(msg);
+              continue;
+            }
+            final id = _uuid.v4();
+            await _db.into(_db.customers).insert(
+                  CustomersCompanion.insert(
+                    id: id,
+                    name: row.name,
+                    phone: Value(row.phone),
+                    address: Value(row.address),
+                    openingBalance: Value(row.openingDebt),
+                    notes: Value(row.notes),
+                  ),
+                );
+            if (row.openingBarnikas > 0) {
+              await _db.into(_db.emptyBarnikaTracking).insert(
+                    EmptyBarnikaTrackingCompanion.insert(
+                      customerId: id,
+                      dateOut: now,
+                      quantityOut: row.openingBarnikas,
+                      quantityReturned: const Value(0),
+                      status: const Value(EmptyBarnikaStatus.outstanding),
+                    ),
+                  );
+              ebCount++;
+            }
+            knownCustomers.add((name: row.name, phone: row.phone));
+            cCount++;
+          } catch (e) {
+            errors.add('عميل صف ${row.rowNumber} "${row.name}": $e');
+          }
+        }
+      }
+    });
+
+    // If legacy multi-sheet workbook also contains shipments/sales/expenses/collections,
+    // import them through the existing pipeline for full backward compatibility.
+    var shCount = 0;
+    var saCount = 0;
+    var eCount = 0;
+    var colCount = 0;
+    if (parsed.hasLegacyOperationalData) {
+      final legacyResult = await _importData({
+        'suppliers': const <Map<String, dynamic>>[],
+        'customers': const <Map<String, dynamic>>[],
+        'shipments': parsed.legacyShipments,
+        'sales': parsed.legacySales,
+        'expenses': parsed.legacyExpenses,
+        'collections': parsed.legacyCollections,
+        'emptyBarnikaRecords': parsed.legacyEmptyBarnika,
+      });
+      shCount = legacyResult.shipments;
+      saCount = legacyResult.sales;
+      eCount = legacyResult.expenses;
+      colCount = legacyResult.collections;
+      ebCount += legacyResult.emptyBarnika;
+      errors.addAll(legacyResult.errors);
+    }
+
+    return ImportResult(
+      suppliers: sCount,
+      customers: cCount,
+      shipments: shCount,
+      sales: saCount,
+      expenses: eCount,
+      collections: colCount,
+      emptyBarnika: ebCount,
+      errors: errors,
+      skippedDuplicates: skippedDuplicates,
+      duplicateDetails: duplicateDetails,
+      warnings: warnings,
+    );
+  }
+
+  Future<List<String>> _detectDuplicates(
+    List<OpeningBalanceCustomerRow> customers,
+    List<OpeningBalanceSupplierRow> suppliers,
+  ) async {
+    final warnings = <String>[];
+    final existingCustomers = (await _db.customerDao.getAllCustomers())
+        .map((c) => (name: c.name, phone: c.phone))
+        .toList();
+    final existingSuppliers = (await _db.supplierDao.getAllSuppliers())
+        .where((s) => s.id != DefaultSupplier.unknownId)
+        .map((s) => (name: s.name, phone: s.phone))
+        .toList();
+
+    for (final c in customers) {
+      final match = _findMatchingEntry(
+        name: c.name,
+        phone: c.phone,
+        existing: existingCustomers,
+      );
+      if (match != null) {
+        warnings.add('عميل صف ${c.rowNumber}: "${c.name}" مشابه/مطابق لـ "$match"');
+      } else {
+        existingCustomers.add((name: c.name, phone: c.phone));
+      }
+    }
+
+    for (final s in suppliers) {
+      final match = _findMatchingEntry(
+        name: s.name,
+        phone: s.phone,
+        existing: existingSuppliers,
+      );
+      if (match != null) {
+        warnings.add('مورد صف ${s.rowNumber}: "${s.name}" مشابه/مطابق لـ "$match"');
+      } else {
+        existingSuppliers.add((name: s.name, phone: s.phone));
+      }
+    }
+    return warnings;
+  }
+
+  static String? _findMatchingEntry({
+    required String name,
+    required String? phone,
+    required List<({String name, String? phone})> existing,
+  }) {
+    final normPhone = _normalizePhoneDigits(phone);
+    for (final item in existing) {
+      if (ArabicNameNormalizer.areEquivalent(name, item.name)) {
+        return item.name;
+      }
+      if (normPhone.isNotEmpty) {
+        final itemPhone = _normalizePhoneDigits(item.phone);
+        if (itemPhone.isNotEmpty && itemPhone == normPhone) {
+          return '${item.name} ($itemPhone)';
+        }
+      }
+    }
+    return null;
+  }
+
+  static String _normalizePhoneDigits(String? phone) {
+    if (phone == null) return '';
+    return phone.replaceAll(RegExp(r'[^0-9]'), '');
+  }
+
+  _ParsedExcelWorkbook _parseExcelWorkbook(Uint8List bytes) {
+    final excel = Excel.decodeBytes(bytes);
+    final customers = <OpeningBalanceCustomerRow>[];
+    final suppliers = <OpeningBalanceSupplierRow>[];
+    final legacyShipments = <Map<String, dynamic>>[];
+    final legacySales = <Map<String, dynamic>>[];
+    final legacyExpenses = <Map<String, dynamic>>[];
+    final legacyCollections = <Map<String, dynamic>>[];
+    final legacyEmptyBarnika = <Map<String, dynamic>>[];
+    final detectedSheets = excel.tables.keys.toList();
+
+    for (final entry in excel.tables.entries) {
+      final sheetKey = _normalizeSheetKey(entry.key);
+      final sheet = entry.value;
+      if (sheet.rows.length <= 1) continue;
+
+      final headerRow = sheet.rows.first;
+      final headerKeys = <int, String>{};
+      for (var i = 0; i < headerRow.length; i++) {
+        final raw = _cellToString(headerRow[i]);
+        if (raw.isNotEmpty) {
+          headerKeys[i] = _normalizeHeaderKey(raw);
+        }
+      }
+
+      if (_isCustomerSheet(sheetKey)) {
+        for (var r = 1; r < sheet.rows.length; r++) {
+          final row = sheet.rows[r];
+          final map = _rowToHeaderMap(row, headerKeys);
+          final name = _pickString(map, const [
+            'name',
+            'الاسم',
+            'اسم العميل',
+            'اسم الزبون',
+            'العميل',
+            'الزبون',
+          ]);
+          if (name == null || name.isEmpty) continue;
+          final phone = _pickString(map, const [
+            'phone',
+            'الهاتف',
+            'التليفون',
+            'الموبايل',
+            'رقم الهاتف',
+          ]);
+          final address = _pickString(map, const ['address', 'العنوان']);
+          final openingDebt = _pickDouble(map, const [
+                'openingbalance',
+                'opening_balance',
+                'openingdebt',
+                'balance',
+                'رصيد الاجل الافتتاحي',
+                'الرصيد الافتتاحي',
+                'رصيد افتتاحي',
+                'الاجل',
+                'المديونية',
+              ]) ??
+              0.0;
+          final openingBarnikas = _pickInt(map, const [
+                'openingbarnika',
+                'opening_barnika',
+                'openingbarnikas',
+                'barnika',
+                'barnikas',
+                'رصيد البرانيك الفارغة',
+                'البرانيك الفارغة',
+                'عهدة البرانيك',
+                'البرانيك',
+                'برانيك',
+              ]) ??
+              0;
+          final notes = _pickString(map, const ['notes', 'note', 'ملاحظات', 'ملاحظة', 'type']);
+          customers.add(
+            OpeningBalanceCustomerRow(
+              rowNumber: r + 1,
+              name: name,
+              phone: phone?.isNotEmpty == true ? phone : null,
+              address: address?.isNotEmpty == true ? address : null,
+              openingDebt: openingDebt < 0 ? 0.0 : openingDebt,
+              openingBarnikas: openingBarnikas < 0 ? 0 : openingBarnikas,
+              notes: notes?.isNotEmpty == true ? notes : null,
+            ),
+          );
+        }
+      } else if (_isSupplierSheet(sheetKey)) {
+        for (var r = 1; r < sheet.rows.length; r++) {
+          final row = sheet.rows[r];
+          final map = _rowToHeaderMap(row, headerKeys);
+          final name = _pickString(map, const [
+            'name',
+            'الاسم',
+            'اسم المورد',
+            'المورد',
+          ]);
+          if (name == null || name.isEmpty) continue;
+          final phone = _pickString(map, const [
+            'phone',
+            'الهاتف',
+            'التليفون',
+            'الموبايل',
+            'رقم الهاتف',
+          ]);
+          final address = _pickString(map, const ['address', 'العنوان']);
+          final openingCredit = _pickDouble(map, const [
+                'openingbalance',
+                'opening_balance',
+                'openingcredit',
+                'balance',
+                'الرصيد الافتتاحي',
+                'رصيد المورد الافتتاحي',
+                'رصيد افتتاحي',
+                'الرصيد',
+                'المستحق',
+              ]) ??
+              0.0;
+          final notes = _pickString(map, const ['notes', 'note', 'ملاحظات', 'ملاحظة']);
+          suppliers.add(
+            OpeningBalanceSupplierRow(
+              rowNumber: r + 1,
+              name: name,
+              phone: phone?.isNotEmpty == true ? phone : null,
+              address: address?.isNotEmpty == true ? address : null,
+              openingCredit: openingCredit < 0 ? 0.0 : openingCredit,
+              notes: notes?.isNotEmpty == true ? notes : null,
+            ),
+          );
+        }
+      } else if (sheetKey == 'shipments' || sheetKey == 'الشحنات') {
+        legacyShipments.addAll(_rowsToRawMaps(sheet, headerRow));
+      } else if (sheetKey == 'sales' || sheetKey == 'المبيعات') {
+        legacySales.addAll(_rowsToRawMaps(sheet, headerRow));
+      } else if (sheetKey == 'expenses' || sheetKey == 'المصروفات') {
+        legacyExpenses.addAll(_rowsToRawMaps(sheet, headerRow));
+      } else if (sheetKey == 'collections' || sheetKey == 'التحصيلات') {
+        legacyCollections.addAll(_rowsToRawMaps(sheet, headerRow));
+      } else if (sheetKey == 'emptybarnikarecords' ||
+          sheetKey == 'البرانيك الفاضية' ||
+          sheetKey == 'البرانيك') {
+        legacyEmptyBarnika.addAll(_rowsToRawMaps(sheet, headerRow));
+      }
+    }
+
+    return _ParsedExcelWorkbook(
+      customers: customers,
+      suppliers: suppliers,
+      legacyShipments: legacyShipments,
+      legacySales: legacySales,
+      legacyExpenses: legacyExpenses,
+      legacyCollections: legacyCollections,
+      legacyEmptyBarnika: legacyEmptyBarnika,
+      detectedSheets: detectedSheets,
+    );
+  }
+
+  static String _normalizeSheetKey(String raw) =>
+      ArabicNameNormalizer.normalize(raw).replaceAll(' ', '');
+
+  static bool _isCustomerSheet(String key) => const {
+        'customers',
+        'customer',
+        'العملاء',
+        'عملاء',
+        'الزباين',
+        'زباين',
+        'عملا',
+      }.contains(key) ||
+      key.contains('عميل') ||
+      key.contains('زبون') ||
+      key.contains('عملا') ||
+      key.contains('زباين');
+
+  static bool _isSupplierSheet(String key) => const {
+        'suppliers',
+        'supplier',
+        'الموردين',
+        'الموردون',
+        'موردين',
+        'موردون',
+      }.contains(key) ||
+      key.contains('مورد');
+
+  static String _normalizeHeaderKey(String raw) {
+    final normAr = ArabicNameNormalizer.normalize(raw);
+    if (normAr.isNotEmpty) return normAr;
+    return raw.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  static Map<String, String> _rowToHeaderMap(
+    List<Data?> row,
+    Map<int, String> headerKeys,
+  ) {
+    final out = <String, String>{};
+    for (final entry in headerKeys.entries) {
+      if (entry.key < row.length) {
+        final v = _cellToString(row[entry.key]);
+        if (v.isNotEmpty) {
+          out[entry.value] = v;
+        }
+      }
+    }
+    return out;
+  }
+
+  static List<Map<String, dynamic>> _rowsToRawMaps(
+    Sheet sheet,
+    List<Data?> headerRow,
+  ) {
+    final cols = <int, String>{};
+    for (var i = 0; i < headerRow.length; i++) {
+      final h = _cellToString(headerRow[i]);
+      if (h.isNotEmpty) cols[i] = h;
+    }
+    final rows = <Map<String, dynamic>>[];
+    for (var r = 1; r < sheet.rows.length; r++) {
+      final row = sheet.rows[r];
+      final map = <String, dynamic>{};
+      var hasVal = false;
+      for (final c in cols.entries) {
+        if (c.key < row.length) {
+          final v = row[c.key]?.value;
+          if (v != null) {
+            final s = v.toString().trim();
+            if (s.isNotEmpty) {
+              map[c.value] = v is IntCellValue
+                  ? v.value
+                  : (v is DoubleCellValue ? v.value : s);
+              hasVal = true;
+            }
+          }
+        }
+      }
+      if (hasVal) rows.add(map);
+    }
+    return rows;
+  }
+
+  static String? _pickString(Map<String, String> map, List<String> aliases) {
+    for (final alias in aliases) {
+      final normAlias = _normalizeHeaderKey(alias);
+      final compactAlias = normAlias.replaceAll(' ', '');
+      if (map.containsKey(normAlias)) return map[normAlias];
+      for (final entry in map.entries) {
+        final kCompact = entry.key.replaceAll(' ', '');
+        if (kCompact == compactAlias || entry.key == alias.toLowerCase()) {
+          return entry.value;
+        }
+      }
+    }
+    return null;
+  }
+
+  static double? _pickDouble(Map<String, String> map, List<String> aliases) {
+    final raw = _pickString(map, aliases);
+    if (raw == null || raw.isEmpty) return null;
+    final cleaned = raw.replaceAll(',', '').trim();
+    return double.tryParse(cleaned);
+  }
+
+  static int? _pickInt(Map<String, String> map, List<String> aliases) {
+    final d = _pickDouble(map, aliases);
+    return d?.round();
+  }
+
+  static String _cellToString(Data? cell) {
+    final val = cell?.value;
+    if (val == null) return '';
+    if (val is TextCellValue) return val.value.text?.trim() ?? val.value.toString().trim();
+    if (val is IntCellValue) return val.value.toString();
+    if (val is DoubleCellValue) {
+      final d = val.value;
+      return d == d.roundToDouble() ? d.toInt().toString() : d.toString();
+    }
+    if (val is BoolCellValue) return val.value ? 'true' : 'false';
+    return val.toString().trim();
   }
 
   Future<ImportResult> importFromJsonString(String jsonString) async {
@@ -490,3 +1160,33 @@ class VegetableMarketImportService {
         ));
   }
 }
+
+class _ParsedExcelWorkbook {
+  final List<OpeningBalanceCustomerRow> customers;
+  final List<OpeningBalanceSupplierRow> suppliers;
+  final List<Map<String, dynamic>> legacyShipments;
+  final List<Map<String, dynamic>> legacySales;
+  final List<Map<String, dynamic>> legacyExpenses;
+  final List<Map<String, dynamic>> legacyCollections;
+  final List<Map<String, dynamic>> legacyEmptyBarnika;
+  final List<String> detectedSheets;
+
+  const _ParsedExcelWorkbook({
+    required this.customers,
+    required this.suppliers,
+    required this.legacyShipments,
+    required this.legacySales,
+    required this.legacyExpenses,
+    required this.legacyCollections,
+    required this.legacyEmptyBarnika,
+    required this.detectedSheets,
+  });
+
+  bool get hasLegacyOperationalData =>
+      legacyShipments.isNotEmpty ||
+      legacySales.isNotEmpty ||
+      legacyExpenses.isNotEmpty ||
+      legacyCollections.isNotEmpty ||
+      legacyEmptyBarnika.isNotEmpty;
+}
+

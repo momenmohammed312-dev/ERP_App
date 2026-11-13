@@ -18,6 +18,7 @@ import 'package:pos_offline_desktop/ui/reports/widgets/daily_report_page.dart';
 import 'package:pos_offline_desktop/ui/analytics/consolidated_accounts_screen.dart';
 import 'package:pos_offline_desktop/ui/reports/subreports/smart_analytics_report_page.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
+import 'package:pos_offline_desktop/core/services/vegetable_excel_export_service.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/charts/financial_flow_spline_chart.dart';
 import 'package:pos_offline_desktop/ui/reports/widgets/charts/product_sales_pie_chart.dart';
 
@@ -949,6 +950,35 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               MaterialPageRoute(builder: (_) => const ConsolidatedAccountsScreen()),
             ),
       },
+      if (AppFeatures.hasShipmentTracking)
+        {
+          'title': 'تصدير إكسل سوق الخضار',
+          'desc': 'كشوف الشحنات، مديونيات الزباين، البرانيك الفارغة، والمصروفات (.xlsx)',
+          'icon': Icons.table_view_rounded,
+          'color': const Color(0xFF1F6FEB),
+          'onTap': () async {
+            final messenger = ScaffoldMessenger.of(context);
+            try {
+              final filePath = await VegetableExcelExportService(db)
+                  .exportAndShareWorkbook(from: _startDate, to: _endDate);
+              if (!mounted) return;
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text('تم تصدير ملف الإكسل: $filePath'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            } catch (e) {
+              if (!mounted) return;
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text('فشل تصدير الإكسل: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
+        },
       if (AppFeatures.hasSmartAnalytics)
         {
           'title': 'التحليل الذكي والمستشار',
