@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/config/license_config.dart';
+import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/services/online_license_service.dart';
 import 'package:pos_offline_desktop/widgets/brand/madar_logo.dart';
@@ -138,8 +139,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       unawaited(_runCheckinInBackground(currentLicense.licenseKey));
     }
 
-    // Step 3 — Database loading
+    // Step 3 — Database & session loading
     _updateStatus('تحميل قاعدة البيانات...', 0.88);
+    await ref.read(authProvider.notifier).ensureInitialized();
     await Future.delayed(const Duration(milliseconds: 350));
 
     // Step 4 — Ready

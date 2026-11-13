@@ -113,8 +113,25 @@ class AppTheme {
         headerBackgroundColor: MadarColors.lightPrimary,
         headerForegroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
-        dayStyle: const TextStyle(color: MadarColors.lightTextPrimary),
-        yearStyle: const TextStyle(color: MadarColors.lightTextPrimary),
+        weekdayStyle: const TextStyle(
+          color: MadarColors.lightTextSecondary,
+          fontWeight: FontWeight.w600,
+          fontFamily: arabicFontFamily,
+        ),
+        dayStyle: const TextStyle(
+          color: MadarColors.lightTextPrimary,
+          fontFamily: arabicFontFamily,
+        ),
+        yearStyle: const TextStyle(
+          color: MadarColors.lightTextPrimary,
+          fontFamily: arabicFontFamily,
+        ),
+        dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return MadarColors.lightPrimary;
+          }
+          return Colors.transparent;
+        }),
         dayForegroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return Colors.white;
@@ -124,8 +141,32 @@ class AppTheme {
           }
           return MadarColors.lightTextPrimary;
         }),
-        todayForegroundColor: WidgetStateProperty.all(MadarColors.lightPrimary),
-        todayBorder: const BorderSide(color: MadarColors.lightPrimary),
+        todayForegroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.white;
+          }
+          return MadarColors.lightPrimary;
+        }),
+        todayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return MadarColors.lightPrimary;
+          }
+          return MadarColors.lightBabyBlueContainer;
+        }),
+        todayBorder: const BorderSide(
+          color: MadarColors.lightPrimary,
+          width: 1.5,
+        ),
+        rangePickerBackgroundColor: Colors.white,
+        rangePickerHeaderBackgroundColor: MadarColors.lightPrimary,
+        rangePickerHeaderForegroundColor: Colors.white,
+        rangeSelectionBackgroundColor: MadarColors.lightBabyBlueContainer,
+        yearBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return MadarColors.lightPrimary;
+          }
+          return Colors.transparent;
+        }),
         yearForegroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return Colors.white;
@@ -228,27 +269,65 @@ class AppTheme {
       ),
       datePickerTheme: DatePickerThemeData(
         backgroundColor: const Color(0xFF161B22),
-        headerBackgroundColor: Colors.black,
-        headerForegroundColor: Colors.white,
+        headerBackgroundColor: const Color(0xFF0D1117),
+        headerForegroundColor: const Color(0xFFE6EDF3),
         surfaceTintColor: Colors.transparent,
-        dayStyle: const TextStyle(color: Colors.white),
-        yearStyle: const TextStyle(color: Colors.white),
+        weekdayStyle: const TextStyle(
+          color: Color(0xFF8B949E),
+          fontWeight: FontWeight.w600,
+          fontFamily: arabicFontFamily,
+        ),
+        dayStyle: const TextStyle(
+          color: Color(0xFFE6EDF3),
+          fontFamily: arabicFontFamily,
+        ),
+        yearStyle: const TextStyle(
+          color: Color(0xFFE6EDF3),
+          fontFamily: arabicFontFamily,
+        ),
+        dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFFC9A84C);
+          }
+          return Colors.transparent;
+        }),
         dayForegroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return Colors.black;
+            return const Color(0xFF0D1117);
           }
           if (states.contains(WidgetState.disabled)) {
-            return Colors.grey;
+            return const Color(0xFF484F58);
           }
-          return Colors.white;
+          return const Color(0xFFE6EDF3);
         }),
-        todayForegroundColor: WidgetStateProperty.all(Colors.white),
-        todayBorder: const BorderSide(color: Colors.white),
+        todayForegroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFF0D1117);
+          }
+          return const Color(0xFFC9A84C);
+        }),
+        todayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFFC9A84C);
+          }
+          return const Color(0x1FC9A84C);
+        }),
+        todayBorder: const BorderSide(color: Color(0xFFC9A84C), width: 1.5),
+        rangePickerBackgroundColor: const Color(0xFF161B22),
+        rangePickerHeaderBackgroundColor: const Color(0xFF0D1117),
+        rangePickerHeaderForegroundColor: const Color(0xFFE6EDF3),
+        rangeSelectionBackgroundColor: const Color(0x33C9A84C),
+        yearBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFFC9A84C);
+          }
+          return Colors.transparent;
+        }),
         yearForegroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return Colors.black;
+            return const Color(0xFF0D1117);
           }
-          return Colors.white;
+          return const Color(0xFFE6EDF3);
         }),
       ),
     );

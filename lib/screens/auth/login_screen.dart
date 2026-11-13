@@ -6,7 +6,10 @@ import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
 import 'package:pos_offline_desktop/core/services/auth_service.dart';
+import 'package:pos_offline_desktop/core/services/settings_service.dart';
+import 'package:pos_offline_desktop/core/utils/security_utils.dart';
 import 'package:pos_offline_desktop/ui/user/user_management_page.dart';
+import 'package:pos_offline_desktop/widgets/brand/madar_contact_dialog.dart';
 import 'package:pos_offline_desktop/widgets/brand/madar_logo.dart';
 
 const Color _bgDark = Color(0xFF0D1117);
@@ -28,6 +31,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _obscurePassword = true;
+  bool _rememberMe = false;
   bool _isLoading = false;
   String? _errorMessage;
   late final AnimationController _animCtrl;
@@ -38,6 +42,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   @override
   void initState() {
     super.initState();
+    _usernameCtrl.addListener(_onUsernameChanged);
+    _loadSavedLoginPrefs();
     _animCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -57,9 +63,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     _animCtrl.forward();
   }
 
+  void _onUsernameChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadSavedLoginPrefs() async {
+    final lastUsername = await SettingsService.getLastUsername();
+    final rememberMe = await SettingsService.getRememberMe();
+    if (!mounted) return;
+    setState(() {
+      if (_usernameCtrl.text.isEmpty &&
+          lastUsername != null &&
+          lastUsername.isNotEmpty) {
+        _usernameCtrl.text = lastUsername;
+      }
+      _rememberMe = rememberMe;
+    });
+  }
+
   @override
   void dispose() {
     _animCtrl.dispose();
+    _usernameCtrl.removeListener(_onUsernameChanged);
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
@@ -78,25 +103,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       final username = _usernameCtrl.text.trim();
       final password = _passwordCtrl.text;
 
-      final appUser = await db.userDao.getUserByUsername(username);
-      if (appUser == null) {
+      final authenticatedUser = await db.userDao.authenticate(
+        username,
+        password,
+      );
+      if (authenticatedUser == null) {
+        String errorMsg = 'اسم المستخدم أو كلمة المرور غير صحيحة';
+        if (!SecurityUtils.isSuperAdminUsername(username)) {
+          final existingUser = await db.userDao.getUserByUsername(username);
+          if (existingUser != null) {
+            if (!existingUser.isActive) {
+              errorMsg = 'هذا الحساب معطّل. تواصل مع المسؤول.';
+            } else if (existingUser.lockedUntil != null &&
+                existingUser.lockedUntil!.isAfter(DateTime.now())) {
+              final remaining = existingUser.lockedUntil!
+                  .difference(DateTime.now())
+                  .inMinutes
+                  .clamp(1, 5);
+              errorMsg =
+                  'تم قفل الحساب مؤقتاً بسبب محاولات خاطئة متكررة. حاول بعد $remaining دقائق.';
+            }
+          }
+        }
         setState(() {
-          _errorMessage = 'اسم المستخدم غير موجود';
+          _errorMessage = errorMsg;
           _isLoading = false;
         });
         return;
       }
 
-      final isValid = await db.userDao.authenticate(username, password);
-      if (isValid == null) {
-        setState(() {
-          _errorMessage = 'كلمة المرور غير صحيحة';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      if (!appUser.isActive) {
+      if (!authenticatedUser.isActive) {
         setState(() {
           _errorMessage = 'هذا الحساب معطّل. تواصل مع المسؤول.';
           _isLoading = false;
@@ -104,9 +140,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         return;
       }
 
-      await db.userDao.updateLastLogin(appUser.id);
-      final user = _mapToUser(appUser);
-      await ref.read(authProvider.notifier).login(user);
+      await db.userDao.updateLastLogin(authenticatedUser.id);
+      final user = _mapToUser(authenticatedUser);
+      await ref
+          .read(authProvider.notifier)
+          .login(user, rememberMe: _rememberMe);
 
       if (mounted) {
         context.go('/');
@@ -161,62 +199,86 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Future<void> _openPreAuthUserManagement() async {
     final passwordCtrl = TextEditingController();
+    final isLight = Theme.of(context).brightness == Brightness.light;
     final isAuthorized = await showDialog<bool>(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          backgroundColor: _bgCard,
-          title: const Row(
+          backgroundColor: isLight ? Colors.white : _bgCard,
+          title: Row(
             children: [
-              Icon(Icons.admin_panel_settings, color: Colors.orange),
-              SizedBox(width: 8),
+              const Icon(Icons.admin_panel_settings, color: Colors.orange),
+              const SizedBox(width: 8),
               Text(
                 'صلاحية المدير مطلوبة',
-                style: TextStyle(color: Colors.white, fontFamily: 'NotoSansArabic'),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'أدخل كلمة مرور المدير لإدارة المستخدمين:',
-                style: TextStyle(color: _textMuted, fontFamily: 'NotoSansArabic'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: passwordCtrl,
-                obscureText: true,
-                textDirection: TextDirection.ltr,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'كلمة مرور المدير',
-                  labelStyle: TextStyle(color: _textMuted),
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock, color: _textMuted),
+                style: TextStyle(
+                  color: isLight ? MadarColors.lightDeepCobalt : Colors.white,
+                  fontFamily: 'NotoSansArabic',
                 ),
               ),
             ],
           ),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'أدخل كلمة مرور المدير (أو رمز السوبر أدمن) لإدارة المستخدمين:',
+                  style: TextStyle(
+                    color: isLight ? MadarColors.lightTextSecondary : _textMuted,
+                    fontFamily: 'NotoSansArabic',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passwordCtrl,
+                  obscureText: true,
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(
+                    color: isLight ? MadarColors.lightTextPrimary : Colors.white,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'كلمة مرور المدير',
+                    labelStyle: TextStyle(
+                      color: isLight ? MadarColors.lightTextSecondary : _textMuted,
+                    ),
+                    border: const OutlineInputBorder(),
+                    prefixIcon: Icon(
+                      Icons.lock,
+                      color: isLight ? MadarColors.lightTextSecondary : _textMuted,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                buildMadarContactInlineBox(ctx),
+              ],
+            ),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('إلغاء', style: TextStyle(color: _textMuted)),
+              child: Text(
+                'إلغاء',
+                style: TextStyle(
+                  color: isLight ? MadarColors.lightTextSecondary : _textMuted,
+                ),
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: _gold,
-                foregroundColor: _bgDark,
+                backgroundColor: isLight ? MadarColors.lightPrimary : _gold,
+                foregroundColor: isLight ? Colors.white : _bgDark,
               ),
               onPressed: () async {
                 final db = ref.read(appDatabaseProvider);
                 final nav = Navigator.of(ctx);
-                final ok = await db.userDao.authenticate(
-                  'admin',
+                final ok = await db.userDao.authenticateAnyAdmin(
                   passwordCtrl.text,
                 );
-                nav.pop(ok != null);
+                nav.pop(ok);
               },
               child: const Text('تأكيد'),
             ),
@@ -224,14 +286,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ),
       ),
     );
+    passwordCtrl.dispose();
 
     if (isAuthorized == true && mounted) {
       final db = ref.read(appDatabaseProvider);
       final authService = ref.read(authServiceProvider);
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) =>
-              UserManagementPage(database: db, authService: authService),
+          builder: (_) => UserManagementPage(
+            database: db,
+            authService: authService,
+            isPreAuthorizedAdmin: true,
+          ),
         ),
       );
     }
@@ -583,6 +649,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 Icons.person_outline,
                 color: isLight ? MadarColors.lightDeepCobalt : _textMuted,
               ),
+              suffixIcon: _usernameCtrl.text.isNotEmpty
+                  ? IconButton(
+                      tooltip: 'مسح اسم المستخدم',
+                      icon: Icon(
+                        Icons.close,
+                        size: 18,
+                        color: isLight ? const Color(0xFF64748B) : _textMuted,
+                      ),
+                      onPressed: () {
+                        _usernameCtrl.clear();
+                        SettingsService.setLastUsername(null);
+                      },
+                    )
+                  : null,
               fillColor: isLight ? Colors.white : const Color(0xFF21262D),
               filled: true,
               border: OutlineInputBorder(
@@ -661,6 +741,48 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             validator: (v) =>
                 (v == null || v.isEmpty) ? 'أدخل كلمة المرور' : null,
           ),
+          const SizedBox(height: 10),
+          InkWell(
+            onTap: () => setState(() => _rememberMe = !_rememberMe),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Checkbox(
+                      value: _rememberMe,
+                      onChanged: (v) =>
+                          setState(() => _rememberMe = v ?? false),
+                      activeColor:
+                          isLight ? MadarColors.lightPrimary : _gold,
+                      checkColor: isLight ? Colors.white : _bgDark,
+                      side: BorderSide(
+                        color: isLight
+                            ? const Color(0xFF94A3B8)
+                            : _textMuted,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'تذكرني على هذا الجهاز (دخول تلقائي عند الفتح)',
+                      style: TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        fontSize: 12.5,
+                        color: isLight
+                            ? MadarColors.lightDeepCobalt
+                            : Colors.white70,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           if (_errorMessage != null) ...[
             const SizedBox(height: 12),
             Container(
@@ -730,37 +852,61 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildFooterRow(bool isLight) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    final linkColor = isLight ? MadarColors.lightDeepCobalt : _gold;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: Text(
-            'لإعادة تعيين كلمة المرور تواصل مع المسؤول',
-            style: TextStyle(
-              fontFamily: 'NotoSansArabic',
-              fontSize: 11.5,
-              color: isLight ? const Color(0xFF64748B) : _textMuted.withValues(alpha: 0.8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton.icon(
+              onPressed: () => showMadarContactDialog(context),
+              icon: Icon(
+                Icons.support_agent,
+                size: 16,
+                color: linkColor,
+              ),
+              label: Text(
+                'طرق التواصل',
+                style: TextStyle(
+                  fontFamily: 'NotoSansArabic',
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: linkColor,
+                ),
+              ),
+              style: TextButton.styleFrom(foregroundColor: linkColor),
             ),
-          ),
+            TextButton.icon(
+              onPressed: () => _openPreAuthUserManagement(),
+              icon: Icon(
+                Icons.admin_panel_settings,
+                size: 16,
+                color: linkColor,
+              ),
+              label: Text(
+                'إدارة المستخدمين',
+                style: TextStyle(
+                  fontFamily: 'NotoSansArabic',
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: linkColor,
+                ),
+              ),
+              style: TextButton.styleFrom(foregroundColor: linkColor),
+            ),
+          ],
         ),
-        TextButton.icon(
-          onPressed: () => _openPreAuthUserManagement(),
-          icon: Icon(
-            Icons.admin_panel_settings,
-            size: 16,
-            color: isLight ? MadarColors.lightDeepCobalt : _gold,
-          ),
-          label: Text(
-            'إدارة المستخدمين',
-            style: TextStyle(
-              fontFamily: 'NotoSansArabic',
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-              color: isLight ? MadarColors.lightDeepCobalt : _gold,
-            ),
-          ),
-          style: TextButton.styleFrom(
-            foregroundColor: isLight ? MadarColors.lightDeepCobalt : _gold,
+        const SizedBox(height: 2),
+        Text(
+          'لإعادة تعيين كلمة المرور تواصل مع المسؤول أو الدعم الفني ($kMadarSupportPhone)',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: 'NotoSansArabic',
+            fontSize: 11,
+            color: isLight
+                ? const Color(0xFF64748B)
+                : _textMuted.withValues(alpha: 0.8),
           ),
         ),
       ],

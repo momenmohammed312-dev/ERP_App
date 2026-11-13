@@ -6,7 +6,9 @@ import '../../core/database/app_database.dart';
 import '../../core/database/dao/user_dao.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/settings_service.dart';
 import '../../core/provider/auth_provider.dart';
+import '../../core/utils/security_utils.dart';
 import '../../widgets/admin_password_gate.dart';
 
 const Color _bgDark = Color(0xFF0D1117);
@@ -21,11 +23,13 @@ const Color _accentBlue = Color(0xFF1ABCFE);
 class UserManagementPage extends ConsumerStatefulWidget {
   final AppDatabase database;
   final AuthService authService;
+  final bool isPreAuthorizedAdmin;
 
   const UserManagementPage({
     super.key,
     required this.database,
     required this.authService,
+    this.isPreAuthorizedAdmin = false,
   });
 
   @override
@@ -206,7 +210,9 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
       orElse: () => UserRole.viewer,
     );
     final currentUser = ref.watch(authProvider);
-    final canManageUsers = currentUser?.hasPermission(Permission.manageUsers) ?? false;
+    final canManageUsers =
+        widget.isPreAuthorizedAdmin ||
+        (currentUser?.hasPermission(Permission.manageUsers) ?? false);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -289,7 +295,7 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
                     icon: const Icon(Icons.tune, color: _accentBlue),
                     tooltip: 'الصلاحيات',
                   ),
-                if (canManageUsers && userRole != UserRole.admin)
+                if (canManageUsers)
                   IconButton(
                     onPressed: () => _showResetPasswordDialog(user),
                     icon: const Icon(Icons.lock_reset, color: _goldLight),
@@ -984,13 +990,34 @@ class _AddUserDialogState extends State<_AddUserDialog> {
 
   Future<void> _saveUser() async {
     if (!_formKey.currentState!.validate()) return;
+    final username = _usernameController.text.trim();
+    if (username.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يرجى إدخال اسم المستخدم'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (SecurityUtils.isSuperAdminUsername(username)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('اسم المستخدم هذا محجوز للنظام'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     setState(() => _isLoading = true);
     try {
       await widget.userDao.createUser(
-        _usernameController.text.trim(),
+        username,
         _passwordController.text,
         _selectedRole.name,
-        _fullNameController.text.trim(),
+        _fullNameController.text.trim().isEmpty
+            ? username
+            : _fullNameController.text.trim(),
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -1014,6 +1041,7 @@ class _EditUserDialog extends StatefulWidget {
 
 class _EditUserDialogState extends State<_EditUserDialog> {
   final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _usernameController;
   late final TextEditingController _fullNameController;
   late final TextEditingController _emailController;
   late final TextEditingController _phoneController;
@@ -1023,6 +1051,7 @@ class _EditUserDialogState extends State<_EditUserDialog> {
   @override
   void initState() {
     super.initState();
+    _usernameController = TextEditingController(text: widget.user.username);
     _fullNameController = TextEditingController(text: widget.user.fullName);
     _emailController = TextEditingController(text: widget.user.email ?? '');
     _phoneController = TextEditingController(text: widget.user.phone ?? '');
@@ -1031,6 +1060,7 @@ class _EditUserDialogState extends State<_EditUserDialog> {
 
   @override
   void dispose() {
+    _usernameController.dispose();
     _fullNameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
@@ -1052,6 +1082,27 @@ class _EditUserDialogState extends State<_EditUserDialog> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  TextFormField(
+                    controller: _usernameController,
+                    textDirection: TextDirection.ltr,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'اسم المستخدم (لتسجيل الدخول)',
+                      labelStyle: TextStyle(color: _textMuted),
+                      prefixIcon: Icon(Icons.person_outline, color: _textMuted),
+                      border: OutlineInputBorder(),
+                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: _border)),
+                    ),
+                    validator: (v) {
+                      final trimmed = v?.trim() ?? '';
+                      if (trimmed.isEmpty) return 'يرجى إدخال اسم المستخدم';
+                      if (SecurityUtils.isSuperAdminUsername(trimmed)) {
+                        return 'هذا الاسم محجوز للنظام';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
                   TextFormField(
                     controller: _fullNameController,
                     style: const TextStyle(color: Colors.white),
@@ -1130,13 +1181,27 @@ class _EditUserDialogState extends State<_EditUserDialog> {
     try {
       final existing = await widget.userDao.getUserById(widget.user.id!);
       if (existing == null) throw StateError('User not found');
+      final newUsername = _usernameController.text.trim();
+      if (newUsername.toLowerCase() != existing.username.toLowerCase()) {
+        final duplicate = await widget.userDao.getUserByUsername(newUsername);
+        if (duplicate != null && duplicate.id != existing.id) {
+          throw StateError('اسم المستخدم "$newUsername" مستخدم بالفعل');
+        }
+      }
       final appUser = existing.copyWith(
+        username: newUsername,
         role: _selectedRole.name,
         fullName: _fullNameController.text.trim(),
         email: Value(_emailController.text.trim().isEmpty ? null : _emailController.text.trim()),
         phone: Value(_phoneController.text.trim().isEmpty ? null : _phoneController.text.trim()),
       );
       await widget.userDao.updateUser(appUser);
+      final lastUsername = await SettingsService.getLastUsername();
+      if (lastUsername != null &&
+          lastUsername.toLowerCase() == existing.username.toLowerCase() &&
+          newUsername != existing.username) {
+        await SettingsService.setLastUsername(newUsername);
+      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {

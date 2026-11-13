@@ -148,14 +148,6 @@ class _SalesReportTabState extends ConsumerState<_SalesReportTab> {
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
       initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(
-            context,
-          ).copyWith(colorScheme: ColorScheme.light(primary: Colors.purple)),
-          child: child ?? const SizedBox(),
-        );
-      },
     );
 
     if (picked != null) {

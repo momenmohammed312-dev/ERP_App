@@ -257,17 +257,6 @@ class _SupplierStatementScreenState
               initialDateRange: DateTimeRange(start: _fromDate, end: _toDate),
               firstDate: DateTime(2020),
               lastDate: DateTime.now(),
-              builder: (context, child) {
-                return Theme(
-                  data: Theme.of(context).copyWith(
-                    colorScheme: ColorScheme.dark(
-                      primary: goldColor,
-                      surface: const Color(0xFF161B22),
-                    ),
-                  ),
-                  child: child!,
-                );
-              },
             );
             if (picked != null) {
               setState(() {

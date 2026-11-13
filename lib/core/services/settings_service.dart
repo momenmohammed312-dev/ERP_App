@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum CalendarThemeMode { light, gray, dark }
-
 class SettingsService {
-  static const _calendarThemeKey = 'calendar_theme_mode';
   static const _appThemeModeKey = 'app_theme_mode';
   static const _defaultInvoiceTypeKey = 'default_invoice_type';
   static const _thermalPrinterKey = 'thermal_printer_name';
   static const _a4PrinterKey = 'a4_printer_name';
+  static const _lastUsernameKey = 'last_logged_in_username';
+  static const _rememberMeKey = 'auth_remember_me';
+  static const _rememberedUserJsonKey = 'auth_remembered_user_json';
 
   static Future<ThemeMode> getAppThemeMode() async {
     final prefs = await SharedPreferences.getInstance();
@@ -30,28 +30,47 @@ class SettingsService {
     );
   }
 
-  static Future<CalendarThemeMode> getCalendarTheme() async {
+  // ─────────────────────────────────────────────────────────────────────────
+  // Auth & Remember Me
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<String?> getLastUsername() async {
     final prefs = await SharedPreferences.getInstance();
-    final v = prefs.getString(_calendarThemeKey) ?? 'light';
-    switch (v) {
-      case 'gray':
-        return CalendarThemeMode.gray;
-      case 'dark':
-        return CalendarThemeMode.dark;
-      case 'light':
-      default:
-        return CalendarThemeMode.light;
+    final value = prefs.getString(_lastUsernameKey);
+    if (value == null || value.trim().isEmpty) return null;
+    return value.trim();
+  }
+
+  static Future<void> setLastUsername(String? username) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (username == null || username.trim().isEmpty) {
+      await prefs.remove(_lastUsernameKey);
+    } else {
+      await prefs.setString(_lastUsernameKey, username.trim());
     }
   }
 
-  static Future<void> setCalendarTheme(CalendarThemeMode mode) async {
+  static Future<bool> getRememberMe() async {
     final prefs = await SharedPreferences.getInstance();
-    final v = switch (mode) {
-      CalendarThemeMode.gray => 'gray',
-      CalendarThemeMode.dark => 'dark',
-      CalendarThemeMode.light => 'light',
-    };
-    await prefs.setString(_calendarThemeKey, v);
+    return prefs.getBool(_rememberMeKey) ?? false;
+  }
+
+  static Future<void> setRememberMe(bool remember) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_rememberMeKey, remember);
+  }
+
+  static Future<String?> getRememberedUserJson() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_rememberedUserJsonKey);
+  }
+
+  static Future<void> setRememberedUserJson(String? json) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (json == null || json.isEmpty) {
+      await prefs.remove(_rememberedUserJsonKey);
+    } else {
+      await prefs.setString(_rememberedUserJsonKey, json);
+    }
   }
 
   static Future<void> setDefaultInvoiceType(String type) async {

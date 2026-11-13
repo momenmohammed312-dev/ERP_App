@@ -6,13 +6,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
-import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/ui/user/user_management_page.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/services/auth_service.dart';
 import 'package:pos_offline_desktop/core/provider/theme_provider.dart';
 import 'package:pos_offline_desktop/core/provider/smart_advisor_provider.dart';
 import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
+import 'package:pos_offline_desktop/widgets/brand/madar_contact_dialog.dart';
 import '../backup/enhanced_backup_screen.dart';
 
 // ignore_for_file: deprecated_member_use
@@ -26,10 +26,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _darkModeEnabled = false;
-  CalendarThemeMode _calendarTheme = CalendarThemeMode.light;
-  List<Map<String, dynamic>> _printers = [];
-  String? _selectedThermalPrinter;
-  String? _selectedA4Printer;
 
   String? _logoPath;
 
@@ -58,18 +54,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
     SettingsService.getGeminiApiKey().then((k) {
       if (mounted && k != null) _geminiKeyController.text = k;
-    });
-    SettingsService.getCalendarTheme().then((mode) {
-      setState(() => _calendarTheme = mode);
-    });
-    PrinterService.getAvailablePrinters().then((list) async {
-      final thermal = await SettingsService.getThermalPrinter();
-      final a4 = await SettingsService.getA4Printer();
-      setState(() {
-        _printers = list;
-        _selectedThermalPrinter = thermal;
-        _selectedA4Printer = a4;
-      });
     });
 
     SettingsService.getBusinessInfo().then((info) {
@@ -212,233 +196,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ],
                       ),
                     ),
-                    const Gap(16),
-                    Text(
-                      'نمط ألوان التقويم (Calendar Theme)',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor),
-                    ),
-                    const Gap(8),
-                    Row(
-                      children: [
-                        _buildCalendarThemeOption(
-                          label: isNarrow ? 'فاتح' : 'فاتح (Light)',
-                          mode: CalendarThemeMode.light,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
-                          borderColor: borderColor,
-                          innerBg: innerBg,
-                          goldColor: goldColor,
-                        ),
-                        const Gap(8),
-                        _buildCalendarThemeOption(
-                          label: isNarrow ? 'رمادي' : 'رمادي (Gray)',
-                          mode: CalendarThemeMode.gray,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
-                          borderColor: borderColor,
-                          innerBg: innerBg,
-                          goldColor: goldColor,
-                        ),
-                        const Gap(8),
-                        _buildCalendarThemeOption(
-                          label: isNarrow ? 'داكن' : 'داكن (Dark)',
-                          mode: CalendarThemeMode.dark,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
-                          borderColor: borderColor,
-                          innerBg: innerBg,
-                          goldColor: goldColor,
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),
 
               const Gap(20),
 
-              // 2. إعدادات الطابعات
-              _buildSectionCard(
-                cardBg: cardBg,
-                borderColor: borderColor,
-                title: 'إعدادات الطابعات والطباعة',
-                icon: Icons.print_outlined,
-                iconColor: blueColor,
-                trailing: OutlinedButton.icon(
-                  onPressed: () async {
-                    final list = await PrinterService.getAvailablePrinters();
-                    setState(() => _printers = list);
-                  },
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('تحديث القائمة', style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: textColor,
-                    side: BorderSide(color: borderColor),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_printers.isEmpty)
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: innerBg,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: borderColor),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline, color: subTextColor, size: 20),
-                            const Gap(10),
-                            Expanded(
-                              child: Text(
-                                'لا توجد طابعات مثبتة على هذا الجهاز حالياً',
-                                style: TextStyle(color: subTextColor, fontSize: 13),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else ...[
-                      if (isNarrow) ...[
-                        DropdownButtonFormField<String>(
-                          value: _selectedThermalPrinter,
-                          style: TextStyle(color: textColor, fontSize: 13),
-                          dropdownColor: cardBg,
-                          decoration: InputDecoration(
-                            labelText: 'طابعة الفواتير الحرارية الافتراضية (Thermal)',
-                            labelStyle: TextStyle(color: subTextColor, fontSize: 12),
-                            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                            focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: blueColor)),
-                            prefixIcon: Icon(Icons.receipt_rounded, color: blueColor, size: 20),
-                            filled: true,
-                            fillColor: innerBg,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                          ),
-                          items: _printers
-                              .where((p) => p['type'] == 'Thermal')
-                              .map(
-                                (p) => DropdownMenuItem<String>(
-                                  value: p['name'] as String,
-                                  child: Text(p['name'] as String),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (val) async {
-                            setState(() => _selectedThermalPrinter = val);
-                            await SettingsService.setThermalPrinter(val);
-                          },
-                        ),
-                        const Gap(14),
-                        DropdownButtonFormField<String>(
-                          value: _selectedA4Printer,
-                          style: TextStyle(color: textColor, fontSize: 13),
-                          dropdownColor: cardBg,
-                          decoration: InputDecoration(
-                            labelText: 'طابعة التقارير والفواتير الكبيرة (A4 / PDF)',
-                            labelStyle: TextStyle(color: subTextColor, fontSize: 12),
-                            border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                            focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: blueColor)),
-                            prefixIcon: Icon(Icons.description_outlined, color: blueColor, size: 20),
-                            filled: true,
-                            fillColor: innerBg,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                          ),
-                          items: _printers
-                              .where((p) => p['type'] == 'A4' || p['type'] == 'PDF')
-                              .map(
-                                (p) => DropdownMenuItem<String>(
-                                  value: p['name'] as String,
-                                  child: Text(p['name'] as String),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (val) async {
-                            setState(() => _selectedA4Printer = val);
-                            await SettingsService.setA4Printer(val);
-                          },
-                        ),
-                      ] else ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: _selectedThermalPrinter,
-                                style: TextStyle(color: textColor, fontSize: 13),
-                                dropdownColor: cardBg,
-                                decoration: InputDecoration(
-                                  labelText: 'طابعة الفواتير الحرارية الافتراضية (Thermal)',
-                                  labelStyle: TextStyle(color: subTextColor, fontSize: 12),
-                                  border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                                  focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: blueColor)),
-                                  prefixIcon: Icon(Icons.receipt_rounded, color: blueColor, size: 20),
-                                  filled: true,
-                                  fillColor: innerBg,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                                ),
-                                items: _printers
-                                    .where((p) => p['type'] == 'Thermal')
-                                    .map(
-                                      (p) => DropdownMenuItem<String>(
-                                        value: p['name'] as String,
-                                        child: Text(p['name'] as String),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (val) async {
-                                  setState(() => _selectedThermalPrinter = val);
-                                  await SettingsService.setThermalPrinter(val);
-                                },
-                              ),
-                            ),
-                            const Gap(14),
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: _selectedA4Printer,
-                                style: TextStyle(color: textColor, fontSize: 13),
-                                dropdownColor: cardBg,
-                                decoration: InputDecoration(
-                                  labelText: 'طابعة التقارير والفواتير الكبيرة (A4 / PDF)',
-                                  labelStyle: TextStyle(color: subTextColor, fontSize: 12),
-                                  border: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: borderColor)),
-                                  focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: blueColor)),
-                                  prefixIcon: Icon(Icons.description_outlined, color: blueColor, size: 20),
-                                  filled: true,
-                                  fillColor: innerBg,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                                ),
-                                items: _printers
-                                    .where((p) => p['type'] == 'A4' || p['type'] == 'PDF')
-                                    .map(
-                                      (p) => DropdownMenuItem<String>(
-                                        value: p['name'] as String,
-                                        child: Text(p['name'] as String),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (val) async {
-                                  setState(() => _selectedA4Printer = val);
-                                  await SettingsService.setA4Printer(val);
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ],
-                ),
-              ),
-
-              const Gap(20),
-
-              // 3. معلومات النشاط التجاري
+              // 2. معلومات النشاط التجاري
               _buildSectionCard(
                 cardBg: cardBg,
                 borderColor: borderColor,
@@ -894,23 +658,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     _buildSettingsTile(
                       icon: Icons.info_outline,
                       iconColor: goldColor,
-                      title: 'حول مدار ERP',
-                      subtitle: 'الإصدار 1.0.0 — رخصة تشغيل محلية مع حماية البيانات',
+                      title: 'حول مِدار (MADAR ERP) وطرق التواصل',
+                      subtitle:
+                          '$kMadarAppVersion • تطوير $kMadarDeveloperName • $kMadarSupportPhone',
                       textColor: textColor,
                       subTextColor: subTextColor,
                       borderColor: borderColor,
-                      onTap: () {
-                        showAboutDialog(
-                          context: context,
-                          applicationName: 'مدار ERP',
-                          applicationVersion: '1.0.0',
-                          applicationIcon: const Icon(Icons.store, color: Color(0xFFC9A84C), size: 36),
-                          children: const [
-                            Text('نظام إدارة العمليات ونقاط البيع المتكامل MADAR ERP.'),
-                            Text('تم التطوير بواسطة MO2 مع دعم كامل للعمل بلا إنترنت والتشفير التام.'),
-                          ],
-                        );
-                      },
+                      onTap: () => showMadarContactDialog(
+                        context,
+                        showAboutHeader: true,
+                      ),
                     ),
                   ],
                 ),
@@ -1008,18 +765,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const Gap(30),
 
               Center(
-                child: Column(
-                  children: [
-                    Text(
-                      'مدار ERP — الإصدار 1.0.0',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: subTextColor),
-                    ),
-                    const Gap(3),
-                    Text(
-                      'Developed by MO2',
-                      style: TextStyle(fontSize: 10, letterSpacing: 0.8, color: subTextColor.withValues(alpha: 0.7)),
-                    ),
-                  ],
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 460),
+                  child: Column(
+                    children: [
+                      Text(
+                        '$kMadarAppTitleAr — $kMadarAppVersion',
+                        style: TextStyle(
+                          fontFamily: 'NotoSansArabic',
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                      const Gap(4),
+                      Text(
+                        'Developed by $kMadarDeveloperName',
+                        style: TextStyle(
+                          fontSize: 11,
+                          letterSpacing: 0.8,
+                          fontWeight: FontWeight.w600,
+                          color: goldColor,
+                        ),
+                      ),
+                      const Gap(12),
+                      buildMadarContactInlineBox(context),
+                    ],
+                  ),
                 ),
               ),
               const Gap(16),
@@ -1110,61 +882,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const Gap(14),
           child,
         ],
-      ),
-    );
-  }
-
-  Widget _buildCalendarThemeOption({
-    required String label,
-    required CalendarThemeMode mode,
-    required Color textColor,
-    required Color subTextColor,
-    required Color borderColor,
-    required Color innerBg,
-    required Color goldColor,
-  }) {
-    final isSelected = (_calendarTheme == mode);
-    return Expanded(
-      child: InkWell(
-        onTap: () {
-          SettingsService.setCalendarTheme(mode);
-          setState(() => _calendarTheme = mode);
-        },
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected ? goldColor.withValues(alpha: 0.12) : innerBg,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isSelected ? goldColor : borderColor,
-              width: isSelected ? 1.5 : 1,
-            ),
-          ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-                  size: 16,
-                  color: isSelected ? goldColor : subTextColor,
-                ),
-                const Gap(6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? textColor : subTextColor,
-                  ),
-                  maxLines: 1,
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

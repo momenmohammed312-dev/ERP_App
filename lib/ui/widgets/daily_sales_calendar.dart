@@ -3,7 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_offline_desktop/core/services/daily_sales_service.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
-import 'package:pos_offline_desktop/core/services/settings_service.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 
 class DailySalesCalendar extends ConsumerStatefulWidget {
   final AppDatabase db;
@@ -20,16 +20,11 @@ class _DailySalesCalendarState extends ConsumerState<DailySalesCalendar> {
   DateTime? _selectedDate;
   Map<String, Map<String, dynamic>> _dailySalesData = {};
   bool _isLoading = false;
-  CalendarThemeMode _calendarTheme = CalendarThemeMode.light;
 
   @override
   void initState() {
     super.initState();
     _dailySalesService = DailySalesService(widget.db);
-    // Load calendar theme from settings
-    SettingsService.getCalendarTheme().then((mode) {
-      setState(() => _calendarTheme = mode);
-    });
     _loadMonthlyData();
   }
 
@@ -123,6 +118,7 @@ class _DailySalesCalendarState extends ConsumerState<DailySalesCalendar> {
   }
 
   Widget _buildCalendarGrid() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final daysInMonth = DateTime(
       _selectedMonth.year,
       _selectedMonth.month + 1,
@@ -194,10 +190,27 @@ class _DailySalesCalendarState extends ConsumerState<DailySalesCalendar> {
                     child: Container(
                       margin: const EdgeInsets.all(2),
                       decoration: BoxDecoration(
-                        color: _getDayColor(salesAmount, isSelected, isToday),
+                        color: _getDayColor(
+                          salesAmount,
+                          isSelected,
+                          isToday,
+                          isDark,
+                        ),
                         borderRadius: BorderRadius.circular(8),
                         border: isSelected
-                            ? Border.all(color: Colors.blue, width: 2)
+                            ? Border.all(
+                                color: isDark
+                                    ? MadarColors.gold
+                                    : MadarColors.lightPrimary,
+                                width: 2,
+                              )
+                            : isToday
+                            ? Border.all(
+                                color: isDark
+                                    ? MadarColors.gold.withValues(alpha: 0.85)
+                                    : MadarColors.lightPrimary,
+                                width: 1.2,
+                              )
                             : null,
                       ),
                       child: Padding(
@@ -216,6 +229,7 @@ class _DailySalesCalendarState extends ConsumerState<DailySalesCalendar> {
                                   salesAmount,
                                   isSelected,
                                   isToday,
+                                  isDark,
                                 ),
                               ),
                             ),
@@ -228,6 +242,7 @@ class _DailySalesCalendarState extends ConsumerState<DailySalesCalendar> {
                                     salesAmount,
                                     isSelected,
                                     isToday,
+                                    isDark,
                                   ),
                                 ),
                               ),
@@ -248,13 +263,20 @@ class _DailySalesCalendarState extends ConsumerState<DailySalesCalendar> {
   Widget _buildSelectedDateDetails() {
     if (_selectedDate == null) return const SizedBox();
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final dateString = DateFormat('yyyy-MM-dd').format(_selectedDate!);
     final dayData = _dailySalesData[dateString];
     final salesAmount = dayData?['salesAmount'] as double? ?? 0.0;
     final salesCount = dayData?['salesCount'] as int? ?? 0;
 
-    return Card(
-      color: Colors.blue.shade50,
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF21262D) : const Color(0xFFEBF4FC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? const Color(0xFF30363D) : MadarColors.lightBorder,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -262,9 +284,12 @@ class _DailySalesCalendarState extends ConsumerState<DailySalesCalendar> {
           children: [
             Text(
               'تفاصيل يوم ${DateFormat('dd/MM/yyyy').format(_selectedDate!)}',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: isDark
+                    ? const Color(0xFFE6EDF3)
+                    : MadarColors.lightTextPrimary,
+              ),
             ),
             const SizedBox(height: 12),
             Row(
@@ -292,7 +317,7 @@ class _DailySalesCalendarState extends ConsumerState<DailySalesCalendar> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => _showDayInvoices(),
-                  child: Text('عرض فواتير اليوم'),
+                  child: const Text('عرض فواتير اليوم'),
                 ),
               ),
             ],
@@ -303,16 +328,24 @@ class _DailySalesCalendarState extends ConsumerState<DailySalesCalendar> {
   }
 
   Widget _buildDetailCard(String title, String value, Color color) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withValues(alpha: isDark ? 0.16 : 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Column(
         children: [
-          Text(title, style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: isDark
+                  ? const Color(0xFF8B949E)
+                  : MadarColors.lightTextSecondary,
+            ),
+          ),
           const SizedBox(height: 4),
           Text(
             value,
@@ -326,41 +359,37 @@ class _DailySalesCalendarState extends ConsumerState<DailySalesCalendar> {
     );
   }
 
-  Color _getDayColor(double salesAmount, bool isSelected, bool isToday) {
-    switch (_calendarTheme) {
-      case CalendarThemeMode.dark:
-        if (isSelected) return const Color(0xFF1F6FEB); // Distinct vibrant blue
-        if (isToday) return const Color(0xFFD29922); // Warm golden amber
-        if (salesAmount > 0) return const Color(0xFF238636); // Crisp emerald green
-        return const Color(0xFF262C36); // Lighter, clean slate surface (not murky)
-      case CalendarThemeMode.gray:
-        if (isSelected) return Colors.blueGrey.shade200;
-        if (isToday) return Colors.orange.shade200;
-        if (salesAmount > 0) return Colors.green.shade200;
-        return Colors.grey.shade200;
-      case CalendarThemeMode.light:
-        if (isSelected) return Colors.blue.shade200;
-        if (isToday) return Colors.orange.shade200;
-        if (salesAmount > 0) return Colors.green.shade100;
-        return Colors.grey.shade100;
+  Color _getDayColor(
+    double salesAmount,
+    bool isSelected,
+    bool isToday,
+    bool isDark,
+  ) {
+    if (isDark) {
+      if (isSelected) return const Color(0xFF1F6FEB);
+      if (isToday) return const Color(0xFFD29922);
+      if (salesAmount > 0) return const Color(0xFF238636);
+      return const Color(0xFF262C36);
     }
+    if (isSelected) return Colors.blue.shade200;
+    if (isToday) return Colors.orange.shade200;
+    if (salesAmount > 0) return Colors.green.shade100;
+    return Colors.grey.shade100;
   }
 
-  Color _getTextColor(double salesAmount, bool isSelected, bool isToday) {
-    switch (_calendarTheme) {
-      case CalendarThemeMode.dark:
-        if (isSelected || isToday) return Colors.white;
-        if (salesAmount > 0) return Colors.white;
-        return const Color(0xFFE6EDF3); // High-contrast, bright text
-      case CalendarThemeMode.gray:
-        if (isSelected || isToday) return Colors.black;
-        if (salesAmount > 0) return Colors.green.shade800;
-        return Colors.grey.shade600;
-      case CalendarThemeMode.light:
-        if (isSelected || isToday) return Colors.black;
-        if (salesAmount > 0) return Colors.green.shade800;
-        return Colors.grey.shade600;
+  Color _getTextColor(
+    double salesAmount,
+    bool isSelected,
+    bool isToday,
+    bool isDark,
+  ) {
+    if (isDark) {
+      if (isSelected || isToday || salesAmount > 0) return Colors.white;
+      return const Color(0xFFE6EDF3);
     }
+    if (isSelected || isToday) return Colors.black;
+    if (salesAmount > 0) return Colors.green.shade800;
+    return Colors.grey.shade700;
   }
 
   bool _isToday(DateTime date) {
