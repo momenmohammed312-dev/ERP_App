@@ -164,29 +164,32 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
                         setState(() => _searchQuery = val.trim()),
                   ),
                   const Gap(10),
-                  Row(
-                    children: [
-                      ChoiceChip(
-                        label: const Text('الكل'),
-                        selected: _statusFilter == 'all',
-                        onSelected: (_) =>
-                            setState(() => _statusFilter = 'all'),
-                      ),
-                      const Gap(8),
-                      ChoiceChip(
-                        label: const Text('مفتوحة'),
-                        selected: _statusFilter == 'open',
-                        onSelected: (_) =>
-                            setState(() => _statusFilter = 'open'),
-                      ),
-                      const Gap(8),
-                      ChoiceChip(
-                        label: const Text('مقفولة'),
-                        selected: _statusFilter == 'closed',
-                        onSelected: (_) =>
-                            setState(() => _statusFilter = 'closed'),
-                      ),
-                    ],
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('الكل'),
+                          selected: _statusFilter == 'all',
+                          onSelected: (_) =>
+                              setState(() => _statusFilter = 'all'),
+                        ),
+                        ChoiceChip(
+                          label: const Text('مفتوحة'),
+                          selected: _statusFilter == 'open',
+                          onSelected: (_) =>
+                              setState(() => _statusFilter = 'open'),
+                        ),
+                        ChoiceChip(
+                          label: const Text('مقفولة'),
+                          selected: _statusFilter == 'closed',
+                          onSelected: (_) =>
+                              setState(() => _statusFilter = 'closed'),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -274,8 +277,7 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
                   }
 
                   return ListView.builder(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 88),
                     itemCount: shipments.length,
                     itemBuilder: (context, index) {
                       final s = shipments[index];

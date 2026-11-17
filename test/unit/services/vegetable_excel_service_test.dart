@@ -6,6 +6,7 @@ import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/expenses_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/supplier_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/vegetable_shipments_table.dart';
 import 'package:pos_offline_desktop/core/services/invoice_service.dart';
 import 'package:pos_offline_desktop/core/services/shipment_settlement_service.dart';
@@ -96,6 +97,7 @@ void main() {
 
       expect(decoded.tables.keys, contains('العملاء'));
       expect(decoded.tables.keys, contains('الموردين'));
+      expect(decoded.tables.keys, contains('الشحنات'));
       expect(decoded.tables.keys.contains('Sheet1'), isFalse);
 
       final custHeaders = decoded.tables['العملاء']!.rows.first
@@ -464,6 +466,7 @@ void main() {
       expect(preview.customers.first.name, 'أحمد التجريبي');
       expect(preview.customers.first.openingDebt, closeTo(1400.0, 0.01));
       expect(preview.customers.first.openingBarnikas, 11);
+      expect(preview.shipmentsCount, 3);
       expect(preview.expensesCount, 0);
       expect(preview.collectionsCount, 0);
 
@@ -471,6 +474,7 @@ void main() {
       expect(result.errors, isEmpty);
       expect(result.customers, 1);
       expect(result.suppliers, 1);
+      expect(result.shipments, 3);
       expect(result.emptyBarnika, 1);
 
       final allCust = await db.customerDao.getAllCustomers();
@@ -480,6 +484,109 @@ void main() {
         await db.emptyBarnikaTrackingDao.getCustomerOutstandingBalance(allCust.first.id),
         11,
       );
+
+      final allShipments = await db.vegetableShipmentDao.getAll();
+      expect(allShipments.length, 3);
+      final shp1 = allShipments.firstWhere((s) => s.shipmentNumber == 'ش-001');
+      expect(shp1.pricingMode, ShipmentPricingMode.perUnit);
+      expect(shp1.costPricePerBarnika, closeTo(150.0, 0.01));
+      expect(shp1.barnikaSoldCount, 10);
+      expect(shp1.barnikaRemainingCount, 90);
+      final shp2 = allShipments.firstWhere((s) => s.shipmentNumber == 'ش-002');
+      // 5 registered + 4 walk-in cash sales consumed from ش-002 -> 9 sold, 71 left
+      expect(shp2.barnikaSoldCount, 9);
+      expect(shp2.barnikaRemainingCount, 71);
+      expect(shp2.supplierId, shp1.supplierId);
+      final shp3 = allShipments.firstWhere((s) => s.shipmentNumber == 'ش-003');
+      expect(shp3.supplierId, DefaultSupplier.unknownId);
+      expect(shp3.barnikaRemainingCount, 50);
+    });
+
+    test('imports dedicated Arabic الشحنات sheet with multiple pricing modes and skips duplicates', () async {
+      final excel = Excel.createExcel();
+      final shp = excel['الشحنات'];
+      shp.appendRow([
+        TextCellValue('رقم الشحنة'),
+        TextCellValue('التاريخ'),
+        TextCellValue('اسم المورد'),
+        TextCellValue('نظام التسعير'),
+        TextCellValue('عدد البرانيك'),
+        TextCellValue('سعر البرنيكة'),
+        TextCellValue('تكلفة الجملة'),
+        TextCellValue('نسبة العمولة %'),
+        TextCellValue('سعر العبوة'),
+        TextCellValue('المباع'),
+        TextCellValue('المتبقي'),
+        TextCellValue('ملاحظات'),
+      ]);
+      shp.appendRow([
+        TextCellValue('عربية-10'),
+        TextCellValue('2026-08-01'),
+        TextCellValue('مزارع الدلتا'),
+        TextCellValue('بالسعر'),
+        IntCellValue(100),
+        DoubleCellValue(120.0),
+        null,
+        null,
+        DoubleCellValue(15.0),
+        IntCellValue(25),
+        IntCellValue(75),
+        TextCellValue('طماطم درجة أولى'),
+      ]);
+      shp.appendRow([
+        TextCellValue('عربية-11'),
+        TextCellValue('2026-08-02'),
+        null,
+        TextCellValue('عمولة'),
+        IntCellValue(60),
+        null,
+        null,
+        DoubleCellValue(7.0),
+        null,
+        IntCellValue(60),
+        IntCellValue(0),
+        TextCellValue('مقفولة بالكامل'),
+      ]);
+      // Duplicate shipment number
+      shp.appendRow([
+        TextCellValue('عربية-10'),
+        TextCellValue('2026-08-03'),
+        TextCellValue('مزارع الدلتا'),
+        TextCellValue('جملة'),
+        IntCellValue(50),
+        null,
+        DoubleCellValue(4000.0),
+      ]);
+      if (excel.tables.containsKey('Sheet1')) {
+        excel.delete('Sheet1');
+      }
+
+      final bytes = Uint8List.fromList(excel.encode()!);
+      final service = VegetableMarketImportService(db);
+
+      final preview = await service.previewExcelBytes(bytes);
+      expect(preview.shipmentsCount, 3);
+      expect(preview.duplicateWarnings.length, 1);
+
+      final result = await service.importFromExcelBytes(bytes);
+      expect(result.errors, isEmpty);
+      expect(result.shipments, 2);
+      expect(result.skippedDuplicates, 1);
+
+      final rows = await db.vegetableShipmentDao.getAll();
+      expect(rows.length, 2);
+      final s10 = rows.firstWhere((s) => s.shipmentNumber == 'عربية-10');
+      expect(s10.pricingMode, ShipmentPricingMode.perUnit);
+      expect(s10.totalCost, closeTo(12000.0, 0.01));
+      expect(s10.containerPrice, closeTo(15.0, 0.01));
+      expect(s10.barnikaRemainingCount, 75);
+      expect(s10.status, VegetableShipmentStatus.open);
+
+      final s11 = rows.firstWhere((s) => s.shipmentNumber == 'عربية-11');
+      expect(s11.supplierId, DefaultSupplier.unknownId);
+      expect(s11.pricingMode, ShipmentPricingMode.commission);
+      expect(s11.commissionPercentage, closeTo(7.0, 0.01));
+      expect(s11.status, VegetableShipmentStatus.closed);
     });
   });
 }

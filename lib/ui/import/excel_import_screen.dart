@@ -30,6 +30,7 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
   VegetableExcelPreview? _preview;
   bool _importCustomers = true;
   bool _importSuppliers = true;
+  bool _importShipments = true;
   bool _importing = false;
   bool _downloadingTemplate = false;
   String? _error;
@@ -91,7 +92,7 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
                       ),
                       const Gap(6),
                       Text(
-                        'يحتوي القالب على ورقتَي عمل بالعربية: «العملاء» (الاسم، الهاتف، العنوان، رصيد الآجل الافتتاحي، رصيد البرانيك الفارغة) و«الموردين» (الاسم، الهاتف، العنوان، الرصيد الافتتاحي).',
+                        'يحتوي القالب على ثلاث أوراق عمل بالعربية: «العملاء»، «الموردين»، و«الشحنات» (كما يدعم الاستيراد ملفات المعاملات التي تتضمن شحنات داخل ورقة الموردين).',
                         style: TextStyle(
                           fontSize: 12.5,
                           color: theme.colorScheme.onSurfaceVariant,
@@ -235,13 +236,24 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
                             style: const TextStyle(fontSize: 12),
                           ),
                         ),
-                        if (_preview!.shipmentsCount > 0 ||
-                            _preview!.salesCount > 0 ||
+                        SwitchListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          value: _importShipments,
+                          onChanged: _importing
+                              ? null
+                              : (v) => setState(() => _importShipments = v),
+                          title: Text('استيراد الشحنات (${_preview!.shipmentsCount})'),
+                          subtitle: Text(
+                            'برانيك متبقية بالمخزن: ${_preview!.shipmentsBarnikaRemainingTotal}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        if (_preview!.salesCount > 0 ||
                             _preview!.expensesCount > 0 ||
                             _preview!.collectionsCount > 0 ||
                             _preview!.emptyBarnikaRecordsCount > 0) ...[
                           const Divider(height: 16),
-                          _buildCountRow('الشحنات', _preview!.shipmentsCount),
                           _buildCountRow('المبيعات', _preview!.salesCount),
                           _buildCountRow('المصروفات', _preview!.expensesCount),
                           _buildCountRow('التحصيلات', _preview!.collectionsCount),
@@ -499,6 +511,7 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
         bytes,
         importCustomers: _importCustomers,
         importSuppliers: _importSuppliers,
+        importShipments: _importShipments,
       );
       if (!mounted) return;
       final skippedText = result.skippedDuplicates > 0
@@ -507,7 +520,7 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'تم الاستيراد: ${result.total} سجل (زباين: ${result.customers}، موردين: ${result.suppliers}، برانيك: ${result.emptyBarnika}$skippedText)'
+            'تم الاستيراد: ${result.total} سجل (زباين: ${result.customers}، موردين: ${result.suppliers}، شحنات: ${result.shipments}، برانيك: ${result.emptyBarnika}$skippedText)'
             '${result.errors.isNotEmpty ? ' — أخطاء: ${result.errors.length}' : ''}',
           ),
           backgroundColor: result.errors.isEmpty ? Colors.green : Colors.orange,

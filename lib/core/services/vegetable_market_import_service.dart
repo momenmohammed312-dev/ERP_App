@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../database/app_database.dart';
 import '../database/tables/empty_barnika_tracking_table.dart';
 import '../database/tables/supplier_table.dart';
+import '../database/tables/vegetable_shipments_table.dart';
 import '../utils/arabic_name_normalizer.dart';
 
 class ImportResult {
@@ -81,9 +82,46 @@ class OpeningBalanceSupplierRow {
   });
 }
 
+class OpeningBalanceShipmentRow {
+  final int rowNumber;
+  final String shipmentNumber;
+  final String? supplierName;
+  final DateTime date;
+  final String pricingMode;
+  final int totalBarnikaCount;
+  final double? costPricePerBarnika;
+  final double? lumpSumCost;
+  final double? commissionPercentage;
+  final double? containerPrice;
+  final double totalCost;
+  final int barnikaSoldCount;
+  final int barnikaRemainingCount;
+  final String status;
+  final String? notes;
+
+  const OpeningBalanceShipmentRow({
+    required this.rowNumber,
+    required this.shipmentNumber,
+    this.supplierName,
+    required this.date,
+    required this.pricingMode,
+    required this.totalBarnikaCount,
+    this.costPricePerBarnika,
+    this.lumpSumCost,
+    this.commissionPercentage,
+    this.containerPrice,
+    required this.totalCost,
+    this.barnikaSoldCount = 0,
+    required this.barnikaRemainingCount,
+    this.status = VegetableShipmentStatus.open,
+    this.notes,
+  });
+}
+
 class VegetableExcelPreview {
   final List<OpeningBalanceCustomerRow> customers;
   final List<OpeningBalanceSupplierRow> suppliers;
+  final List<OpeningBalanceShipmentRow> shipments;
   final int shipmentsCount;
   final int salesCount;
   final int expensesCount;
@@ -95,6 +133,7 @@ class VegetableExcelPreview {
   const VegetableExcelPreview({
     required this.customers,
     required this.suppliers,
+    this.shipments = const [],
     this.shipmentsCount = 0,
     this.salesCount = 0,
     this.expensesCount = 0,
@@ -112,6 +151,9 @@ class VegetableExcelPreview {
 
   double get suppliersOpeningCreditTotal =>
       suppliers.fold(0.0, (sum, r) => sum + r.openingCredit);
+
+  int get shipmentsBarnikaRemainingTotal =>
+      shipments.fold(0, (sum, r) => sum + r.barnikaRemainingCount);
 
   int get totalRows =>
       customers.length +
@@ -184,6 +226,36 @@ class VegetableMarketImportService {
       TextCellValue('مورد طماطم'),
     ]);
 
+    final shipmentsSheet = excel['الشحنات'];
+    shipmentsSheet.appendRow([
+      TextCellValue('رقم الشحنة'),
+      TextCellValue('التاريخ'),
+      TextCellValue('اسم المورد'),
+      TextCellValue('نظام التسعير'),
+      TextCellValue('عدد البرانيك'),
+      TextCellValue('سعر البرنيكة'),
+      TextCellValue('تكلفة الجملة'),
+      TextCellValue('نسبة العمولة %'),
+      TextCellValue('سعر العبوة'),
+      TextCellValue('المباع'),
+      TextCellValue('المتبقي'),
+      TextCellValue('ملاحظات'),
+    ]);
+    shipmentsSheet.appendRow([
+      TextCellValue('ش-101'),
+      TextCellValue('2026-08-01'),
+      TextCellValue('مزارع النور (مثال)'),
+      TextCellValue('عمولة'),
+      IntCellValue(200),
+      null,
+      null,
+      DoubleCellValue(7.0),
+      null,
+      IntCellValue(50),
+      IntCellValue(150),
+      TextCellValue('شحنة مثال'),
+    ]);
+
     if (excel.tables.containsKey('Sheet1')) {
       excel.delete('Sheet1');
     }
@@ -201,11 +273,15 @@ class VegetableMarketImportService {
     final duplicateWarnings = await _detectDuplicates(
       parsed.customers,
       parsed.suppliers,
+      parsed.shipments,
     );
     return VegetableExcelPreview(
       customers: parsed.customers,
       suppliers: parsed.suppliers,
-      shipmentsCount: parsed.legacyShipments.length,
+      shipments: parsed.shipments,
+      shipmentsCount: parsed.shipments.isNotEmpty
+          ? parsed.shipments.length
+          : parsed.legacyShipments.length,
       salesCount: parsed.legacySales.length,
       expensesCount: parsed.legacyExpenses.length,
       collectionsCount: parsed.legacyCollections.length,
@@ -232,6 +308,7 @@ class VegetableMarketImportService {
     Uint8List bytes, {
     bool importCustomers = true,
     bool importSuppliers = true,
+    bool importShipments = true,
   }) async {
     final parsed = _parseExcelWorkbook(bytes);
     final errors = <String>[];
@@ -240,6 +317,7 @@ class VegetableMarketImportService {
 
     var cCount = 0;
     var sCount = 0;
+    var shCount = 0;
     var ebCount = 0;
     var skippedDuplicates = 0;
 
@@ -247,13 +325,17 @@ class VegetableMarketImportService {
     final existingSuppliers = (await _db.supplierDao.getAllSuppliers())
         .where((s) => s.id != DefaultSupplier.unknownId)
         .toList();
+    final existingShipments = await _db.vegetableShipmentDao.getAll();
 
     final knownCustomers = existingCustomers
         .map((c) => (name: c.name, phone: c.phone))
         .toList();
     final knownSuppliers = existingSuppliers
-        .map((s) => (name: s.name, phone: s.phone))
+        .map((s) => (id: s.id, name: s.name, phone: s.phone))
         .toList();
+    final knownShipmentNumbers = existingShipments
+        .map((s) => s.shipmentNumber.trim().toLowerCase())
+        .toSet();
 
     final now = DateTime.now();
 
@@ -264,7 +346,9 @@ class VegetableMarketImportService {
             final match = _findMatchingEntry(
               name: row.name,
               phone: row.phone,
-              existing: knownSuppliers,
+              existing: knownSuppliers
+                  .map((s) => (name: s.name, phone: s.phone))
+                  .toList(),
             );
             if (match != null) {
               skippedDuplicates++;
@@ -284,7 +368,7 @@ class VegetableMarketImportService {
                     openingBalance: Value(row.openingCredit),
                   ),
                 );
-            knownSuppliers.add((name: row.name, phone: row.phone));
+            knownSuppliers.add((id: id, name: row.name, phone: row.phone));
             sCount++;
           } catch (e) {
             errors.add('مورد صف ${row.rowNumber} "${row.name}": $e');
@@ -338,11 +422,72 @@ class VegetableMarketImportService {
           }
         }
       }
+
+      if (importShipments && parsed.shipments.isNotEmpty) {
+        for (final row in parsed.shipments) {
+          try {
+            final normNum = row.shipmentNumber.trim().toLowerCase();
+            if (knownShipmentNumbers.contains(normNum)) {
+              skippedDuplicates++;
+              final msg =
+                  'شحنة (صف ${row.rowNumber}): "${row.shipmentNumber}" موجودة مسبقاً — تم التخطي';
+              duplicateDetails.add(msg);
+              warnings.add(msg);
+              continue;
+            }
+
+            var resolvedSupplierId = DefaultSupplier.unknownId;
+            final supName = row.supplierName?.trim();
+            if (supName != null && supName.isNotEmpty) {
+              final existingSup = knownSuppliers.where(
+                (s) => ArabicNameNormalizer.areEquivalent(s.name, supName),
+              );
+              if (existingSup.isNotEmpty) {
+                resolvedSupplierId = existingSup.first.id;
+              } else if (importSuppliers) {
+                // Auto-create supplier referenced only in the shipments sheet
+                final newSupId = _uuid.v4();
+                await _db.into(_db.suppliers).insert(
+                      SuppliersCompanion.insert(
+                        id: newSupId,
+                        name: supName,
+                      ),
+                    );
+                knownSuppliers.add((id: newSupId, name: supName, phone: null));
+                resolvedSupplierId = newSupId;
+                sCount++;
+              }
+            }
+
+            await _db.vegetableShipmentDao.insertShipment(
+                  VegetableShipmentsCompanion.insert(
+                    supplierId: resolvedSupplierId,
+                    shipmentNumber: row.shipmentNumber.trim(),
+                    date: Value(row.date),
+                    pricingMode: row.pricingMode,
+                    totalBarnikaCount: row.totalBarnikaCount,
+                    costPricePerBarnika: Value(row.costPricePerBarnika),
+                    lumpSumCost: Value(row.lumpSumCost),
+                    commissionPercentage: Value(row.commissionPercentage),
+                    containerPrice: Value(row.containerPrice),
+                    totalCost: row.totalCost,
+                    barnikaSoldCount: Value(row.barnikaSoldCount),
+                    barnikaRemainingCount: row.barnikaRemainingCount,
+                    status: Value(row.status),
+                    notes: Value(row.notes),
+                  ),
+                );
+            knownShipmentNumbers.add(normNum);
+            shCount++;
+          } catch (e) {
+            errors.add('شحنة صف ${row.rowNumber} "${row.shipmentNumber}": $e');
+          }
+        }
+      }
     });
 
     // If legacy multi-sheet workbook also contains shipments/sales/expenses/collections,
     // import them through the existing pipeline for full backward compatibility.
-    var shCount = 0;
     var saCount = 0;
     var eCount = 0;
     var colCount = 0;
@@ -350,13 +495,15 @@ class VegetableMarketImportService {
       final legacyResult = await _importData({
         'suppliers': const <Map<String, dynamic>>[],
         'customers': const <Map<String, dynamic>>[],
-        'shipments': parsed.legacyShipments,
+        'shipments': importShipments && parsed.shipments.isEmpty
+            ? parsed.legacyShipments
+            : const <Map<String, dynamic>>[],
         'sales': parsed.legacySales,
         'expenses': parsed.legacyExpenses,
         'collections': parsed.legacyCollections,
         'emptyBarnikaRecords': parsed.legacyEmptyBarnika,
       });
-      shCount = legacyResult.shipments;
+      shCount += legacyResult.shipments;
       saCount = legacyResult.sales;
       eCount = legacyResult.expenses;
       colCount = legacyResult.collections;
@@ -382,6 +529,7 @@ class VegetableMarketImportService {
   Future<List<String>> _detectDuplicates(
     List<OpeningBalanceCustomerRow> customers,
     List<OpeningBalanceSupplierRow> suppliers,
+    List<OpeningBalanceShipmentRow> shipments,
   ) async {
     final warnings = <String>[];
     final existingCustomers = (await _db.customerDao.getAllCustomers())
@@ -391,6 +539,9 @@ class VegetableMarketImportService {
         .where((s) => s.id != DefaultSupplier.unknownId)
         .map((s) => (name: s.name, phone: s.phone))
         .toList();
+    final existingShipmentNumbers = (await _db.vegetableShipmentDao.getAll())
+        .map((s) => s.shipmentNumber.trim().toLowerCase())
+        .toSet();
 
     for (final c in customers) {
       final match = _findMatchingEntry(
@@ -415,6 +566,15 @@ class VegetableMarketImportService {
         warnings.add('مورد صف ${s.rowNumber}: "${s.name}" مشابه/مطابق لـ "$match"');
       } else {
         existingSuppliers.add((name: s.name, phone: s.phone));
+      }
+    }
+
+    for (final sh in shipments) {
+      final normNum = sh.shipmentNumber.trim().toLowerCase();
+      if (existingShipmentNumbers.contains(normNum)) {
+        warnings.add('شحنة صف ${sh.rowNumber}: "${sh.shipmentNumber}" موجودة مسبقاً');
+      } else {
+        existingShipmentNumbers.add(normNum);
       }
     }
     return warnings;
@@ -452,6 +612,8 @@ class VegetableMarketImportService {
     final transactionalCustomerKeys = <String>{};
     final suppliers = <OpeningBalanceSupplierRow>[];
     final consolidatedSuppliers = <String, OpeningBalanceSupplierRow>{};
+    final rawShipments = <_RawShipmentCandidate>[];
+    final soldByShipmentNumber = <String, int>{};
     final collectionsByNormCustomer = <String, double>{};
     final legacyShipments = <Map<String, dynamic>>[];
     final legacySales = <Map<String, dynamic>>[];
@@ -502,6 +664,29 @@ class VegetableMarketImportService {
           if (name == null || name.isEmpty) continue;
           final normName = ArabicNameNormalizer.normalize(name);
           if (_isSummaryRowName(normName)) continue;
+
+          // Track crates sold per shipment across ALL sales rows (including walk-in cash)
+          // before skipping generic cash pseudo-customers.
+          final saleShipmentNum = _pickString(map, const [
+            'رقم الشحنة (مورد)',
+            'رقم الشحنة',
+            'الشحنة',
+            'shipmentnumber',
+          ]);
+          final saleQty = _pickInt(map, const [
+            'عدد البرانيك',
+            'الكمية',
+            'quantity',
+          ]);
+          if (saleShipmentNum != null &&
+              saleShipmentNum.isNotEmpty &&
+              saleQty != null &&
+              saleQty > 0) {
+            final normShpKey = saleShipmentNum.trim().toLowerCase();
+            soldByShipmentNumber[normShpKey] =
+                (soldByShipmentNumber[normShpKey] ?? 0) + saleQty;
+          }
+
           if (const {'نقديه', 'نقدي', 'كاش', 'عميل نقدي'}.contains(normName)) {
             continue;
           }
@@ -629,14 +814,36 @@ class VegetableMarketImportService {
       } else if (_isSupplierSheet(sheetKey)) {
         final isTransactionalSupplier = _hasAnyHeader(headerKeys, const [
           'رقم الشحنة',
+          'رقم العربية',
+          'كود الشحنة',
           'عدد البرانيك',
           'سعر الطماطم للبرنيكة',
           'إجمالي التكلفة',
+        ]);
+        final hasShipmentColumn = _hasAnyHeader(headerKeys, const [
+          'رقم الشحنة',
+          'رقم العربية',
+          'كود الشحنة',
         ]);
 
         for (var r = headerRowIndex + 1; r < sheet.rows.length; r++) {
           final row = sheet.rows[r];
           final map = _rowToHeaderMap(row, headerKeys);
+
+          // Extract shipment candidate BEFORE skipping rows with empty supplier
+          // name (shipments can arrive without a known supplier yet).
+          if (hasShipmentColumn) {
+            final candidate = _extractRawShipmentCandidate(
+              rowNumber: r + 1,
+              map: map,
+              row: row,
+              headerKeys: headerKeys,
+            );
+            if (candidate != null) {
+              rawShipments.add(candidate);
+            }
+          }
+
           final name = _pickString(map, const [
             'name',
             'الاسم',
@@ -696,6 +903,29 @@ class VegetableMarketImportService {
             suppliers.add(rowObj);
           }
         }
+      } else if (_isShipmentSheet(sheetKey)) {
+        final rawRows = _rowsToRawMaps(sheet, headerRowIndex);
+        final isLegacyUuidShipments = rawRows.isNotEmpty &&
+            rawRows.first.containsKey('id') &&
+            rawRows.first.containsKey('supplierId') &&
+            rawRows.first.containsKey('shipmentNumber');
+        if (isLegacyUuidShipments) {
+          legacyShipments.addAll(rawRows);
+        } else {
+          for (var r = headerRowIndex + 1; r < sheet.rows.length; r++) {
+            final row = sheet.rows[r];
+            final map = _rowToHeaderMap(row, headerKeys);
+            final candidate = _extractRawShipmentCandidate(
+              rowNumber: r + 1,
+              map: map,
+              row: row,
+              headerKeys: headerKeys,
+            );
+            if (candidate != null) {
+              rawShipments.add(candidate);
+            }
+          }
+        }
       } else if (_isCollectionSheet(sheetKey)) {
         for (var r = headerRowIndex + 1; r < sheet.rows.length; r++) {
           final row = sheet.rows[r];
@@ -731,11 +961,6 @@ class VegetableMarketImportService {
         final rawRows = _rowsToRawMaps(sheet, headerRowIndex);
         if (rawRows.isNotEmpty && rawRows.first.containsKey('customerName')) {
           legacyCollections.addAll(rawRows);
-        }
-      } else if (sheetKey == 'shipments' || sheetKey == 'الشحنات') {
-        final rawRows = _rowsToRawMaps(sheet, headerRowIndex);
-        if (rawRows.isNotEmpty && rawRows.first.containsKey('shipmentNumber')) {
-          legacyShipments.addAll(rawRows);
         }
       } else if (sheetKey == 'sales' || sheetKey == 'المبيعات') {
         final rawRows = _rowsToRawMaps(sheet, headerRowIndex);
@@ -783,9 +1008,57 @@ class VegetableMarketImportService {
       suppliers.addAll(consolidatedSuppliers.values);
     }
 
+    final shipments = <OpeningBalanceShipmentRow>[];
+    for (final raw in rawShipments) {
+      final normNumKey = raw.shipmentNumber.trim().toLowerCase();
+      final soldCount =
+          raw.soldCount ?? soldByShipmentNumber[normNumKey] ?? 0;
+      final effectiveTotal = (raw.totalCount != null && raw.totalCount! > 0)
+          ? raw.totalCount!
+          : soldCount;
+      // Skip unpopulated template placeholder rows that have neither crates nor sales.
+      if (effectiveTotal <= 0) continue;
+
+      final remainingCount = raw.remainingCount != null
+          ? math.max(0, raw.remainingCount!)
+          : math.max(0, effectiveTotal - soldCount);
+      final status = raw.explicitStatus ??
+          (remainingCount > 0
+              ? VegetableShipmentStatus.open
+              : VegetableShipmentStatus.closed);
+
+      final pricingMode = raw.pricingMode;
+      final totalCost = pricingMode == ShipmentPricingMode.perUnit
+          ? (raw.costPricePerBarnika ?? 0.0) * effectiveTotal
+          : (pricingMode == ShipmentPricingMode.lumpSum
+              ? (raw.lumpSumCost ?? 0.0)
+              : 0.0);
+
+      shipments.add(
+        OpeningBalanceShipmentRow(
+          rowNumber: raw.rowNumber,
+          shipmentNumber: raw.shipmentNumber,
+          supplierName: raw.supplierName,
+          date: raw.date,
+          pricingMode: pricingMode,
+          totalBarnikaCount: effectiveTotal,
+          costPricePerBarnika: raw.costPricePerBarnika,
+          lumpSumCost: raw.lumpSumCost,
+          commissionPercentage: raw.commissionPercentage,
+          containerPrice: raw.containerPrice,
+          totalCost: totalCost,
+          barnikaSoldCount: math.max(0, soldCount),
+          barnikaRemainingCount: remainingCount,
+          status: status,
+          notes: raw.notes,
+        ),
+      );
+    }
+
     return _ParsedExcelWorkbook(
       customers: customers,
       suppliers: suppliers,
+      shipments: shipments,
       legacyShipments: legacyShipments,
       legacySales: legacySales,
       legacyExpenses: legacyExpenses,
@@ -888,6 +1161,212 @@ class VegetableMarketImportService {
         'موردون',
       }.contains(key) ||
       key.contains('مورد');
+
+  static bool _isShipmentSheet(String key) => const {
+        'shipments',
+        'shipment',
+        'الشحنات',
+        'شحنات',
+        'الشحنه',
+        'شحنه',
+      }.contains(key) ||
+      key.contains('شحن');
+
+  static _RawShipmentCandidate? _extractRawShipmentCandidate({
+    required int rowNumber,
+    required Map<String, String> map,
+    required List<Data?> row,
+    required Map<int, String> headerKeys,
+  }) {
+    final shipmentNumber = _pickString(map, const [
+      'shipmentnumber',
+      'shipment_number',
+      'رقم الشحنة',
+      'الشحنة',
+      'رقم العربية',
+      'كود الشحنة',
+    ]);
+    if (shipmentNumber == null || shipmentNumber.trim().isEmpty) return null;
+    final normNum = ArabicNameNormalizer.normalize(shipmentNumber);
+    if (_isSummaryRowName(normNum)) return null;
+
+    final supplierName = _pickString(map, const [
+      'suppliername',
+      'supplier',
+      'اسم المورد',
+      'المورد',
+    ]);
+    final date = _pickDateFromRow(row, headerKeys, map) ?? DateTime.now();
+
+    final totalCount = _pickInt(map, const [
+      'totalbarnikacount',
+      'total_barnika_count',
+      'عدد البرانيك',
+      'الكمية',
+      'المستلم',
+      'البرانيك',
+      'quantity',
+    ]);
+    final soldCount = _pickInt(map, const [
+      'barnikasoldcount',
+      'barnika_sold_count',
+      'برانيك اتباعت',
+      'المباع',
+      'sold',
+    ]);
+    final remainingCount = _pickInt(map, const [
+      'barnikaremainingcount',
+      'barnika_remaining_count',
+      'برانيك متبقية بالمخزن',
+      'المتبقي',
+      'remaining',
+    ]);
+
+    final costPerUnit = _pickDouble(map, const [
+      'costpriceperbarnika',
+      'cost_price_per_barnika',
+      'سعر الطماطم للبرنيكة',
+      'سعر التكلفة للبرنيكة',
+      'سعر الشراء',
+      'سعر البرنيكة',
+      'سعر الطماطم',
+      'unitcost',
+    ]);
+    final lumpSum = _pickDouble(map, const [
+      'lumpsumcost',
+      'lump_sum_cost',
+      'تكلفة الجملة',
+      'إجمالي التكلفة جملة',
+      'مبلغ الجملة',
+      'جملة',
+    ]);
+    final commissionPct = _pickDouble(map, const [
+      'commissionpercentage',
+      'commission_percentage',
+      'نسبة العمولة %',
+      'نسبة العمولة',
+      'العمولة',
+      'عمولة',
+    ]);
+    final containerPrice = _pickDouble(map, const [
+      'containerprice',
+      'container_price',
+      'سعر البرنيكة (عبوة)',
+      'سعر العبوة',
+      'سعر تأمين البرنيكة',
+      'تأمين البرنيكة',
+    ]);
+
+    final rawMode = _pickString(map, const [
+      'pricingmode',
+      'pricing_mode',
+      'نظام التسعير',
+      'التسعير',
+    ]);
+    var pricingMode = _parsePricingMode(rawMode);
+    if (pricingMode == null) {
+      if (lumpSum != null && lumpSum > 0) {
+        pricingMode = ShipmentPricingMode.lumpSum;
+      } else if (costPerUnit != null && costPerUnit > 0) {
+        pricingMode = ShipmentPricingMode.perUnit;
+      } else {
+        pricingMode = ShipmentPricingMode.commission;
+      }
+    }
+
+    // Normalize mode-specific fields so VegetableShipmentDao.validatePricingFields holds.
+    double? finalPerUnit;
+    double? finalLumpSum;
+    double? finalCommission;
+    switch (pricingMode) {
+      case ShipmentPricingMode.perUnit:
+        if (costPerUnit != null && costPerUnit >= 0) {
+          finalPerUnit = costPerUnit;
+        } else {
+          pricingMode = ShipmentPricingMode.commission;
+          finalCommission = commissionPct ?? 0.0;
+        }
+      case ShipmentPricingMode.lumpSum:
+        if (lumpSum != null && lumpSum >= 0) {
+          finalLumpSum = lumpSum;
+        } else {
+          pricingMode = ShipmentPricingMode.commission;
+          finalCommission = commissionPct ?? 0.0;
+        }
+      default:
+        pricingMode = ShipmentPricingMode.commission;
+        finalCommission = commissionPct ?? 0.0;
+    }
+
+    final rawStatus = _pickString(map, const ['status', 'الحالة']);
+    String? explicitStatus;
+    if (rawStatus != null) {
+      final normSt = ArabicNameNormalizer.normalize(rawStatus);
+      if (normSt.contains('مقفول') || normSt == 'closed') {
+        explicitStatus = VegetableShipmentStatus.closed;
+      } else if (normSt.contains('مفتوح') || normSt == 'open') {
+        explicitStatus = VegetableShipmentStatus.open;
+      }
+    }
+
+    final notes =
+        _pickString(map, const ['notes', 'note', 'ملاحظات', 'ملاحظة']);
+
+    return _RawShipmentCandidate(
+      rowNumber: rowNumber,
+      shipmentNumber: shipmentNumber.trim(),
+      supplierName: supplierName?.trim(),
+      date: date,
+      pricingMode: pricingMode,
+      totalCount: totalCount,
+      soldCount: soldCount,
+      remainingCount: remainingCount,
+      costPricePerBarnika: finalPerUnit,
+      lumpSumCost: finalLumpSum,
+      commissionPercentage: finalCommission,
+      containerPrice: containerPrice,
+      explicitStatus: explicitStatus,
+      notes: notes?.isNotEmpty == true ? notes : null,
+    );
+  }
+
+  static String? _parsePricingMode(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final norm = ArabicNameNormalizer.normalize(raw);
+    if (norm == 'per_unit' || norm == 'perunit' || norm.contains('بالسعر')) {
+      return ShipmentPricingMode.perUnit;
+    }
+    if (norm == 'lump_sum' || norm == 'lumpsum' || norm.contains('جمل')) {
+      return ShipmentPricingMode.lumpSum;
+    }
+    if (norm == 'commission' || norm.contains('عمول')) {
+      return ShipmentPricingMode.commission;
+    }
+    return null;
+  }
+
+  static DateTime? _pickDateFromRow(
+    List<Data?> row,
+    Map<int, String> headerKeys,
+    Map<String, String> map,
+  ) {
+    final normDateAliases = {'date', 'تاريخ', 'تاريخ شحنه', 'تاريخ استلام'};
+    for (final entry in headerKeys.entries) {
+      if (normDateAliases.contains(entry.value) && entry.key < row.length) {
+        final val = row[entry.key]?.value;
+        if (val is DateCellValue) return val.asDateTimeLocal();
+        if (val is DateTimeCellValue) return val.asDateTimeLocal();
+      }
+    }
+    final raw = _pickString(map, const [
+      'date',
+      'التاريخ',
+      'تاريخ الشحنة',
+      'تاريخ الاستلام',
+    ]);
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw.replaceAll('/', '-').trim());
+  }
 
   static String _normalizeHeaderKey(String raw) {
     final normAr = ArabicNameNormalizer.normalize(raw);
@@ -1426,9 +1905,44 @@ class VegetableMarketImportService {
   }
 }
 
+class _RawShipmentCandidate {
+  final int rowNumber;
+  final String shipmentNumber;
+  final String? supplierName;
+  final DateTime date;
+  final String pricingMode;
+  final int? totalCount;
+  final int? soldCount;
+  final int? remainingCount;
+  final double? costPricePerBarnika;
+  final double? lumpSumCost;
+  final double? commissionPercentage;
+  final double? containerPrice;
+  final String? explicitStatus;
+  final String? notes;
+
+  const _RawShipmentCandidate({
+    required this.rowNumber,
+    required this.shipmentNumber,
+    this.supplierName,
+    required this.date,
+    required this.pricingMode,
+    this.totalCount,
+    this.soldCount,
+    this.remainingCount,
+    this.costPricePerBarnika,
+    this.lumpSumCost,
+    this.commissionPercentage,
+    this.containerPrice,
+    this.explicitStatus,
+    this.notes,
+  });
+}
+
 class _ParsedExcelWorkbook {
   final List<OpeningBalanceCustomerRow> customers;
   final List<OpeningBalanceSupplierRow> suppliers;
+  final List<OpeningBalanceShipmentRow> shipments;
   final List<Map<String, dynamic>> legacyShipments;
   final List<Map<String, dynamic>> legacySales;
   final List<Map<String, dynamic>> legacyExpenses;
@@ -1439,6 +1953,7 @@ class _ParsedExcelWorkbook {
   const _ParsedExcelWorkbook({
     required this.customers,
     required this.suppliers,
+    required this.shipments,
     required this.legacyShipments,
     required this.legacySales,
     required this.legacyExpenses,

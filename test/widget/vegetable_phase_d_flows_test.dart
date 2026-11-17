@@ -14,15 +14,21 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/services/shipment_allocation_service.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
 import 'package:pos_offline_desktop/ui/customer/customer_debt_list_screen.dart';
+import 'package:pos_offline_desktop/ui/day/close_day_dialog.dart';
+import 'package:pos_offline_desktop/ui/empty_barnika/empty_barnika_screen.dart';
 import 'package:pos_offline_desktop/ui/expense/expense_page.dart';
 import 'package:pos_offline_desktop/ui/home/modern_home.dart';
 import 'package:pos_offline_desktop/ui/invoice/quick_sale_screen.dart';
+import 'package:pos_offline_desktop/ui/shipments/shipments_screen.dart';
 import 'package:pos_offline_desktop/ui/shipments/widgets/shipment_detail_screen.dart';
 
-Widget _wrapTestApp(AppDatabase db, Widget home) {
+Widget _wrapTestApp(AppDatabase db, Widget home, {ThemeMode themeMode = ThemeMode.light}) {
   return ProviderScope(
     overrides: [appDatabaseProvider.overrideWithValue(db)],
     child: MaterialApp(
+      themeMode: themeMode,
+      theme: ThemeData.light(useMaterial3: true),
+      darkTheme: ThemeData.dark(useMaterial3: true),
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
@@ -428,6 +434,85 @@ void main() {
         expect(find.text('العهد المالية'), findsNothing);
         expect(find.text('المنتجات'), findsNothing);
         expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+
+    testWidgets(
+      'All core vegetable phone flows render without overflow on 360x780 small phone in Dark Mode',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 780);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final db = AppDatabase(NativeDatabase.memory());
+        addTearDown(() => tester.runAsync(db.close));
+
+        await tester.runAsync(() async {
+          await _seedOpenDay(db);
+          await db.into(db.suppliers).insert(
+                SuppliersCompanion.insert(
+                  id: DefaultSupplier.unknownId,
+                  name: DefaultSupplier.unknownName,
+                ),
+              );
+          await db.customerDao.insertCustomer(
+            CustomersCompanion.insert(id: 'C-MOB', name: 'زبون هاتف'),
+          );
+          await db.emptyBarnikaTrackingDao.insertRecord(
+            EmptyBarnikaTrackingCompanion.insert(
+              customerId: 'C-MOB',
+              dateOut: DateTime.now(),
+              quantityOut: 5,
+            ),
+          );
+          await db.vegetableShipmentDao.insertShipment(
+            VegetableShipmentsCompanion.insert(
+              supplierId: DefaultSupplier.unknownId,
+              shipmentNumber: 'SHP-MOB',
+              pricingMode: ShipmentPricingMode.commission,
+              totalBarnikaCount: 25,
+              totalCost: 0.0,
+              barnikaRemainingCount: 25,
+              commissionPercentage: const Value(7.0),
+            ),
+          );
+        });
+
+        // 1. ModernHomeScreen on 360x780 dark
+        await tester.pumpWidget(_wrapTestApp(db, ModernHomeScreen(db: db), themeMode: ThemeMode.dark));
+        await tester.pump(const Duration(milliseconds: 600));
+        await _pumpAsync(tester);
+        expect(tester.takeException(), isNull);
+
+        // 2. ShipmentsScreen + ShipmentFormDialog on 360x780 dark
+        await tester.pumpWidget(_wrapTestApp(db, ShipmentsScreen(db: db), themeMode: ThemeMode.dark));
+        await _pumpAsync(tester);
+        expect(find.text('شحنة #SHP-MOB'), findsOneWidget);
+        await tester.tap(find.text('استلام شحنة جديدة'));
+        await _pumpAsync(tester);
+        expect(find.text('استلام شحنة جديدة'), findsWidgets);
+        expect(tester.takeException(), isNull);
+
+        // 3. QuickSaleScreen on 360x780 dark
+        await tester.pumpWidget(_wrapTestApp(db, QuickSaleScreen(db: db), themeMode: ThemeMode.dark));
+        await _pumpAsync(tester);
+        expect(find.text('عدد البرانيك *'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        // 4. EmptyBarnikaScreen on 360x780 dark
+        await tester.pumpWidget(_wrapTestApp(db, EmptyBarnikaScreen(db: db), themeMode: ThemeMode.dark));
+        await _pumpAsync(tester);
+        expect(find.text('زبون هاتف'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        // 5. CloseDayDialog on 360x780 dark
+        await tester.pumpWidget(_wrapTestApp(db, const CloseDayDialog(), themeMode: ThemeMode.dark));
+        await _pumpAsync(tester);
+        expect(find.text('ملخص تسوية اليوم'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
         await tester.pumpWidget(const SizedBox());
       },
     );

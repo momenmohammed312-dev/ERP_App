@@ -571,15 +571,18 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
                               },
                             ),
                             const SizedBox(width: 8),
-                            const Text(
-                              'مدار ERP',
-                              style: TextStyle(
-                                fontFamily: 'NotoSansArabic',
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
+                            const Expanded(
+                              child: Text(
+                                'مدار ERP',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontFamily: 'NotoSansArabic',
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
-                            const Spacer(),
+                            const SizedBox(width: 6),
                             if (AppFeatures.hasSmartAnalytics)
                               IconButton(
                                 icon: Consumer(

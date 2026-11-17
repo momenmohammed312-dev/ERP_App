@@ -1070,121 +1070,145 @@ class _QuickSaleScreenState extends State<QuickSaleScreen> {
               ],
             ),
             const Gap(12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Quantity with +/- stepper
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('عدد البرانيك *', style: TextStyle(fontSize: 12)),
-                      const Gap(4),
-                      Row(
-                        children: [
-                          IconButton.filledTonal(
-                            onPressed: _qty > 1
-                                ? () => _qtyCtrl.text = (_qty - 1).toString()
-                                : null,
-                            icon: const Icon(Icons.remove),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isCompact = constraints.maxWidth < 380;
+                final qtyField = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('عدد البرانيك *', style: TextStyle(fontSize: 12)),
+                    const Gap(4),
+                    Row(
+                      children: [
+                        IconButton.filledTonal(
+                          constraints: const BoxConstraints.tightFor(
+                            width: 38,
+                            height: 44,
                           ),
-                          Expanded(
-                            child: TextFormField(
-                              controller: _qtyCtrl,
-                              textAlign: TextAlign.center,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              decoration: const InputDecoration(
-                                border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 10,
-                                ),
+                          padding: EdgeInsets.zero,
+                          onPressed: _qty > 1
+                              ? () => _qtyCtrl.text = (_qty - 1).toString()
+                              : null,
+                          icon: const Icon(Icons.remove, size: 18),
+                        ),
+                        const Gap(4),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _qtyCtrl,
+                            textAlign: TextAlign.center,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 10,
                               ),
-                              validator: (v) {
-                                final q = int.tryParse(v?.trim() ?? '');
-                                if (q == null || q <= 0) return 'أدخل كمية > 0';
-                                if (_selectedShipment != null && q > _maxAvailable) {
-                                  return 'المتاح $_maxAvailable فقط';
-                                }
-                                return null;
-                              },
                             ),
+                            validator: (v) {
+                              final q = int.tryParse(v?.trim() ?? '');
+                              if (q == null || q <= 0) return 'أدخل كمية > 0';
+                              if (_selectedShipment != null &&
+                                  q > _maxAvailable) {
+                                return 'المتاح $_maxAvailable فقط';
+                              }
+                              return null;
+                            },
                           ),
-                          IconButton.filledTonal(
-                            onPressed: _qty < _maxAvailable
-                                ? () => _qtyCtrl.text = (_qty + 1).toString()
-                                : null,
-                            icon: const Icon(Icons.add),
+                        ),
+                        const Gap(4),
+                        IconButton.filledTonal(
+                          constraints: const BoxConstraints.tightFor(
+                            width: 38,
+                            height: 44,
                           ),
-                        ],
+                          padding: EdgeInsets.zero,
+                          onPressed: _qty < _maxAvailable
+                              ? () => _qtyCtrl.text = (_qty + 1).toString()
+                              : null,
+                          icon: const Icon(Icons.add, size: 18),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+                final priceField = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'سعر البرنيكة (يدوي) *',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    const Gap(4),
+                    TextFormField(
+                      controller: _priceCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
                       ),
-                    ],
-                  ),
-                ),
-                const Gap(12),
-                // Manual unit selling price (starts empty — NO default!)
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                      decoration: const InputDecoration(
+                        hintText: 'اكتب السعر...',
+                        suffixText: 'ج.م',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 12,
+                        ),
+                      ),
+                      validator: (v) {
+                        final p = double.tryParse(v?.trim() ?? '');
+                        if (p == null || p <= 0) {
+                          return 'اكتب السعر يدوياً';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                );
+
+                if (isCompact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text('سعر البرنيكة (يدوي) *',
-                          style: TextStyle(fontSize: 12)),
-                      const Gap(4),
-                      TextFormField(
-                        controller: _priceCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: const InputDecoration(
-                          hintText: 'اكتب السعر...',
-                          suffixText: 'ج.م',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 12,
-                          ),
-                        ),
-                        validator: (v) {
-                          final p = double.tryParse(v?.trim() ?? '');
-                          if (p == null || p <= 0) {
-                            return 'اكتب السعر يدوياً';
-                          }
-                          return null;
-                        },
-                      ),
+                      qtyField,
+                      const Gap(10),
+                      priceField,
                     ],
-                  ),
-                ),
-              ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: qtyField),
+                    const Gap(12),
+                    Expanded(child: priceField),
+                  ],
+                );
+              },
             ),
             const Gap(10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _discountCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'خصم (اختياري)',
-                      suffixText: 'ج.م',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) return null;
-                      final d = double.tryParse(v.trim());
-                      if (d == null || d < 0) return 'خصم غير صحيح';
-                      if (d > _grossTotal) return 'الخصم أكبر من الإجمالي';
-                      return null;
-                    },
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final discountField = TextFormField(
+                  controller: _discountCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
                   ),
-                ),
-                const Gap(12),
-                Container(
+                  decoration: const InputDecoration(
+                    labelText: 'خصم (اختياري)',
+                    suffixText: 'ج.م',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return null;
+                    final d = double.tryParse(v.trim());
+                    if (d == null || d < 0) return 'خصم غير صحيح';
+                    if (d > _grossTotal) return 'الخصم أكبر من الإجمالي';
+                    return null;
+                  },
+                );
+                final netBox = Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: MadarColors.gold.withValues(alpha: 0.12),
@@ -1197,18 +1221,38 @@ class _QuickSaleScreenState extends State<QuickSaleScreen> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       const Text('الصافي المطلوب', style: TextStyle(fontSize: 11)),
-                      Text(
-                        '${_netTotal.toStringAsFixed(2)} ج.م',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: MadarColors.gold,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '${_netTotal.toStringAsFixed(2)} ج.م',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: MadarColors.gold,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
+                );
+                if (constraints.maxWidth < 320) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      discountField,
+                      const Gap(10),
+                      netBox,
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: discountField),
+                    const Gap(12),
+                    netBox,
+                  ],
+                );
+              },
             ),
           ],
         ),

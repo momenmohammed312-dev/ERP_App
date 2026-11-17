@@ -276,316 +276,361 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
         width: dialogWidth,
         padding: const EdgeInsets.all(18),
         child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      widget.shipment == null ? Icons.add_business : Icons.edit,
-                      color: theme.colorScheme.primary,
-                      size: 26,
-                    ),
-                    const Gap(10),
-                    Expanded(
-                      child: Text(
-                        widget.shipment == null
-                            ? 'استلام شحنة جديدة'
-                            : 'تعديل بيانات الشحنة',
-                        style: theme.textTheme.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isCompact = constraints.maxWidth < 380;
+              final shipmentNumberField = TextFormField(
+                controller: _shipmentNumberCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'رقم الشحنة *',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.tag),
                 ),
-                const Divider(height: 24),
-
-                if (_errorMessage != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.errorContainer,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _errorMessage!,
-                      style:
-                          TextStyle(color: theme.colorScheme.onErrorContainer),
-                    ),
-                  ),
-                  const Gap(16),
-                ],
-
-                // Supplier picker (optional on arrival — defaults to «مورد غير محدد»)
-                if (_loadingSuppliers)
-                  const Center(child: CircularProgressIndicator())
-                else
-                  DropdownButtonFormField<Supplier>(
-                    initialValue: _selectedSupplier,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'المورد (اختياري وقت الاستلام)',
-                      helperText:
-                          'يمكن تركه «مورد غير محدد» وتعيينه لاحقاً قبل قفل الشحنة',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person),
-                    ),
-                    items: _suppliers
-                        .map(
-                          (s) => DropdownMenuItem(
-                            value: s,
-                            child: Text(
-                              s.id == DefaultSupplier.unknownId
-                                  ? '${s.name} (تحديد لاحقاً)'
-                                  : '${s.name}${s.phone != null ? ' (${s.phone})' : ''}',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (val) => setState(() => _selectedSupplier = val),
-                  ),
-                const Gap(16),
-
-                // Shipment number & date
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _shipmentNumberCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'رقم الشحنة *',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.tag),
-                        ),
-                        validator: (val) =>
-                            val == null || val.trim().isEmpty ? 'رقم الشحنة مطلوب' : null,
-                      ),
-                    ),
-                    const Gap(12),
-                    Expanded(
-                      child: InkWell(
-                        onTap: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: _selectedDate,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime(2100),
-                          );
-                          if (picked != null) {
-                            setState(() => _selectedDate = picked);
-                          }
-                        },
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'تاريخ الشحنة',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.calendar_today),
-                          ),
-                          child: Text(
-                            DateFormat('yyyy/MM/dd').format(_selectedDate),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const Gap(20),
-
-                // Pricing mode selector
-                Text(
-                  'نظام التسعير *',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const Gap(8),
-                Row(
-                  children: [
-                    _buildPricingChoiceChip(
-                      mode: ShipmentPricingMode.perUnit,
-                      label: 'بالسعر/سعر البرنيكة',
-                      icon: Icons.filter_1,
-                    ),
-                    const Gap(8),
-                    _buildPricingChoiceChip(
-                      mode: ShipmentPricingMode.lumpSum,
-                      label: 'جملة (Lump Sum)',
-                      icon: Icons.all_inclusive,
-                    ),
-                    const Gap(8),
-                    _buildPricingChoiceChip(
-                      mode: ShipmentPricingMode.commission,
-                      label: 'عمولة (Commission)',
-                      icon: Icons.percent,
-                    ),
-                  ],
-                ),
-                const Gap(16),
-
-                // Total Barnika Count
-                TextFormField(
-                  controller: _totalBarnikaCtrl,
-                  keyboardType: TextInputType.number,
+                validator: (val) => val == null || val.trim().isEmpty
+                    ? 'رقم الشحنة مطلوب'
+                    : null,
+              );
+              final shipmentDateField = InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _selectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) {
+                    setState(() => _selectedDate = picked);
+                  }
+                },
+                child: InputDecorator(
                   decoration: const InputDecoration(
-                    labelText: 'عدد البرانيك الكلي *',
+                    labelText: 'تاريخ الشحنة',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.inventory_2),
+                    prefixIcon: Icon(Icons.calendar_today),
                   ),
-                  onChanged: (_) => setState(() {}),
-                  validator: (val) {
-                    final n = int.tryParse(val ?? '');
-                    if (n == null || n <= 0) return 'ادخل عدد برانيك صحيح أكبر من 0';
-                    return null;
-                  },
+                  child: Text(
+                    DateFormat('yyyy/MM/dd').format(_selectedDate),
+                  ),
                 ),
-                const Gap(16),
-
-                // Mode-specific inputs
-                if (_pricingMode == ShipmentPricingMode.perUnit) ...[
-                  TextFormField(
-                    controller: _costPerBarnikaCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'سعر التكلفة للبرنيكة الواحدة (ج.م) *',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.attach_money),
-                    ),
-                    onChanged: (_) => setState(() {}),
-                    validator: (val) {
-                      final n = double.tryParse(val ?? '');
-                      if (n == null || n < 0) return 'ادخل سعر تكلفة صحيح';
-                      return null;
-                    },
-                  ),
-                  const Gap(16),
-                ] else if (_pricingMode == ShipmentPricingMode.lumpSum) ...[
-                  TextFormField(
-                    controller: _lumpSumCostCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'إجمالي تكلفة الشحنة (جملة) (ج.م) *',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.account_balance_wallet),
-                    ),
-                    onChanged: (_) => setState(() {}),
-                    validator: (val) {
-                      final n = double.tryParse(val ?? '');
-                      if (n == null || n < 0) return 'ادخل التكلفة الإجمالية الصحيحة';
-                      return null;
-                    },
-                  ),
-                  const Gap(16),
-                ] else if (_pricingMode == ShipmentPricingMode.commission) ...[
-                  TextFormField(
-                    controller: _commissionPercentageCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'نسبة عمولة المحل (%) *',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.percent),
-                      suffixText: '%',
-                    ),
-                    validator: (val) {
-                      final n = double.tryParse(val ?? '');
-                      if (n == null || n < 0 || n > 100) return 'ادخل نسبة بين 0 و 100%';
-                      return null;
-                    },
-                  ),
-                  const Gap(16),
-                ],
-
-                // Container price & Notes
-                Row(
+              );
+              final containerPriceField = TextFormField(
+                controller: _containerPriceCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'سعر تأمين البرنيكة (اختياري)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.shield_outlined),
+                ),
+              );
+              final calculatedCostBox = Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color:
+                      theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _containerPriceCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'سعر تأمين البرنيكة (اختياري)',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.shield_outlined),
-                        ),
+                    Text(
+                      _pricingMode == ShipmentPricingMode.commission
+                          ? 'نظام التحاسب:'
+                          : 'التكلفة الإجمالية المحسوبة:',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    Text(
+                      _pricingMode == ShipmentPricingMode.commission
+                          ? 'عمولة من إجمالي البيع'
+                          : '${_calculateTotalCost().toStringAsFixed(2)} ج.م',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
                       ),
                     ),
-                    const Gap(12),
-                    Expanded(
-                      child: Container(
+                  ],
+                ),
+              );
+
+              return Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          widget.shipment == null
+                              ? Icons.add_business
+                              : Icons.edit,
+                          color: theme.colorScheme.primary,
+                          size: 26,
+                        ),
+                        const Gap(10),
+                        Expanded(
+                          child: Text(
+                            widget.shipment == null
+                                ? 'استلام شحنة جديدة'
+                                : 'تعديل بيانات الشحنة',
+                            style: theme.textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+
+                    if (_errorMessage != null) ...[
+                      Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          color: theme.colorScheme.errorContainer,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _pricingMode == ShipmentPricingMode.commission
-                                  ? 'نظام التحاسب:'
-                                  : 'التكلفة الإجمالية المحسوبة:',
-                              style: theme.textTheme.bodySmall,
-                            ),
-                            Text(
-                              _pricingMode == ShipmentPricingMode.commission
-                                  ? 'عمولة من إجمالي البيع'
-                                  : '${_calculateTotalCost().toStringAsFixed(2)} ج.م',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.primary,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          _errorMessage!,
+                          style: TextStyle(
+                            color: theme.colorScheme.onErrorContainer,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const Gap(16),
+                      const Gap(16),
+                    ],
 
-                TextFormField(
-                  controller: _notesCtrl,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'ملاحظات (اختياري)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.note_alt_outlined),
-                  ),
-                ),
-                const Gap(24),
-
-                // Submit buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
-                      child: const Text('إلغاء'),
-                    ),
-                    const Gap(12),
-                    ElevatedButton.icon(
-                      onPressed: _isSubmitting ? null : _submit,
-                      icon: _isSubmitting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                    // Supplier picker (optional on arrival — defaults to «مورد غير محدد»)
+                    if (_loadingSuppliers)
+                      const Center(child: CircularProgressIndicator())
+                    else
+                      DropdownButtonFormField<Supplier>(
+                        initialValue: _selectedSupplier,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'المورد (اختياري وقت الاستلام)',
+                          helperText:
+                              'يمكن تركه «مورد غير محدد» وتعيينه لاحقاً قبل قفل الشحنة',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.person),
+                        ),
+                        items: _suppliers
+                            .map(
+                              (s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(
+                                  s.id == DefaultSupplier.unknownId
+                                      ? '${s.name} (تحديد لاحقاً)'
+                                      : '${s.name}${s.phone != null ? ' (${s.phone})' : ''}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             )
-                          : const Icon(Icons.check),
-                      label: Text(widget.shipment == null ? 'إضافة الشحنة' : 'حفظ التعديلات'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => _selectedSupplier = val),
+                      ),
+                    const Gap(16),
+
+                    // Shipment number & date (stacked on narrow mobile screens)
+                    if (isCompact) ...[
+                      shipmentNumberField,
+                      const Gap(12),
+                      shipmentDateField,
+                    ] else
+                      Row(
+                        children: [
+                          Expanded(child: shipmentNumberField),
+                          const Gap(12),
+                          Expanded(child: shipmentDateField),
+                        ],
+                      ),
+                    const Gap(20),
+
+                    // Pricing mode selector
+                    Text(
+                      'نظام التسعير *',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const Gap(8),
+                    Row(
+                      children: [
+                        _buildPricingChoiceChip(
+                          mode: ShipmentPricingMode.perUnit,
+                          label: isCompact ? 'بالسعر' : 'بالسعر/سعر البرنيكة',
+                          icon: Icons.filter_1,
+                        ),
+                        const Gap(8),
+                        _buildPricingChoiceChip(
+                          mode: ShipmentPricingMode.lumpSum,
+                          label: isCompact ? 'جملة' : 'جملة (Lump Sum)',
+                          icon: Icons.all_inclusive,
+                        ),
+                        const Gap(8),
+                        _buildPricingChoiceChip(
+                          mode: ShipmentPricingMode.commission,
+                          label: isCompact ? 'عمولة' : 'عمولة (Commission)',
+                          icon: Icons.percent,
+                        ),
+                      ],
+                    ),
+                    const Gap(16),
+
+                    // Total Barnika Count
+                    TextFormField(
+                      controller: _totalBarnikaCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'عدد البرانيك الكلي *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.inventory_2),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                      validator: (val) {
+                        final n = int.tryParse(val ?? '');
+                        if (n == null || n <= 0) {
+                          return 'ادخل عدد برانيك صحيح أكبر من 0';
+                        }
+                        return null;
+                      },
+                    ),
+                    const Gap(16),
+
+                    // Mode-specific inputs
+                    if (_pricingMode == ShipmentPricingMode.perUnit) ...[
+                      TextFormField(
+                        controller: _costPerBarnikaCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'سعر التكلفة للبرنيكة الواحدة (ج.م) *',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.attach_money),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                        validator: (val) {
+                          final n = double.tryParse(val ?? '');
+                          if (n == null || n < 0) return 'ادخل سعر تكلفة صحيح';
+                          return null;
+                        },
+                      ),
+                      const Gap(16),
+                    ] else if (_pricingMode == ShipmentPricingMode.lumpSum) ...[
+                      TextFormField(
+                        controller: _lumpSumCostCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'إجمالي تكلفة الشحنة (جملة) (ج.م) *',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.account_balance_wallet),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                        validator: (val) {
+                          final n = double.tryParse(val ?? '');
+                          if (n == null || n < 0) {
+                            return 'ادخل التكلفة الإجمالية الصحيحة';
+                          }
+                          return null;
+                        },
+                      ),
+                      const Gap(16),
+                    ] else if (_pricingMode == ShipmentPricingMode.commission) ...[
+                      TextFormField(
+                        controller: _commissionPercentageCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'نسبة عمولة المحل (%) *',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.percent),
+                          suffixText: '%',
+                        ),
+                        validator: (val) {
+                          final n = double.tryParse(val ?? '');
+                          if (n == null || n < 0 || n > 100) {
+                            return 'ادخل نسبة بين 0 و 100%';
+                          }
+                          return null;
+                        },
+                      ),
+                      const Gap(16),
+                    ],
+
+                    // Container price & calculated cost
+                    if (isCompact) ...[
+                      containerPriceField,
+                      const Gap(12),
+                      calculatedCostBox,
+                    ] else
+                      Row(
+                        children: [
+                          Expanded(child: containerPriceField),
+                          const Gap(12),
+                          Expanded(child: calculatedCostBox),
+                        ],
+                      ),
+                    const Gap(16),
+
+                    TextFormField(
+                      controller: _notesCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'ملاحظات (اختياري)',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.note_alt_outlined),
                       ),
                     ),
+                    const Gap(24),
+
+                    // Submit buttons
+                    Wrap(
+                      alignment: WrapAlignment.end,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        TextButton(
+                          onPressed: _isSubmitting
+                              ? null
+                              : () => Navigator.of(context).pop(),
+                          child: const Text('إلغاء'),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: _isSubmitting ? null : _submit,
+                          icon: _isSubmitting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.check),
+                          label: Text(
+                            widget.shipment == null
+                                ? 'إضافة الشحنة'
+                                : 'حفظ التعديلات',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
