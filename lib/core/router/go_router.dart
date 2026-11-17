@@ -24,6 +24,7 @@ import 'package:pos_offline_desktop/ui/empty_barnika/empty_barnika_screen.dart';
 import 'package:pos_offline_desktop/ui/day/day_management_screen.dart';
 import 'package:pos_offline_desktop/ui/customer/customer_debt_list_screen.dart';
 import 'package:pos_offline_desktop/ui/import/excel_import_screen.dart';
+import 'package:pos_offline_desktop/ui/expense/expense_page.dart';
 import 'package:pos_offline_desktop/ui/custody/custody_page.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/bom_list_screen.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/mo_detail_screen.dart';
@@ -211,6 +212,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/customer-debts',
         builder: (context, state) => CustomerDebtListScreen(db: db),
+      ),
+      GoRoute(
+        path: '/expenses',
+        builder: (context, state) => ExpensePage(db: db),
       ),
       GoRoute(
         path: '/excel-import',

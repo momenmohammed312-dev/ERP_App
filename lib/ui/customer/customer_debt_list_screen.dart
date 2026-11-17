@@ -167,6 +167,7 @@ class _CustomerDebtListScreenState extends State<CustomerDebtListScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(
         title: const Text('مديونيات العملاء والتحصيل'),
@@ -276,10 +277,16 @@ class _CustomerDebtListScreenState extends State<CustomerDebtListScreen> {
                           children: [
                             CircleAvatar(
                               backgroundColor: d.hasOverdue
-                                  ? Colors.red.shade100
+                                  ? Colors.red.withValues(
+                                      alpha: isDark ? 0.22 : 0.12,
+                                    )
                                   : (d.hasDueToday
-                                      ? Colors.orange.shade100
-                                      : Colors.blue.shade100),
+                                      ? Colors.orange.withValues(
+                                          alpha: isDark ? 0.22 : 0.12,
+                                        )
+                                      : Colors.blue.withValues(
+                                          alpha: isDark ? 0.22 : 0.12,
+                                        )),
                               child: Icon(
                                 d.hasOverdue
                                     ? Icons.warning
@@ -373,7 +380,9 @@ class _CustomerDebtListScreenState extends State<CustomerDebtListScreen> {
                                               vertical: 2,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Colors.orange.shade50,
+                                              color: Colors.orange.withValues(
+                                                alpha: isDark ? 0.18 : 0.1,
+                                              ),
                                               borderRadius:
                                                   BorderRadius.circular(6),
                                               border: Border.all(
@@ -384,7 +393,9 @@ class _CustomerDebtListScreenState extends State<CustomerDebtListScreen> {
                                               'برانيك: ${d.barnikaBalance}',
                                               style: TextStyle(
                                                 fontSize: 11,
-                                                color: Colors.orange.shade900,
+                                                color: isDark
+                                                    ? Colors.orange.shade200
+                                                    : Colors.orange.shade900,
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),

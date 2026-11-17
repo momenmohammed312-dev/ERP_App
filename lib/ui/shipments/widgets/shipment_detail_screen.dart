@@ -130,8 +130,18 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                               return ListTile(
                                 leading: CircleAvatar(
                                   backgroundColor: isCurrent
-                                      ? Colors.green.shade100
-                                      : Colors.blue.shade50,
+                                      ? Colors.green.withValues(
+                                          alpha: Theme.of(ctx).brightness ==
+                                                  Brightness.dark
+                                              ? 0.22
+                                              : 0.12,
+                                        )
+                                      : Colors.blue.withValues(
+                                          alpha: Theme.of(ctx).brightness ==
+                                                  Brightness.dark
+                                              ? 0.22
+                                              : 0.12,
+                                        ),
                                   child: Icon(
                                     Icons.person,
                                     color: isCurrent ? Colors.green : Colors.blue,
@@ -214,7 +224,9 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
               Text(
                 'المتبقي المتاح حالياً: ${st.remainingCount} برنيكة',
                 style: TextStyle(
-                  color: Colors.green.shade800,
+                  color: Theme.of(ctx).brightness == Brightness.dark
+                      ? Colors.green.shade300
+                      : Colors.green.shade800,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -506,18 +518,27 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
+                  color: Colors.amber.withValues(
+                    alpha: Theme.of(ctx).brightness == Brightness.dark
+                        ? 0.18
+                        : 0.1,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.amber.shade400),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.warning_amber, color: Colors.amber),
-                    Gap(8),
+                    const Icon(Icons.warning_amber, color: Colors.amber),
+                    const Gap(8),
                     Expanded(
                       child: Text(
                         'تنبيه: المورد ما زال «مورد غير محدد». يفضل تعيين المورد الفعلي قبل قفل الشحنة.',
-                        style: TextStyle(fontSize: 13),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(ctx).brightness == Brightness.dark
+                              ? Colors.amber.shade200
+                              : Colors.amber.shade900,
+                        ),
                       ),
                     ),
                   ],
@@ -784,6 +805,7 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
 
     final st = _statement!;
     final s = st.shipment;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -862,8 +884,10 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.w600,
                                       color: st.hasUnknownSupplier
-                                          ? Colors.orange.shade900
-                                          : Colors.grey.shade800,
+                                          ? (isDark
+                                              ? Colors.orange.shade300
+                                              : Colors.orange.shade900)
+                                          : theme.colorScheme.onSurfaceVariant,
                                     ),
                                   ),
                                   if (!st.isClosed)
@@ -902,10 +926,16 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                           ),
                           decoration: BoxDecoration(
                             color: st.isClosed
-                                ? Colors.blueGrey.shade100
+                                ? Colors.blueGrey.withValues(
+                                    alpha: isDark ? 0.24 : 0.14,
+                                  )
                                 : (st.remainingCount > 0
-                                    ? Colors.green.shade100
-                                    : Colors.amber.shade100),
+                                    ? Colors.green.withValues(
+                                        alpha: isDark ? 0.22 : 0.12,
+                                      )
+                                    : Colors.amber.withValues(
+                                        alpha: isDark ? 0.22 : 0.12,
+                                      )),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: st.isClosed
@@ -919,10 +949,16 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                             st.isClosed ? 'مقفولة' : 'مفتوحة',
                             style: TextStyle(
                               color: st.isClosed
-                                  ? Colors.blueGrey.shade900
+                                  ? (isDark
+                                      ? Colors.blueGrey.shade200
+                                      : Colors.blueGrey.shade900)
                                   : (st.remainingCount > 0
-                                      ? Colors.green.shade900
-                                      : Colors.amber.shade900),
+                                      ? (isDark
+                                          ? Colors.green.shade300
+                                          : Colors.green.shade900)
+                                      : (isDark
+                                          ? Colors.amber.shade300
+                                          : Colors.amber.shade900)),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -1007,13 +1043,21 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.amber.shade50,
+                          color: Colors.amber.withValues(
+                            alpha: isDark ? 0.16 : 0.08,
+                          ),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.amber.shade200),
+                          border: Border.all(
+                            color: Colors.amber.withValues(alpha: 0.4),
+                          ),
                         ),
                         child: Text(
                           'ملاحظات: ${s.notes!}',
-                          style: TextStyle(color: Colors.amber.shade900),
+                          style: TextStyle(
+                            color: isDark
+                                ? Colors.amber.shade200
+                                : Colors.amber.shade900,
+                          ),
                         ),
                       ),
                     ],
@@ -1064,12 +1108,15 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                       _buildStatementRow(
                         '− عمولة المحل (${st.commissionPercentage.toStringAsFixed(1)}%)',
                         '-${st.commissionAmount.toStringAsFixed(2)} ج.م',
-                        valueColor: Colors.teal.shade800,
+                        valueColor: isDark
+                            ? Colors.teal.shade200
+                            : Colors.teal.shade800,
                       ),
                     _buildStatementRow(
                       '− مصروفات الشحنة (النولون/المشال)',
                       '-${st.shipmentExpenses.toStringAsFixed(2)} ج.م',
-                      valueColor: Colors.red.shade700,
+                      valueColor:
+                          isDark ? Colors.red.shade300 : Colors.red.shade700,
                     ),
                     const Divider(height: 18),
                     _buildStatementRow(
@@ -1077,20 +1124,28 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                       '${st.netSupplierDue.toStringAsFixed(2)} ج.م',
                       isBold: true,
                       fontSize: 16,
-                      valueColor: Colors.indigo.shade900,
+                      valueColor: isDark
+                          ? Colors.indigo.shade200
+                          : Colors.indigo.shade900,
                     ),
                     _buildStatementRow(
                       'المدفوع للمورد على الشحنة',
                       '${st.paidForShipment.toStringAsFixed(2)} ج.م',
-                      valueColor: Colors.green.shade800,
+                      valueColor: isDark
+                          ? Colors.green.shade300
+                          : Colors.green.shade800,
                     ),
                     _buildStatementRow(
                       'المتبقي للمورد على الشحنة',
                       '${st.remainingForShipment.toStringAsFixed(2)} ج.م',
                       isBold: true,
                       valueColor: st.remainingForShipment > 0.01
-                          ? Colors.deepOrange.shade800
-                          : Colors.green.shade800,
+                          ? (isDark
+                              ? Colors.deepOrange.shade300
+                              : Colors.deepOrange.shade800)
+                          : (isDark
+                              ? Colors.green.shade300
+                              : Colors.green.shade800),
                     ),
                     const Gap(14),
                     Wrap(
@@ -1179,11 +1234,15 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                             contentPadding: EdgeInsets.zero,
                             leading: CircleAvatar(
                               radius: 16,
-                              backgroundColor: Colors.red.shade50,
+                              backgroundColor: Colors.red.withValues(
+                                alpha: isDark ? 0.2 : 0.1,
+                              ),
                               child: Icon(
                                 Icons.money_off,
                                 size: 16,
-                                color: Colors.red.shade700,
+                                color: isDark
+                                    ? Colors.red.shade300
+                                    : Colors.red.shade700,
                               ),
                             ),
                             title: Text(exp.description),
@@ -1194,7 +1253,9 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                               '${exp.amount.toStringAsFixed(2)} ج.م',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: Colors.red.shade800,
+                                color: isDark
+                                    ? Colors.red.shade300
+                                    : Colors.red.shade800,
                               ),
                             ),
                           );
@@ -1294,7 +1355,9 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
                               'عمولة: ${item.commission.toStringAsFixed(2)} ج.م',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.green.shade800,
+                                color: isDark
+                                    ? Colors.green.shade300
+                                    : Colors.green.shade800,
                               ),
                             ),
                         ],
@@ -1362,7 +1425,9 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
             children: [
               Text(
                 label,
-                style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
               Text(
                 value,
@@ -1371,7 +1436,11 @@ class _ShipmentDetailScreenState extends State<ShipmentDetailScreen> {
               if (subtitle != null && subtitle.isNotEmpty)
                 Text(
                   subtitle,
-                  style: theme.textTheme.bodySmall?.copyWith(color: Colors.green.shade800),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.brightness == Brightness.dark
+                        ? Colors.green.shade300
+                        : Colors.green.shade800,
+                  ),
                 ),
             ],
           ),

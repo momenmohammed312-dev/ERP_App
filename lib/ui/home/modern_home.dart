@@ -1129,7 +1129,8 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
             Icons.lock_clock,
             Colors.deepOrange,
             () async {
-              final isOpen = await widget.db.dayDao.isDayOpen();
+              final isOpen = await widget.db.dayDao.isDayOpen() ||
+                  await widget.db.cashSessionDao.isCashOpen();
               if (!context.mounted) return;
               if (!isOpen) {
                 ScaffoldMessenger.of(context).showSnackBar(

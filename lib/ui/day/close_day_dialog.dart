@@ -178,9 +178,16 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
 
     try {
       final db = ref.read(appDatabaseProvider);
-      final today = await db.dayDao.getTodayDay();
+      final openDay =
+          await db.dayDao.getOpenDay() ?? await db.dayDao.getTodayDay();
+      final openSession = await db.cashSessionDao.getCurrentSession();
+      final hasOpenDay =
+          openDay != null &&
+          (openDay['is_open'] == 1 || openDay['is_open'] == true);
+      final hasOpenSession =
+          openSession != null && openSession.status == 'open';
 
-      if (today == null) {
+      if (!hasOpenDay && !hasOpenSession) {
         if (mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -355,8 +362,12 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
       final netCustody = custodyDisbursed - custodyReturned;
 
       // Get opening balance
-      final today = await db.dayDao.getTodayDay();
-      final openingBalance = today?['opening_balance'] as double?;
+      final openDay =
+          await db.dayDao.getOpenDay() ?? await db.dayDao.getTodayDay();
+      final openSession = await db.cashSessionDao.getCurrentSession();
+      final openingBalance =
+          (openDay?['opening_balance'] as num?)?.toDouble() ??
+          openSession?.openingBalance;
 
       // Calculate expected balance
       final expectedBalance =
@@ -442,9 +453,15 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
         PermissionValidator.requirePermission(currentUser, Permission.closeDay, 'إقفال اليوم');
 
         final db = ref.read(appDatabaseProvider);
-        final today = await db.dayDao.getTodayDay();
+        final openDay =
+            await db.dayDao.getOpenDay() ?? await db.dayDao.getTodayDay();
+        final session = await db.cashSessionDao.getCurrentSession();
+        final hasOpenDay =
+            openDay != null &&
+            (openDay['is_open'] == 1 || openDay['is_open'] == true);
+        final hasOpenSession = session != null && session.status == 'open';
 
-        if (today == null) {
+        if (!hasOpenDay && !hasOpenSession) {
           throw Exception('لا يوجد يوم مفتوح');
         }
 
@@ -461,8 +478,7 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
           // the day in one transaction via the existing DAO machinery.
           final difference = actualBalance - _expectedBalance;
           await db.transaction(() async {
-            final session = await db.cashSessionDao.getCurrentSession();
-            if (session != null && session.status == 'open') {
+            if (hasOpenSession) {
               await db.cashSessionDao.closeCashSession(
                 session.id,
                 expectedBalance: _expectedBalance,
@@ -472,16 +488,25 @@ class _CloseDayDialogState extends ConsumerState<CloseDayDialog> {
                 settlementAmount: settlementAmount,
               );
             }
-            await db.dayDao.closeDay(
-              dayId: today['id'] as int,
-              closingBalance: actualBalance,
-              notes: notes,
-              closedBy: closedBy,
+            if (openDay != null) {
+              await db.dayDao.closeDay(
+                dayId: openDay['id'] as int,
+                closingBalance: actualBalance,
+                notes: notes,
+                closedBy: closedBy,
+              );
+            }
+            await db.customUpdate(
+              "UPDATE days SET is_open = 0, closed_at = COALESCE(closed_at, ?), closed_by = COALESCE(NULLIF(closed_by, ''), ?) WHERE is_open = 1",
+              variables: [
+                drift.Variable.withDateTime(DateTime.now()),
+                drift.Variable.withString(closedBy),
+              ],
             );
           });
-        } else {
+        } else if (openDay != null) {
           await db.dayDao.closeDay(
-            dayId: today['id'] as int,
+            dayId: openDay['id'] as int,
             closingBalance: actualBalance,
             notes: notes,
             closedBy: closedBy,

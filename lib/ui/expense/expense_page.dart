@@ -927,29 +927,43 @@ class _ExpensePageState extends State<ExpensePage> {
                         '${DateFormat('yyyy/MM/dd').format(expense.date)} • ${_getLocalizedPaymentMethod(expense.paymentMethod, l10n)}',
                       ),
                       if (AppFeatures.hasShipmentTracking)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isShip
-                                ? Colors.orange.shade100
-                                : Colors.blueGrey.shade100,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            isShip
-                                ? 'شحنة${ship != null ? " #${ship.shipmentNumber}" : ""}'
-                                : 'محل',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: isShip
-                                  ? Colors.orange.shade900
-                                  : Colors.blueGrey.shade900,
-                            ),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final isDark =
+                                Theme.of(context).brightness == Brightness.dark;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isShip
+                                    ? Colors.orange.withValues(
+                                        alpha: isDark ? 0.22 : 0.14,
+                                      )
+                                    : Colors.blueGrey.withValues(
+                                        alpha: isDark ? 0.24 : 0.14,
+                                      ),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                isShip
+                                    ? 'شحنة${ship != null ? " #${ship.shipmentNumber}" : ""}'
+                                    : 'محل',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: isShip
+                                      ? (isDark
+                                          ? Colors.orange.shade200
+                                          : Colors.orange.shade900)
+                                      : (isDark
+                                          ? Colors.blueGrey.shade200
+                                          : Colors.blueGrey.shade900),
+                                ),
+                              ),
+                            );
+                          },
                         ),
                     ],
                   ),

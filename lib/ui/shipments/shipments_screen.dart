@@ -288,6 +288,7 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
                           s.status == VegetableShipmentStatus.closed;
                       final effectiveRemaining =
                           ShipmentAllocationService.effectiveRemaining(s);
+                      final isDark = theme.brightness == Brightness.dark;
 
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -316,14 +317,18 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
                                   children: [
                                     CircleAvatar(
                                       backgroundColor: isClosed
-                                          ? Colors.grey.shade200
+                                          ? (isDark
+                                              ? Colors.grey.shade800
+                                              : Colors.grey.shade200)
                                           : theme.colorScheme.primaryContainer,
                                       child: Icon(
                                         isClosed
                                             ? Icons.lock_outline
                                             : Icons.local_shipping,
                                         color: isClosed
-                                            ? Colors.grey.shade700
+                                            ? (isDark
+                                                ? Colors.grey.shade300
+                                                : Colors.grey.shade700)
                                             : theme.colorScheme.primary,
                                       ),
                                     ),
@@ -356,8 +361,14 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: isClosed
-                                                      ? Colors.grey.shade200
-                                                      : Colors.green.shade50,
+                                                      ? Colors.grey.withValues(
+                                                          alpha:
+                                                              isDark ? 0.22 : 0.14,
+                                                        )
+                                                      : Colors.green.withValues(
+                                                          alpha:
+                                                              isDark ? 0.2 : 0.1,
+                                                        ),
                                                   borderRadius:
                                                       BorderRadius.circular(10),
                                                 ),
@@ -367,8 +378,12 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.bold,
                                                     color: isClosed
-                                                        ? Colors.grey.shade800
-                                                        : Colors.green.shade800,
+                                                        ? (isDark
+                                                            ? Colors.grey.shade300
+                                                            : Colors.grey.shade800)
+                                                        : (isDark
+                                                            ? Colors.green.shade300
+                                                            : Colors.green.shade800),
                                                   ),
                                                 ),
                                               ),
@@ -382,8 +397,11 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
                                                   s.supplierId ==
                                                           DefaultSupplier
                                                               .unknownId
-                                                      ? Colors.orange.shade800
-                                                      : Colors.grey.shade700,
+                                                      ? (isDark
+                                                          ? Colors.orange.shade300
+                                                          : Colors.orange.shade800)
+                                                      : theme.colorScheme
+                                                          .onSurfaceVariant,
                                             ),
                                           ),
                                         ],
@@ -430,14 +448,18 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: Colors.amber.shade50,
+                                          color: Colors.amber.withValues(
+                                            alpha: isDark ? 0.2 : 0.1,
+                                          ),
                                           borderRadius:
                                               BorderRadius.circular(6),
                                         ),
                                         child: Text(
                                           'تكميل: ${s.toppingCount}',
                                           style: TextStyle(
-                                            color: Colors.amber.shade900,
+                                            color: isDark
+                                                ? Colors.amber.shade200
+                                                : Colors.amber.shade900,
                                             fontWeight: FontWeight.bold,
                                             fontSize: 12,
                                           ),
@@ -448,16 +470,24 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
                                           horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
                                         color: effectiveRemaining > 0
-                                            ? Colors.green.shade50
-                                            : Colors.grey.shade100,
+                                            ? Colors.green.withValues(
+                                                alpha: isDark ? 0.2 : 0.1,
+                                              )
+                                            : Colors.grey.withValues(
+                                                alpha: isDark ? 0.22 : 0.14,
+                                              ),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Text(
                                         'متبقي: $effectiveRemaining',
                                         style: TextStyle(
                                           color: effectiveRemaining > 0
-                                              ? Colors.green.shade800
-                                              : Colors.grey.shade700,
+                                              ? (isDark
+                                                  ? Colors.green.shade300
+                                                  : Colors.green.shade800)
+                                              : (isDark
+                                                  ? Colors.grey.shade300
+                                                  : Colors.grey.shade700),
                                           fontWeight: FontWeight.bold,
                                           fontSize: 12,
                                         ),

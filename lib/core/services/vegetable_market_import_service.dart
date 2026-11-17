@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:drift/drift.dart';
 import 'package:excel/excel.dart';
@@ -447,7 +448,11 @@ class VegetableMarketImportService {
   _ParsedExcelWorkbook _parseExcelWorkbook(Uint8List bytes) {
     final excel = Excel.decodeBytes(bytes);
     final customers = <OpeningBalanceCustomerRow>[];
+    final consolidatedCustomers = <String, OpeningBalanceCustomerRow>{};
+    final transactionalCustomerKeys = <String>{};
     final suppliers = <OpeningBalanceSupplierRow>[];
+    final consolidatedSuppliers = <String, OpeningBalanceSupplierRow>{};
+    final collectionsByNormCustomer = <String, double>{};
     final legacyShipments = <Map<String, dynamic>>[];
     final legacySales = <Map<String, dynamic>>[];
     final legacyExpenses = <Map<String, dynamic>>[];
@@ -460,7 +465,10 @@ class VegetableMarketImportService {
       final sheet = entry.value;
       if (sheet.rows.length <= 1) continue;
 
-      final headerRow = sheet.rows.first;
+      final headerRowIndex = _findHeaderRowIndex(sheet);
+      if (headerRowIndex + 1 >= sheet.rows.length) continue;
+
+      final headerRow = sheet.rows[headerRowIndex];
       final headerKeys = <int, String>{};
       for (var i = 0; i < headerRow.length; i++) {
         final raw = _cellToString(headerRow[i]);
@@ -468,9 +476,19 @@ class VegetableMarketImportService {
           headerKeys[i] = _normalizeHeaderKey(raw);
         }
       }
+      if (headerKeys.isEmpty) continue;
 
       if (_isCustomerSheet(sheetKey)) {
-        for (var r = 1; r < sheet.rows.length; r++) {
+        final isTransactionalCustomer = _hasAnyHeader(headerKeys, const [
+          'عدد البرانيك',
+          'سعر بيع البرنيكة',
+          'سعر البرنيكة',
+          'إجمالي المستحق',
+          'البرانيك المستلمه',
+          'البرانيك المستلمة',
+        ]);
+
+        for (var r = headerRowIndex + 1; r < sheet.rows.length; r++) {
           final row = sheet.rows[r];
           final map = _rowToHeaderMap(row, headerKeys);
           final name = _pickString(map, const [
@@ -482,6 +500,12 @@ class VegetableMarketImportService {
             'الزبون',
           ]);
           if (name == null || name.isEmpty) continue;
+          final normName = ArabicNameNormalizer.normalize(name);
+          if (_isSummaryRowName(normName)) continue;
+          if (const {'نقديه', 'نقدي', 'كاش', 'عميل نقدي'}.contains(normName)) {
+            continue;
+          }
+
           final phone = _pickString(map, const [
             'phone',
             'الهاتف',
@@ -490,46 +514,127 @@ class VegetableMarketImportService {
             'رقم الهاتف',
           ]);
           final address = _pickString(map, const ['address', 'العنوان']);
-          final openingDebt = _pickDouble(map, const [
-                'openingbalance',
-                'opening_balance',
-                'openingdebt',
-                'balance',
-                'رصيد الاجل الافتتاحي',
-                'الرصيد الافتتاحي',
-                'رصيد افتتاحي',
-                'الاجل',
-                'المديونية',
-              ]) ??
-              0.0;
-          final openingBarnikas = _pickInt(map, const [
-                'openingbarnika',
-                'opening_barnika',
-                'openingbarnikas',
-                'barnika',
-                'barnikas',
-                'رصيد البرانيك الفارغة',
-                'البرانيك الفارغة',
-                'عهدة البرانيك',
-                'البرانيك',
-                'برانيك',
-              ]) ??
-              0;
-          final notes = _pickString(map, const ['notes', 'note', 'ملاحظات', 'ملاحظة', 'type']);
-          customers.add(
-            OpeningBalanceCustomerRow(
-              rowNumber: r + 1,
-              name: name,
-              phone: phone?.isNotEmpty == true ? phone : null,
-              address: address?.isNotEmpty == true ? address : null,
-              openingDebt: openingDebt < 0 ? 0.0 : openingDebt,
-              openingBarnikas: openingBarnikas < 0 ? 0 : openingBarnikas,
-              notes: notes?.isNotEmpty == true ? notes : null,
-            ),
+
+          double? openingDebt = _pickDouble(map, const [
+            'openingbalance',
+            'opening_balance',
+            'openingdebt',
+            'balance',
+            'رصيد الاجل الافتتاحي',
+            'الرصيد الافتتاحي',
+            'رصيد افتتاحي',
+            'الاجل',
+            'المديونية',
+            'الباقي (اجل)',
+            'الباقي',
+          ]);
+          if (openingDebt == null) {
+            final qty = _pickDouble(map, const [
+              'عدد البرانيك',
+              'الكمية',
+              'quantity',
+            ]);
+            final unitPrice = _pickDouble(map, const [
+              'سعر بيع البرنيكة',
+              'سعر البرنيكة',
+              'السعر',
+              'unitprice',
+              'price',
+            ]);
+            final paid =
+                _pickDouble(map, const ['المدفوع', 'مدفوع', 'paid']) ?? 0.0;
+            final discount =
+                _pickDouble(map, const ['خصومات', 'الخصم', 'خصم', 'discount']) ??
+                    0.0;
+            if (qty != null && unitPrice != null) {
+              openingDebt = math.max(0.0, (qty * unitPrice) - paid - discount);
+            } else {
+              openingDebt = 0.0;
+            }
+          }
+
+          int? openingBarnikas = _pickInt(map, const [
+            'openingbarnika',
+            'opening_barnika',
+            'openingbarnikas',
+            'barnika',
+            'barnikas',
+            'رصيد البرانيك الفارغة',
+            'البرانيك الفارغة',
+            'عهدة البرانيك',
+            'البرانيك المتبقيه',
+            'البرانيك المتبقية',
+            'البرانيك',
+            'برانيك',
+          ]);
+          if (openingBarnikas == null) {
+            final qty = _pickInt(map, const [
+              'عدد البرانيك',
+              'الكمية',
+              'quantity',
+            ]);
+            final received = _pickInt(map, const [
+                  'البرانيك المستلمه',
+                  'البرانيك المستلمة',
+                  'المستلم',
+                ]) ??
+                0;
+            if (qty != null) {
+              openingBarnikas = math.max(0, qty - received);
+            } else {
+              openingBarnikas = 0;
+            }
+          }
+
+          final notes = _pickString(map, const [
+            'notes',
+            'note',
+            'ملاحظات',
+            'ملاحظة',
+            'type',
+            'نوع الزبون',
+          ]);
+          final rowObj = OpeningBalanceCustomerRow(
+            rowNumber: r + 1,
+            name: name.trim(),
+            phone: phone?.isNotEmpty == true ? phone : null,
+            address: address?.isNotEmpty == true ? address : null,
+            openingDebt: openingDebt < 0 ? 0.0 : openingDebt,
+            openingBarnikas: openingBarnikas < 0 ? 0 : openingBarnikas,
+            notes: notes?.isNotEmpty == true ? notes : null,
           );
+
+          if (isTransactionalCustomer) {
+            transactionalCustomerKeys.add(normName);
+            final prev = consolidatedCustomers[normName];
+            if (prev == null) {
+              consolidatedCustomers[normName] = rowObj;
+            } else {
+              consolidatedCustomers[normName] = OpeningBalanceCustomerRow(
+                rowNumber: prev.rowNumber,
+                name: prev.name,
+                phone: prev.phone ?? rowObj.phone,
+                address: prev.address ?? rowObj.address,
+                openingDebt: prev.openingDebt + rowObj.openingDebt,
+                openingBarnikas: prev.openingBarnikas + rowObj.openingBarnikas,
+                notes: prev.notes ?? rowObj.notes,
+              );
+            }
+          } else {
+            // Keep individual rows on opening-balance templates so duplicate
+            // Arabic names are surfaced to the user instead of silently merged.
+            customers.add(rowObj);
+          }
         }
       } else if (_isSupplierSheet(sheetKey)) {
-        for (var r = 1; r < sheet.rows.length; r++) {
+        final isTransactionalSupplier = _hasAnyHeader(headerKeys, const [
+          'رقم الشحنة',
+          'عدد البرانيك',
+          'سعر الطماطم للبرنيكة',
+          'إجمالي التكلفة',
+        ]);
+
+        for (var r = headerRowIndex + 1; r < sheet.rows.length; r++) {
           final row = sheet.rows[r];
           final map = _rowToHeaderMap(row, headerKeys);
           final name = _pickString(map, const [
@@ -539,6 +644,9 @@ class VegetableMarketImportService {
             'المورد',
           ]);
           if (name == null || name.isEmpty) continue;
+          final normName = ArabicNameNormalizer.normalize(name);
+          if (_isSummaryRowName(normName)) continue;
+
           final phone = _pickString(map, const [
             'phone',
             'الهاتف',
@@ -559,31 +667,120 @@ class VegetableMarketImportService {
                 'المستحق',
               ]) ??
               0.0;
-          final notes = _pickString(map, const ['notes', 'note', 'ملاحظات', 'ملاحظة']);
-          suppliers.add(
-            OpeningBalanceSupplierRow(
-              rowNumber: r + 1,
-              name: name,
-              phone: phone?.isNotEmpty == true ? phone : null,
-              address: address?.isNotEmpty == true ? address : null,
-              openingCredit: openingCredit < 0 ? 0.0 : openingCredit,
-              notes: notes?.isNotEmpty == true ? notes : null,
-            ),
+          final notes =
+              _pickString(map, const ['notes', 'note', 'ملاحظات', 'ملاحظة']);
+          final rowObj = OpeningBalanceSupplierRow(
+            rowNumber: r + 1,
+            name: name.trim(),
+            phone: phone?.isNotEmpty == true ? phone : null,
+            address: address?.isNotEmpty == true ? address : null,
+            openingCredit: openingCredit < 0 ? 0.0 : openingCredit,
+            notes: notes?.isNotEmpty == true ? notes : null,
           );
+
+          if (isTransactionalSupplier) {
+            final prev = consolidatedSuppliers[normName];
+            if (prev == null) {
+              consolidatedSuppliers[normName] = rowObj;
+            } else {
+              consolidatedSuppliers[normName] = OpeningBalanceSupplierRow(
+                rowNumber: prev.rowNumber,
+                name: prev.name,
+                phone: prev.phone ?? rowObj.phone,
+                address: prev.address ?? rowObj.address,
+                openingCredit: prev.openingCredit + rowObj.openingCredit,
+                notes: prev.notes ?? rowObj.notes,
+              );
+            }
+          } else {
+            suppliers.add(rowObj);
+          }
+        }
+      } else if (_isCollectionSheet(sheetKey)) {
+        for (var r = headerRowIndex + 1; r < sheet.rows.length; r++) {
+          final row = sheet.rows[r];
+          final map = _rowToHeaderMap(row, headerKeys);
+          final name = _pickString(map, const [
+            'customername',
+            'name',
+            'اسم الزبون',
+            'اسم العميل',
+            'الاسم',
+            'العميل',
+            'الزبون',
+          ]);
+          final amount = _pickDouble(map, const [
+            'amount',
+            'المبلغ المحصل',
+            'المحصل',
+            'المبلغ',
+            'paid',
+          ]);
+          if (name != null &&
+              name.isNotEmpty &&
+              amount != null &&
+              amount > 0) {
+            final normName = ArabicNameNormalizer.normalize(name);
+            collectionsByNormCustomer[normName] =
+                (collectionsByNormCustomer[normName] ?? 0.0) + amount;
+          }
+        }
+
+        // Only expose canonical English-keyed legacy rows when no Arabic
+        // opening/transactional structure is present.
+        final rawRows = _rowsToRawMaps(sheet, headerRowIndex);
+        if (rawRows.isNotEmpty && rawRows.first.containsKey('customerName')) {
+          legacyCollections.addAll(rawRows);
         }
       } else if (sheetKey == 'shipments' || sheetKey == 'الشحنات') {
-        legacyShipments.addAll(_rowsToRawMaps(sheet, headerRow));
+        final rawRows = _rowsToRawMaps(sheet, headerRowIndex);
+        if (rawRows.isNotEmpty && rawRows.first.containsKey('shipmentNumber')) {
+          legacyShipments.addAll(rawRows);
+        }
       } else if (sheetKey == 'sales' || sheetKey == 'المبيعات') {
-        legacySales.addAll(_rowsToRawMaps(sheet, headerRow));
-      } else if (sheetKey == 'expenses' || sheetKey == 'المصروفات') {
-        legacyExpenses.addAll(_rowsToRawMaps(sheet, headerRow));
-      } else if (sheetKey == 'collections' || sheetKey == 'التحصيلات') {
-        legacyCollections.addAll(_rowsToRawMaps(sheet, headerRow));
+        final rawRows = _rowsToRawMaps(sheet, headerRowIndex);
+        if (rawRows.isNotEmpty && rawRows.first.containsKey('totalAmount')) {
+          legacySales.addAll(rawRows);
+        }
+      } else if (sheetKey == 'expenses' ||
+          sheetKey == 'المصروفات' ||
+          sheetKey == 'مصروفات') {
+        final rawRows = _rowsToRawMaps(sheet, headerRowIndex);
+        if (rawRows.isNotEmpty && rawRows.first.containsKey('description')) {
+          legacyExpenses.addAll(rawRows);
+        }
       } else if (sheetKey == 'emptybarnikarecords' ||
-          sheetKey == 'البرانيك الفاضية' ||
+          sheetKey == 'البرانيكالفاضية' ||
           sheetKey == 'البرانيك') {
-        legacyEmptyBarnika.addAll(_rowsToRawMaps(sheet, headerRow));
+        final rawRows = _rowsToRawMaps(sheet, headerRowIndex);
+        if (rawRows.isNotEmpty && rawRows.first.containsKey('quantityOut')) {
+          legacyEmptyBarnika.addAll(rawRows);
+        }
       }
+    }
+
+    if (consolidatedCustomers.isNotEmpty) {
+      for (final entry in consolidatedCustomers.entries) {
+        final collected = transactionalCustomerKeys.contains(entry.key)
+            ? (collectionsByNormCustomer[entry.key] ?? 0.0)
+            : 0.0;
+        final netDebt = math.max(0.0, entry.value.openingDebt - collected);
+        customers.add(
+          OpeningBalanceCustomerRow(
+            rowNumber: entry.value.rowNumber,
+            name: entry.value.name,
+            phone: entry.value.phone,
+            address: entry.value.address,
+            openingDebt: netDebt,
+            openingBarnikas: entry.value.openingBarnikas,
+            notes: entry.value.notes,
+          ),
+        );
+      }
+    }
+
+    if (consolidatedSuppliers.isNotEmpty) {
+      suppliers.addAll(consolidatedSuppliers.values);
     }
 
     return _ParsedExcelWorkbook(
@@ -597,6 +794,73 @@ class VegetableMarketImportService {
       detectedSheets: detectedSheets,
     );
   }
+
+  static int _findHeaderRowIndex(Sheet sheet) {
+    const keywords = [
+      'الاسم',
+      'اسم الزبون',
+      'اسم العميل',
+      'اسم المورد',
+      'المورد',
+      'رقم الشحنة',
+      'عدد البرانيك',
+      'البند',
+      'المبلغ',
+      'المبلغ المحصل',
+      'name',
+      'phone',
+      'الرصيد الافتتاحي',
+      'رصيد الآجل الافتتاحي',
+    ];
+    final normKeywords = keywords.map(_normalizeHeaderKey).toSet();
+    final limit = math.min(10, sheet.rows.length);
+    for (var r = 0; r < limit; r++) {
+      final row = sheet.rows[r];
+      var nonEmpty = 0;
+      var hasMatch = false;
+      for (final cell in row) {
+        final raw = _cellToString(cell);
+        if (raw.isEmpty) continue;
+        nonEmpty++;
+        final norm = _normalizeHeaderKey(raw);
+        if (normKeywords.contains(norm) ||
+            normKeywords.any((k) => norm.contains(k))) {
+          hasMatch = true;
+        }
+      }
+      if (nonEmpty >= 2 && hasMatch) {
+        return r;
+      }
+    }
+    return 0;
+  }
+
+  static bool _hasAnyHeader(Map<int, String> headerKeys, List<String> candidates) {
+    final values = headerKeys.values.toList();
+    for (final c in candidates) {
+      final norm = _normalizeHeaderKey(c);
+      final compact = norm.replaceAll(' ', '');
+      for (final v in values) {
+        if (v == norm || v.replaceAll(' ', '') == compact) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  static bool _isSummaryRowName(String normName) =>
+      normName.isEmpty ||
+      normName == 'اجمالي' ||
+      normName == 'مجموع' ||
+      normName.startsWith('اجمالي ') ||
+      normName.startsWith('مجموع ');
+
+  static bool _isCollectionSheet(String key) =>
+      key == 'collections' ||
+      key == 'التحصيلات' ||
+      key == 'تحصيلات' ||
+      key.contains('تحصيل');
 
   static String _normalizeSheetKey(String raw) =>
       ArabicNameNormalizer.normalize(raw).replaceAll(' ', '');
@@ -649,23 +913,24 @@ class VegetableMarketImportService {
 
   static List<Map<String, dynamic>> _rowsToRawMaps(
     Sheet sheet,
-    List<Data?> headerRow,
+    int headerRowIndex,
   ) {
+    final headerRow = sheet.rows[headerRowIndex];
     final cols = <int, String>{};
     for (var i = 0; i < headerRow.length; i++) {
       final h = _cellToString(headerRow[i]);
       if (h.isNotEmpty) cols[i] = h;
     }
     final rows = <Map<String, dynamic>>[];
-    for (var r = 1; r < sheet.rows.length; r++) {
+    for (var r = headerRowIndex + 1; r < sheet.rows.length; r++) {
       final row = sheet.rows[r];
       final map = <String, dynamic>{};
       var hasVal = false;
       for (final c in cols.entries) {
         if (c.key < row.length) {
           final v = row[c.key]?.value;
-          if (v != null) {
-            final s = v.toString().trim();
+          if (v != null && v is! FormulaCellValue) {
+            final s = _cellToString(row[c.key]);
             if (s.isNotEmpty) {
               map[c.value] = v is IntCellValue
                   ? v.value
@@ -709,7 +974,7 @@ class VegetableMarketImportService {
 
   static String _cellToString(Data? cell) {
     final val = cell?.value;
-    if (val == null) return '';
+    if (val == null || val is FormulaCellValue) return '';
     if (val is TextCellValue) return val.value.text?.trim() ?? val.value.toString().trim();
     if (val is IntCellValue) return val.value.toString();
     if (val is DoubleCellValue) {

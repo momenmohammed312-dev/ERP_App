@@ -326,7 +326,9 @@ class _EmptyBarnikaScreenState extends State<EmptyBarnikaScreen> {
                                       '${customerRecords.length} عملية • متبقي: $totalOutstanding برنيكة',
                                       style:
                                           theme.textTheme.bodySmall?.copyWith(
-                                        color: Colors.orange.shade900,
+                                        color: theme.brightness == Brightness.dark
+                                            ? Colors.orange.shade300
+                                            : Colors.orange.shade900,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -634,16 +636,17 @@ class _EmptyBarnikaCustomerScreenState extends State<EmptyBarnikaCustomerScreen>
 class _RecordStat extends StatelessWidget {
   final String label;
   final int value;
-  final Color valueColor;
+  final Color? valueColor;
 
   const _RecordStat({
     required this.label,
     required this.value,
-    this.valueColor = Colors.black,
+    this.valueColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final resolvedColor = valueColor ?? Theme.of(context).colorScheme.onSurface;
     return Column(
       children: [
         Text(
@@ -656,7 +659,7 @@ class _RecordStat extends StatelessWidget {
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: valueColor,
+            color: resolvedColor,
           ),
         ),
       ],

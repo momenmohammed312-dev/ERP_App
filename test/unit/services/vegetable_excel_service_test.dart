@@ -305,5 +305,181 @@ void main() {
       final expTypes = expSheet.rows.skip(1).map((r) => r[1]?.value.toString()).toList();
       expect(expTypes, containsAll(['مصروف شحنة', 'مصروف محل']));
     });
+
+    test('imports transactional ERP workbook with title rows, Row-3 headers, FormulaCellValue, and consolidated balances', () async {
+      final excel = Excel.createExcel();
+
+      // Sheet: موردين (Row 1 title, Row 2 empty, Row 3 headers)
+      final sup = excel['موردين'];
+      sup.appendRow([TextCellValue('شحنات الموردين - تجريبي')]);
+      sup.appendRow([]);
+      sup.appendRow([
+        TextCellValue('م'),
+        TextCellValue('التاريخ'),
+        TextCellValue('اسم المورد'),
+        TextCellValue('رقم الشحنة'),
+        TextCellValue('عدد البرانيك'),
+        TextCellValue('سعر الطماطم للبرنيكة'),
+        TextCellValue('إجمالي التكلفة'),
+      ]);
+      sup.appendRow([
+        IntCellValue(1),
+        TextCellValue('2026-07-17'),
+        TextCellValue('مورد تجريبي أ'),
+        TextCellValue('ش-001'),
+        IntCellValue(100),
+        DoubleCellValue(150),
+        FormulaCellValue('=E4*F4'),
+      ]);
+      // Repeat normalized supplier + empty supplier row (should consolidate & skip empty)
+      sup.appendRow([
+        IntCellValue(2),
+        TextCellValue('2026-07-18'),
+        TextCellValue('مورد تجريبى ا'),
+        TextCellValue('ش-002'),
+        IntCellValue(80),
+        null,
+        FormulaCellValue('=E5*F5'),
+      ]);
+      sup.appendRow([
+        IntCellValue(3),
+        TextCellValue('2026-07-19'),
+        null,
+        TextCellValue('ش-003'),
+        IntCellValue(50),
+      ]);
+
+      // Sheet: زباين (Row 1 title, Row 2 empty, Row 3 headers, formulas in total/remaining)
+      final cust = excel['زباين'];
+      cust.appendRow([TextCellValue('مبيعات الزباين - كاش وآجل')]);
+      cust.appendRow([]);
+      cust.appendRow([
+        TextCellValue('م'),
+        TextCellValue('التاريخ'),
+        TextCellValue('اسم الزبون'),
+        TextCellValue('نوع الزبون'),
+        TextCellValue('رقم الشحنة (مورد)'),
+        TextCellValue('عدد البرانيك'),
+        TextCellValue('سعر بيع البرنيكة'),
+        TextCellValue('إجمالي المستحق'),
+        TextCellValue('المدفوع'),
+        TextCellValue('خصومات'),
+        TextCellValue('الباقي (آجل)'),
+        TextCellValue('البرانيك المستلمه'),
+        TextCellValue('البرانيك المتبقيه'),
+      ]);
+      // Row 1 for الزبون التجريبي: 10 * 160 = 1600, paid 600, discount 100 -> debt 900; barnika 10 - 3 = 7
+      cust.appendRow([
+        IntCellValue(1),
+        TextCellValue('2026-07-17'),
+        TextCellValue('أحمد التجريبي'),
+        TextCellValue('تاجر'),
+        TextCellValue('ش-001'),
+        IntCellValue(10),
+        DoubleCellValue(160),
+        FormulaCellValue('=F4*G4'),
+        DoubleCellValue(600),
+        DoubleCellValue(100),
+        FormulaCellValue('=H4-I4-J4'),
+        IntCellValue(3),
+        FormulaCellValue('=F4-L4'),
+      ]);
+      // Row 2 for same customer without hamza: 5 * 200 = 1000, paid 200 -> debt 800; barnika 5 - 1 = 4
+      cust.appendRow([
+        IntCellValue(2),
+        TextCellValue('2026-07-18'),
+        TextCellValue('احمد التجريبى'),
+        TextCellValue('تاجر'),
+        TextCellValue('ش-002'),
+        IntCellValue(5),
+        DoubleCellValue(200),
+        FormulaCellValue('=F5*G5'),
+        DoubleCellValue(200),
+        null,
+        FormulaCellValue('=H5-I5'),
+        IntCellValue(1),
+        FormulaCellValue('=F5-L5'),
+      ]);
+      // Walk-in cash pseudo-name (must be skipped)
+      cust.appendRow([
+        IntCellValue(3),
+        TextCellValue('2026-07-18'),
+        TextCellValue('نقديه'),
+        TextCellValue('نقدي'),
+        TextCellValue('ش-002'),
+        IntCellValue(4),
+        DoubleCellValue(150),
+        FormulaCellValue('=F6*G6'),
+        DoubleCellValue(600),
+        null,
+        FormulaCellValue('=H6-I6'),
+        IntCellValue(4),
+        FormulaCellValue('=F6-L6'),
+      ]);
+
+      // Sheet: تحصيلات (Row 1 headers): 300 collected from أحمد التجريبي -> net debt = 900 + 800 - 300 = 1400
+      final col = excel['تحصيلات'];
+      col.appendRow([
+        TextCellValue('م'),
+        TextCellValue('التاريخ'),
+        TextCellValue('اسم الزبون'),
+        TextCellValue('المبلغ المحصل'),
+      ]);
+      col.appendRow([
+        IntCellValue(1),
+        TextCellValue('2026-07-19'),
+        TextCellValue('أحمد التجريبي'),
+        DoubleCellValue(300),
+      ]);
+
+      // Sheet: مصروفات (Row 1 title, Row 2 empty, Row 3 headers - should not crash Excel import)
+      final exp = excel['مصروفات'];
+      exp.appendRow([TextCellValue('المصروفات التشغيلية')]);
+      exp.appendRow([]);
+      exp.appendRow([
+        TextCellValue('م'),
+        TextCellValue('التاريخ'),
+        TextCellValue('البند'),
+        TextCellValue('الوصف'),
+        TextCellValue('المبلغ'),
+      ]);
+      exp.appendRow([
+        IntCellValue(1),
+        TextCellValue('2026-07-17'),
+        TextCellValue('نقل'),
+        TextCellValue('نولون'),
+        DoubleCellValue(500),
+      ]);
+
+      if (excel.tables.containsKey('Sheet1')) {
+        excel.delete('Sheet1');
+      }
+      final bytes = Uint8List.fromList(excel.encode()!);
+
+      final service = VegetableMarketImportService(db);
+      final preview = await service.previewExcelBytes(bytes);
+      expect(preview.suppliers.length, 1);
+      expect(preview.suppliers.first.name, 'مورد تجريبي أ');
+      expect(preview.customers.length, 1);
+      expect(preview.customers.first.name, 'أحمد التجريبي');
+      expect(preview.customers.first.openingDebt, closeTo(1400.0, 0.01));
+      expect(preview.customers.first.openingBarnikas, 11);
+      expect(preview.expensesCount, 0);
+      expect(preview.collectionsCount, 0);
+
+      final result = await service.importFromExcelBytes(bytes);
+      expect(result.errors, isEmpty);
+      expect(result.customers, 1);
+      expect(result.suppliers, 1);
+      expect(result.emptyBarnika, 1);
+
+      final allCust = await db.customerDao.getAllCustomers();
+      expect(allCust.length, 1);
+      expect(allCust.first.openingBalance, closeTo(1400.0, 0.01));
+      expect(
+        await db.emptyBarnikaTrackingDao.getCustomerOutstandingBalance(allCust.first.id),
+        11,
+      );
+    });
   });
 }

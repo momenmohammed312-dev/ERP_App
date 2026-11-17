@@ -44,6 +44,9 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
       );
     }
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
@@ -57,31 +60,42 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
             children: [
               // Opening-balance template download card
               Card(
-                color: Colors.teal.shade50,
+                color: Colors.teal.withValues(alpha: isDark ? 0.16 : 0.08),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.teal.withValues(alpha: 0.35)),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.table_chart_outlined, color: Colors.teal),
-                          Gap(8),
+                          Icon(
+                            Icons.table_chart_outlined,
+                            color: isDark ? Colors.teal.shade200 : Colors.teal,
+                          ),
+                          const Gap(8),
                           Expanded(
                             child: Text(
                               'قالب البداية النظيفة (الأرصدة الافتتاحية)',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 15,
+                                color: theme.colorScheme.onSurface,
                               ),
                             ),
                           ),
                         ],
                       ),
                       const Gap(6),
-                      const Text(
+                      Text(
                         'يحتوي القالب على ورقتَي عمل بالعربية: «العملاء» (الاسم، الهاتف، العنوان، رصيد الآجل الافتتاحي، رصيد البرانيك الفارغة) و«الموردين» (الاسم، الهاتف، العنوان، الرصيد الافتتاحي).',
-                        style: TextStyle(fontSize: 12.5, color: Colors.black87),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                       const Gap(10),
                       SizedBox(
@@ -90,6 +104,16 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
                           onPressed: _downloadingTemplate
                               ? null
                               : _downloadOpeningBalanceTemplate,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: isDark
+                                ? Colors.teal.shade200
+                                : Colors.teal.shade800,
+                            side: BorderSide(
+                              color: isDark
+                                  ? Colors.teal.shade300
+                                  : Colors.teal.shade600,
+                            ),
+                          ),
                           icon: _downloadingTemplate
                               ? const SizedBox(
                                   width: 16,
@@ -180,7 +204,7 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
                             'الأوراق المكتشفة: ${_preview!.detectedSheets.join('، ')}',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey.shade700,
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -233,7 +257,13 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
                 const Gap(12),
                 if (_preview!.duplicateWarnings.isNotEmpty) ...[
                   Card(
-                    color: Colors.orange.shade50,
+                    color: Colors.orange.withValues(alpha: isDark ? 0.16 : 0.08),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: Colors.orange.withValues(alpha: 0.35),
+                      ),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(14),
                       child: Column(
@@ -251,7 +281,9 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
                                   'تنبيه تكرار/تشابه أسماء (${_preview!.duplicateWarnings.length}) — سيتم تخطيها تلقائياً',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.orange.shade900,
+                                    color: isDark
+                                        ? Colors.orange.shade300
+                                        : Colors.orange.shade900,
                                   ),
                                 ),
                               ),
@@ -263,7 +295,10 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
                                   padding: const EdgeInsets.only(bottom: 3),
                                   child: Text(
                                     '• $w',
-                                    style: const TextStyle(fontSize: 12),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: theme.colorScheme.onSurface,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -272,7 +307,9 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
                               'و ${_preview!.duplicateWarnings.length - 8} تنبيهات أخرى...',
                               style: TextStyle(
                                 fontSize: 11.5,
-                                color: Colors.orange.shade800,
+                                color: isDark
+                                    ? Colors.orange.shade200
+                                    : Colors.orange.shade800,
                               ),
                             ),
                         ],
@@ -286,12 +323,20 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> {
               // Error display
               if (_error != null) ...[
                 Card(
-                  color: Colors.red.shade50,
+                  color: Colors.red.withValues(alpha: isDark ? 0.16 : 0.08),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: Colors.red.withValues(alpha: 0.35),
+                    ),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(14),
                     child: Text(
                       _error!,
-                      style: const TextStyle(color: Colors.red),
+                      style: TextStyle(
+                        color: isDark ? Colors.red.shade200 : Colors.red.shade800,
+                      ),
                     ),
                   ),
                 ),

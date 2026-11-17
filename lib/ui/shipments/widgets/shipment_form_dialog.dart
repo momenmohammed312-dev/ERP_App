@@ -620,14 +620,18 @@ class _ShipmentFormDialogState extends State<ShipmentFormDialog> {
             children: [
               Icon(
                 icon,
-                color: selected ? Colors.white : Colors.black87,
+                color: selected
+                    ? Colors.white
+                    : Theme.of(context).colorScheme.onSurface,
                 size: 20,
               ),
               const Gap(4),
               Text(
                 label,
                 style: TextStyle(
-                  color: selected ? Colors.white : Colors.black87,
+                  color: selected
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.onSurface,
                   fontSize: 12,
                   fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                 ),

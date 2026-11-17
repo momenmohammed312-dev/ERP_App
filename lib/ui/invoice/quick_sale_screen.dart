@@ -703,6 +703,7 @@ class _QuickSaleScreenState extends State<QuickSaleScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -728,18 +729,31 @@ class _QuickSaleScreenState extends State<QuickSaleScreen> {
                     children: [
                       if (!_isDayOpen) ...[
                         Card(
-                          color: Colors.red.shade50,
+                          color: Colors.red.withValues(alpha: isDark ? 0.16 : 0.08),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: Colors.red.withValues(alpha: 0.35),
+                            ),
+                          ),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Row(
                               children: [
-                                const Icon(Icons.lock_clock, color: Colors.red),
+                                Icon(
+                                  Icons.lock_clock,
+                                  color: isDark
+                                      ? Colors.red.shade200
+                                      : Colors.red.shade800,
+                                ),
                                 const Gap(10),
-                                const Expanded(
+                                Expanded(
                                   child: Text(
                                     'اليوم المالي مغلق حالياً. افتح اليوم للبدء بالبيع.',
                                     style: TextStyle(
-                                      color: Colors.red,
+                                      color: isDark
+                                          ? Colors.red.shade200
+                                          : Colors.red.shade800,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -932,6 +946,7 @@ class _QuickSaleScreenState extends State<QuickSaleScreen> {
   }
 
   Widget _buildShipmentCard(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -955,12 +970,17 @@ class _QuickSaleScreenState extends State<QuickSaleScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
+                  color: Colors.orange.withValues(alpha: isDark ? 0.16 : 0.08),
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.35),
+                  ),
                 ),
-                child: const Text(
+                child: Text(
                   'لا توجد شحنات مفتوحة بها برانيك متاحة للبيع حالياً.',
-                  style: TextStyle(color: Colors.orange),
+                  style: TextStyle(
+                    color: isDark ? Colors.orange.shade200 : Colors.orange.shade900,
+                  ),
                 ),
               )
             else ...[
@@ -1014,7 +1034,9 @@ class _QuickSaleScreenState extends State<QuickSaleScreen> {
                       Text(
                         'عمولة: ${(_selectedShipment!.commissionPercentage ?? 0).toStringAsFixed(1)}%',
                         style: TextStyle(
-                          color: Colors.orange.shade800,
+                          color: isDark
+                              ? Colors.orange.shade300
+                              : Colors.orange.shade800,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1334,6 +1356,7 @@ class _QuickSaleScreenState extends State<QuickSaleScreen> {
   }
 
   Widget _buildBarnikaCard(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
     final outVal = int.tryParse(_barnikaOutCtrl.text.trim()) ?? 0;
     final retVal = int.tryParse(_barnikaReturnedCtrl.text.trim()) ?? 0;
     final afterBalance = _customerBarnikaBalance + outVal - retVal;
@@ -1402,7 +1425,7 @@ class _QuickSaleScreenState extends State<QuickSaleScreen> {
               'رصيد البرانيك بعد البيعة: ${math.max(0, afterBalance)} برنيكة فارغة على الزبون',
               style: TextStyle(
                 fontSize: 12.5,
-                color: Colors.teal.shade800,
+                color: isDark ? Colors.teal.shade200 : Colors.teal.shade800,
                 fontWeight: FontWeight.w600,
               ),
             ),

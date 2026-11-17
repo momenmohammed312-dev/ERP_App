@@ -22,6 +22,14 @@ class DayDao extends DatabaseAccessor<AppDatabase> with _$DayDaoMixin {
     return row?.data;
   }
 
+  Future<Map<String, Object?>?> getOpenDay() async {
+    final row = await customSelect(
+      'SELECT * FROM days WHERE is_open = 1 ORDER BY id DESC LIMIT 1',
+    ).getSingleOrNull();
+
+    return row?.data;
+  }
+
   Future<Map<String, Object?>?> getOrCreateTodayDay({
     double? openingBalance,
     String? openedBy,
