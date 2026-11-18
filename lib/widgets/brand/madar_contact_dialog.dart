@@ -80,12 +80,13 @@ Widget buildMadarContactInlineBox(BuildContext context) {
               children: [
                 Icon(Icons.phone_outlined, size: 15, color: mutedColor),
                 const SizedBox(width: 6),
-                const Text(
+                Text(
                   kMadarSupportPhone,
                   textDirection: TextDirection.ltr,
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
+                    color: textColor,
                   ),
                 ),
                 const Spacer(),
@@ -105,7 +106,7 @@ Widget buildMadarContactInlineBox(BuildContext context) {
               children: [
                 Icon(Icons.email_outlined, size: 15, color: mutedColor),
                 const SizedBox(width: 6),
-                const Expanded(
+                Expanded(
                   child: Text(
                     kMadarSupportEmail,
                     textDirection: TextDirection.ltr,
@@ -113,6 +114,7 @@ Widget buildMadarContactInlineBox(BuildContext context) {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
+                      color: textColor,
                     ),
                   ),
                 ),
@@ -299,9 +301,10 @@ class _ContactTile extends StatelessWidget {
                     SelectableText(
                       value,
                       textDirection: TextDirection.ltr,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : MadarColors.lightTextPrimary,
                       ),
                     ),
                   ],

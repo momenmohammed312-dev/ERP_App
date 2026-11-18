@@ -5,10 +5,12 @@
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts\build_android_apk.ps1 -TrialDays 7
+#   powershell -ExecutionPolicy Bypass -File scripts\build_android_apk.ps1 -Standard
 #   powershell -ExecutionPolicy Bypass -File scripts\build_android_apk.ps1 -TrialDays 7 -InstallOnDevice
 
 param(
     [int]$TrialDays = 7,
+    [switch]$Standard,
     [switch]$InstallOnDevice,
     [string]$Target = "lib/main_all.dart"
 )
@@ -37,12 +39,20 @@ $rawKey = if ($secrets.LICENSE_PUBLIC_KEY.value) {
 }
 $publicKeyPem = ($rawKey -replace "`r`n", '\n' -replace "`n", '\n').Trim()
 
-Write-Host "=== Building Android Release APK (Trial: $TrialDays days) ===" -ForegroundColor Cyan
+if ($Standard) {
+    Write-Host "=== Building Android Release APK (Standard Licensed) ===" -ForegroundColor Cyan
+} else {
+    Write-Host "=== Building Android Release APK (Trial: $TrialDays days) ===" -ForegroundColor Cyan
+}
 Write-Host "Injected Secrets:" -ForegroundColor Green
 Write-Host "  - LICENSE_SECRET_KEY: [Configured]" -ForegroundColor Green
 Write-Host "  - LICENSE_PUBLIC_KEY: [Configured]" -ForegroundColor Green
-Write-Host "  - FREE_VERSION: true" -ForegroundColor Green
-Write-Host "  - FREE_TRIAL_DAYS: $TrialDays" -ForegroundColor Green
+if ($Standard) {
+    Write-Host "  - FREE_VERSION: false (Standard Licensed - Activation required)" -ForegroundColor Green
+} else {
+    Write-Host "  - FREE_VERSION: true" -ForegroundColor Green
+    Write-Host "  - FREE_TRIAL_DAYS: $TrialDays" -ForegroundColor Green
+}
 Write-Host "  - ENABLE_SMART_ANALYTICS: false (Smart Analytics & Smart Notifications hidden)" -ForegroundColor Green
 
 $buildArgs = @(
@@ -54,11 +64,16 @@ $buildArgs = @(
     # An explicit ENABLE_SMART_ANALYTICS=false wins over ENABLE_ALL_FEATURES
     # on the Dart side (AppFeatures.hasSmartAnalytics) - do not "fix" this.
     '--dart-define=ENABLE_SMART_ANALYTICS=false',
-    '--dart-define=FREE_VERSION=true',
-    "--dart-define=FREE_TRIAL_DAYS=$TrialDays",
     "--dart-define=LICENSE_SECRET_KEY=$($secrets.LICENSE_SECRET_KEY)",
     "--dart-define=LICENSE_PUBLIC_KEY=$publicKeyPem"
 )
+
+if ($Standard) {
+    $buildArgs += '--dart-define=FREE_VERSION=false'
+} else {
+    $buildArgs += '--dart-define=FREE_VERSION=true'
+    $buildArgs += "--dart-define=FREE_TRIAL_DAYS=$TrialDays"
+}
 
 if (-not [string]::IsNullOrWhiteSpace($secrets.SUPABASE_URL)) {
     $buildArgs += "--dart-define=SUPABASE_URL=$($secrets.SUPABASE_URL)"
@@ -82,7 +97,8 @@ try {
         exit 1
     }
 
-    $destApk = Join-Path $ProjectRoot "build\app\outputs\flutter-apk\MADAR_ERP_Trial_${TrialDays}Days.apk"
+    $destName = if ($Standard) { "MADAR_ERP_Standard.apk" } else { "MADAR_ERP_Trial_${TrialDays}Days.apk" }
+    $destApk = Join-Path $ProjectRoot "build\app\outputs\flutter-apk\$destName"
     Copy-Item -LiteralPath $builtApk -Destination $destApk -Force
     Write-Host ">>> SUCCESS: Built APK copied to $destApk <<<" -ForegroundColor Green
 
