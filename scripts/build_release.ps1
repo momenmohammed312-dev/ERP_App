@@ -78,7 +78,11 @@ if ($LASTEXITCODE -ne 0) { Write-Host "[ABORT] flutter pub get failed." -Foregro
 # 3) flutter build windows --release
 # ────────────────────────────────────────────────────────────────────────────
 Write-Host "`n=== [3/5] flutter build windows --release ===" -ForegroundColor Cyan
-$buildArgs = @("build", "windows", "--release")
+Write-Host "[MODE] Smart Analytics & Smart Notifications are HIDDEN in this release build (--dart-define=ENABLE_SMART_ANALYTICS=false)." -ForegroundColor Yellow
+$buildArgs = @("build", "windows", "--release",
+    # Customer release gate: Smart Analytics & Smart Notifications are hidden.
+    # Unconditional - this script has a single windows-release target.
+    "--dart-define=ENABLE_SMART_ANALYTICS=false")
 if (-not $SkipLicenseCheck) {
     if (-not [string]::IsNullOrEmpty($LicenseSecretKey)) {
         $buildArgs += "--dart-define=LICENSE_SECRET_KEY=$LicenseSecretKey"
@@ -155,5 +159,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "`n[DONE] Release build + verification + packaging completed successfully." -ForegroundColor Green
+Write-Host "[DONE] Smart Analytics & Smart Notifications: HIDDEN (ENABLE_SMART_ANALYTICS=false)" -ForegroundColor Yellow
 Write-Host "[DONE] اكتمل البناء والتحقق والتغليف بنجاح." -ForegroundColor Green
 exit 0

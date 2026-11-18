@@ -1,3 +1,4 @@
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -22,23 +23,19 @@ class DamagedItemsScreen extends StatefulWidget {
 }
 
 class _DamagedItemsScreenState extends State<DamagedItemsScreen> {
+  bool get isLight => Theme.of(context).brightness == Brightness.light;
+
   @override
   Widget build(BuildContext context) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
     return Scaffold(
-      backgroundColor: _bgDark,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('إدارة الهالك والتالف'),
-        backgroundColor: _bgCard,
-        foregroundColor: Colors.white,
         elevation: 0,
-        titleTextStyle: const TextStyle(
-          color: _gold,
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add, color: _gold),
+            icon: Icon(Icons.add_circle_outline, color: isLight ? MadarColors.lightPrimary : _gold),
             tooltip: 'إضافة هالك جديد',
             onPressed: () => _showAddDialog(context),
           ),
@@ -90,8 +87,8 @@ class _DamagedItemsScreenState extends State<DamagedItemsScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddDialog(context),
-        backgroundColor: _gold,
-        foregroundColor: _bgDark,
+        backgroundColor: isLight ? MadarColors.lightPrimary : _gold,
+        foregroundColor: isLight ? Colors.white : _bgDark,
         tooltip: 'إضافة هالك',
         child: const Icon(Icons.add),
       ),
@@ -118,9 +115,13 @@ class _DamagedItemsScreenState extends State<DamagedItemsScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'لا يوجد سجلات للمنتجات التالفة',
-            style: TextStyle(fontSize: 18, color: Colors.white),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: isLight ? MadarColors.lightDeepCobalt : Colors.white,
+            ),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -180,10 +181,10 @@ class _DamagedItemsScreenState extends State<DamagedItemsScreen> {
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: isLight ? MadarColors.lightDeepCobalt : Colors.white,
             ),
           ),
           Text(label, style: const TextStyle(fontSize: 11, color: _textMuted)),
@@ -193,6 +194,7 @@ class _DamagedItemsScreenState extends State<DamagedItemsScreen> {
   }
 
   Widget _buildItemsList(List<DamagedItemWithProduct> items) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
       itemCount: items.length,
@@ -215,9 +217,20 @@ class _DamagedItemsScreenState extends State<DamagedItemsScreen> {
           child: Container(
             margin: const EdgeInsets.only(bottom: 10),
             decoration: BoxDecoration(
-              color: _bgCard,
+              color: isLight ? Colors.white : _bgCard,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _border),
+              border: Border.all(
+                color: isLight ? MadarColors.lightBorder : _border,
+              ),
+              boxShadow: isLight
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
             ),
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -243,9 +256,9 @@ class _DamagedItemsScreenState extends State<DamagedItemsScreen> {
                       children: [
                         Text(
                           itemWithProduct.productName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: isLight ? MadarColors.lightDeepCobalt : Colors.white,
                             fontSize: 15,
                           ),
                         ),
@@ -334,14 +347,23 @@ class _DamagedItemsScreenState extends State<DamagedItemsScreen> {
   }
 
   Future<void> _showDeleteConfirm(BuildContext context, int id) async {
+    final isLight = Theme.of(context).brightness == Brightness.light;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: _bgCard,
-        title: const Text('تأكيد الحذف', style: TextStyle(color: Colors.white)),
-        content: const Text(
+        backgroundColor: isLight ? Colors.white : _bgCard,
+        title: Text(
+          'تأكيد الحذف',
+          style: TextStyle(
+            color: isLight ? MadarColors.lightDeepCobalt : Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
           'هل تريد حذف هذا السجل؟',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(
+            color: isLight ? const Color(0xFF475569) : Colors.white70,
+          ),
         ),
         actions: [
           TextButton(
@@ -536,15 +558,19 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
       );
     }
 
+    final isLight = Theme.of(context).brightness == Brightness.light;
     return AlertDialog(
-      backgroundColor: _bgCard,
+      backgroundColor: isLight ? Colors.white : _bgCard,
       title: Row(
         children: [
           const Icon(Icons.delete_sweep, color: Colors.red),
           const SizedBox(width: 8),
           Text(
             _isEditing ? 'تعديل سجل هالك/تالف' : 'تسجيل منتج هالك/تالف',
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(
+              color: isLight ? MadarColors.lightDeepCobalt : Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -557,7 +583,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<Product>(
-                  dropdownColor: _bgCard,
+                  dropdownColor: isLight ? Colors.white : _bgCard,
                   decoration: const InputDecoration(
                     labelText: 'المنتج',
                     labelStyle: TextStyle(color: _textMuted),
@@ -569,7 +595,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
                       borderSide: BorderSide(color: _gold),
                     ),
                   ),
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: isLight ? MadarColors.lightDeepCobalt : Colors.white),
                   items: _products.map((p) {
                     return DropdownMenuItem(
                       value: p,
@@ -592,7 +618,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
                 TextFormField(
                   controller: _quantityController,
                   keyboardType: TextInputType.number,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: isLight ? MadarColors.lightDeepCobalt : Colors.white),
                   decoration: const InputDecoration(
                     labelText: 'الكمية التالفة',
                     labelStyle: TextStyle(color: _textMuted),
@@ -616,7 +642,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
                 TextFormField(
                   controller: _costPriceController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: isLight ? MadarColors.lightDeepCobalt : Colors.white),
                   decoration: InputDecoration(
                     labelText: 'سعر التكلفة للوحدة',
                     labelStyle: const TextStyle(color: _textMuted),
@@ -642,7 +668,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _reasonController,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: isLight ? MadarColors.lightDeepCobalt : Colors.white),
                   decoration: const InputDecoration(
                     labelText: 'السبب (مثال: منتهي الصلاحية، كسر...)',
                     labelStyle: TextStyle(color: _textMuted),
@@ -661,7 +687,7 @@ class _AddDamagedItemDialogState extends State<_AddDamagedItemDialog> {
                 TextFormField(
                   controller: _notesController,
                   maxLines: 3,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: isLight ? MadarColors.lightDeepCobalt : Colors.white),
                   decoration: const InputDecoration(
                     labelText: 'ملاحظات إضافية',
                     labelStyle: TextStyle(color: _textMuted),

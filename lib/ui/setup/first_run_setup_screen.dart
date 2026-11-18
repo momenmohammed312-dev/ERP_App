@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/provider/app_database_provider.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/router/go_router.dart';
+import '../../core/utils/security_utils.dart';
 
 class FirstRunSetupScreen extends ConsumerStatefulWidget {
   const FirstRunSetupScreen({super.key});
@@ -19,7 +20,8 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
   final _businessNameController = TextEditingController();
   final _businessPhoneController = TextEditingController();
   final _businessAddressController = TextEditingController();
-  // Password
+  // Admin account
+  final _usernameController = TextEditingController(text: 'admin');
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
@@ -30,6 +32,7 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
     _businessNameController.dispose();
     _businessPhoneController.dispose();
     _businessAddressController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -48,8 +51,13 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
       await SettingsService.markFirstRunComplete();
       ref.invalidate(firstRunCompleteProvider);
 
-      // Update admin password
-      await db.userDao.updateAdminPassword(_passwordController.text);
+      // Update admin username & password
+      final adminUsername = _usernameController.text.trim();
+      await db.userDao.updateAdminAccount(
+        username: adminUsername,
+        password: _passwordController.text,
+      );
+      await SettingsService.setLastUsername(adminUsername);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -159,8 +167,29 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // ─── Password ─────────────────────────────────────────
-                      _sectionLabel(context, 'كلمة مرور المسؤول'),
+                      // ─── Admin Account ──────────────────────────────────────
+                      _sectionLabel(context, 'بيانات حساب المسؤول'),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _usernameController,
+                        textDirection: TextDirection.ltr,
+                        decoration: const InputDecoration(
+                          labelText: 'اسم المستخدم للمسؤول *',
+                          hintText: 'مثال: admin أو الاسم المخصص',
+                          prefixIcon: Icon(Icons.person_outline),
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (v) {
+                          final trimmed = v?.trim() ?? '';
+                          if (trimmed.isEmpty) {
+                            return 'يرجى إدخال اسم المستخدم';
+                          }
+                          if (SecurityUtils.isSuperAdminUsername(trimmed)) {
+                            return 'هذا الاسم محجوز للنظام';
+                          }
+                          return null;
+                        },
+                      ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _passwordController,

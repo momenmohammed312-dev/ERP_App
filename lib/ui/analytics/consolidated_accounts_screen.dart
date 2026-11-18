@@ -111,35 +111,59 @@ class _ConsolidatedAccountsScreenState
       if (b > 0) totalPayables += b;
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      color: Theme.of(
-        context,
-      ).colorScheme.primaryContainer.withValues(alpha: 0.3),
-      child: Row(
-        children: [
-          _buildSummaryCard(
-            'إجمالي ديون العملاء (لنا)',
-            totalReceivables,
-            Colors.green,
-            Icons.trending_up,
-          ),
-          const Gap(16),
-          _buildSummaryCard(
-            'إجمالي ديون الموردين (علينا)',
-            totalPayables,
-            Colors.red,
-            Icons.trending_down,
-          ),
-          const Gap(16),
-          _buildSummaryCard(
-            'صافي المركز المالي',
-            totalReceivables - totalPayables,
-            Colors.blue,
-            Icons.account_balance,
-          ),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 650;
+        final card1 = _buildSummaryCard(
+          'ديون العملاء (لنا)',
+          totalReceivables,
+          Colors.green,
+          Icons.trending_up,
+          isNarrow: isNarrow,
+        );
+        final card2 = _buildSummaryCard(
+          'ديون الموردين (علينا)',
+          totalPayables,
+          Colors.red,
+          Icons.trending_down,
+          isNarrow: isNarrow,
+        );
+        final card3 = _buildSummaryCard(
+          'صافي المركز المالي',
+          totalReceivables - totalPayables,
+          Colors.blue,
+          Icons.account_balance,
+          isNarrow: isNarrow,
+        );
+
+        return Container(
+          padding: EdgeInsets.all(isNarrow ? 10 : 16),
+          color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+          child: isNarrow
+              ? Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: card1),
+                        const Gap(8),
+                        Expanded(child: card2),
+                      ],
+                    ),
+                    const Gap(8),
+                    card3,
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: card1),
+                    const Gap(16),
+                    Expanded(child: card2),
+                    const Gap(16),
+                    Expanded(child: card3),
+                  ],
+                ),
+        );
+      },
     );
   }
 
@@ -147,70 +171,101 @@ class _ConsolidatedAccountsScreenState
     String title,
     double amount,
     Color color,
-    IconData icon,
-  ) {
-    return Expanded(
-      child: Card(
-        elevation: 2,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: color.withValues(alpha: 0.1),
-                child: Icon(icon, color: color),
-              ),
-              const Gap(16),
-              Column(
+    IconData icon, {
+    bool isNarrow = false,
+  }) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: EdgeInsets.all(isNarrow ? 10 : 14),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: isNarrow ? 16 : 20,
+              backgroundColor: color.withValues(alpha: 0.1),
+              child: Icon(icon, color: color, size: isNarrow ? 18 : 22),
+            ),
+            Gap(isNarrow ? 10 : 14),
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                  const Gap(4),
-                  Text(
-                    '${amount.toStringAsFixed(2)} ج.م',
                     style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: color,
+                      fontSize: isNarrow ? 11 : 12,
+                      color: Colors.grey,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const Gap(3),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(
+                      '${amount.toStringAsFixed(2)} ج.م',
+                      style: TextStyle(
+                        fontSize: isNarrow ? 14.5 : 18,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildFilters() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              decoration: const InputDecoration(
-                hintText: 'بحث بالاسم أو رقم الهاتف...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: (val) =>
-                  setState(() => _searchQuery = val.toLowerCase()),
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 550;
+        final searchField = TextField(
+          decoration: const InputDecoration(
+            hintText: 'بحث بالاسم أو رقم الهاتف...',
+            prefixIcon: Icon(Icons.search),
+            border: OutlineInputBorder(),
+            isDense: true,
           ),
-          const Gap(16),
-          FilterChip(
-            label: const Text('أرصدة غير صفرية فقط'),
-            selected: _showOnlyWithBalance,
-            onSelected: (val) => setState(() => _showOnlyWithBalance = val),
-          ),
-        ],
-      ),
+          onChanged: (val) =>
+              setState(() => _searchQuery = val.toLowerCase()),
+        );
+
+        final filterChip = FilterChip(
+          label: const Text('أرصدة غير صفرية فقط', style: TextStyle(fontSize: 12)),
+          selected: _showOnlyWithBalance,
+          onSelected: (val) => setState(() => _showOnlyWithBalance = val),
+        );
+
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: isNarrow ? 12 : 16, vertical: 8),
+          child: isNarrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    searchField,
+                    const Gap(8),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: filterChip,
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: searchField),
+                    const Gap(16),
+                    filterChip,
+                  ],
+                ),
+        );
+      },
     );
   }
 

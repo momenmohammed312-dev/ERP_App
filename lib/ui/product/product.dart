@@ -12,8 +12,12 @@ class ProductScreen extends StatefulWidget {
   ProductScreenState createState() => ProductScreenState();
 }
 
-class ProductScreenState extends State<ProductScreen> {
+class ProductScreenState extends State<ProductScreen>
+    with AutomaticKeepAliveClientMixin {
   late final AppDatabase db;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -23,10 +27,11 @@ class ProductScreenState extends State<ProductScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: Padding(
-        padding: const EdgeInsets.all(50.0),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
         child: ProductContainer(db: db),
       ),
     );

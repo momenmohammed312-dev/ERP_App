@@ -97,6 +97,12 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
     int? bomItemId,
     String? dispositionNote,
     String? performedBy,
+    int? stageId,
+    int? variantId,
+    String? variantName,
+    bool isSellable = false,
+    double estimatedSellPrice = 0.0,
+    int? scrapProductId,
   }) {
     return transaction(() async {
       // ── 1. Validate. Nothing below this block writes anything. ──
@@ -221,6 +227,12 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
           responsibleParty: responsibleParty,
           dispositionNote: Value(dispositionNote),
           performedBy: Value(performedBy),
+          stageId: Value(stageId),
+          variantId: Value(variantId),
+          variantName: Value(variantName),
+          isSellable: Value(isSellable),
+          estimatedSellPrice: Value(estimatedSellPrice),
+          scrapProductId: Value(scrapProductId),
           createdAt: Value(now),
         ),
       );
@@ -259,6 +271,12 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
     int? bomItemId,
     String? dispositionNote,
     String? performedBy,
+    int? stageId,
+    int? variantId,
+    String? variantName,
+    bool isSellable = false,
+    double estimatedSellPrice = 0.0,
+    int? scrapProductId,
   }) {
     return transaction(() async {
       // 1. Basic validation
@@ -381,6 +399,12 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
           compensationAction: Value(compensationAction),
           compensationAmount: Value(compensationAmount),
           performedBy: Value(performedBy),
+          stageId: Value(stageId),
+          variantId: Value(variantId),
+          variantName: Value(variantName),
+          isSellable: Value(isSellable),
+          estimatedSellPrice: Value(estimatedSellPrice),
+          scrapProductId: Value(scrapProductId),
           createdAt: Value(now),
         ),
       );

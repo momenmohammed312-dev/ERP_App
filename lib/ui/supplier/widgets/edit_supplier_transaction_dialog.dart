@@ -5,9 +5,10 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/services/audit_log_service.dart';
 import 'package:pos_offline_desktop/core/services/document_date_service.dart';
+import 'package:pos_offline_desktop/core/services/printer_service.dart';
 import 'package:pos_offline_desktop/ui/widgets/document_date_picker.dart';
 
-/// حوار تعديل حركة مالية لمورد مع تغيير التاريخ وتحديث دفتر الأستاذ وسجل التدقيق
+/// حوار تعديل أو حذف حركة مالية لمورد مع تغيير التاريخ وتحديث دفتر الأستاذ وسجل التدقيق والطباعة
 class EditSupplierTransactionDialog extends StatefulWidget {
   final AppDatabase db;
   final LedgerTransaction transaction;
@@ -137,6 +138,113 @@ class _EditSupplierTransactionDialogState
     }
   }
 
+  Future<void> _delete() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تأكيد حذف الحركة'),
+        content: const Text(
+          'هل أنت متأكد من حذف حركة السداد هذه؟\nسيتم استرجاع المبلغ لمديونية المورد.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('تأكيد الحذف'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      await widget.db.transaction(() async {
+        await (widget.db.delete(widget.db.ledgerTransactions)
+              ..where((t) => t.id.equals(widget.transaction.id)))
+            .go();
+
+        await AuditService.log(
+          db: widget.db,
+          action: 'DELETE',
+          tableName: 'ledger_transactions',
+          details: '[MONEY] حذف حركة مورد (${widget.transaction.refId}) بمبلغ '
+              '${widget.transaction.debit > 0 ? widget.transaction.debit : widget.transaction.credit} ج.م',
+          oldValue: {
+            'id': widget.transaction.id,
+            'refId': widget.transaction.refId,
+            'debit': widget.transaction.debit,
+            'credit': widget.transaction.credit,
+            'date': widget.transaction.date.toIso8601String(),
+            'description': widget.transaction.description,
+          },
+          newValue: null,
+        );
+      });
+
+      if (mounted) {
+        Navigator.pop(context, true);
+        widget.onSaved?.call();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم حذف الحركة واسترجاع الرصيد بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ في حذف الحركة: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _printReceipt() async {
+    final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
+    try {
+      await PrinterService.printThermalReceipt(
+        items: [
+          {
+            'name': _descriptionController.text.trim().isNotEmpty
+                ? _descriptionController.text.trim()
+                : (widget.transaction.debit > 0 ? 'سداد دفعة للمورد' : 'حركة مورد'),
+            'quantity': 1,
+            'unitPrice': amount,
+            'totalPrice': amount,
+          }
+        ],
+        totalAmount: amount,
+        paidAmount: amount,
+        remainingAmount: 0.0,
+        paymentMethod: _paymentMethod,
+        receiptNumber: widget.transaction.id,
+        date: _selectedDate,
+        customerName: 'مورد (${widget.transaction.refId})',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر الطباعة: $e'), backgroundColor: Colors.orange),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDebit = widget.transaction.debit > 0;
@@ -229,6 +337,17 @@ class _EditSupplierTransactionDialogState
         ),
       ),
       actions: [
+        TextButton.icon(
+          onPressed: _isLoading ? null : _delete,
+          icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
+          label: const Text('حذف', style: TextStyle(color: Colors.red)),
+        ),
+        TextButton.icon(
+          onPressed: _isLoading ? null : _printReceipt,
+          icon: const Icon(Icons.print, size: 18),
+          label: const Text('طباعة سند'),
+        ),
+        const Spacer(),
         TextButton(
           onPressed: _isLoading ? null : () => Navigator.pop(context),
           child: const Text('إلغاء'),

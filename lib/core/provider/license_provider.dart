@@ -23,8 +23,8 @@ final isFeatureEnabledProvider = Provider.family<bool, String>((
   ref,
   featureName,
 ) {
-  // Free version flavor/build has all features enabled
-  if (LicenseConfig.isFreeVersion) return true;
+  // Permanent free version flavor/build has all features enabled
+  if (LicenseConfig.isPermanentFreeVersion) return true;
 
   // Fundamental core features are always unlocked
   if (LicenseEntitlement.coreFeatures.contains(featureName)) return true;

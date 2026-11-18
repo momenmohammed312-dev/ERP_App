@@ -1,102 +1,92 @@
 @echo off
+chcp 65001 >nul 2>&1
+setlocal EnableDelayedExpansion
+
 REM ════════════════════════════════════════════════════════════════════════════
-REM POS System v2.3.0 - Update Installer
-REM DEVELOPED BY MO2 | Contact: 01025545211
+REM POS System - Clean Setup & Update Installer
 REM ════════════════════════════════════════════════════════════════════════════
 
-title POS System v2.3.0 - Update Installer
+set "APP_NAME=POS System"
+set "APP_VERSION=2.3.0"
+set "APP_EXE=pos_offline_desktop.exe"
+set "INSTALL_DIR=%ProgramFiles%\POS System"
+set "SHORTCUT_NAME=POS System"
 
-REM Check for admin rights
->nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
-if '%errorlevel%' NEQ '0' (
-    echo This installer requires administrator rights.
-    echo Please right-click and select "Run as administrator".
-    pause
-    exit /b 1
+title %APP_NAME% v%APP_VERSION% - Installer
+
+:: Check for admin rights and auto-elevate
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [INFO] Requesting Administrator Privileges...
+    powershell -ExecutionPolicy Bypass -Command "Start-Process cmd -ArgumentList '/c', '\"\"%~f0\"\"' -Verb RunAs"
+    exit /b
 )
 
-REM Set installation directory
-set INSTALLDIR=%ProgramFiles%\POS System
-
-echo.
+cls
 echo ══════════════════════════════════════════════════════════════════════
-echo   POS System v2.3.0 - Update Installer
-echo   DEVELOPED BY MO2
+echo   %APP_NAME% v%APP_VERSION% - Installation
 echo ══════════════════════════════════════════════════════════════════════
 echo.
-echo Installing to: %INSTALLDIR%
+echo Installing to: %INSTALL_DIR%
 echo.
 
-REM Close existing application
+:: Close existing application if running
 echo Closing application if running...
-taskkill /f /im pos_offline_desktop.exe >nul 2>&1
-timeout /t 2 /nobreak >nul
+taskkill /f /im %APP_EXE% >nul 2>&1
+timeout /t 1 /nobreak >nul
 
-REM Create installation directory
-if not exist "%INSTALLDIR%" mkdir "%INSTALLDIR%"
+:: FEAT-013: Existing license data is deliberately PRESERVED.
+:: An update or installation must NEVER cost a customer their license.
+if exist "%APPDATA%\pos_offline_desktop\secure_license.dat" (
+    echo Existing license found - preserved safely.
+)
 
-REM Extract files
-echo Extracting application files...
-xcopy /s /e /y /q "%~dp0*" "%INSTALLDIR%\" >nul 2>&1
+:: Create installation directory
+if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%" >nul 2>&1
 
-REM Create shortcuts
+:: Copy application files
+echo Copying application files...
+robocopy "%~dp0\" "%INSTALL_DIR%" /E /IS /IT /XF "Install*.bat" "Setup*.bat" "*.zip" >nul 2>&1
+if %errorlevel% gtr 7 (
+    xcopy /s /e /y /q "%~dp0*" "%INSTALL_DIR%\" >nul 2>&1
+)
+
+:: Create shortcuts
 echo Creating shortcuts...
-set DESKTOP=%PUBLIC%\Desktop
-set STARTMENU=%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs
+set "DESKTOP=%PUBLIC%\Desktop"
+set "STARTMENU=%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs"
 
-echo Set oWS = WScript.CreateObject("WScript.Shell") > "%TEMP%\create_shortcut.vbs"
-echo sLinkFile = "%DESKTOP%\POS System.lnk" >> "%TEMP%\create_shortcut.vbs"
-echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%TEMP%\create_shortcut.vbs"
-echo oLink.TargetPath = "%INSTALLDIR%\pos_offline_desktop.exe" >> "%TEMP%\create_shortcut.vbs"
-echo oLink.WorkingDirectory = "%INSTALLDIR%" >> "%TEMP%\create_shortcut.vbs"
-echo oLink.Save >> "%TEMP%\create_shortcut.vbs"
-cscript /nologo "%TEMP%\create_shortcut.vbs" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$ws = New-Object -ComObject WScript.Shell; " ^
+    "$desk = $ws.CreateShortcut('%DESKTOP%\%SHORTCUT_NAME%.lnk'); " ^
+    "$desk.TargetPath = '%INSTALL_DIR%\%APP_EXE%'; " ^
+    "$desk.WorkingDirectory = '%INSTALL_DIR%'; " ^
+    "$desk.IconLocation = '%INSTALL_DIR%\%APP_EXE%,0'; " ^
+    "$desk.Save(); " ^
+    "$menu = $ws.CreateShortcut('%STARTMENU%\%SHORTCUT_NAME%.lnk'); " ^
+    "$menu.TargetPath = '%INSTALL_DIR%\%APP_EXE%'; " ^
+    "$menu.WorkingDirectory = '%INSTALL_DIR%'; " ^
+    "$menu.IconLocation = '%INSTALL_DIR%\%APP_EXE%,0'; " ^
+    "$menu.Save();" >nul 2>&1
 
-echo Set oWS = WScript.CreateObject("WScript.Shell") > "%TEMP%\create_shortcut2.vbs"
-echo sLinkFile = "%STARTMENU%\POS System.lnk" >> "%TEMP%\create_shortcut2.vbs"
-echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%TEMP%\create_shortcut2.vbs"
-echo oLink.TargetPath = "%INSTALLDIR%\pos_offline_desktop.exe" >> "%TEMP%\create_shortcut2.vbs"
-echo oLink.WorkingDirectory = "%INSTALLDIR%" >> "%TEMP%\create_shortcut2.vbs"
-echo oLink.Save >> "%TEMP%\create_shortcut2.vbs"
-cscript /nologo "%TEMP%\create_shortcut2.vbs" >nul 2>&1
-
-REM Clean up
-del "%TEMP%\create_shortcut.vbs" >nul 2>&1
-del "%TEMP%\create_shortcut2.vbs" >nul 2>&1
-
-REM Register installation
-reg add "HKLM\SOFTWARE\POS System" /v InstallPath /d "%INSTALLDIR%" /f >nul 2>&1
-reg add "HKLM\SOFTWARE\POS System" /v Version /d "2.3.0" /f >nul 2>&1
-reg add "HKLM\SOFTWARE\POS System" /v Publisher /d "DEVELOPED BY MO2" /f >nul 2>&1
+:: Register installation
+reg add "HKLM\SOFTWARE\POS System" /v InstallPath /d "%INSTALL_DIR%" /f >nul 2>&1
+reg add "HKLM\SOFTWARE\POS System" /v Version /d "%APP_VERSION%" /f >nul 2>&1
 
 echo.
 echo ══════════════════════════════════════════════════════════════════════
 echo   Installation Complete!
 echo ══════════════════════════════════════════════════════════════════════
 echo.
-echo   POS System v2.3.0 has been installed to:
-echo   %INSTALLDIR%
-echo.
-echo   New Features:
-echo   + QR Code Support
-echo   + Enhanced Customer Management
-echo.
-echo   Fixes:
-echo   + Fixed unexpected security warnings
-echo   + Improved system stability
-echo.
-echo   Contact: 01025545211
-echo   Website: https://mo2.dev
-echo.
-echo ══════════════════════════════════════════════════════════════════════
+echo   Location: %INSTALL_DIR%
 echo.
 
-set /p LAUNCH="Would you like to launch POS System now? (Y/N): "
+set /p LAUNCH="Would you like to launch %APP_NAME% now? (Y/N): "
+if /i "%LAUNCH%"=="" set LAUNCH=Y
 if /i "%LAUNCH%"=="Y" (
-    start "" "%INSTALLDIR%\pos_offline_desktop.exe"
+    start "" "%INSTALL_DIR%\%APP_EXE%"
 )
 
 echo.
-echo Thank you for using POS System!
-echo.
-pause
+timeout /t 2 >nul
+exit /b 0

@@ -129,6 +129,138 @@ void main() {
 
       expect(novSlip.advances, 0.0);
     });
+
+    test('single advance with deductOnPeriod is only deducted in that selected month', () async {
+      // Requested in August, but explicitly scheduled to be deducted on November (2026-11)
+      await db.into(db.staffAdvances).insert(
+            StaffAdvancesCompanion.insert(
+              staffId: 'ST-01',
+              amount: 700,
+              requestDate: DateTime(2026, 8, 20),
+              status: 'approved',
+              paymentDate: Value(DateTime(2026, 8, 20)),
+              deductOnPeriod: const Value('2026-11'),
+              createdAt: DateTime(2026, 8, 20),
+              updatedAt: DateTime(2026, 8, 20),
+            ),
+          );
+
+      // August (request month) -> NOT deducted
+      await service.calculatePayroll(admin(), 'ST-01', '2026-08');
+      final augSlip = await (db.select(db.payrollTable)
+            ..where((t) => t.staffId.equals('ST-01') & t.payrollPeriod.equals('2026-08')))
+          .getSingle();
+      expect(augSlip.advances, 0.0);
+
+      // October -> NOT deducted
+      await service.calculatePayroll(admin(), 'ST-01', '2026-10');
+      final octSlip = await (db.select(db.payrollTable)
+            ..where((t) => t.staffId.equals('ST-01') & t.payrollPeriod.equals('2026-10')))
+          .getSingle();
+      expect(octSlip.advances, 0.0);
+
+      // November (deductOnPeriod) -> IS deducted
+      await service.calculatePayroll(admin(), 'ST-01', '2026-11');
+      final novSlip = await (db.select(db.payrollTable)
+            ..where((t) => t.staffId.equals('ST-01') & t.payrollPeriod.equals('2026-11')))
+          .getSingle();
+      expect(novSlip.advances, 700.0);
+      expect(novSlip.netSalary, 5300.0);
+
+      // December -> NOT deducted
+      await service.calculatePayroll(admin(), 'ST-01', '2026-12');
+      final decSlip = await (db.select(db.payrollTable)
+            ..where((t) => t.staffId.equals('ST-01') & t.payrollPeriod.equals('2026-12')))
+          .getSingle();
+      expect(decSlip.advances, 0.0);
+    });
+
+    test('pending advance can be approved via approveAdvance and is counted in payroll', () async {
+      await db.into(db.staffAdvances).insert(
+            StaffAdvancesCompanion.insert(
+              staffId: 'ST-01',
+              amount: 400,
+              requestDate: DateTime(2026, 9, 10),
+              status: 'pending',
+              deductOnPeriod: const Value('2026-09'),
+              createdAt: DateTime(2026, 9, 10),
+              updatedAt: DateTime(2026, 9, 10),
+            ),
+          );
+
+      // Approve it
+      final advances = await db.staffManagementDao.getAdvancesByStaff('ST-01');
+      final pendingAdv = advances.firstWhere((a) => a.amount == 400);
+      expect(pendingAdv.status, 'pending');
+
+      await db.staffManagementDao.approveAdvance(pendingAdv.id, 'مدير الفرع');
+
+      final updatedAdv = await (db.select(db.staffAdvances)..where((t) => t.id.equals(pendingAdv.id))).getSingle();
+      expect(updatedAdv.status, 'approved');
+      expect(updatedAdv.approvedBy, 'مدير الفرع');
+
+      // Now calculate payroll -> advance of 400 must be deducted
+      await service.calculatePayroll(admin(), 'ST-01', '2026-09');
+      final slip = await (db.select(db.payrollTable)
+            ..where((t) => t.staffId.equals('ST-01') & t.payrollPeriod.equals('2026-09')))
+          .getSingle();
+
+      expect(slip.advances, 400.0);
+      expect(slip.netSalary, 5600.0);
+    });
+
+    test('installment advance with deductOnPeriod starts deductions at the chosen month', () async {
+      // Requested in August, but installments start in October for 2 months (Oct 500, Nov 500)
+      await db.into(db.staffAdvances).insert(
+            StaffAdvancesCompanion.insert(
+              staffId: 'ST-01',
+              amount: 1000,
+              requestDate: DateTime(2026, 8, 10),
+              status: 'approved',
+              paymentDate: Value(DateTime(2026, 8, 10)),
+              installmentMonths: const Value(2),
+              monthlyDeduction: const Value(500),
+              deductOnPeriod: const Value('2026-10'),
+              createdAt: DateTime(2026, 8, 10),
+              updatedAt: DateTime(2026, 8, 10),
+            ),
+          );
+
+      // August -> NOT deducted
+      await service.calculatePayroll(admin(), 'ST-01', '2026-08');
+      final augSlip = await (db.select(db.payrollTable)
+            ..where((t) => t.staffId.equals('ST-01') & t.payrollPeriod.equals('2026-08')))
+          .getSingle();
+      expect(augSlip.advances, 0.0);
+
+      // September -> NOT deducted
+      await service.calculatePayroll(admin(), 'ST-01', '2026-09');
+      final sepSlip = await (db.select(db.payrollTable)
+            ..where((t) => t.staffId.equals('ST-01') & t.payrollPeriod.equals('2026-09')))
+          .getSingle();
+      expect(sepSlip.advances, 0.0);
+
+      // October (Month 1 of installment) -> deducted 500
+      await service.calculatePayroll(admin(), 'ST-01', '2026-10');
+      final octSlip = await (db.select(db.payrollTable)
+            ..where((t) => t.staffId.equals('ST-01') & t.payrollPeriod.equals('2026-10')))
+          .getSingle();
+      expect(octSlip.advances, 500.0);
+
+      // November (Month 2 of installment) -> deducted 500
+      await service.calculatePayroll(admin(), 'ST-01', '2026-11');
+      final novSlip = await (db.select(db.payrollTable)
+            ..where((t) => t.staffId.equals('ST-01') & t.payrollPeriod.equals('2026-11')))
+          .getSingle();
+      expect(novSlip.advances, 500.0);
+
+      // December -> NOT deducted (2 months ended)
+      await service.calculatePayroll(admin(), 'ST-01', '2026-12');
+      final decSlip = await (db.select(db.payrollTable)
+            ..where((t) => t.staffId.equals('ST-01') & t.payrollPeriod.equals('2026-12')))
+          .getSingle();
+      expect(decSlip.advances, 0.0);
+    });
   });
 
   group('Attendance regularity bonus (إضافة انتظام)', () {

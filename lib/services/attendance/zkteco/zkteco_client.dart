@@ -259,6 +259,20 @@ class ZKTecoClient {
     return null;
   }
 
+  Uint8List _stripSizePrefixIfPresent(Uint8List data) {
+    if (data.length >= 4) {
+      final possibleSize = ByteData.sublistView(
+        data,
+        0,
+        4,
+      ).getUint32(0, Endian.little);
+      if (possibleSize == data.length - 4) {
+        return Uint8List.sublistView(data, 4);
+      }
+    }
+    return data;
+  }
+
   /// Fetches all users registered on the terminal
   Future<List<ZkUser>> getUsers() async {
     _ensureConnected();
@@ -270,27 +284,30 @@ class ZKTecoClient {
 
     if (data.isEmpty) return [];
 
+    final payload = _stripSizePrefixIfPresent(data);
+    if (payload.isEmpty) return [];
+
     final users = <ZkUser>[];
 
     // Try 72-byte SSR format first (Modern ZK format)
-    if (data.length >= 72 && data.length % 72 == 0) {
-      for (int offset = 0; offset + 72 <= data.length; offset += 72) {
-        final chunk = Uint8List.sublistView(data, offset, offset + 72);
+    if (payload.length >= 72 && payload.length % 72 == 0) {
+      for (int offset = 0; offset + 72 <= payload.length; offset += 72) {
+        final chunk = Uint8List.sublistView(payload, offset, offset + 72);
         final user = _parse72ByteUser(chunk);
         if (user != null) users.add(user);
       }
-    } else if (data.length >= 28 && data.length % 28 == 0) {
+    } else if (payload.length >= 28 && payload.length % 28 == 0) {
       // 28-byte legacy format
-      for (int offset = 0; offset + 28 <= data.length; offset += 28) {
-        final chunk = Uint8List.sublistView(data, offset, offset + 28);
+      for (int offset = 0; offset + 28 <= payload.length; offset += 28) {
+        final chunk = Uint8List.sublistView(payload, offset, offset + 28);
         final user = _parse28ByteUser(chunk);
         if (user != null) users.add(user);
       }
     } else {
       // Best-effort adaptive parser
       int offset = 0;
-      while (offset + 72 <= data.length) {
-        final chunk = Uint8List.sublistView(data, offset, offset + 72);
+      while (offset + 72 <= payload.length) {
+        final chunk = Uint8List.sublistView(payload, offset, offset + 72);
         final user = _parse72ByteUser(chunk);
         if (user != null && user.userId.isNotEmpty) {
           users.add(user);
@@ -339,17 +356,7 @@ class ZKTecoClient {
       return report;
     }
 
-    var payload = data;
-    if (payload.length % 40 == 4) {
-      final possibleSize = ByteData.sublistView(
-        payload,
-        0,
-        4,
-      ).getUint32(0, Endian.little);
-      if (possibleSize == payload.length - 4) {
-        payload = Uint8List.sublistView(payload, 4);
-      }
-    }
+    var payload = _stripSizePrefixIfPresent(data);
 
     final records = <ZkAttendanceRecord>[];
     var droppedChunks = 0;
@@ -473,13 +480,18 @@ class ZKTecoClient {
     final password = _extractNullTerminatedString(bytes.sublist(4, 12));
     final name = _extractNullTerminatedString(bytes.sublist(12, 20));
     final card = view.getUint32(20, Endian.little).toString();
+    final pin2 = view.getUint32(24, Endian.little);
+    final extractedPin = _extractNullTerminatedString(bytes.sublist(24, 28));
+    final resolvedUserId = pin2 > 0
+        ? pin2.toString()
+        : (extractedPin.isNotEmpty ? extractedPin : uid.toString());
 
-    if (uid == 0) return null;
+    if (uid == 0 && pin2 == 0 && extractedPin.isEmpty) return null;
 
     return ZkUser(
       uid: uid,
-      userId: uid.toString(),
-      name: name.isNotEmpty ? name : 'User $uid',
+      userId: resolvedUserId,
+      name: name.isNotEmpty ? name : 'User $resolvedUserId',
       password: password.isNotEmpty ? password : null,
       card: card != '0' ? card : null,
       role: role,

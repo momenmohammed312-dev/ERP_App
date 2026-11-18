@@ -130,6 +130,11 @@ class NotificationService {
         .getNotificationsDueBefore(DateTime.now());
 
     for (final notification in dueNotifications) {
+      // FEAT-034: Skip smart analytics notifications so they remain unread for the user UI
+      if (notification.entityId != null &&
+          notification.entityId!.startsWith('smart:')) {
+        continue;
+      }
       await _sendNotification(notification);
       await _db.notificationsDao.markAsSent(notification.id);
     }

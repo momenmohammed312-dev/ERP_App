@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:pdf/pdf.dart' show PdfPageFormat;
+import 'package:printing/printing.dart';
+import 'package:pos_offline_desktop/core/services/unified_print_service.dart' as ups;
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/bom_form_dialog.dart';
@@ -58,6 +62,86 @@ class _BomListScreenState extends State<BomListScreen> {
           backgroundColor: Colors.green,
         ),
       );
+    }
+  }
+
+  Future<void> _printBom(BillOfMaterial bom) async {
+    final product = _productMap[bom.finishedProductId];
+    final itemsWithProducts = await widget.db.bomDao.getItemsWithProducts(bom.id);
+    final itemsData = itemsWithProducts.map((pair) {
+      final item = pair.$1;
+      final raw = pair.$2;
+      final cost = raw.costPrice ?? raw.price;
+      return {
+        'productName': raw.name,
+        'quantity': item.quantityRequired,
+        'unit': raw.unit ?? 'وحدة',
+        'waste': item.wastePercentageOverride != null ? '${item.wastePercentageOverride}%' : '—',
+        'unitCost': cost.toStringAsFixed(2),
+        'lineCost': (item.quantityRequired * cost).toStringAsFixed(2),
+      };
+    }).toList();
+
+    try {
+      final pdf = await ups.UnifiedPrintService.generateUnifiedDocument(
+        documentType: ups.DocumentType.bomRecipeCard,
+        data: {
+          'name': bom.name,
+          'productName': product?.name ?? '—',
+          'code': bom.code ?? '—',
+          'yieldQuantity': bom.yieldQuantity,
+          'wastePercentage': bom.wastePercentage,
+        },
+        additionalData: {'items': itemsData},
+      );
+
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => Dialog(
+          insetPadding: const EdgeInsets.all(24),
+          child: SizedBox(
+            width: 900,
+            height: 750,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'بطاقة وصفة التصنيع — ${bom.name}',
+                          style: Theme.of(ctx).textTheme.titleMedium,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: PdfPreview(
+                    build: (format) => pdf.save(),
+                    allowPrinting: true,
+                    allowSharing: true,
+                    initialPageFormat: PdfPageFormat.a4,
+                    pdfFileName: 'bom_${bom.name}.pdf',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل إنشاء بطاقة الوصفة: $e')),
+        );
+      }
     }
   }
 
@@ -127,6 +211,41 @@ class _BomListScreenState extends State<BomListScreen> {
       ),
       body: Column(
         children: [
+          // Quick Navigation Strip
+          Container(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/manufacturing/orders'),
+                    icon: const Icon(Icons.precision_manufacturing, size: 18),
+                    label: const Text('أوامر التصنيع'),
+                  ),
+                  const Gap(8),
+                  FilledButton.tonalIcon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.playlist_add_check, size: 18),
+                    label: const Text('الوصفات (BOM)'),
+                  ),
+                  const Gap(8),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/manufacturing/receipts'),
+                    icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                    label: const Text('خامات العملاء'),
+                  ),
+                  const Gap(8),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/manufacturing/reports'),
+                    icon: const Icon(Icons.analytics_outlined, size: 18),
+                    label: const Text('تقارير التصنيع PDF'),
+                  ),
+                ],
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -352,6 +471,11 @@ class _BomListScreenState extends State<BomListScreen> {
                                     label: Text(
                                       isActive ? 'إلغاء تفعيل' : 'تفعيل',
                                     ),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: () => _printBom(bom),
+                                    icon: const Icon(Icons.picture_as_pdf, size: 18),
+                                    label: const Text('بطاقة الوصفة PDF'),
                                   ),
                                   TextButton.icon(
                                     onPressed: () => _openForm(bom: bom),

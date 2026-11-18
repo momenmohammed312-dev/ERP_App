@@ -1,35 +1,76 @@
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum CalendarThemeMode { light, gray, dark }
-
 class SettingsService {
-  static const _calendarThemeKey = 'calendar_theme_mode';
+  static const _appThemeModeKey = 'app_theme_mode';
   static const _defaultInvoiceTypeKey = 'default_invoice_type';
   static const _thermalPrinterKey = 'thermal_printer_name';
   static const _a4PrinterKey = 'a4_printer_name';
+  static const _lastUsernameKey = 'last_logged_in_username';
+  static const _rememberMeKey = 'auth_remember_me';
+  static const _rememberedUserJsonKey = 'auth_remembered_user_json';
 
-  static Future<CalendarThemeMode> getCalendarTheme() async {
+  static Future<ThemeMode> getAppThemeMode() async {
     final prefs = await SharedPreferences.getInstance();
-    final v = prefs.getString(_calendarThemeKey) ?? 'light';
+    final v = prefs.getString(_appThemeModeKey) ?? 'dark';
     switch (v) {
-      case 'gray':
-        return CalendarThemeMode.gray;
-      case 'dark':
-        return CalendarThemeMode.dark;
       case 'light':
+        return ThemeMode.light;
+      case 'dark':
       default:
-        return CalendarThemeMode.light;
+        return ThemeMode.dark;
     }
   }
 
-  static Future<void> setCalendarTheme(CalendarThemeMode mode) async {
+  static Future<void> setAppThemeMode(ThemeMode mode) async {
     final prefs = await SharedPreferences.getInstance();
-    final v = switch (mode) {
-      CalendarThemeMode.gray => 'gray',
-      CalendarThemeMode.dark => 'dark',
-      CalendarThemeMode.light => 'light',
-    };
-    await prefs.setString(_calendarThemeKey, v);
+    await prefs.setString(
+      _appThemeModeKey,
+      mode == ThemeMode.light ? 'light' : 'dark',
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Auth & Remember Me
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<String?> getLastUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_lastUsernameKey);
+    if (value == null || value.trim().isEmpty) return null;
+    return value.trim();
+  }
+
+  static Future<void> setLastUsername(String? username) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (username == null || username.trim().isEmpty) {
+      await prefs.remove(_lastUsernameKey);
+    } else {
+      await prefs.setString(_lastUsernameKey, username.trim());
+    }
+  }
+
+  static Future<bool> getRememberMe() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_rememberMeKey) ?? false;
+  }
+
+  static Future<void> setRememberMe(bool remember) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_rememberMeKey, remember);
+  }
+
+  static Future<String?> getRememberedUserJson() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_rememberedUserJsonKey);
+  }
+
+  static Future<void> setRememberedUserJson(String? json) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (json == null || json.isEmpty) {
+      await prefs.remove(_rememberedUserJsonKey);
+    } else {
+      await prefs.setString(_rememberedUserJsonKey, json);
+    }
   }
 
   static Future<void> setDefaultInvoiceType(String type) async {
@@ -272,5 +313,73 @@ class SettingsService {
   static Future<void> setLastSyncedAt(DateTime value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_lastSyncedAtKey, value.toIso8601String());
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Cloud Folder Sync (Google Drive / OneDrive / Local / Network folder)
+  // ─────────────────────────────────────────────────────────────────────────
+  static const _cloudSyncFolderPathKey = 'cloud_sync_folder_path';
+  static const _cloudFolderSyncEnabledKey = 'cloud_folder_sync_enabled';
+
+  /// Returns the configured folder path for cloud-syncing backups (e.g. Google Drive folder).
+  static Future<String?> getCloudSyncFolderPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_cloudSyncFolderPathKey);
+  }
+
+  /// Sets or clears the configured cloud sync folder path.
+  static Future<void> setCloudSyncFolderPath(String? path) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (path == null || path.trim().isEmpty) {
+      await prefs.remove(_cloudSyncFolderPathKey);
+    } else {
+      await prefs.setString(_cloudSyncFolderPathKey, path.trim());
+    }
+  }
+
+  /// Whether automatic mirroring to the cloud sync folder is enabled (default true).
+  static Future<bool> isCloudFolderSyncEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_cloudFolderSyncEnabledKey) ?? true;
+  }
+
+  /// Sets whether automatic mirroring to the cloud sync folder is enabled.
+  static Future<void> setCloudFolderSyncEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_cloudFolderSyncEnabledKey, enabled);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Smart Analytics & AI Advisor (المستشار والتحليل الذكي)
+  // ─────────────────────────────────────────────────────────────────────────
+  static const _smartAnalyticsEnabledKey = 'smart_analytics_enabled';
+  static const _smartAnalyticsGeminiApiKey = 'smart_analytics_gemini_api_key';
+
+  /// Whether Smart Analytics & Predictive Alerts are enabled (default true).
+  static Future<bool> isSmartAnalyticsEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_smartAnalyticsEnabledKey) ?? true;
+  }
+
+  /// Sets whether Smart Analytics & Predictive Alerts are enabled.
+  static Future<void> setSmartAnalyticsEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_smartAnalyticsEnabledKey, enabled);
+  }
+
+  /// Optional free Gemini API Key for executive brief generation.
+  static Future<String?> getGeminiApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_smartAnalyticsGeminiApiKey);
+  }
+
+  /// Sets or clears the optional Gemini API key.
+  static Future<void> setGeminiApiKey(String? key) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (key == null || key.trim().isEmpty) {
+      await prefs.remove(_smartAnalyticsGeminiApiKey);
+    } else {
+      await prefs.setString(_smartAnalyticsGeminiApiKey, key.trim());
+    }
   }
 }

@@ -40,8 +40,8 @@ class FeatureGuard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 1. Free version flavor/build — always unlocked
-    if (LicenseConfig.isFreeVersion) {
+    // 1. Permanent free version flavor/build — always unlocked
+    if (LicenseConfig.isPermanentFreeVersion) {
       return child;
     }
 

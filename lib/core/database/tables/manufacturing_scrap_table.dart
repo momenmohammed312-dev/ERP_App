@@ -4,11 +4,6 @@ import 'product_table.dart';
 import 'manufacturing_tables.dart';
 
 /// Reasons a production line can be written off as scrap.
-///
-/// Fixed vocabulary so a scrap line is auditable: you can always answer "why
-/// was this thrown away and who signed it off". OQ2 settled these six for
-/// factory-owned material; customer-owned material adds a separate
-/// disposition vocabulary in Phase B and must not reuse these.
 abstract final class ManufacturingScrapReason {
   static const defective = 'defective';
   static const materialShortage = 'material_shortage';
@@ -48,18 +43,9 @@ abstract final class ManufacturingScrapReason {
   }
 }
 
-/// A written-off quantity from a completed manufacturing order.
-///
-/// Scrap is recorded rather than folded into the recipe's waste allowance.
-/// waste_percentage says what to *plan* for; this says what actually happened.
-/// Keeping both is the point — the variance between them is the number worth
-/// acting on. A BOM that silently absorbs waste cannot tell a good unit from a
-/// scrapped one, which makes unit cost fiction.
+/// A written-off quantity from a manufacturing order or stage.
 @DataClassName('ManufacturingScrap')
 class ManufacturingScraps extends Table {
-  // Drift would pluralise the class name to manufacturing_scraps. Pin the SQL
-  // name to the singular so it matches the other manufacturing tables' naming
-  // intent and the documented schema contract in the migration tests.
   @override
   String get tableName => 'manufacturing_scrap';
 
@@ -68,23 +54,20 @@ class ManufacturingScraps extends Table {
   IntColumn get manufacturingOrderId =>
       integer().references(ManufacturingOrders, #id, onDelete: KeyAction.cascade)();
 
-  /// What was thrown away. May be a raw material or the finished good itself;
-  /// use [bomItemId] to tell which recipe line it came from.
+  /// What was thrown away or set aside. May be a raw material or the finished good itself.
   IntColumn get productId => integer().references(Products, #id)();
 
   /// The recipe line, when the scrap came from raw material.
   IntColumn get bomItemId =>
       integer().references(BomItems, #id, onDelete: KeyAction.setNull).nullable()();
 
-  /// How many units were written off. REAL because a recipe can be fractional
-  /// (0.2 litre), and the record must not lose that precision.
+  /// How many units were written off.
   RealColumn get quantity => real()();
 
   /// One of [ManufacturingScrapReason].
   TextColumn get reason => text()();
 
-  /// Who is accountable. Required and non-blank — a scrap line with no owner
-  /// is not auditable.
+  /// Who is accountable.
   TextColumn get responsibleParty => text()();
 
   /// Free text, typically an authorisation reference for the write-off.
@@ -103,6 +86,17 @@ class ManufacturingScraps extends Table {
       real().nullable().withDefault(const Constant(0.0))();
 
   TextColumn get performedBy => text().nullable()();
+
+  /// ── FEAT-026: Multi-stage, Variants & Sellable Scrap (v81) ──
+  IntColumn get stageId => integer().nullable()();
+  IntColumn get variantId => integer().nullable()();
+  TextColumn get variantName => text().nullable()();
+  BoolColumn get isSellable =>
+      boolean().nullable().withDefault(const Constant(false))();
+  RealColumn get estimatedSellPrice =>
+      real().nullable().withDefault(const Constant(0.0))();
+  IntColumn get scrapProductId =>
+      integer().nullable().references(Products, #id, onDelete: KeyAction.setNull)();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }

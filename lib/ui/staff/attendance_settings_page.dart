@@ -5,6 +5,7 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/services/attendance/attendance_calculation_engine.dart';
 import 'package:pos_offline_desktop/widgets/permission_guard.dart';
+import '../../core/theme/madar_colors.dart';
 
 class AttendanceSettingsPage extends ConsumerStatefulWidget {
   const AttendanceSettingsPage({super.key});
@@ -20,6 +21,9 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
   // Work schedule defaults
   TimeOfDay _workStart = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _workEnd = const TimeOfDay(hour: 17, minute: 0);
+  bool _restBreakEnabled = false;
+  TimeOfDay _restBreakStart = const TimeOfDay(hour: 13, minute: 0);
+  TimeOfDay _restBreakEnd = const TimeOfDay(hour: 14, minute: 0);
   final Map<String, bool> _workDays = {
     'sun': true, 'mon': true, 'tue': true, 'wed': true, 'thu': true,
     'fri': false, 'sat': false,
@@ -62,6 +66,12 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             _workStart = _parseTime(s.settingValue);
           case 'default_work_end':
             _workEnd = _parseTime(s.settingValue);
+          case 'rest_break_enabled':
+            _restBreakEnabled = s.settingValue.toLowerCase() == 'true';
+          case 'rest_break_start':
+            _restBreakStart = _parseTime(s.settingValue);
+          case 'rest_break_end':
+            _restBreakEnd = _parseTime(s.settingValue);
           case 'default_work_days':
             final days = s.settingValue.split(',');
             for (final key in _workDays.keys) {
@@ -124,6 +134,9 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
       final settingsMap = {
         'default_work_start': _formatTime(_workStart),
         'default_work_end': _formatTime(_workEnd),
+        'rest_break_enabled': _restBreakEnabled.toString(),
+        'rest_break_start': _formatTime(_restBreakStart),
+        'rest_break_end': _formatTime(_restBreakEnd),
         'default_work_days': _workDays.entries.where((e) => e.value).map((e) => e.key).join(','),
         'default_weekend': _weekendDay,
         'grace_period_minutes': _gracePeriodMinutes.toString(),
@@ -216,21 +229,50 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final bgColor = context.bgCanvas;
+    final textColor = context.textPrimary;
+    final accentColor = context.primaryColor;
+
     return PermissionGuard(
       permission: Permission.manageAttendance,
       child: Scaffold(
+        backgroundColor: bgColor,
         appBar: AppBar(
           title: const Text('إعدادات الحضور والانصراف'),
+          backgroundColor: isDark ? MadarColors.bgDark : Colors.white,
+          foregroundColor: textColor,
+          elevation: 0,
           actions: [
-            IconButton(
-              icon: const Icon(Icons.save),
-              onPressed: _isSaving ? null : _saveSettings,
-              tooltip: 'حفظ',
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: ElevatedButton.icon(
+                onPressed: _isSaving ? null : _saveSettings,
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.check, size: 18),
+                label: const Text('حفظ الإعدادات'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? MadarColors.success : MadarColors.lightPrimary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+              ),
             ),
           ],
         ),
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(child: CircularProgressIndicator(color: accentColor))
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -249,14 +291,17 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
   }
 
   Widget _buildWorkScheduleSection() {
+    final isDark = context.isDarkMode;
+
     return _buildSection(
       title: 'جدول العمل الافتراضي',
       icon: Icons.schedule,
       children: [
         ListTile(
-          title: const Text('وقت بدء العمل'),
-          subtitle: Text(_formatTime(_workStart)),
-          trailing: const Icon(Icons.access_time),
+          leading: const Icon(Icons.login, color: MadarColors.success, size: 20),
+          title: Text('وقت بدء العمل', style: TextStyle(color: context.textPrimary, fontSize: 14)),
+          subtitle: Text(_formatTime(_workStart), style: TextStyle(color: context.primaryColor, fontWeight: FontWeight.bold)),
+          trailing: Icon(Icons.access_time, color: context.textMuted),
           onTap: () async {
             final picked = await showTimePicker(
               context: context,
@@ -265,11 +310,12 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (picked != null) setState(() => _workStart = picked);
           },
         ),
-        const Divider(height: 1),
+        Divider(height: 1, color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle),
         ListTile(
-          title: const Text('وقت نهاية العمل'),
-          subtitle: Text(_formatTime(_workEnd)),
-          trailing: const Icon(Icons.access_time),
+          leading: const Icon(Icons.logout, color: MadarColors.error, size: 20),
+          title: Text('وقت نهاية العمل', style: TextStyle(color: context.textPrimary, fontSize: 14)),
+          subtitle: Text(_formatTime(_workEnd), style: TextStyle(color: context.primaryColor, fontWeight: FontWeight.bold)),
+          trailing: Icon(Icons.access_time, color: context.textMuted),
           onTap: () async {
             final picked = await showTimePicker(
               context: context,
@@ -278,29 +324,41 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (picked != null) setState(() => _workEnd = picked);
           },
         ),
-        const Divider(height: 1),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Text('أيام العمل', style: TextStyle(fontWeight: FontWeight.bold)),
+        Divider(height: 1, color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Text(
+            'أيام العمل الأسبوعية',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: context.textPrimary,
+              fontSize: 13,
+            ),
+          ),
         ),
-        Wrap(
-          spacing: 8,
-          children: [
-            _buildDayChip('sun', 'الأحد'),
-            _buildDayChip('mon', 'الاثنين'),
-            _buildDayChip('tue', 'الثلاثاء'),
-            _buildDayChip('wed', 'الأربعاء'),
-            _buildDayChip('thu', 'الخميس'),
-            _buildDayChip('fri', 'الجمعة'),
-            _buildDayChip('sat', 'السبت'),
-          ],
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _buildDayChip('sun', 'الأحد'),
+              _buildDayChip('mon', 'الاثنين'),
+              _buildDayChip('tue', 'الثلاثاء'),
+              _buildDayChip('wed', 'الأربعاء'),
+              _buildDayChip('thu', 'الخميس'),
+              _buildDayChip('fri', 'الجمعة'),
+              _buildDayChip('sat', 'السبت'),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
-        const Divider(height: 1),
+        Divider(height: 1, color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle),
         ListTile(
-          title: const Text('ساعات العمل اليومية'),
-          subtitle: Text('${_overtimeThresholdHours.toStringAsFixed(1)} ساعة'),
-          trailing: const Icon(Icons.timer),
+          leading: const Icon(Icons.timer_outlined, color: MadarColors.info, size: 20),
+          title: Text('ساعات العمل اليومية', style: TextStyle(color: context.textPrimary, fontSize: 14)),
+          subtitle: Text('${_overtimeThresholdHours.toStringAsFixed(1)} ساعة', style: TextStyle(color: context.primaryColor, fontWeight: FontWeight.bold)),
+          trailing: Icon(Icons.edit_outlined, size: 18, color: context.textMuted),
           onTap: () async {
             final controller = TextEditingController(
               text: _overtimeThresholdHours.toString(),
@@ -332,17 +390,78 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (result != null) setState(() => _overtimeThresholdHours = result);
           },
         ),
+        Divider(height: 1, color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle),
+        SwitchListTile(
+          secondary: const Icon(Icons.coffee_outlined, color: MadarColors.gold, size: 22),
+          title: Text('فترة الراحة اليومية (Rest)', style: TextStyle(color: context.textPrimary, fontSize: 14)),
+          subtitle: Text('استقطاع ساعة الراحة تلقائياً من ساعات العمل والإذن المتداخل معها', style: TextStyle(color: context.textMuted, fontSize: 12)),
+          value: _restBreakEnabled,
+          onChanged: (val) => setState(() => _restBreakEnabled = val),
+        ),
+        if (_restBreakEnabled) ...[
+          Divider(height: 1, color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle),
+          ListTile(
+            leading: const Icon(Icons.free_breakfast, color: MadarColors.gold, size: 20),
+            title: Text('بداية فترة الراحة', style: TextStyle(color: context.textPrimary, fontSize: 14)),
+            subtitle: Text(_formatTime(_restBreakStart), style: TextStyle(color: context.primaryColor, fontWeight: FontWeight.bold)),
+            trailing: Icon(Icons.access_time, color: context.textMuted),
+            onTap: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: _restBreakStart,
+              );
+              if (picked != null) setState(() => _restBreakStart = picked);
+            },
+          ),
+          Divider(height: 1, color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle),
+          ListTile(
+            leading: const Icon(Icons.work_history, color: MadarColors.gold, size: 20),
+            title: Text('نهاية فترة الراحة', style: TextStyle(color: context.textPrimary, fontSize: 14)),
+            subtitle: Text(_formatTime(_restBreakEnd), style: TextStyle(color: context.primaryColor, fontWeight: FontWeight.bold)),
+            trailing: Icon(Icons.access_time, color: context.textMuted),
+            onTap: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: _restBreakEnd,
+              );
+              if (picked != null) setState(() => _restBreakEnd = picked);
+            },
+          ),
+        ],
       ],
     );
   }
 
   Widget _buildDayChip(String key, String label) {
     final selected = _workDays[key] ?? false;
+    final isDark = context.isDarkMode;
+    final activeColor = isDark ? MadarColors.success : MadarColors.lightPrimary;
+
     return FilterChip(
-      label: Text(label),
+      label: Text(
+        label,
+        style: TextStyle(
+          color: selected
+              ? (isDark ? Colors.white : MadarColors.lightPrimary)
+              : context.textMuted,
+          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+          fontSize: 12,
+        ),
+      ),
       selected: selected,
-      selectedColor: Colors.green.withValues(alpha: 0.2),
-      checkmarkColor: Colors.green,
+      selectedColor: activeColor.withValues(alpha: isDark ? 0.25 : 0.12),
+      checkmarkColor: activeColor,
+      backgroundColor: isDark
+          ? MadarColors.bgDark.withValues(alpha: 0.5)
+          : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: selected
+              ? activeColor
+              : (isDark ? MadarColors.border : MadarColors.lightBorder),
+        ),
+      ),
       onSelected: (val) => setState(() => _workDays[key] = val),
     );
   }
@@ -382,7 +501,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (result != null) setState(() => _gracePeriodMinutes = result);
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
           title: const Text('مضاعف خصم التأخير'),
           subtitle: Text(
@@ -445,7 +564,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             }
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
           title: const Text('خصم الغياب (اليوم بيوم)'),
           subtitle: Text(
@@ -527,7 +646,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             }
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
           title: const Text('مضاعف خصم يوم الغياب'),
           subtitle: Text('اليوم الغائب يُخصم بمعدل ${_absencePenaltyDaysMultiplier.toStringAsFixed(1)} يوم'),
@@ -546,7 +665,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             },
           ),
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
           title: const Text('مضاعف العمل الإضافي'),
           subtitle: Text('x${_overtimeRateMultiplier.toStringAsFixed(1)}'),
@@ -594,7 +713,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             if (result != null) setState(() => _overtimeRateMultiplier = result);
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
           title: const Text('مهلة بداية الإضافي'),
           subtitle: Text(
@@ -637,7 +756,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             }
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         ListTile(
           title: const Text('مكافأة الحضور الكامل (الانتظام)'),
           subtitle: Text(
@@ -680,14 +799,14 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
             }
           },
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         SwitchListTile(
           title: const Text('تفعيل مكافأة الانتظام'),
           subtitle: const Text('إضافة مكافأة الحضور الكامل تلقائياً عند احتساب المرتب'),
           value: _perfectAttendanceEnabled,
           onChanged: (val) => setState(() => _perfectAttendanceEnabled = val),
         ),
-        const Divider(height: 1),
+        const Divider(height: 1, color: MadarColors.border),
         SwitchListTile(
           title: const Text('تطبيق المكافأة على الموظفين بالأسبوع'),
           subtitle: const Text('افتراضياً غير مفعلة لموظفي الأسبوعي لمنع تكرار صرفها أسبوعياً'),
@@ -720,7 +839,7 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
           ),
         ),
         if (_absencesGenerated > 0) ...[
-          const Divider(height: 1),
+          const Divider(height: 1, color: MadarColors.border),
           ListTile(
             leading: const Icon(Icons.check_circle, color: Colors.green),
             title: Text('تم توليد $_absencesGenerated سجل غياب'),
@@ -735,26 +854,60 @@ class _AttendanceSettingsPageState extends ConsumerState<AttendanceSettingsPage>
     required IconData icon,
     required List<Widget> children,
   }) {
-    return Card(
+    final isDark = context.isDarkMode;
+    final primary = isDark ? MadarColors.gold : MadarColors.lightPrimary;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: context.bgCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? MadarColors.border : MadarColors.lightBorder,
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.15)
+                : const Color(0x0A0066FF),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             child: Row(
               children: [
-                Icon(icon, size: 20, color: Colors.blue[700]),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: primary.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Icon(icon, size: 18, color: primary),
+                ),
+                const SizedBox(width: 10),
                 Text(
                   title,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue[700],
+                    color: context.textPrimary,
                   ),
                 ),
               ],
             ),
+          ),
+          Divider(
+            height: 1,
+            color: isDark ? MadarColors.border : MadarColors.lightBorderSubtle,
           ),
           ...children,
         ],

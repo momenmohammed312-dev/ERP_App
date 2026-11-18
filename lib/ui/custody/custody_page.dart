@@ -1,3 +1,4 @@
+import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
@@ -82,13 +83,17 @@ class _CustodyPageState extends State<CustodyPage> {
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: const Row(
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.account_balance_wallet_outlined, size: 28),
-            Gap(12),
+            const Icon(Icons.account_balance_wallet_outlined, size: 24),
+            const Gap(8),
             Text(
-              'إدارة العهد المالية للموظفين',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+              PlatformUtils.isMobile ? 'العهد المالية' : 'إدارة العهد المالية للموظفين',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: PlatformUtils.isMobile ? 16 : 20,
+              ),
             ),
           ],
         ),
@@ -98,62 +103,119 @@ class _CustodyPageState extends State<CustodyPage> {
             icon: const Icon(Icons.refresh),
             onPressed: _loadCustodies,
           ),
-          const Gap(8),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal.shade700,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          if (PlatformUtils.isMobile)
+            IconButton(
+              tooltip: 'صرف عهدة جديدة',
+              icon: const Icon(Icons.add_card, color: Colors.teal),
+              onPressed: () => _showCreateCustodyDialog(context),
+            )
+          else ...[
+            const Gap(8),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal.shade700,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              icon: const Icon(Icons.add_card, size: 20),
+              label: const Text('صرف عهدة جديدة', style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: () => _showCreateCustodyDialog(context),
             ),
-            icon: const Icon(Icons.add_card, size: 20),
-            label: const Text('صرف عهدة جديدة', style: TextStyle(fontWeight: FontWeight.bold)),
-            onPressed: () => _showCreateCustodyDialog(context),
-          ),
-          const Gap(16),
+          ],
+          const Gap(12),
         ],
       ),
       body: _isLoading && _custodies.isEmpty
           ? const Center(child: CircularProgressIndicator())
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── القائمة اليمنى: قائمة العهد والفلترة ──
-                Expanded(
-                  flex: 5,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        left: BorderSide(
-                          color: colorScheme.outline.withValues(alpha: 0.2),
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 720;
+                if (isWide) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── القائمة اليمنى: قائمة العهد والفلترة ──
+                      Expanded(
+                        flex: 5,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border(
+                              left: BorderSide(
+                                color: colorScheme.outline.withValues(alpha: 0.2),
+                              ),
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              _buildFilterBar(colorScheme),
+                              _buildSummaryHeader(),
+                              const Divider(height: 1),
+                              Expanded(child: _buildCustodyList(colorScheme)),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    child: Column(
-                      children: [
-                        _buildFilterBar(colorScheme),
-                        _buildSummaryHeader(),
-                        const Divider(height: 1),
-                        Expanded(child: _buildCustodyList(colorScheme)),
-                      ],
-                    ),
-                  ),
-                ),
 
-                // ── القسم الأيسر: تفاصيل العهدة المختارة ومصروفاتها ──
-                Expanded(
-                  flex: 7,
-                  child: _selectedCustody == null
-                      ? _buildEmptyDetailsPlaceholder(colorScheme)
-                      : _buildCustodyDetailsPanel(colorScheme),
-                ),
-              ],
+                      // ── القسم الأيسر: تفاصيل العهدة المختارة ومصروفاتها ──
+                      Expanded(
+                        flex: 7,
+                        child: _selectedCustody == null
+                            ? _buildEmptyDetailsPlaceholder(colorScheme)
+                            : _buildCustodyDetailsPanel(colorScheme),
+                      ),
+                    ],
+                  );
+                } else {
+                  // ── نمط الهاتف المحمول (عرض كامل وتصفح متجاوب) ──
+                  if (_selectedCustody != null) {
+                    return Column(
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          color: colorScheme.primary.withValues(alpha: 0.08),
+                          child: Row(
+                            children: [
+                              IconButton.filledTonal(
+                                icon: const Icon(Icons.arrow_forward_rounded, size: 20),
+                                onPressed: () {
+                                  setState(() => _selectedCustody = null);
+                                },
+                                tooltip: 'العودة لقائمة العهد',
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'عهدة:  ()',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(child: _buildCustodyDetailsPanel(colorScheme)),
+                      ],
+                    );
+                  }
+                  return Column(
+                    children: [
+                      _buildFilterBar(colorScheme),
+                      _buildSummaryHeader(),
+                      const Divider(height: 1),
+                      Expanded(child: _buildCustodyList(colorScheme)),
+                    ],
+                  );
+                }
+              },
             ),
     );
   }
 
   Widget _buildFilterBar(ColorScheme colorScheme) {
-    return Padding(
-      padding: const EdgeInsets.all(12.0),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
       child: SegmentedButton<String>(
         segments: const [
           ButtonSegment(value: 'all', label: Text('الكل')),
@@ -662,7 +724,7 @@ class _CustodyPageState extends State<CustodyPage> {
                 ],
               ),
               content: SizedBox(
-                width: 480,
+                width: MediaQuery.of(context).size.width.clamp(280.0, 480.0),
                 child: Form(
                   key: formKey,
                   child: SingleChildScrollView(
@@ -798,7 +860,7 @@ class _CustodyPageState extends State<CustodyPage> {
             ],
           ),
           content: SizedBox(
-            width: 440,
+            width: MediaQuery.of(context).size.width.clamp(280.0, 440.0),
             child: Form(
               key: formKey,
               child: Column(

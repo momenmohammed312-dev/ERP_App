@@ -100,7 +100,7 @@ class LicenseEntitlement {
   /// the check a write operation depends on — a licence must be proven, not
   /// assumed.
   bool grants(String feature) {
-    if (LicenseConfig.isFreeVersion) return true;
+    if (LicenseConfig.isPermanentFreeVersion) return true;
     if (coreFeatures.contains(feature)) return true;
     if (!_loaded) return false;
     // '*' is the modern catch-all; 'all' is what the pre-RS256 generators

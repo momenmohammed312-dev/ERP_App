@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/madar_colors.dart';
 
 class AppTheme {
   static const String arabicFontFamily = 'NotoSansArabic';
@@ -8,47 +9,169 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: const ColorScheme.light(
-        secondary: Color(0xFF424242), // Dark grey
-        primary: Color(0xFF212121), // Black
-        surface: Color(0xFFF8F9FA),
+        primary: MadarColors.lightPrimary, // #0066FF
         onPrimary: Colors.white,
+        primaryContainer: MadarColors.lightBabyBlueContainer, // #E0F2FE
+        onPrimaryContainer: MadarColors.lightPrimary,
+        secondary: MadarColors.lightDeepCobalt, // #0A2540
         onSecondary: Colors.white,
-        onSurface: Color(0xFF1A1A1A),
-        surfaceTint: Color(0xFFE0E0E0),
-        surfaceContainerHighest: Color(0xFFE0E0E0),
+        secondaryContainer: MadarColors.lightBgSurface, // #EBF4FC
+        onSecondaryContainer: MadarColors.lightDeepCobalt,
+        tertiary: Color(0xFF0284C7),
+        surface: MadarColors.lightBgCard, // #FFFFFF
+        onSurface: MadarColors.lightTextPrimary, // #0B192C
+        surfaceContainerHighest: MadarColors.lightBgSurface,
+        surfaceContainerLow: Color(0xFFF8FAFD),
+        outline: MadarColors.lightBorder, // #CDE2F5
+        outlineVariant: MadarColors.lightBorderSubtle, // #E2EFF9
+        error: Color(0xFFEF4444),
+        onError: Colors.white,
       ),
       fontFamily: arabicFontFamily,
       appBarTheme: getAppBarTheme(isDark: false),
-      scaffoldBackgroundColor: const Color(0xFFF8F9FA),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: Colors.white,
-        selectedItemColor: Color(0xFF212121),
-        unselectedItemColor: Colors.grey,
+      scaffoldBackgroundColor: MadarColors.lightBgApp, // #F2F7FC
+      cardTheme: const CardThemeData(
+        color: MadarColors.lightBgCard,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+          side: BorderSide(color: MadarColors.lightBorder, width: 1.2),
+        ),
       ),
       elevatedButtonTheme: getElevatedButtonTheme(isDark: false),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: MadarColors.lightPrimary,
+          backgroundColor: const Color(0x0F0066FF), // Translucent blue tint
+          side: const BorderSide(color: MadarColors.lightPrimary, width: 1.5),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          textStyle: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            fontFamily: arabicFontFamily,
+          ),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: MadarColors.lightBabyBlueContainer,
+          foregroundColor: MadarColors.lightPrimary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          textStyle: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            fontFamily: arabicFontFamily,
+          ),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: MadarColors.lightBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: MadarColors.lightBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: MadarColors.lightPrimary, width: 2),
+        ),
+        hintStyle: const TextStyle(color: MadarColors.lightTextMuted),
+        labelStyle: const TextStyle(color: MadarColors.lightTextSecondary),
+      ),
+      dataTableTheme: DataTableThemeData(
+        headingRowColor: WidgetStateProperty.all(MadarColors.lightBgSurface),
+        dataRowColor: WidgetStateProperty.all(Colors.white),
+        headingTextStyle: const TextStyle(
+          color: MadarColors.lightTextPrimary,
+          fontWeight: FontWeight.bold,
+          fontFamily: arabicFontFamily,
+        ),
+        dataTextStyle: const TextStyle(
+          color: MadarColors.lightTextPrimary,
+          fontFamily: arabicFontFamily,
+        ),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: MadarColors.lightBorderSubtle,
+        thickness: 1,
+        space: 1,
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: Colors.white,
+        selectedItemColor: MadarColors.lightPrimary,
+        unselectedItemColor: MadarColors.lightTextMuted,
+      ),
       datePickerTheme: DatePickerThemeData(
         backgroundColor: Colors.white,
-        headerBackgroundColor: Colors.black,
+        headerBackgroundColor: MadarColors.lightPrimary,
         headerForegroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
-        dayStyle: const TextStyle(color: Colors.black),
-        yearStyle: const TextStyle(color: Colors.black),
+        weekdayStyle: const TextStyle(
+          color: MadarColors.lightTextSecondary,
+          fontWeight: FontWeight.w600,
+          fontFamily: arabicFontFamily,
+        ),
+        dayStyle: const TextStyle(
+          color: MadarColors.lightTextPrimary,
+          fontFamily: arabicFontFamily,
+        ),
+        yearStyle: const TextStyle(
+          color: MadarColors.lightTextPrimary,
+          fontFamily: arabicFontFamily,
+        ),
+        dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return MadarColors.lightPrimary;
+          }
+          return Colors.transparent;
+        }),
         dayForegroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return Colors.white;
           }
           if (states.contains(WidgetState.disabled)) {
-            return Colors.grey;
+            return MadarColors.lightTextMuted;
           }
-          return Colors.black;
+          return MadarColors.lightTextPrimary;
         }),
-        todayForegroundColor: WidgetStateProperty.all(Colors.black),
-        todayBorder: const BorderSide(color: Colors.black),
+        todayForegroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.white;
+          }
+          return MadarColors.lightPrimary;
+        }),
+        todayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return MadarColors.lightPrimary;
+          }
+          return MadarColors.lightBabyBlueContainer;
+        }),
+        todayBorder: const BorderSide(
+          color: MadarColors.lightPrimary,
+          width: 1.5,
+        ),
+        rangePickerBackgroundColor: Colors.white,
+        rangePickerHeaderBackgroundColor: MadarColors.lightPrimary,
+        rangePickerHeaderForegroundColor: Colors.white,
+        rangeSelectionBackgroundColor: MadarColors.lightBabyBlueContainer,
+        yearBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return MadarColors.lightPrimary;
+          }
+          return Colors.transparent;
+        }),
         yearForegroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return Colors.white;
           }
-          return Colors.black;
+          return MadarColors.lightTextPrimary;
         }),
       ),
     );
@@ -77,6 +200,33 @@ class AppTheme {
         unselectedItemColor: Color(0xFF8B949E),
       ),
       elevatedButtonTheme: getElevatedButtonTheme(isDark: true),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          backgroundColor: const Color(0x1AFFFFFF),
+          side: const BorderSide(color: Color(0xFF30363D), width: 1.5),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          textStyle: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            fontFamily: arabicFontFamily,
+          ),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFF21262D),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          textStyle: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            fontFamily: arabicFontFamily,
+          ),
+        ),
+      ),
       cardTheme: const CardThemeData(
         color: Color(0xFF161B22),
         elevation: 2,
@@ -119,27 +269,65 @@ class AppTheme {
       ),
       datePickerTheme: DatePickerThemeData(
         backgroundColor: const Color(0xFF161B22),
-        headerBackgroundColor: Colors.black,
-        headerForegroundColor: Colors.white,
+        headerBackgroundColor: const Color(0xFF0D1117),
+        headerForegroundColor: const Color(0xFFE6EDF3),
         surfaceTintColor: Colors.transparent,
-        dayStyle: const TextStyle(color: Colors.white),
-        yearStyle: const TextStyle(color: Colors.white),
+        weekdayStyle: const TextStyle(
+          color: Color(0xFF8B949E),
+          fontWeight: FontWeight.w600,
+          fontFamily: arabicFontFamily,
+        ),
+        dayStyle: const TextStyle(
+          color: Color(0xFFE6EDF3),
+          fontFamily: arabicFontFamily,
+        ),
+        yearStyle: const TextStyle(
+          color: Color(0xFFE6EDF3),
+          fontFamily: arabicFontFamily,
+        ),
+        dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFFC9A84C);
+          }
+          return Colors.transparent;
+        }),
         dayForegroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return Colors.black;
+            return const Color(0xFF0D1117);
           }
           if (states.contains(WidgetState.disabled)) {
-            return Colors.grey;
+            return const Color(0xFF484F58);
           }
-          return Colors.white;
+          return const Color(0xFFE6EDF3);
         }),
-        todayForegroundColor: WidgetStateProperty.all(Colors.white),
-        todayBorder: const BorderSide(color: Colors.white),
+        todayForegroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFF0D1117);
+          }
+          return const Color(0xFFC9A84C);
+        }),
+        todayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFFC9A84C);
+          }
+          return const Color(0x1FC9A84C);
+        }),
+        todayBorder: const BorderSide(color: Color(0xFFC9A84C), width: 1.5),
+        rangePickerBackgroundColor: const Color(0xFF161B22),
+        rangePickerHeaderBackgroundColor: const Color(0xFF0D1117),
+        rangePickerHeaderForegroundColor: const Color(0xFFE6EDF3),
+        rangeSelectionBackgroundColor: const Color(0x33C9A84C),
+        yearBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFFC9A84C);
+          }
+          return Colors.transparent;
+        }),
         yearForegroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return Colors.black;
+            return const Color(0xFF0D1117);
           }
-          return Colors.white;
+          return const Color(0xFFE6EDF3);
         }),
       ),
     );
@@ -150,13 +338,14 @@ class AppTheme {
   }) {
     return ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        backgroundColor: isDark ? Colors.white : const Color(0xFF212121),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        backgroundColor: isDark ? Colors.white : MadarColors.lightPrimary,
         foregroundColor: isDark ? Colors.black : Colors.white,
+        elevation: 0,
         textStyle: TextStyle(
           color: isDark ? Colors.black : Colors.white,
-          fontWeight: FontWeight.w600,
-          fontSize: 16,
+          fontWeight: FontWeight.w700,
+          fontSize: 15,
           fontFamily: arabicFontFamily,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -168,16 +357,16 @@ class AppTheme {
     return AppBarTheme(
       backgroundColor: isDark
           ? const Color(0xFF161B22)
-          : const Color(0xFFF8F9FA),
+          : Colors.white,
       foregroundColor: isDark
           ? const Color(0xFFE6EDF3)
-          : const Color(0xFF1A1A1A),
+          : MadarColors.lightTextPrimary,
       elevation: 0,
       centerTitle: true,
       titleTextStyle: TextStyle(
-        fontWeight: FontWeight.w600,
-        fontSize: 22,
-        color: isDark ? const Color(0xFFE6EDF3) : const Color(0xFF1A1A1A),
+        fontWeight: FontWeight.w700,
+        fontSize: 20,
+        color: isDark ? const Color(0xFFE6EDF3) : MadarColors.lightTextPrimary,
         fontFamily: arabicFontFamily,
       ),
     );

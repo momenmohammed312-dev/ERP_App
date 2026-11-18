@@ -163,6 +163,11 @@ class StaffManagementService {
     await updateStaffInfo(user, staffId: staffId, status: 'terminated');
   }
 
+  Future<void> deleteStaff(User? user, String staffId) async {
+    PermissionValidator.requirePermission(user, Permission.deleteEmployee, 'حذف موظف');
+    await _dao.deleteStaff(staffId);
+  }
+
   // ATTENDANCE MANAGEMENT
 
   Future<void> recordCheckIn(String staffId, {String? location}) async {

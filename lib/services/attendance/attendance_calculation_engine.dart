@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/attendance_device_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/staff_management_dao.dart';
+import 'package:pos_offline_desktop/services/attendance/attendance_deduction_calculator.dart';
 import 'package:pos_offline_desktop/services/attendance/attendance_shift_bounds.dart';
 
 /// Work schedule configuration for an employee
@@ -16,6 +17,11 @@ class ScheduleConfig {
   final double standardHoursPerDay;
   final double overtimeRateMultiplier;
   final int overtimeGraceMinutes; // مهلة بعد نهاية الدوام قبل بدء الإضافي (افتراضي 30)
+  final bool restBreakEnabled;
+  final int restBreakStartHour;
+  final int restBreakStartMinute;
+  final int restBreakEndHour;
+  final int restBreakEndMinute;
 
   const ScheduleConfig({
     required this.workStartHour,
@@ -28,6 +34,11 @@ class ScheduleConfig {
     required this.standardHoursPerDay,
     required this.overtimeRateMultiplier,
     this.overtimeGraceMinutes = 30,
+    this.restBreakEnabled = false,
+    this.restBreakStartHour = 13,
+    this.restBreakStartMinute = 0,
+    this.restBreakEndHour = 14,
+    this.restBreakEndMinute = 0,
   });
 
   DateTime get workStartToday {
@@ -42,12 +53,38 @@ class ScheduleConfig {
 
   int get workStartMinutesSinceMidnight => workStartHour * 60 + workStartMinute;
   int get workEndMinutesSinceMidnight => workEndHour * 60 + workEndMinute;
+
+  int get restBreakStartMinutesSinceMidnight =>
+      restBreakStartHour * 60 + restBreakStartMinute;
+  int get restBreakEndMinutesSinceMidnight =>
+      restBreakEndHour * 60 + restBreakEndMinute;
+
+  int get restBreakMinutes {
+    if (!restBreakEnabled) return 0;
+    final span = restBreakEndMinutesSinceMidnight - restBreakStartMinutesSinceMidnight;
+    return span > 0 ? span : 0;
+  }
+
   int get standardMinutesPerDay {
     final span = workEndMinutesSinceMidnight - workStartMinutesSinceMidnight;
     // A shift that ends earlier in the clock than it starts (e.g. 20:00-02:30)
     // has a negative raw span; add a day so callers get a real length.
     // 08:00-17:00 stays 540.
-    return span <= 0 ? span + 1440 : span;
+    final totalSpan = span <= 0 ? span + 1440 : span;
+    if (!restBreakEnabled) return totalSpan;
+
+    final shiftStart = workStartMinutesSinceMidnight;
+    final shiftEnd = workEndMinutesSinceMidnight <= workStartMinutesSinceMidnight
+        ? workEndMinutesSinceMidnight + 1440
+        : workEndMinutesSinceMidnight;
+    final overlap = AttendanceDeductionRules.calculateWindowOverlap(
+      windowAStart: shiftStart,
+      windowAEnd: shiftEnd,
+      windowBStart: restBreakStartMinutesSinceMidnight,
+      windowBEnd: restBreakEndMinutesSinceMidnight,
+    );
+    final net = totalSpan - overlap;
+    return net > 0 ? net : totalSpan;
   }
   int get standardMinutesTotal => standardMinutesPerDay; // alias for clarity
 }
@@ -129,6 +166,12 @@ class AttendanceCalculationEngine {
   /// Falls back to default settings if the employee has no custom schedule
   Future<ScheduleConfig> getScheduleForStaff(String staffId) async {
     final staff = await _staffDao.getStaffById(staffId);
+    final restBreakEnabled =
+        (await _getSetting('rest_break_enabled', 'false')).toLowerCase() == 'true';
+    final restBreakStartStr = await _getSetting('rest_break_start', '13:00');
+    final restBreakEndStr = await _getSetting('rest_break_end', '14:00');
+    final restStart = _parseTime(restBreakStartStr);
+    final restEnd = _parseTime(restBreakEndStr);
 
     // Check if employee has custom schedule
     if (staff != null && !staff.useDefaultSchedule) {
@@ -152,6 +195,11 @@ class AttendanceCalculationEngine {
         standardHoursPerDay: double.tryParse(await _getSetting('overtime_threshold_hours', '8')) ?? 8.0,
         overtimeRateMultiplier: double.tryParse(await _getSetting('overtime_rate_multiplier', '1.5')) ?? 1.5,
         overtimeGraceMinutes: int.tryParse(await _getSetting('overtime_grace_minutes', '30')) ?? 30,
+        restBreakEnabled: restBreakEnabled,
+        restBreakStartHour: restStart.$1,
+        restBreakStartMinute: restStart.$2,
+        restBreakEndHour: restEnd.$1,
+        restBreakEndMinute: restEnd.$2,
       );
     }
 
@@ -179,6 +227,11 @@ class AttendanceCalculationEngine {
       overtimeRateMultiplier: double.tryParse(rateStr) ?? 1.5,
       overtimeGraceMinutes:
           int.tryParse(await _getSetting('overtime_grace_minutes', '30')) ?? 30,
+      restBreakEnabled: restBreakEnabled,
+      restBreakStartHour: restStart.$1,
+      restBreakStartMinute: restStart.$2,
+      restBreakEndHour: restEnd.$1,
+      restBreakEndMinute: restEnd.$2,
     );
   }
 
@@ -250,9 +303,22 @@ class AttendanceCalculationEngine {
 
       final totalMinutes = effectiveCheckOut.difference(checkInTime).inMinutes;
       final checkOutMinutes = checkOutTime.hour * 60 + checkOutTime.minute;
+
+      int restOverlap = 0;
+      if (schedule.restBreakEnabled && totalMinutes > 0) {
+        final inMinutes = checkInTime.hour * 60 + checkInTime.minute;
+        final outMinutes = inMinutes + totalMinutes;
+        restOverlap = AttendanceDeductionRules.calculateWindowOverlap(
+          windowAStart: inMinutes,
+          windowAEnd: outMinutes,
+          windowBStart: schedule.restBreakStartMinutesSinceMidnight,
+          windowBEnd: schedule.restBreakEndMinutesSinceMidnight,
+        );
+      }
+      final netWorkedMinutes = totalMinutes - restOverlap;
       // Clamp: worked hours can never be negative. A malformed pair with no
       // recoverable rollover reads as 0 rather than as a phantom deduction.
-      workingHours = totalMinutes < 0 ? 0.0 : totalMinutes / 60.0;
+      workingHours = netWorkedMinutes < 0 ? 0.0 : netWorkedMinutes / 60.0;
 
       // وقت الانصراف + مهلة الإضافي = بداية استحقاق الوقت الإضافي
       // (مقارنة صارمة: عند المهلة تماماً = صفر)
@@ -295,8 +361,8 @@ class AttendanceCalculationEngine {
             ci: checkInTime,
           )) {
         // If they left early but were present, mark as early leave
-        // (but keep 'present' if they worked enough hours)
-        if (totalMinutes < schedule.standardMinutesPerDay * 0.5) {
+        // (but keep 'present' if they worked enough hours against standard net day)
+        if (netWorkedMinutes < schedule.standardMinutesPerDay * 0.5) {
           status = 'early_leave';
         }
       }

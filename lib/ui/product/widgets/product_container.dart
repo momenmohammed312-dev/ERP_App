@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
@@ -18,23 +19,40 @@ class ProductContainer extends StatefulWidget {
   State<ProductContainer> createState() => _ProductContainerState();
 }
 
-class _ProductContainerState extends State<ProductContainer> {
+class _ProductContainerState extends State<ProductContainer>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   List<Product> products = [];
   List<Product> filteredProducts = [];
   final TextEditingController _searchController = TextEditingController();
+  StreamSubscription<List<Product>>? _productsSub;
+  bool _isLoading = true;
 
-  // Load products when the page loads
+  int _currentPage = 0;
+  int _rowsPerPage = 25;
+  static const List<int> _availableRowsPerPage = [15, 25, 50, 100];
+
   @override
   void initState() {
     super.initState();
-    widget.db.productDao.watchAllProducts().listen((event) {
+    _productsSub = widget.db.productDao.watchAllProducts().listen((event) {
       if (mounted) {
         setState(() {
           products = event;
-          filteredProducts = event; // Initially, show all products
+          _applySearch();
+          _isLoading = false;
         });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _productsSub?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _showDeleteConfirmation(Product product) {
@@ -51,21 +69,32 @@ class _ProductContainerState extends State<ProductContainer> {
     );
   }
 
-  // Search function to filter the products (by name or barcode)
   void _searchProducts(String query) {
-    final q = query.toLowerCase();
-    final filtered = products
-        .where(
-          (product) =>
-              product.name.toLowerCase().contains(q) ||
-              (product.barcode?.toLowerCase().contains(q) ?? false),
-        )
-        .toList();
+    setState(() {
+      _applySearch();
+    });
+  }
 
-    if (mounted) {
-      setState(() {
-        filteredProducts = filtered;
-      });
+  void _applySearch() {
+    final q = _searchController.text.trim().toLowerCase();
+    if (q.isEmpty) {
+      filteredProducts = List.from(products);
+    } else {
+      filteredProducts = products
+          .where(
+            (product) =>
+                product.name.toLowerCase().contains(q) ||
+                (product.barcode?.toLowerCase().contains(q) ?? false) ||
+                (product.category?.toLowerCase().contains(q) ?? false),
+          )
+          .toList();
+    }
+
+    final maxPages = (filteredProducts.length / _rowsPerPage).ceil();
+    if (_currentPage >= maxPages && maxPages > 0) {
+      _currentPage = maxPages - 1;
+    } else if (maxPages == 0) {
+      _currentPage = 0;
     }
   }
 
@@ -84,300 +113,793 @@ class _ProductContainerState extends State<ProductContainer> {
   }
 
   @override
-  void dispose() {
-    // Dispose of the controller when the widget is removed from the tree
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    super.build(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final isDesktop = MediaQuery.of(context).size.width >= 750;
+
+    final inStockCount = products.where((p) => p.quantity > 0).length;
+    final outOfStockCount = products.where((p) => p.quantity <= 0).length;
+
+    final totalItems = filteredProducts.length;
+    final totalPages = (totalItems / _rowsPerPage).ceil().clamp(1, 999999);
+    final startIndex = _currentPage * _rowsPerPage;
+    final endIndex = (startIndex + _rowsPerPage).clamp(0, totalItems);
+    final pageProducts = (startIndex < totalItems)
+        ? filteredProducts.sublist(startIndex, endIndex)
+        : <Product>[];
+
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  context.l10n.product_list,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const Gap(16),
-              Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _addProduct,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                    ),
-                    icon: const Icon(Icons.add, color: Colors.white, size: 18),
-                    label: Text(
-                      context.l10n.add_product,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () => exportProductsToExcel(widget.db, context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color.fromARGB(255, 73, 8, 85),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                    ),
-                    icon: const Icon(
-                      Icons.table_chart,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                    label: Text(
-                      context.l10n.export,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () => PriceListPrintService.printPriceList(products),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueGrey,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                    ),
-                    icon: const Icon(
-                      Icons.print,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                    label: const Text(
-                      'طباعة الأسعار',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => LabelPrintPage(db: widget.db),
+          // Top Bar: Title, Quick KPI Badges, and Action Buttons (Responsive)
+          if (isDesktop)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      Text(
+                        context.l10n.product_list,
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
                         ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2E7D32),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          'الإجمالي: ${products.length}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: primaryColor,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          'متوفر: $inStockCount',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ),
+                      if (outOfStockCount > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            'نفد: $outOfStockCount',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const Gap(16),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _addProduct,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                      ),
+                      icon: const Icon(Icons.add, color: Colors.white, size: 18),
+                      label: Text(
+                        context.l10n.add_product,
+                        style: const TextStyle(color: Colors.white),
                       ),
                     ),
-                    icon: const Icon(
-                      Icons.qr_code_2,
-                      color: Colors.white,
-                      size: 18,
+                    ElevatedButton.icon(
+                      onPressed: () => exportProductsToExcel(widget.db, context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color.fromARGB(255, 73, 8, 85),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                      ),
+                      icon: const Icon(
+                        Icons.table_chart,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      label: Text(
+                        context.l10n.export,
+                        style: const TextStyle(color: Colors.white),
+                      ),
                     ),
-                    label: const Text(
-                      'طباعة ملصق',
-                      style: TextStyle(color: Colors.white),
+                    ElevatedButton.icon(
+                      onPressed: () => PriceListPrintService.printPriceList(products),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueGrey,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                      ),
+                      icon: const Icon(
+                        Icons.print,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'طباعة الأسعار',
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => LabelPrintPage(db: widget.db),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2E7D32),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                      ),
+                      icon: const Icon(
+                        Icons.qr_code_2,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'طباعة ملصق',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        context.l10n.product_list,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: _addProduct,
+                      icon: const Icon(Icons.add, size: 18, color: Colors.white),
+                      label: Text(
+                        context.l10n.add_product,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert),
+                      onSelected: (val) {
+                        if (val == 'export') {
+                          exportProductsToExcel(widget.db, context);
+                        } else if (val == 'price_list') {
+                          PriceListPrintService.printPriceList(products);
+                        } else if (val == 'labels') {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => LabelPrintPage(db: widget.db),
+                            ),
+                          );
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'export',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.table_chart, size: 18, color: Color.fromARGB(255, 73, 8, 85)),
+                              const Gap(8),
+                              Text(context.l10n.export),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'price_list',
+                          child: Row(
+                            children: [
+                              Icon(Icons.print, size: 18, color: Colors.blueGrey),
+                              Gap(8),
+                              Text('طباعة الأسعار'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'labels',
+                          child: Row(
+                            children: [
+                              Icon(Icons.qr_code_2, size: 18, color: Color(0xFF2E7D32)),
+                              Gap(8),
+                              Text('طباعة ملصق'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const Gap(8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          'الإجمالي: ${products.length}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: primaryColor,
+                          ),
+                        ),
+                      ),
+                      const Gap(8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          'متوفر: $inStockCount',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ),
+                      if (outOfStockCount > 0) ...[
+                        const Gap(8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            'نفد: $outOfStockCount',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ),
-            ],
-          ),
-          const Gap(16),
+                ),
+              ],
+            ),
+          const Gap(14),
           SearchWidget(
             controller: _searchController,
             onSearch: _searchProducts,
             hintText: context.l10n.search_product_hint,
           ),
-          const Gap(20),
+          const Gap(14),
           Expanded(
-            child: StreamBuilder<List<Product>>(
-              stream: widget.db.productDao.watchAllProducts(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final products = filteredProducts;
-                if (products.isEmpty) {
-                  return Center(
-                    child: Text(context.l10n.no_products_available_drawer),
-                  );
-                }
-
-                return Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minWidth: MediaQuery.of(context).size.width - 350,
-                        ),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.vertical,
-                          child: DataTable(
-                            columnSpacing: 20,
-                            headingRowColor: WidgetStateProperty.all(
-                              Theme.of(
-                                context,
-                              ).colorScheme.primary.withValues(alpha: 0.05),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : Card(
+                    elevation: 1,
+                    clipBehavior: Clip.antiAlias,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+                      ),
+                    ),
+                    child: filteredProducts.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.search_off_rounded,
+                                  size: 48,
+                                  color: Colors.grey.shade400,
+                                ),
+                                const Gap(12),
+                                Text(
+                                  context.l10n.no_products_available_drawer,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
                             ),
-                            headingTextStyle: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                            dataTextStyle: const TextStyle(fontSize: 13),
-                            columns: [
-                              DataColumn(label: Text(context.l10n.index_short)),
-                              DataColumn(label: Text(context.l10n.product)),
-                              DataColumn(label: Text(context.l10n.category)),
-                              DataColumn(label: Text(context.l10n.quantity)),
-                              DataColumn(label: Text(context.l10n.price)),
-                              DataColumn(label: Text(context.l10n.status)),
-                              DataColumn(label: Text(context.l10n.actions)),
-                            ],
-                            rows: List.generate(products.length, (index) {
-                              final product = products[index];
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text('${index + 1}')),
-                                  DataCell(
+                          )
+                        : Column(
+                            children: [
+                              Expanded(
+                                child: isDesktop
+                                    ? LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          return SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            child: ConstrainedBox(
+                                              constraints: BoxConstraints(
+                                                minWidth: constraints.maxWidth,
+                                              ),
+                                              child: SingleChildScrollView(
+                                                scrollDirection: Axis.vertical,
+                                                child: DataTable(
+                                                  columnSpacing: 24,
+                                                  headingRowColor: WidgetStateProperty.all(
+                                                    Theme.of(context)
+                                                        .colorScheme
+                                                        .primary
+                                                        .withValues(alpha: 0.05),
+                                                  ),
+                                                  headingTextStyle: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 14,
+                                                  ),
+                                                  dataTextStyle: const TextStyle(fontSize: 13),
+                                                  columns: [
+                                                    DataColumn(label: Text(context.l10n.index_short)),
+                                                    DataColumn(label: Text(context.l10n.product)),
+                                                    DataColumn(label: Text(context.l10n.category)),
+                                                    DataColumn(label: Text(context.l10n.quantity)),
+                                                    DataColumn(label: Text(context.l10n.price)),
+                                                    DataColumn(label: Text(context.l10n.status)),
+                                                    DataColumn(label: Text(context.l10n.actions)),
+                                                  ],
+                                                  rows: List.generate(pageProducts.length, (index) {
+                                                    final product = pageProducts[index];
+                                                    final displayIndex = startIndex + index + 1;
+                                                    return DataRow(
+                                                      cells: [
+                                                        DataCell(Text('$displayIndex')),
+                                                        DataCell(
+                                                          Row(
+                                                            mainAxisSize: MainAxisSize.min,
+                                                            children: [
+                                                              Text(
+                                                                product.name,
+                                                                style: const TextStyle(
+                                                                  fontWeight: FontWeight.w600,
+                                                                ),
+                                                              ),
+                                                              if (product.barneka) ...[
+                                                                const SizedBox(width: 8),
+                                                                Container(
+                                                                  padding: const EdgeInsets.symmetric(
+                                                                    horizontal: 8,
+                                                                    vertical: 2,
+                                                                  ),
+                                                                  decoration: BoxDecoration(
+                                                                    color: Colors.teal.withValues(
+                                                                      alpha: 0.12,
+                                                                    ),
+                                                                    borderRadius: BorderRadius.circular(10),
+                                                                  ),
+                                                                  child: const Text(
+                                                                    'برنيكه',
+                                                                    style: TextStyle(
+                                                                      color: Colors.teal,
+                                                                      fontWeight: FontWeight.w600,
+                                                                      fontSize: 11,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ],
+                                                          ),
+                                                        ),
+                                                        DataCell(Text(product.category ?? '-')),
+                                                        DataCell(
+                                                          Text(
+                                                            '${product.quantity}',
+                                                            style: TextStyle(
+                                                              fontWeight: FontWeight.bold,
+                                                              color: product.quantity <= 0
+                                                                  ? Colors.red
+                                                                  : null,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        DataCell(
+                                                          Text(
+                                                            '${product.price} ${context.l10n.currency_symbol}',
+                                                            style: const TextStyle(
+                                                              fontWeight: FontWeight.w600,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        DataCell(
+                                                          Container(
+                                                            padding: const EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 4,
+                                                            ),
+                                                            decoration: BoxDecoration(
+                                                              color: (product.status ?? 'Active') == 'Active'
+                                                                  ? Colors.green.withValues(alpha: 0.1)
+                                                                  : Colors.red.withValues(alpha: 0.1),
+                                                              borderRadius: BorderRadius.circular(12),
+                                                            ),
+                                                            child: Text(
+                                                              (product.status ?? 'Active') == 'Active'
+                                                                  ? context.l10n.active
+                                                                  : context.l10n.inactive,
+                                                              style: TextStyle(
+                                                                color: (product.status ?? 'Active') == 'Active'
+                                                                    ? Colors.green
+                                                                    : Colors.red,
+                                                                fontWeight: FontWeight.w600,
+                                                                fontSize: 12,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        DataCell(
+                                                          Row(
+                                                            mainAxisSize: MainAxisSize.min,
+                                                            children: [
+                                                              if (product.barneka)
+                                                                IconButton(
+                                                                  icon: const Icon(
+                                                                    Icons.people_alt_outlined,
+                                                                    color: Colors.teal,
+                                                                  ),
+                                                                  tooltip: 'عملاء البرنيكه',
+                                                                  onPressed: () {
+                                                                    Navigator.of(context).push(
+                                                                      MaterialPageRoute(
+                                                                        builder: (context) => BarnekaTrackingScreen(
+                                                                          db: widget.db,
+                                                                          product: product,
+                                                                        ),
+                                                                      ),
+                                                                    );
+                                                                  },
+                                                                ),
+                                                              IconButton(
+                                                                icon: const Icon(Icons.edit_outlined),
+                                                                tooltip: 'تعديل',
+                                                                onPressed: () => _editProduct(product),
+                                                              ),
+                                                              IconButton(
+                                                                icon: const Icon(
+                                                                  Icons.delete_outline,
+                                                                  color: Colors.red,
+                                                                ),
+                                                                tooltip: 'حذف',
+                                                                onPressed: () => _showDeleteConfirmation(product),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    );
+                                                  }),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      )
+                                    : ListView.separated(
+                                        itemCount: pageProducts.length,
+                                        separatorBuilder: (ctx, i) => Divider(
+                                          height: 1,
+                                          color: Theme.of(ctx).colorScheme.outline.withValues(alpha: 0.08),
+                                        ),
+                                        itemBuilder: (ctx, index) {
+                                          final product = pageProducts[index];
+                                          final displayIndex = startIndex + index + 1;
+                                          final isOut = product.quantity <= 0;
+                                          return ListTile(
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                            leading: CircleAvatar(
+                                              radius: 18,
+                                              backgroundColor: (product.quantity > 0 ? Colors.green : Colors.red)
+                                                  .withValues(alpha: 0.12),
+                                              child: Text(
+                                                '$displayIndex',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: product.quantity > 0 ? Colors.green : Colors.red,
+                                                ),
+                                              ),
+                                            ),
+                                            title: Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    product.name,
+                                                    style: const TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 14,
+                                                    ),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                if (product.barneka) ...[
+                                                  const Gap(6),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.teal.withValues(alpha: 0.12),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: const Text(
+                                                      'برنيكه',
+                                                      style: TextStyle(
+                                                        color: Colors.teal,
+                                                        fontWeight: FontWeight.w600,
+                                                        fontSize: 10,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                            subtitle: Padding(
+                                              padding: const EdgeInsets.only(top: 4),
+                                              child: Row(
+                                                children: [
+                                                  if (product.category != null && product.category!.isNotEmpty) ...[
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: Theme.of(ctx).colorScheme.outline.withValues(alpha: 0.1),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                      ),
+                                                      child: Text(
+                                                        product.category!,
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.7),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const Gap(8),
+                                                  ],
+                                                  Text(
+                                                    'الكمية: ${product.quantity}',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: isOut ? Colors.red : Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.8),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            trailing: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  '${product.price} ${context.l10n.currency_symbol}',
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 14,
+                                                    color: Color(0xFFC9A84C),
+                                                  ),
+                                                ),
+                                                PopupMenuButton<String>(
+                                                  icon: const Icon(Icons.more_vert, size: 20),
+                                                  padding: EdgeInsets.zero,
+                                                  onSelected: (action) {
+                                                    if (action == 'edit') {
+                                                      _editProduct(product);
+                                                    } else if (action == 'delete') {
+                                                      _showDeleteConfirmation(product);
+                                                    } else if (action == 'barneka') {
+                                                      Navigator.of(context).push(
+                                                        MaterialPageRoute(
+                                                          builder: (context) => BarnekaTrackingScreen(
+                                                            db: widget.db,
+                                                            product: product,
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                  itemBuilder: (context) => [
+                                                    if (product.barneka)
+                                                      const PopupMenuItem(
+                                                        value: 'barneka',
+                                                        child: Row(
+                                                          children: [
+                                                            Icon(Icons.people_alt_outlined, size: 18, color: Colors.teal),
+                                                            Gap(8),
+                                                            Text('عملاء البرنيكه'),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    const PopupMenuItem(
+                                                      value: 'edit',
+                                                      child: Row(
+                                                        children: [
+                                                          Icon(Icons.edit_outlined, size: 18),
+                                                          Gap(8),
+                                                          Text('تعديل'),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const PopupMenuItem(
+                                                      value: 'delete',
+                                                      child: Row(
+                                                        children: [
+                                                          Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                                          Gap(8),
+                                                          Text('حذف', style: TextStyle(color: Colors.red)),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      ),
+                              ),
+                              // Bottom pagination controls (Responsive)
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: isDesktop ? 16 : 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF161B22) : const Color(0xFFF6F8FA),
+                                  border: Border(
+                                    top: BorderSide(
+                                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      isDesktop
+                                          ? 'عرض ${totalItems == 0 ? 0 : startIndex + 1} - $endIndex من إجمالي $totalItems منتج'
+                                          : '$startIndex-$endIndex / $totalItems',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                                      ),
+                                    ),
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Text(product.name),
-                                        if (product.barneka) ...[
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.teal.withValues(
-                                                alpha: 0.12,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                            ),
-                                            child: const Text(
-                                              'برنيكه',
-                                              style: TextStyle(
-                                                color: Colors.teal,
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 11,
-                                              ),
+                                        if (isDesktop) ...[
+                                          Text(
+                                            'العناصر في الصفحة:',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
                                             ),
                                           ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  DataCell(Text(product.category ?? '-')),
-                                  DataCell(Text('${product.quantity}')),
-                                  DataCell(
-                                    Text(
-                                      '${product.price} ${context.l10n.currency_symbol}',
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            (product.status ?? 'Active') ==
-                                                'Active'
-                                            ? Colors.green.withValues(
-                                                alpha: 0.1,
-                                              )
-                                            : Colors.red.withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        (product.status ?? 'Active') == 'Active'
-                                            ? context.l10n.active
-                                            : context.l10n.inactive,
-                                        style: TextStyle(
-                                          color:
-                                              (product.status ?? 'Active') ==
-                                                  'Active'
-                                              ? Colors.green
-                                              : Colors.red,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Row(
-                                      children: [
-                                        if (product.barneka)
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.people_alt_outlined,
-                                              color: Colors.teal,
-                                            ),
-                                            tooltip: 'عملاء البرنيكه',
-                                            onPressed: () {
-                                              Navigator.of(context).push(
-                                                MaterialPageRoute(
-                                                  builder: (context) =>
-                                                      BarnekaTrackingScreen(
-                                                    db: widget.db,
-                                                    product: product,
-                                                  ),
-                                                ),
+                                          const Gap(8),
+                                          DropdownButton<int>(
+                                            value: _rowsPerPage,
+                                            isDense: true,
+                                            underline: const SizedBox.shrink(),
+                                            items: _availableRowsPerPage.map((n) {
+                                              return DropdownMenuItem<int>(
+                                                value: n,
+                                                child: Text('$n', style: const TextStyle(fontSize: 12)),
                                               );
+                                            }).toList(),
+                                            onChanged: (val) {
+                                              if (val != null && val != _rowsPerPage) {
+                                                setState(() {
+                                                  _rowsPerPage = val;
+                                                  _currentPage = 0;
+                                                });
+                                              }
                                             },
                                           ),
-                                        IconButton(
-                                          icon: const Icon(Icons.edit_outlined),
-                                          onPressed: () =>
-                                              _editProduct(product),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.delete_outline,
+                                          const Gap(16),
+                                          IconButton(
+                                            icon: const Icon(Icons.first_page, size: 20),
+                                            tooltip: 'الصفحة الأولى',
+                                            onPressed: _currentPage > 0
+                                                ? () => setState(() => _currentPage = 0)
+                                                : null,
                                           ),
-                                          onPressed: () =>
-                                              _showDeleteConfirmation(product),
+                                        ],
+                                        IconButton(
+                                          icon: const Icon(Icons.chevron_left, size: 20),
+                                          tooltip: 'الصفحة السابقة',
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                          onPressed: _currentPage > 0
+                                              ? () => setState(() => _currentPage--)
+                                              : null,
                                         ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                                          child: Text(
+                                            '${_currentPage + 1} / $totalPages',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.chevron_right, size: 20),
+                                          tooltip: 'الصفحة التالية',
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                          onPressed: _currentPage < totalPages - 1
+                                              ? () => setState(() => _currentPage++)
+                                              : null,
+                                        ),
+                                        if (isDesktop)
+                                          IconButton(
+                                            icon: const Icon(Icons.last_page, size: 20),
+                                            tooltip: 'الصفحة الأخيرة',
+                                            onPressed: _currentPage < totalPages - 1
+                                                ? () => setState(() => _currentPage = totalPages - 1)
+                                                : null,
+                                          ),
                                       ],
                                     ),
-                                  ),
-                                ],
-                              );
-                            }),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ),
-                    ),
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
