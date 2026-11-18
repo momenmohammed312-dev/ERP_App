@@ -93,7 +93,7 @@ class License {
   /// to be a 7-day grace here while [daysRemaining] counted down to the raw
   /// expiry date, so the UI showed "0 يوم" and then negative day counts for a
   /// full week while every paid feature stayed unlocked.
-  bool get isExpired => DateTime.now().isAfter(expiryDate);
+  bool get isExpired => LicenseManager.nowProvider().isAfter(expiryDate);
 
   bool get isValid => !isExpired && isSignatureValid;
 
@@ -111,14 +111,30 @@ class License {
   }
 
   /// Whole days left until [expiryDate]. Never negative: an expired license
-  /// reports 0 so the badge can never render a negative day count.
+  /// reports 0 so the badge can never render a negative day count. Also clamped
+  /// to the license's total term so an accidental backward clock reset never
+  /// displays thousands of days.
   ///
   /// A value of 0 means "less than 24 hours left OR already expired" — always
   /// read it together with [isExpired], never on its own.
   int get daysRemaining {
     if (isExpired) return 0;
-    final remaining = expiryDate.difference(DateTime.now()).inDays;
-    return remaining < 0 ? 0 : remaining;
+    final totalTerm = expiryDate.difference(issueDate);
+    if (totalTerm < const Duration(days: 1)) return 0;
+    final remaining = expiryDate.difference(LicenseManager.nowProvider()).inDays;
+    if (remaining < 0) return 0;
+    final totalTermDays = totalTerm.inDays;
+    if (totalTermDays > 0 && remaining > totalTermDays) {
+      return totalTermDays;
+    }
+    return remaining;
+  }
+
+  /// Exact time left until [expiryDate], clamped to zero once expired.
+  Duration get timeRemaining {
+    if (isExpired) return Duration.zero;
+    final remaining = expiryDate.difference(LicenseManager.nowProvider());
+    return remaining.isNegative ? Duration.zero : remaining;
   }
 
   String get licenseType => type.toString().split('.').last;
@@ -179,13 +195,13 @@ class License {
 }
 
 class LicenseManager {
+  /// Clock seam for deterministic time-based tests (defaults to real clock).
+  @visibleForTesting
+  static DateTime Function() nowProvider = DateTime.now;
+
   static const String _storageKey = 'app_license';
   static const String _secretKey = LicenseConfig.secretKey;
   static const String _firstRunKey = 'free_version_first_run';
-  static const int _freeTrialDays = int.fromEnvironment(
-    'FREE_TRIAL_DAYS',
-    defaultValue: 36500,
-  );
 
   // Singleton
   static final LicenseManager _instance = LicenseManager._internal();
@@ -263,7 +279,7 @@ class LicenseManager {
 
       // Expiry check
       final expiryDate = DateTime.parse(licenseData['expiry']);
-      if (DateTime.now().isAfter(expiryDate)) {
+      if (LicenseManager.nowProvider().isAfter(expiryDate)) {
         return LicenseValidationResult.expired(
           'انتهت صلاحية الترخيص في ${_formatDate(expiryDate)}',
         );
@@ -304,12 +320,13 @@ class LicenseManager {
   // ════════════════════════════════════════════════════════════════════
 
   Future<bool> isLicenseActive() async {
-    // Free version — always active, no license required
-    if (LicenseConfig.isFreeVersion) {
+    // Permanent free version (100 years) — always active, no license required.
+    // Time-limited trials (e.g. 7 days) still go through getCurrentLicense().
+    if (LicenseConfig.isPermanentFreeVersion) {
       return true;
     }
 
-    // Paid license: check from secure storage first, fallback to prefs
+    // Paid or time-limited trial license: check validity from current license.
     final license = await getCurrentLicense();
     if (license == null) return false;
     return license.isValid;
@@ -351,7 +368,7 @@ class LicenseManager {
   static bool _legacyStillGraced(SecureLicenseData data) {
     final endsAt = data.legacyGraceEndsAt;
     if (endsAt == null) return false;
-    return DateTime.now().isBefore(endsAt);
+    return LicenseManager.nowProvider().isBefore(endsAt);
   }
 
   /// Reads a pre-RS256 AES license from [data] into a [License].
@@ -435,7 +452,7 @@ class LicenseManager {
 
     final stamped = data.copyWith(
       isLegacyLicense: true,
-      legacyGraceEndsAt: DateTime.now().add(legacyGracePeriod),
+      legacyGraceEndsAt: LicenseManager.nowProvider().add(legacyGracePeriod),
     );
     await SecureLicenseStorage.write(stamped);
     AppLogger.i(
@@ -467,195 +484,235 @@ class LicenseManager {
   }
 
   Future<License?> _readCurrentLicense() async {
-    if (LicenseConfig.isFreeVersion) {
-      final data = await SecureLicenseStorage.read();
-      final hardwareId = await HardwareIdService.getHardwareId();
+    // Recomputed on every read so a stale value can never leak across calls.
+    _legacyLicenseSeen = false;
+    SecureLicenseData? data;
 
-      // FEAT-013: an app update must NOT wipe the customer's license.
-      //
-      // This used to call SecureLicenseStorage.clear() whenever
-      // `appVersion` differed, which deleted secure_license.dat AND the paid
-      // license stored inside it — so every single update cost the customer
-      // their license. Worse, this branch runs for FREE_VERSION builds, so a
-      // free build could destroy a paid license sitting in the same file.
-      //
-      // The version stamp is kept for diagnostics only: it is refreshed in
-      // place, never used as a deletion trigger. `firstRunDate` is likewise
-      // preserved so the 100-year window cannot be restarted by reinstalling
-      // or updating the app.
-      if (data != null && data.appVersion != _currentAppVersion) {
-        AppLogger.i(
-          'App updated from ${data.appVersion} to $_currentAppVersion — '
-          'stamping version, keeping license and firstRunDate intact',
-        );
-        final stamped = data.copyWith(appVersion: _currentAppVersion);
-        await SecureLicenseStorage.write(stamped);
-      }
-
-      final freshData = await SecureLicenseStorage.read();
-
-      if (freshData == null) {
-        // First run or update — create and save fresh data
-        final now = DateTime.now();
-        final currentComponents =
-            await HardwareIdService.getHardwareComponents();
-        final newData = SecureLicenseData.create(
-          firstRunDate: now,
-          hardwareId: hardwareId,
-          appVersion: _currentAppVersion,
-          hardwareComponents: currentComponents.toJson(),
-        );
-        await SecureLicenseStorage.write(newData);
-        // Also save to SharedPreferences for migration
-        await _saveFirstRunDate(now);
-        final isShortTrial = _freeTrialDays <= 30;
-        return License(
-          licenseKey: isShortTrial ? 'TRIAL_7_DAYS' : 'FREE_VERSION',
-          deviceFingerprint: 'free',
-          type: isShortTrial ? LicenseType.trial : LicenseType.free,
-          issueDate: now,
-          expiryDate: now.add(Duration(days: _freeTrialDays)),
-          features: List<String>.from(LicenseConfig.availableFeatures),
-          maxUsers: 999,
-          companyName: isShortTrial ? 'نسخة تجريبية ($_freeTrialDays أيام)' : 'Free Version',
-          contactEmail: '',
-          hardwareId: hardwareId,
-        );
-      }
-
-      // Hardware binding check with grace period
-      if (freshData.hardwareId.isNotEmpty) {
-        final currentComponents =
-            await HardwareIdService.getHardwareComponents();
-        final savedComponents = freshData.lastHardwareComponents != null
-            ? HardwareComponents.fromJson(freshData.lastHardwareComponents!)
-            : null;
-
-        final isSameDevice = await HardwareIdService.isSameDeviceTolerant(
-          freshData.hardwareId,
-          savedComponents,
-        );
-
-        if (!isSameDevice) {
-          // Increment mismatch counter
-          final newMismatchCount = freshData.hardwareMismatchCount + 1;
-          AppLogger.w(
-            'Hardware mismatch — free version bound to different device '
-            '(mismatch count: $newMismatchCount)',
-          );
-
-          if (newMismatchCount >= 2) {
-            // Second consecutive mismatch - block
-            AppLogger.e('Hardware mismatch persisted - blocking free version');
-            return null;
-          } else {
-            // First mismatch - update counter and allow grace launch
-            final updatedData = freshData.copyWith(
-              hardwareMismatchCount: newMismatchCount,
-              lastMismatchTime: DateTime.now(),
-              lastHardwareComponents: currentComponents.toJson(),
-            );
-            await SecureLicenseStorage.write(updatedData);
-            AppLogger.w(
-              'First hardware mismatch - grace launch allowed, user should reactivate',
-            );
-            // Allow this launch but log warning
-          }
-        } else {
-          // Match successful - reset mismatch counter
-          if (freshData.hardwareMismatchCount > 0) {
-            final updatedData = freshData.copyWith(
-              hardwareMismatchCount: 0,
-              lastMismatchTime: null,
-              lastHardwareComponents: currentComponents.toJson(),
-            );
-            await SecureLicenseStorage.write(updatedData);
-            AppLogger.i('Hardware match confirmed - mismatch counter reset');
-          }
-        }
-      }
-
-      final expiry = freshData.firstRunDate.add(Duration(days: _freeTrialDays));
-      if (DateTime.now().isAfter(expiry)) return null;
-
-      final isShortTrial = _freeTrialDays <= 30;
-      return License(
-        licenseKey: isShortTrial ? 'TRIAL_7_DAYS' : 'FREE_VERSION',
-        deviceFingerprint: 'free',
-        type: isShortTrial ? LicenseType.trial : LicenseType.free,
-        issueDate: freshData.firstRunDate,
-        expiryDate: expiry,
-        features: List<String>.from(LicenseConfig.availableFeatures),
-        maxUsers: 999,
-        companyName: isShortTrial ? 'نسخة تجريبية ($_freeTrialDays أيام)' : 'Free Version',
-        contactEmail: '',
-        hardwareId: freshData.hardwareId,
-      );
-    }
-
-    // Paid license: signed lease issued by the license server.
-    // The lease is verified offline with the baked-in PUBLIC key.
     try {
-      // Recomputed on every read so a stale value can never leak across calls.
-      _legacyLicenseSeen = false;
-      final secureData = await SecureLicenseStorage.read();
-      if (secureData != null && secureData.licenseJson != null) {
-        // FEAT-014 — legacy AES bridge. `License.fromJson` below throws on a
-        // pre-RS256 payload (it has no 'expiry' field), so read the legacy
-        // shape first and keep the customer working during the grace window
-        // instead of dropping them on the activation screen with no warning.
-        if (!secureData.licenseJson!.containsKey('lease_token')) {
-          final legacy = await _readLegacyLicense(secureData);
-          if (legacy != null) {
-            _legacyLicenseSeen = true;
-            // Stamp the deadline before deciding, so a legacy license that
-            // has already served out its window is refused on THIS launch
-            // rather than being granted a fresh 90 days.
-            await _markLegacy(secureData);
-            final stamped = (await SecureLicenseStorage.read()) ?? secureData;
+      data = await SecureLicenseStorage.read();
 
-            if (_legacyStillGraced(stamped)) {
-              AppLogger.i(
-                'Serving legacy AES license until grace ends — '
-                'expires ${legacy.expiryDate.toIso8601String()}',
-              );
-              return legacy;
-            }
-            AppLogger.w(
-              'Legacy AES license is past its ${legacyGracePeriod.inDays}-day '
-              'grace — a signed license is required',
+      // Priority 1: Signed RS256 lease (checks paid/upgraded license BEFORE
+      // falling back to free/trial so an upgraded trial install uses the paid
+      // license immediately without losing data or requiring a separate build).
+      final token = data?.licenseJson?['lease_token'] as String?;
+      if (data != null && token != null) {
+        final leaseLicense = await _parseLease(token);
+        if (leaseLicense == null) {
+          return LicenseConfig.isPermanentFreeVersion
+              ? await _readFreeOrTrialLicense(data)
+              : null;
+        }
+
+        // Clock-rollback protection: compare against the last time reported by
+        // the SERVER (not the local clock), so a wrong-but-later-fixed clock can
+        // never leave the customer locked out permanently.
+        final serverTime = DateTime.tryParse(
+          '${data.licenseJson?['server_time'] ?? ''}',
+        );
+        if (serverTime != null &&
+            LicenseManager.nowProvider().toUtc().isBefore(
+              serverTime.toUtc().subtract(const Duration(days: 1)),
+            )) {
+          AppLogger.w('System clock is behind the last server time — rejecting');
+          return LicenseConfig.isPermanentFreeVersion
+              ? await _readFreeOrTrialLicense(data)
+              : null;
+        }
+
+        await _updateSessionTracking(data);
+        return leaseLicense;
+      }
+
+      // Priority 2: Legacy AES-encrypted license bridge (FEAT-014).
+      if (data != null && data.licenseJson != null) {
+        final legacy = await _readLegacyLicense(data);
+        if (legacy != null) {
+          _legacyLicenseSeen = true;
+          // Stamp the deadline before deciding, so a legacy license that
+          // has already served out its window is refused on THIS launch
+          // rather than being granted a fresh 90 days.
+          await _markLegacy(data);
+          final stamped = (await SecureLicenseStorage.read()) ?? data;
+
+          if (_legacyStillGraced(stamped)) {
+            AppLogger.i(
+              'Serving legacy AES license until grace ends — '
+              'expires ${legacy.expiryDate.toIso8601String()}',
             );
-            return null;
+            return legacy;
           }
+          AppLogger.w(
+            'Legacy AES license is past its ${legacyGracePeriod.inDays}-day '
+            'grace — a signed license is required',
+          );
+          return LicenseConfig.isPermanentFreeVersion
+              ? await _readFreeOrTrialLicense(stamped)
+              : null;
         }
       }
-
-      final token = secureData?.licenseJson?['lease_token'] as String?;
-      if (secureData == null || token == null) return null;
-
-      final license = await _parseLease(token);
-      if (license == null) return null;
-
-      // Clock-rollback protection: compare against the last time reported by
-      // the SERVER (not the local clock), so a wrong-but-later-fixed clock can
-      // never leave the customer locked out permanently.
-      final serverTime = DateTime.tryParse(
-        '${secureData.licenseJson?['server_time'] ?? ''}',
-      );
-      if (serverTime != null &&
-          DateTime.now().toUtc().isBefore(
-            serverTime.toUtc().subtract(const Duration(days: 1)),
-          )) {
-        AppLogger.w('System clock is behind the last server time — rejecting');
-        return null;
-      }
-
-      await _updateSessionTracking(secureData);
-      return license;
     } catch (e) {
       AppLogger.e('Error reading license lease', e);
-      return null;
+      if (!LicenseConfig.isFreeVersion) return null;
     }
+
+    // Priority 3: Standard licensed build with no stored license.
+    if (!LicenseConfig.isFreeVersion) return null;
+
+    // Priority 4: Permanent Free or Time-Limited Trial build.
+    return _readFreeOrTrialLicense(data);
+  }
+
+  Future<License?> _readFreeOrTrialLicense(SecureLicenseData? data) async {
+    final hardwareId = await HardwareIdService.getHardwareId();
+    final trialDays = LicenseConfig.freeTrialDays;
+    final trialMinutes = LicenseConfig.freeTrialMinutes;
+    final isMinuteTrial = trialMinutes > 0;
+    final trialDuration = LicenseConfig.freeTrialDuration;
+    final isTimeLimited = LicenseConfig.isTimeLimitedTrial;
+    final trialKey = isMinuteTrial
+        ? 'TRIAL_${trialMinutes}_MIN'
+        : 'TRIAL_${trialDays}_DAYS';
+    final trialCompany = isMinuteTrial
+        ? 'نسخة تجريبية ($trialMinutes دقيقة)'
+        : 'نسخة تجريبية ($trialDays أيام)';
+
+    // FEAT-013: an app update must NOT wipe the customer's license.
+    //
+    // The version stamp is kept for diagnostics only: it is refreshed in
+    // place, never used as a deletion trigger. `firstRunDate` is likewise
+    // preserved so the trial/free window cannot be restarted by reinstalling
+    // or updating the app.
+    if (data != null && data.appVersion != _currentAppVersion) {
+      AppLogger.i(
+        'App updated from ${data.appVersion} to $_currentAppVersion — '
+        'stamping version, keeping license and firstRunDate intact',
+      );
+      final stamped = data.copyWith(appVersion: _currentAppVersion);
+      await SecureLicenseStorage.write(stamped);
+    }
+
+    final freshData = await SecureLicenseStorage.read();
+
+    if (freshData == null) {
+      // First run — create and save fresh trial/free anchor.
+      final now = LicenseManager.nowProvider();
+      final currentComponents =
+          await HardwareIdService.getHardwareComponents();
+      final newData = SecureLicenseData(
+        firstRunDate: now,
+        hardwareId: hardwareId,
+        lastCheckTime: now,
+        appVersion: _currentAppVersion,
+        lastHardwareComponents: currentComponents.toJson(),
+      );
+      await SecureLicenseStorage.write(newData);
+      // Also save to SharedPreferences for migration
+      await _saveFirstRunDate(now);
+      return License(
+        licenseKey: isTimeLimited ? trialKey : 'FREE_VERSION',
+        deviceFingerprint: 'free',
+        type: isTimeLimited ? LicenseType.trial : LicenseType.free,
+        issueDate: now,
+        expiryDate: now.add(trialDuration),
+        features: List<String>.from(LicenseConfig.availableFeatures),
+        maxUsers: 999,
+        companyName: isTimeLimited ? trialCompany : 'Free Version',
+        contactEmail: '',
+        hardwareId: hardwareId,
+      );
+    }
+
+    // Hardware binding check with grace period
+    if (freshData.hardwareId.isNotEmpty) {
+      final currentComponents =
+          await HardwareIdService.getHardwareComponents();
+      final savedComponents = freshData.lastHardwareComponents != null
+          ? HardwareComponents.fromJson(freshData.lastHardwareComponents!)
+          : null;
+
+      final isSameDevice = await HardwareIdService.isSameDeviceTolerant(
+        freshData.hardwareId,
+        savedComponents,
+      );
+
+      if (!isSameDevice) {
+        // Increment mismatch counter
+        final newMismatchCount = freshData.hardwareMismatchCount + 1;
+        AppLogger.w(
+          'Hardware mismatch — free version bound to different device '
+          '(mismatch count: $newMismatchCount)',
+        );
+
+        if (newMismatchCount >= 2) {
+          // Second consecutive mismatch - block
+          AppLogger.e('Hardware mismatch persisted - blocking free version');
+          return null;
+        } else {
+          // First mismatch - update counter and allow grace launch
+          final updatedData = freshData.copyWith(
+            hardwareMismatchCount: newMismatchCount,
+            lastMismatchTime: LicenseManager.nowProvider(),
+            lastHardwareComponents: currentComponents.toJson(),
+          );
+          await SecureLicenseStorage.write(updatedData);
+          AppLogger.w(
+            'First hardware mismatch - grace launch allowed, user should reactivate',
+          );
+          // Allow this launch but log warning
+        }
+      } else {
+        // Match successful - reset mismatch counter
+        if (freshData.hardwareMismatchCount > 0) {
+          final updatedData = freshData.copyWith(
+            hardwareMismatchCount: 0,
+            lastMismatchTime: null,
+            lastHardwareComponents: currentComponents.toJson(),
+          );
+          await SecureLicenseStorage.write(updatedData);
+          AppLogger.i('Hardware match confirmed - mismatch counter reset');
+        }
+      }
+    }
+
+    final now = LicenseManager.nowProvider();
+    final trackedSessionMs = await _updateSessionTracking(freshData);
+    final expiry = freshData.firstRunDate.add(trialDuration);
+
+    // Never lock out on an accidental backward clock change (CMOS reset / DST).
+    // Log softly only; daysRemaining handles clamping to the license term.
+    if (isTimeLimited &&
+        now.isBefore(
+          freshData.firstRunDate.subtract(const Duration(days: 1)),
+        )) {
+      AppLogger.w(
+        'System clock is behind trial firstRunDate — continuing without lockout',
+      );
+    }
+
+    // Cumulative active usage guard for time-limited trials: expires only after
+    // genuine >= trialDuration of accumulated active session time.
+    var effectiveExpiry = expiry;
+    if (isTimeLimited) {
+      final maxTrialMs = trialDuration.inMilliseconds;
+      if (trackedSessionMs >= maxTrialMs && !now.isAfter(effectiveExpiry)) {
+        effectiveExpiry = now.subtract(const Duration(seconds: 1));
+      }
+    }
+
+    // Always return the License object even when expired so the UI badge and
+    // activation screen can clearly display "منتهي" instead of vanishing.
+    return License(
+      licenseKey: isTimeLimited ? trialKey : 'FREE_VERSION',
+      deviceFingerprint: 'free',
+      type: isTimeLimited ? LicenseType.trial : LicenseType.free,
+      issueDate: freshData.firstRunDate,
+      expiryDate: effectiveExpiry,
+      features: List<String>.from(LicenseConfig.availableFeatures),
+      maxUsers: 999,
+      companyName: isTimeLimited ? trialCompany : 'Free Version',
+      contactEmail: '',
+      hardwareId: freshData.hardwareId,
+    );
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -690,7 +747,7 @@ class LicenseManager {
       LicenseConfig.availableFeatures.every(features.contains);
 
   Future<bool> hasFeature(String featureName) async {
-    if (LicenseConfig.isFreeVersion) return true;
+    if (LicenseConfig.isPermanentFreeVersion) return true;
     final license = await getCurrentLicense();
     if (license == null || !license.isValid) return false;
     // Wildcards: '*' is the modern catch-all, 'all' is the marker the legacy
@@ -702,7 +759,7 @@ class LicenseManager {
   }
 
   Future<bool> canAddUser(int currentUserCount) async {
-    if (LicenseConfig.isFreeVersion) return true;
+    if (LicenseConfig.isPermanentFreeVersion) return true;
     final license = await getCurrentLicense();
     if (license == null || !license.isValid) return false;
     return currentUserCount < license.maxUsers;
@@ -768,7 +825,7 @@ class LicenseManager {
       final leaseEnd = DateTime.fromMillisecondsSinceEpoch(
         (p['exp'] as int) * 1000,
       );
-      if (DateTime.now().isAfter(
+      if (LicenseManager.nowProvider().isAfter(
         leaseEnd.add(const Duration(days: _leaseGraceDays)),
       )) {
         AppLogger.w('Lease expired — online renewal required');
@@ -876,25 +933,28 @@ class LicenseManager {
     final existing = await SecureLicenseStorage.read();
     final hardwareId = await HardwareIdService.getHardwareId();
     final components = await HardwareIdService.getHardwareComponents();
+    final now = LicenseManager.nowProvider();
 
     final saved = await SecureLicenseStorage.write(
       SecureLicenseData(
-        firstRunDate: existing?.firstRunDate ?? DateTime.now(),
+        firstRunDate: existing?.firstRunDate ?? now,
         hardwareId: hardwareId,
         licenseJson: {
           'lease_token': token,
           'license_key': license.licenseKey,
-          'server_time': serverTime ?? DateTime.now().toUtc().toIso8601String(),
+          'server_time': serverTime ?? now.toUtc().toIso8601String(),
         },
-        lastCheckTime: DateTime.now(),
+        lastCheckTime: now,
         sessionElapsedMs: existing?.sessionElapsedMs ?? 0,
         installCount: (existing?.installCount ?? 0) + 1,
+        appVersion: existing?.appVersion ?? _currentAppVersion,
         lastHardwareComponents: components.toJson(),
       ),
     );
     if (!saved) {
       return LicenseValidationResult.invalid('تعذر حفظ الترخيص على الجهاز');
     }
+    LicenseEntitlement.instance.update(license);
     return LicenseValidationResult.valid(license);
   }
 
@@ -937,7 +997,7 @@ class LicenseManager {
     // clock-rollback anchor is simply "now".
     return saveLease(
       token,
-      serverTime: DateTime.now().toUtc().toIso8601String(),
+      serverTime: LicenseManager.nowProvider().toUtc().toIso8601String(),
     );
   }
 
@@ -1028,14 +1088,16 @@ class LicenseManager {
     final existing = await SecureLicenseStorage.read();
     final hardwareId = await HardwareIdService.getHardwareId();
     final currentComponents = await HardwareIdService.getHardwareComponents();
+    final now = LicenseManager.nowProvider();
 
     final data = SecureLicenseData(
-      firstRunDate: existing?.firstRunDate ?? DateTime.now(),
+      firstRunDate: existing?.firstRunDate ?? now,
       hardwareId: hardwareId,
       licenseJson: license.toJson(),
-      lastCheckTime: DateTime.now(),
+      lastCheckTime: now,
       sessionElapsedMs: existing?.sessionElapsedMs ?? 0,
       installCount: (existing?.installCount ?? 0) + 1,
+      appVersion: existing?.appVersion ?? _currentAppVersion,
       lastHardwareComponents: currentComponents.toJson(),
       // Reset mismatch counter on successful activation
       hardwareMismatchCount: 0,
@@ -1049,16 +1111,26 @@ class LicenseManager {
     await prefs.setString(_storageKey, jsonEncode(license.toJson()));
   }
 
-  /// Update session elapsed time tracking.
-  Future<void> _updateSessionTracking(SecureLicenseData current) async {
-    final now = DateTime.now();
+  /// Update session elapsed time tracking and return the resulting total ms.
+  Future<int> _updateSessionTracking(SecureLicenseData current) async {
+    final now = LicenseManager.nowProvider();
     final elapsed = now.difference(current.lastCheckTime).inMilliseconds;
 
-    // Only write to disk if at least 1 minute elapsed to avoid thrashing I/O on every feature check
-    if (elapsed < 60000) return;
+    // Small backward drift (e.g. DST / minor clock adjustment <= 24h):
+    // keep existing checkpoint and elapsed time untouched.
+    if (elapsed < 0 && elapsed >= -86400000) {
+      return current.sessionElapsedMs;
+    }
 
-    // Only add if elapsed is reasonable (not negative, not more than 24h)
-    final adjustedElapsed = (elapsed > 0 && elapsed < 86400000)
+    // Only write to disk if at least 1 minute elapsed to avoid thrashing I/O on every feature check.
+    if (elapsed >= 0 && elapsed < 60000) {
+      return current.sessionElapsedMs;
+    }
+
+    // Only accumulate reasonable forward session spans (< 24h).
+    // Large forward jumps (>= 24h) or recoveries from an ahead clock (< -24h)
+    // self-heal lastCheckTime cleanly without inflating sessionElapsedMs.
+    final adjustedElapsed = (elapsed >= 60000 && elapsed < 86400000)
         ? current.sessionElapsedMs + elapsed
         : current.sessionElapsedMs;
 
@@ -1068,6 +1140,7 @@ class LicenseManager {
     );
 
     await SecureLicenseStorage.write(updated);
+    return adjustedElapsed;
   }
 
   // ════════════════════════════════════════════════════════════════════

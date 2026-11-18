@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/license_manager.dart';
+import 'activation_screen.dart';
 
 class LicenseInfoScreen extends StatefulWidget {
   const LicenseInfoScreen({super.key});
@@ -55,9 +56,11 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
 
   String _getDurationText() {
     if (_license == null) return 'غير محدد';
+    if (_license!.isExpired) return 'منتهية';
 
     final days = _license!.daysRemaining;
     if (days >= 36500) return 'مدى الحياة';
+    if (days == 0) return 'أقل من يوم';
 
     final years = days ~/ 365;
     final remainingDays = days % 365;
@@ -117,7 +120,19 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
             ),
             const SizedBox(height: 32),
             ElevatedButton.icon(
-              onPressed: () => context.go('/activation'),
+              onPressed: () {
+                final router = GoRouter.maybeOf(context);
+                if (router != null) {
+                  router.go('/activation');
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ActivationScreen(allowBack: false),
+                    ),
+                  );
+                }
+              },
               icon: const Icon(Icons.key),
               label: const Text('تفعيل الرخصة'),
               style: ElevatedButton.styleFrom(
@@ -359,6 +374,38 @@ class _LicenseInfoScreenState extends State<LicenseInfoScreen> {
                 ),
               ),
             ),
+
+          if (_license!.isExpired || _license!.type == LicenseType.trial) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ActivationScreen(
+                        allowBack: !_license!.isExpired,
+                      ),
+                    ),
+                  );
+                  if (mounted) {
+                    await _loadLicenseInfo();
+                  }
+                },
+                icon: const Icon(Icons.workspace_premium_rounded),
+                label: const Text(
+                  'ترقية / تفعيل الرخصة',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade800,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

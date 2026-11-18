@@ -1,4 +1,4 @@
-# build_release.ps1
+﻿# build_release.ps1
 # One reliable Windows release build for pos_offline_desktop.
 #
 # Reads required secrets from build_secrets.local.json (gitignored, never
@@ -8,9 +8,11 @@
 # Usage (from repo root):
 #   .\build_release.ps1               # Standard licensed build (requires activation)
 #   .\build_release.ps1 -FreeVersion  # Free/Pre-activated build (bypasses activation screen)
+#   .\build_release.ps1 -TrialDays 7  # Time-limited 7-day trial build (locks on expiry, upgradeable)
 
 param(
-    [switch]$FreeVersion
+    [switch]$FreeVersion,
+    [int]$TrialDays = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -96,7 +98,11 @@ $buildArgs = @(
     '--dart-define=ENABLE_SMART_ANALYTICS=false'
 )
 
-if ($FreeVersion) {
+if ($TrialDays -gt 0) {
+    Write-Host ">>> [MODE] TRIAL VERSION ($TrialDays days - hard expiry, upgradeable via .madarlicense or online key) <<<" -ForegroundColor Yellow
+    $buildArgs += '--dart-define=FREE_VERSION=true'
+    $buildArgs += "--dart-define=FREE_TRIAL_DAYS=$TrialDays"
+} elseif ($FreeVersion) {
     Write-Host ">>> [MODE] FREE VERSION ACTIVATED (--dart-define=FREE_VERSION=true) <<<" -ForegroundColor Yellow
     Write-Host ">>> Application will run completely unlocked without requiring client activation." -ForegroundColor Yellow
     $buildArgs += "--dart-define=FREE_VERSION=true"
@@ -162,7 +168,9 @@ Write-Host "[POST-BUILD] Sanity smoke-test passed! Application launches cleanly.
 Write-Host '' -ForegroundColor Green
 Write-Host "[DONE] Release build succeeded and verified." -ForegroundColor Green
 Write-Host "[DONE] Version: $appVersion" -ForegroundColor Green
-if ($FreeVersion) {
+if ($TrialDays -gt 0) {
+    Write-Host "[DONE] License Mode: TRIAL VERSION ($TrialDays days - hard expiry, upgradeable in-app)" -ForegroundColor Yellow
+} elseif ($FreeVersion) {
     Write-Host "[DONE] License Mode: FREE VERSION (Unlocked - No activation needed)" -ForegroundColor Yellow
 } else {
     Write-Host "[DONE] License Mode: STANDARD LICENSED (Client activation required)" -ForegroundColor Cyan

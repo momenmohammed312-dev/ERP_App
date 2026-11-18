@@ -4,8 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pos_offline_desktop/l10n/l10n.dart';
+import 'package:pos_offline_desktop/config/license_config.dart';
 import 'package:pos_offline_desktop/core/config/app_features.dart';
+import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
+import 'package:pos_offline_desktop/screens/license/activation_screen.dart';
+import 'package:pos_offline_desktop/screens/license/license_info_screen.dart';
+import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/ui/user/user_management_page.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/services/auth_service.dart';
@@ -198,6 +203,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ],
                 ),
+              ),
+
+              const Gap(20),
+
+              // 1.5 الترخيص والترقية
+              _buildLicenseSection(
+                isNarrow: isNarrow,
+                cardBg: cardBg,
+                innerBg: innerBg,
+                textColor: textColor,
+                subTextColor: subTextColor,
+                borderColor: borderColor,
+                goldColor: goldColor,
+                blueColor: blueColor,
+                greenColor: greenColor,
               ),
 
               const Gap(20),
@@ -798,6 +818,248 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  String _arabicLicenseType(LicenseType type) {
+    switch (type) {
+      case LicenseType.free:
+        return 'نسخة مجانية';
+      case LicenseType.trial:
+        return 'نسخة تجريبية';
+      case LicenseType.basic:
+        return 'أساسي';
+      case LicenseType.standard:
+        return 'قياسي';
+      case LicenseType.professional:
+        return 'احترافي';
+      case LicenseType.enterprise:
+        return 'مؤسسي';
+    }
+  }
+
+  Widget _buildLicenseSection({
+    required bool isNarrow,
+    required Color cardBg,
+    required Color innerBg,
+    required Color textColor,
+    required Color subTextColor,
+    required Color borderColor,
+    required Color goldColor,
+    required Color blueColor,
+    required Color greenColor,
+  }) {
+    final licenseAsync = ref.watch(currentLicenseProvider);
+    final license = licenseAsync.valueOrNull;
+
+    final isPermanentFree = license != null &&
+        license.type == LicenseType.free &&
+        license.daysRemaining >= LicenseConfig.permanentFreeThresholdDays;
+    final String trialDaysLabel;
+    if (LicenseConfig.freeTrialMinutes > 0) {
+      trialDaysLabel = ' (${LicenseConfig.freeTrialMinutes} دقيقة)';
+    } else {
+      final displayTrialDays = license == null
+          ? 0
+          : (LicenseConfig.isTimeLimitedTrial
+              ? LicenseConfig.freeTrialDays
+              : license.expiryDate.difference(license.issueDate).inDays);
+      trialDaysLabel =
+          (displayTrialDays > 0 &&
+              displayTrialDays < LicenseConfig.permanentFreeThresholdDays)
+          ? ' ($displayTrialDays أيام)'
+          : '';
+    }
+
+    late final String statusTitle;
+    late final String statusSubtitle;
+    late final String upgradeButtonLabel;
+    late final Color statusColor;
+    late final IconData statusIcon;
+
+    if (license == null) {
+      if (licenseAsync.isLoading) {
+        statusTitle = 'جاري التحقق من حالة الترخيص...';
+        statusSubtitle = 'يرجى الانتظار لحظة...';
+        upgradeButtonLabel = 'ترقية / تفعيل الرخصة';
+        statusColor = blueColor;
+        statusIcon = Icons.hourglass_empty_rounded;
+      } else if (LicenseConfig.isPermanentFreeVersion) {
+        statusTitle = 'نسخة مجانية مفتوحة';
+        statusSubtitle = 'جميع الميزات متاحة بدون قيد زمني';
+        upgradeButtonLabel = 'تفعيل برخصة مدفوعة';
+        statusColor = greenColor;
+        statusIcon = Icons.verified_user_outlined;
+      } else {
+        statusTitle = 'لا توجد رخصة نشطة';
+        statusSubtitle = 'يرجى تفعيل الرخصة عبر مفتاح التفعيل أو ملف (.madarlicense)';
+        upgradeButtonLabel = 'تفعيل الرخصة الآن';
+        statusColor = Colors.redAccent;
+        statusIcon = Icons.error_outline;
+      }
+    } else if (license.isExpired) {
+      statusTitle = license.type == LicenseType.trial
+          ? 'انتهت الفترة التجريبية$trialDaysLabel'
+          : 'انتهت صلاحية الرخصة';
+      statusSubtitle =
+          'انتهت بتاريخ ${license.expiryDate.toString().split(' ')[0]} • بياناتك محفوظة ويمكنك الترقية فوراً';
+      upgradeButtonLabel = 'ترقية وتفعيل الرخصة الآن';
+      statusColor = Colors.redAccent;
+      statusIcon = Icons.timer_off_outlined;
+    } else if (isPermanentFree) {
+      statusTitle = 'نسخة مجانية مفتوحة';
+      statusSubtitle = 'جميع الميزات متاحة بدون قيد زمني';
+      upgradeButtonLabel = 'تفعيل برخصة مدفوعة';
+      statusColor = greenColor;
+      statusIcon = Icons.verified_user_outlined;
+    } else if (license.type == LicenseType.trial) {
+      final days = license.daysRemaining;
+      final String remainingText;
+      if (LicenseConfig.freeTrialMinutes > 0) {
+        final rem = license.timeRemaining;
+        remainingText = rem.inSeconds <= 0
+            ? 'منتهية'
+            : rem.inMinutes >= 1
+            ? 'متبقي ${rem.inMinutes} دقيقة و ${rem.inSeconds % 60} ثانية'
+            : 'متبقي ${rem.inSeconds} ثانية';
+      } else {
+        remainingText = days == 0 ? 'متبقي أقل من يوم' : 'متبقي $days يوم';
+      }
+      statusTitle = 'فترة تجريبية$trialDaysLabel — $remainingText';
+      statusSubtitle =
+          'تنتهي بتاريخ ${license.expiryDate.toString().split(' ')[0]} • الترقية تحفظ كل بياناتك';
+      upgradeButtonLabel = 'ترقية إلى النسخة المدفوعة';
+      statusColor = days <= 3 ? Colors.orange : greenColor;
+      statusIcon = Icons.hourglass_bottom_rounded;
+    } else {
+      final days = license.daysRemaining;
+      final isLifetime = days >= LicenseConfig.permanentFreeThresholdDays;
+      final remainingText = isLifetime
+          ? 'مدى الحياة'
+          : (days == 0 ? 'متبقي أقل من يوم' : 'متبقي $days يوم');
+      statusTitle =
+          'رخصة مفعّلة (${_arabicLicenseType(license.type)}) — $remainingText';
+      statusSubtitle = isLifetime
+          ? 'ترخيص دائم مفعّل على هذا الجهاز'
+          : 'تنتهي بتاريخ ${license.expiryDate.toString().split(' ')[0]}';
+      upgradeButtonLabel = 'تجديد / تغيير الرخصة';
+      statusColor = (!isLifetime && days <= 5) ? Colors.orange : greenColor;
+      statusIcon = Icons.verified_rounded;
+    }
+
+    final upgradeButton = ElevatedButton.icon(
+      onPressed: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ActivationScreen(
+              allowBack: !(license?.isExpired ?? false),
+            ),
+          ),
+        );
+        if (mounted) {
+          ref.invalidate(currentLicenseProvider);
+        }
+      },
+      icon: const Icon(Icons.workspace_premium_rounded, size: 18),
+      label: Text(
+        upgradeButtonLabel,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: goldColor,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        elevation: 0,
+      ),
+    );
+
+    final detailsButton = OutlinedButton.icon(
+      onPressed: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const LicenseInfoScreen()),
+        );
+        if (mounted) {
+          ref.invalidate(currentLicenseProvider);
+        }
+      },
+      icon: const Icon(Icons.verified_user_outlined, size: 18),
+      label: const Text('تفاصيل الرخصة', style: TextStyle(fontSize: 13)),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: blueColor,
+        side: BorderSide(color: borderColor),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+
+    return _buildSectionCard(
+      cardBg: cardBg,
+      borderColor: borderColor,
+      title: 'الترخيص والترقية',
+      icon: Icons.workspace_premium_outlined,
+      iconColor: goldColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: innerBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: statusColor.withValues(alpha: 0.45)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(statusIcon, color: statusColor, size: 22),
+                ),
+                const Gap(12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        statusTitle,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                      const Gap(3),
+                      Text(
+                        statusSubtitle,
+                        style: TextStyle(fontSize: 12, color: subTextColor),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Gap(12),
+          if (isNarrow) ...[
+            upgradeButton,
+            const Gap(10),
+            detailsButton,
+          ] else
+            Row(
+              children: [
+                Expanded(child: upgradeButton),
+                const Gap(10),
+                detailsButton,
+              ],
+            ),
+        ],
       ),
     );
   }

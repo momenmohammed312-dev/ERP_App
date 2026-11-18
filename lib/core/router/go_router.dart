@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:pos_offline_desktop/config/license_config.dart';
 import 'package:pos_offline_desktop/core/models/user_model.dart';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
+import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/core/services/settings_service.dart';
+import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/ui/home/modern_home.dart';
 import 'package:pos_offline_desktop/screens/auth/login_screen.dart';
 import 'package:pos_offline_desktop/screens/license/activation_screen.dart';
@@ -51,28 +54,65 @@ String? staleActivationLocation(String location) {
   return null;
 }
 
+/// Enforces license expiration on navigation and router refreshes once the
+/// license snapshot has settled, while letting permanent-free builds, `/splash`,
+/// and `/activation` pass through without redirect loops.
+@visibleForTesting
+String? licenseGateRedirect({
+  required String location,
+  required bool isPermanentFreeVersion,
+  required bool isLicenseLoaded,
+  required bool hasValidLicense,
+}) {
+  if (isPermanentFreeVersion) return null;
+  if (location == '/splash' || location == '/activation') return null;
+  if (!isLicenseLoaded) return null;
+  if (!hasValidLicense) return '/activation';
+  return null;
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
   final db = ref.watch(appDatabaseProvider);
   final user = ref.watch(authProvider);
   final firstRunAsync = ref.watch(firstRunCompleteProvider);
   final isFirstRunComplete = firstRunAsync.valueOrNull ?? true;
 
+  final licenseRefreshNotifier = ValueNotifier<int>(0);
+  ref.onDispose(licenseRefreshNotifier.dispose);
+  ref.listen<AsyncValue<License?>>(currentLicenseProvider, (_, _) {
+    licenseRefreshNotifier.value++;
+  });
+
   // Paths that never need authentication
   const publicPaths = ['/login', '/setup', '/activation', '/splash'];
 
   return GoRouter(
     initialLocation: '/splash',
+    refreshListenable: licenseRefreshNotifier,
     redirect: (context, state) {
       final stale = staleActivationLocation(state.uri.path);
       if (stale != null) return stale;
 
       final location = state.matchedLocation;
+      final licenseAsync = ref.read(currentLicenseProvider);
+      final isLicenseLoaded = licenseAsync.hasValue || licenseAsync.hasError;
+      final currentLicense = licenseAsync.valueOrNull;
+      final hasValidLicense = currentLicense != null && currentLicense.isValid;
+      final licenseRedirect = licenseGateRedirect(
+        location: location,
+        isPermanentFreeVersion: LicenseConfig.isPermanentFreeVersion,
+        isLicenseLoaded: isLicenseLoaded,
+        hasValidLicense: hasValidLicense,
+      );
+      if (licenseRedirect != null) return licenseRedirect;
+
       final isPublic = publicPaths.any((p) => location.startsWith(p));
       final isLoggedIn = user != null;
 
       // First-run check: redirect to /setup if not completed
-      if (!isFirstRunComplete && !isPublic && location != '/setup')
+      if (!isFirstRunComplete && !isPublic && location != '/setup') {
         return '/setup';
+      }
 
       // Not logged in and trying to access a protected page → /login
       if (!isLoggedIn && !isPublic) return '/login';
@@ -82,8 +122,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Permission guard: /admin requires manageUsers permission
       if (isLoggedIn &&
           location == '/admin' &&
-          !user.hasPermission(Permission.manageUsers))
+          !user.hasPermission(Permission.manageUsers)) {
         return '/';
+      }
 
       // BUG-018 — entitlement guard. The home screen marks a locked module with
       // a "(مغلق)" badge, but that badge is a child of the launcher button: it

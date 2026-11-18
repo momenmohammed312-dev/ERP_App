@@ -45,10 +45,60 @@ m1HCMTcbuIPO8gGgKdidB7vQoQe67XQ23Parpb/7jEWgq26rMQiH4d4WUUTmjUvQ
     }
   }
 
-  /// When true, runs in fully-free mode — no license activation required.
+  static const bool _isFreeVersionEnv = bool.fromEnvironment(
+    'FREE_VERSION',
+    defaultValue: false,
+  );
+
+  static const int _freeTrialDaysEnv = int.fromEnvironment(
+    'FREE_TRIAL_DAYS',
+    defaultValue: 36500,
+  );
+
+  static const int _freeTrialMinutesEnv = int.fromEnvironment(
+    'FREE_TRIAL_MINUTES',
+    defaultValue: 0,
+  );
+
+  /// Any finite trial below 10 years is treated as a time-limited trial;
+  /// the default 36500 days (100 years) represents a permanent free build.
+  static const int permanentFreeThresholdDays = 3650;
+
+  @visibleForTesting
+  static bool? isFreeVersionOverride;
+
+  @visibleForTesting
+  static int? freeTrialDaysOverride;
+
+  @visibleForTesting
+  static int? freeTrialMinutesOverride;
+
+  /// True for BOTH permanent-free builds and time-limited trial builds.
   /// Set via: --dart-define=FREE_VERSION=true
-  static bool get isFreeVersion =>
-      const bool.fromEnvironment('FREE_VERSION', defaultValue: false);
+  static bool get isFreeVersion => isFreeVersionOverride ?? _isFreeVersionEnv;
+
+  /// Configured trial/free duration in days (default 36500).
+  /// Set via: `--dart-define=FREE_TRIAL_DAYS=<days>`
+  static int get freeTrialDays => freeTrialDaysOverride ?? _freeTrialDaysEnv;
+
+  /// Optional minute-based trial override for QA/debug builds (0 = use [freeTrialDays]).
+  /// Set via: `--dart-define=FREE_TRIAL_MINUTES=<minutes>`
+  static int get freeTrialMinutes =>
+      freeTrialMinutesOverride ?? _freeTrialMinutesEnv;
+
+  /// Effective trial/free duration (minutes override wins when > 0).
+  static Duration get freeTrialDuration => freeTrialMinutes > 0
+      ? Duration(minutes: freeTrialMinutes)
+      : Duration(days: freeTrialDays);
+
+  /// True ONLY for time-limited trial builds (e.g. FREE_VERSION=true + FREE_TRIAL_DAYS=7).
+  static bool get isTimeLimitedTrial =>
+      isFreeVersion &&
+      (freeTrialMinutes > 0 || freeTrialDays < permanentFreeThresholdDays);
+
+  /// True ONLY for permanent free builds (FREE_VERSION=true without finite FREE_TRIAL_DAYS).
+  static bool get isPermanentFreeVersion =>
+      isFreeVersion && !isTimeLimitedTrial;
 
   /// Trial license key shown when user taps "تجربة مجانية".
   /// Only used when isFreeVersion == false.

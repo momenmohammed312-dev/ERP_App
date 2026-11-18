@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pos_offline_desktop/config/license_config.dart';
 import 'package:pos_offline_desktop/core/provider/auth_provider.dart';
+import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/services/online_license_service.dart';
 import 'package:pos_offline_desktop/widgets/brand/madar_logo.dart';
@@ -113,11 +114,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     // Step 1 — License check
     _updateStatus('التحقق من الترخيص...', 0.45);
     await Future.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
     final licenseManager = LicenseManager();
 
-    final isLicenseValid = LicenseConfig.isFreeVersion
+    final isLicenseValid = LicenseConfig.isPermanentFreeVersion
         ? true
         : await licenseManager.isLicenseValid();
+
+    if (!mounted) return;
+    ref.invalidate(currentLicenseProvider);
+    final currentLicense = await ref.read(currentLicenseProvider.future);
 
     if (!isLicenseValid) {
       if (mounted) context.go('/activation');
@@ -134,8 +140,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     // the background on its own schedule.
     _updateStatus('التحقق من منظومة الاشتراك...', 0.70);
     await Future.delayed(const Duration(milliseconds: 300));
-    final currentLicense = await licenseManager.getCurrentLicense();
-    if (currentLicense != null) {
+    if (currentLicense != null &&
+        currentLicense.deviceFingerprint != 'free' &&
+        currentLicense.type != LicenseType.free &&
+        !currentLicense.licenseKey.startsWith('TRIAL_')) {
       unawaited(_runCheckinInBackground(currentLicense.licenseKey));
     }
 

@@ -4,12 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../config/license_config.dart';
 import '../../core/provider/license_provider.dart';
 import '../../services/license_manager.dart';
 import '../../services/online_license_service.dart';
+import '../../widgets/brand/madar_contact_dialog.dart';
 
 class ActivationScreen extends ConsumerStatefulWidget {
-  const ActivationScreen({super.key});
+  final bool allowBack;
+
+  const ActivationScreen({super.key, this.allowBack = false});
 
   @override
   ConsumerState<ActivationScreen> createState() => _ActivationScreenState();
@@ -98,10 +102,18 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
           _isLoading = false;
         });
 
-        await Future.delayed(const Duration(seconds: 2));
+        await Future.delayed(Duration(seconds: widget.allowBack ? 1 : 2));
 
-        if (mounted) {
-          context.go('/activation-success');
+        if (!mounted) return;
+        if (widget.allowBack && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(true);
+          return;
+        }
+        final router = GoRouter.maybeOf(context);
+        if (router != null) {
+          router.go('/activation-success');
+        } else if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(true);
         }
       } else {
         setState(() {
@@ -163,8 +175,18 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
           _isLoading = false;
         });
 
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted) context.go('/activation-success');
+        await Future.delayed(Duration(seconds: widget.allowBack ? 1 : 2));
+        if (!mounted) return;
+        if (widget.allowBack && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(true);
+          return;
+        }
+        final router = GoRouter.maybeOf(context);
+        if (router != null) {
+          router.go('/activation-success');
+        } else if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(true);
+        }
       } else {
         setState(() {
           _errorMessage =
@@ -182,47 +204,195 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.blue.shade900,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 520),
-              padding: const EdgeInsets.all(28),
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.lock_open, size: 56, color: Colors.blue.shade900),
-                  const SizedBox(height: 18),
-                  const Text(
-                    'تفعيل الرخصة',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+    final license = ref.watch(currentLicenseProvider).valueOrNull;
+    final isExpiredTrial =
+        license?.type == LicenseType.trial && license!.isExpired;
+    final isExpiredPaid =
+        license != null && license.type != LicenseType.trial && license.isExpired;
+    final isUpgradeMode =
+        widget.allowBack && license != null && !license.isExpired;
+    final String trialDaysLabel;
+    if (LicenseConfig.freeTrialMinutes > 0) {
+      trialDaysLabel = ' (${LicenseConfig.freeTrialMinutes} دقيقة)';
+    } else {
+      final displayTrialDays = license == null
+          ? 0
+          : (LicenseConfig.isTimeLimitedTrial
+              ? LicenseConfig.freeTrialDays
+              : license.expiryDate.difference(license.issueDate).inDays);
+      trialDaysLabel =
+          (displayTrialDays > 0 &&
+              displayTrialDays < LicenseConfig.permanentFreeThresholdDays)
+          ? ' ($displayTrialDays أيام)'
+          : '';
+    }
+
+    final titleText = isUpgradeMode ? 'ترقية وتفعيل الرخصة' : 'تفعيل الرخصة';
+    final subtitleText = isUpgradeMode
+        ? 'قم بإدخال مفتاح الترخيص أو استيراد ملف (.madarlicense) للترقية مع الحفاظ على جميع بياناتك'
+        : (isExpiredTrial || isExpiredPaid)
+        ? 'اختر طريقة التفعيل لاستئناف العمل على بياناتك المحفوظة'
+        : 'أدخل مفتاح الترخيص لتفعيل نظام نقاط البيع';
+
+    return PopScope(
+      canPop: widget.allowBack,
+      child: Scaffold(
+        backgroundColor: Colors.blue.shade900,
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 520),
+                padding: const EdgeInsets.all(28),
+                margin: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'أدخل مفتاح الترخيص لتفعيل نظام نقاط البيع',
-                    style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.allowBack)
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: TextButton.icon(
+                          onPressed: _isLoading
+                              ? null
+                              : () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                          label: const Text('رجوع'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.blue.shade900,
+                          ),
+                        ),
+                      ),
+                    Icon(
+                      (isExpiredTrial || isExpiredPaid)
+                          ? Icons.timer_off_outlined
+                          : Icons.lock_open,
+                      size: 56,
+                      color: (isExpiredTrial || isExpiredPaid)
+                          ? Colors.red.shade700
+                          : Colors.blue.shade900,
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      titleText,
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      subtitleText,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.grey.shade600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    if (isExpiredTrial) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Colors.red.shade700,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'انتهت الفترة التجريبية$trialDaysLabel',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Colors.red.shade800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'انتهت صلاحية النسخة التجريبية بتاريخ ${license.expiryDate.toString().split(' ')[0]}. جميع بياناتك وفواتيرك محفوظة بأمان — قم بتفعيل الرخصة للمتابعة.',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: Colors.red.shade900,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else if (isExpiredPaid) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  color: Colors.red.shade700,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'انتهت صلاحية الرخصة',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Colors.red.shade800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'انتهت صلاحية الترخيص بتاريخ ${license.expiryDate.toString().split(' ')[0]}. يرجى تجديد الرخصة أو استيراد ملف تفعيل جديد للمتابعة.',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: Colors.red.shade900,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
@@ -414,12 +584,20 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 18),
+                  Theme(
+                    data: ThemeData.light(),
+                    child: Builder(
+                      builder: (lightCtx) => buildMadarContactInlineBox(lightCtx),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
         ),
       ),
+    ),
     );
   }
 

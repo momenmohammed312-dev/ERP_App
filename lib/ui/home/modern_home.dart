@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:pos_offline_desktop/config/license_config.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
+import 'package:pos_offline_desktop/screens/license/activation_screen.dart';
+import 'package:pos_offline_desktop/services/license_manager.dart';
 import 'package:pos_offline_desktop/ui/product/product.dart';
 import 'package:pos_offline_desktop/ui/cashier/cashier_page.dart';
 import 'package:pos_offline_desktop/ui/home/widgets/customer_transactions_widget.dart';
@@ -201,10 +204,13 @@ class _ModernHomeScreenState extends ConsumerState<ModernHomeScreen>
         !_licenseWarningShown &&
         mounted) {
       _licenseWarningShown = true;
+      final remainingText = license.daysRemaining == 0
+          ? 'تبقى أقل من يوم على'
+          : 'تبقى ${license.daysRemaining} أيام على';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'تنبيه: تبقى ${license.daysRemaining} أيام على انتهاء الترخيص. يرجى التجديد.',
+            'تنبيه: $remainingText انتهاء الترخيص. يرجى التجديد.',
           ),
           backgroundColor: Colors.orange,
         ),
@@ -1497,9 +1503,47 @@ class _DashboardSummaryState extends ConsumerState<_DashboardSummary> {
   }
 }
 
-/// Badge يعرض الأيام المتبقية على الترخيص — أخضر (>5) / برتقالي (<5) / أحمر (منتهي)
+/// Badge يعرض الأيام المتبقية على الترخيص — أخضر / برتقالي / أحمر (منتهي)
 class _LicenseBadge extends ConsumerWidget {
   const _LicenseBadge();
+
+  String _arabicType(LicenseType type) {
+    switch (type) {
+      case LicenseType.free:
+        return 'نسخة مجانية';
+      case LicenseType.trial:
+        return 'نسخة تجريبية';
+      case LicenseType.basic:
+        return 'أساسي';
+      case LicenseType.standard:
+        return 'قياسي';
+      case LicenseType.professional:
+        return 'احترافي';
+      case LicenseType.enterprise:
+        return 'مؤسسي';
+    }
+  }
+
+  Future<void> _openActivation(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool allowBack,
+  }) async {
+    if (!allowBack) {
+      final router = GoRouter.maybeOf(context);
+      if (router != null) {
+        router.go('/activation');
+        return;
+      }
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ActivationScreen(allowBack: allowBack),
+      ),
+    );
+    ref.invalidate(currentLicenseProvider);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1507,54 +1551,62 @@ class _LicenseBadge extends ConsumerWidget {
 
     return licenseAsync.when(
       data: (license) {
-        if (license == null) return const SizedBox.shrink();
+        if (license == null) {
+          if (LicenseConfig.isPermanentFreeVersion) {
+            return const SizedBox.shrink();
+          }
+          return _buildBadgeChip(
+            color: Colors.red,
+            icon: Icons.error_outline,
+            label: 'منتهي',
+            onTap: () => _openActivation(context, ref, allowBack: false),
+          );
+        }
 
         final days = license.daysRemaining;
+        final isPermanentFree =
+            license.type == LicenseType.free &&
+            days >= LicenseConfig.permanentFreeThresholdDays;
+        final isExpiringSoon = !license.isExpired &&
+            !isPermanentFree &&
+            (license.type == LicenseType.trial ? days <= 3 : days <= 5);
+
         final color = license.isExpired
             ? Colors.red
-            : days <= 5
+            : isExpiringSoon
             ? Colors.orange
             : Colors.green;
 
-        return Padding(
-          padding: const EdgeInsetsDirectional.only(start: 8),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _showLicenseDialog(context, license, days),
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: color, width: 1),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      license.isExpired ? Icons.error : Icons.verified_user,
-                      size: 18,
-                      color: color,
-                    ),
-                    const Gap(6),
-                    Text(
-                      license.isExpired ? 'منتهي' : '$days يوم',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: color,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+        final isMinuteTrial =
+            LicenseConfig.freeTrialMinutes > 0 &&
+            license.type == LicenseType.trial;
+        final String label;
+        if (license.isExpired) {
+          label = 'منتهي';
+        } else if (isPermanentFree) {
+          label = 'نسخة مجانية';
+        } else if (isMinuteTrial) {
+          final rem = license.timeRemaining;
+          if (rem.inSeconds <= 0) {
+            label = 'منتهي';
+          } else if (rem.inMinutes >= 1) {
+            label = 'تجربة: ${rem.inMinutes} د';
+          } else {
+            label = 'تجربة: ${rem.inSeconds} ث';
+          }
+        } else if (days == 0) {
+          label = 'أقل من يوم';
+        } else if (license.type == LicenseType.trial) {
+          label = 'تجربة: $days يوم';
+        } else {
+          label = '$days يوم';
+        }
+
+        return _buildBadgeChip(
+          color: color,
+          icon: license.isExpired ? Icons.error_outline : Icons.verified_user,
+          label: label,
+          onTap: () => _showLicenseDialog(context, ref, license, days),
         );
       },
       loading: () => const SizedBox.shrink(),
@@ -1562,22 +1614,99 @@ class _LicenseBadge extends ConsumerWidget {
     );
   }
 
-  void _showLicenseDialog(BuildContext context, dynamic license, int days) {
+  Widget _buildBadgeChip({
+    required Color color,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(start: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color, width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 18, color: color),
+                const Gap(6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showLicenseDialog(
+    BuildContext context,
+    WidgetRef ref,
+    License license,
+    int days,
+  ) {
+    final isPermanentFree =
+        license.type == LicenseType.free &&
+        days >= LicenseConfig.permanentFreeThresholdDays;
+    final canOfferUpgrade =
+        !LicenseConfig.isPermanentFreeVersion ||
+        license.type == LicenseType.trial ||
+        license.isExpired;
+    final String remainingText;
+    if (license.isExpired) {
+      remainingText = 'منتهية الصلاحية';
+    } else if (isPermanentFree) {
+      remainingText = 'مدى الحياة';
+    } else if (LicenseConfig.freeTrialMinutes > 0 &&
+        license.type == LicenseType.trial) {
+      final rem = license.timeRemaining;
+      if (rem.inSeconds <= 0) {
+        remainingText = 'منتهية الصلاحية';
+      } else if (rem.inMinutes >= 1) {
+        remainingText = '${rem.inMinutes} دقيقة و ${rem.inSeconds % 60} ثانية';
+      } else {
+        remainingText = '${rem.inSeconds} ثانية';
+      }
+    } else if (days == 0) {
+      remainingText = 'أقل من يوم';
+    } else {
+      remainingText = '$days يوم';
+    }
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('حالة الترخيص'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('النوع: ${license.licenseType}'),
-            Text('الشركة: ${license.companyName}'),
+            Text('النوع: ${_arabicType(license.type)}'),
+            if (license.companyName.isNotEmpty)
+              Text('الجهة: ${license.companyName}'),
+            if (!isPermanentFree)
+              Text(
+                'انتهاء الصلاحية: ${license.expiryDate.toString().split(' ')[0]}',
+              ),
+            const SizedBox(height: 4),
             Text(
-              'انتهاء الصلاحية: ${license.expiryDate.toString().split(' ')[0]}',
-            ),
-            Text(
-              'الأيام المتبقية: ${license.isExpired ? 0 : days}',
+              'المتبقي: $remainingText',
               style: TextStyle(
                 color: license.isExpired ? Colors.red : Colors.green,
                 fontWeight: FontWeight.bold,
@@ -1586,8 +1715,21 @@ class _LicenseBadge extends ConsumerWidget {
           ],
         ),
         actions: [
+          if (canOfferUpgrade)
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _openActivation(
+                  context,
+                  ref,
+                  allowBack: !license.isExpired,
+                );
+              },
+              icon: const Icon(Icons.workspace_premium_rounded, size: 18),
+              label: const Text('ترقية / تفعيل الرخصة'),
+            ),
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('إغلاق'),
           ),
         ],
