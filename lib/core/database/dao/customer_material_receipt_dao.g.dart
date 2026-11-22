@@ -21,6 +21,13 @@ mixin _$CustomerMaterialReceiptDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.customerStockBalances;
   $CustomerStockMovementsTable get customerStockMovements =>
       attachedDatabase.customerStockMovements;
+  $BomItemsTable get bomItems => attachedDatabase.bomItems;
+  $ManufacturingStagesTable get manufacturingStages =>
+      attachedDatabase.manufacturingStages;
+  $InventoryMovementsTable get inventoryMovements =>
+      attachedDatabase.inventoryMovements;
+  $ConsumptionRecordsTable get consumptionRecords =>
+      attachedDatabase.consumptionRecords;
   CustomerMaterialReceiptDaoManager get managers =>
       CustomerMaterialReceiptDaoManager(this);
 }
@@ -71,5 +78,22 @@ class CustomerMaterialReceiptDaoManager {
       $$CustomerStockMovementsTableTableManager(
         _db.attachedDatabase,
         _db.customerStockMovements,
+      );
+  $$BomItemsTableTableManager get bomItems =>
+      $$BomItemsTableTableManager(_db.attachedDatabase, _db.bomItems);
+  $$ManufacturingStagesTableTableManager get manufacturingStages =>
+      $$ManufacturingStagesTableTableManager(
+        _db.attachedDatabase,
+        _db.manufacturingStages,
+      );
+  $$InventoryMovementsTableTableManager get inventoryMovements =>
+      $$InventoryMovementsTableTableManager(
+        _db.attachedDatabase,
+        _db.inventoryMovements,
+      );
+  $$ConsumptionRecordsTableTableManager get consumptionRecords =>
+      $$ConsumptionRecordsTableTableManager(
+        _db.attachedDatabase,
+        _db.consumptionRecords,
       );
 }

@@ -780,5 +780,237 @@ void main() {
       expect(msg, contains('سوستة (عهدة العميل): مطلوب 150'));
     }
   });
+
+  group('FEAT-039 Completion Gates & Scrap Cap', () {
+    test('GATE-1: completeForOthersOrder rejects produced > planned with StateError and zero DB changes', () async {
+      final (db, moDao, _, bomDao, receiptDao) = await setup();
+      await seedCustomer(db, id: 'cust-1', name: 'Al-Madar Textiles');
+      final blankShirtId = await seedProduct(db, name: 'Blank T-Shirt', qty: 0);
+      final printedShirtId = await seedProduct(db, name: 'Printed T-Shirt', qty: 0);
+
+      await receiptDao.receiveCustomerMaterial(
+        customerId: 'cust-1',
+        items: [ReceiptItemInput(productId: blankShirtId, quantityReceived: 150.0)],
+      );
+
+      final bomId = await seedBom(
+        bomDao,
+        finishedProductId: printedShirtId,
+        lines: [(productId: blankShirtId, quantity: 1.0, wasteOverride: null)],
+      );
+
+      final orderId = await seedOrder(
+        moDao,
+        bomId: bomId,
+        finishedProductId: printedShirtId,
+        plannedQuantity: 100.0,
+        customerId: 'cust-1',
+      );
+
+      await expectLater(
+        () => moDao.completeForOthersOrder(
+          orderId: orderId,
+          actualProducedQuantity: 110.0,
+        ),
+        throwsStateError,
+      );
+
+      final order = await moDao.getById(orderId);
+      expect(order!.status, isNot(ManufacturingOrderStatus.completed));
+      expect(order.producedQuantity, 0.0);
+
+      final custBal = await receiptDao.getCustomerAvailableQuantity(
+        customerId: 'cust-1',
+        productId: blankShirtId,
+      );
+      expect(custBal, 150.0);
+
+      final issuedMoves = await (db.select(db.customerStockMovements)
+            ..where((m) => m.movementType.equals('issued_to_order')))
+          .get();
+      expect(issuedMoves, isEmpty);
+    });
+
+    test('GATE-2: JW-branch completeForOthersOrder rejects goodQuantity > inputQuantity with StateError', () async {
+      final (db, moDao, _, _, receiptDao) = await setup();
+      await seedCustomer(db, id: 'cust-jw', name: 'JW Customer');
+      final fabricId = await seedProduct(db, name: 'JW Fabric', qty: 0);
+
+      await receiptDao.receiveCustomerMaterial(
+        customerId: 'cust-jw',
+        items: [ReceiptItemInput(productId: fabricId, quantityReceived: 100.0)],
+      );
+
+      final orderId = await moDao.createJobWorkOrder(
+        orderNumber: 'JW-GATE-01',
+        orderType: 'for_others',
+        customerId: 'cust-jw',
+        inputProductId: fabricId,
+        inputQuantity: 50.0,
+      );
+      await moDao.startOrder(orderId);
+
+      await expectLater(
+        () => moDao.completeForOthersOrder(
+          orderId: orderId,
+          goodQuantity: 55.0,
+        ),
+        throwsStateError,
+      );
+
+      final order = await moDao.getById(orderId);
+      expect(order!.status, ManufacturingOrderStatus.inProgress);
+
+      final bal = await receiptDao.getCustomerBalance(
+        customerId: 'cust-jw',
+        productId: fabricId,
+      );
+      expect(bal!.quantityOnHand, 100.0);
+    });
+
+    test('GATE-3: completeManufacturingOrder rejects produced > planned for for_others orders', () async {
+      final (db, moDao, _, bomDao, _) = await setup();
+      await seedCustomer(db, id: 'cust-1', name: 'Al-Madar Textiles');
+      final rawId = await seedProduct(db, name: 'Raw Cloth', qty: 200);
+      final finId = await seedProduct(db, name: 'Finished Coat', qty: 0);
+
+      final bomId = await seedBom(
+        bomDao,
+        finishedProductId: finId,
+        lines: [(productId: rawId, quantity: 1.0, wasteOverride: null)],
+      );
+
+      final orderId = await seedOrder(
+        moDao,
+        bomId: bomId,
+        finishedProductId: finId,
+        plannedQuantity: 50.0,
+        orderType: 'for_others',
+        customerId: 'cust-1',
+      );
+
+      await expectLater(
+        () => moDao.completeManufacturingOrder(
+          orderId: orderId,
+          actualProducedQuantity: 51.0,
+        ),
+        throwsStateError,
+      );
+
+      final order = await moDao.getById(orderId);
+      expect(order!.status, isNot(ManufacturingOrderStatus.completed));
+    });
+
+    test('GATE-4: completeForOthersOrder succeeds when produced == planned', () async {
+      final (db, moDao, _, bomDao, receiptDao) = await setup();
+      await seedCustomer(db, id: 'cust-1', name: 'Al-Madar Textiles');
+      final blankShirtId = await seedProduct(db, name: 'Blank T-Shirt', qty: 0);
+      final printedShirtId = await seedProduct(db, name: 'Printed T-Shirt', qty: 0);
+
+      await receiptDao.receiveCustomerMaterial(
+        customerId: 'cust-1',
+        items: [ReceiptItemInput(productId: blankShirtId, quantityReceived: 100.0)],
+      );
+
+      final bomId = await seedBom(
+        bomDao,
+        finishedProductId: printedShirtId,
+        lines: [(productId: blankShirtId, quantity: 1.0, wasteOverride: null)],
+      );
+
+      final orderId = await seedOrder(
+        moDao,
+        bomId: bomId,
+        finishedProductId: printedShirtId,
+        plannedQuantity: 100.0,
+        customerId: 'cust-1',
+      );
+
+      final result = await moDao.completeForOthersOrder(
+        orderId: orderId,
+        actualProducedQuantity: 100.0,
+      );
+      expect(result.producedQuantity, 100.0);
+
+      final order = await moDao.getById(orderId);
+      expect(order!.status, ManufacturingOrderStatus.completed);
+    });
+
+    test('SCRAP-CAP: customer scrap twice on finished product succeeds up to producedQuantity and throws above', () async {
+      final (db, moDao, scrapDao, bomDao, receiptDao) = await setup();
+      await seedCustomer(db, id: 'cust-1', name: 'Al-Madar Textiles');
+      final blankShirtId = await seedProduct(db, name: 'Blank T-Shirt', qty: 0);
+      final printedShirtId = await seedProduct(db, name: 'Printed T-Shirt', qty: 0);
+
+      await receiptDao.receiveCustomerMaterial(
+        customerId: 'cust-1',
+        items: [ReceiptItemInput(productId: blankShirtId, quantityReceived: 10.0)],
+      );
+
+      final bomId = await seedBom(
+        bomDao,
+        finishedProductId: printedShirtId,
+        lines: [(productId: blankShirtId, quantity: 1.0, wasteOverride: null)],
+      );
+
+      final orderId = await seedOrder(
+        moDao,
+        bomId: bomId,
+        finishedProductId: printedShirtId,
+        plannedQuantity: 10.0,
+        customerId: 'cust-1',
+      );
+
+      await moDao.completeForOthersOrder(orderId: orderId);
+
+      // First customer scrap: 4 units (<= 10)
+      final s1 = await scrapDao.recordOrderScrapWithPolicy(
+        orderId: orderId,
+        productId: printedShirtId,
+        quantity: 4.0,
+        reason: ManufacturingScrapReason.defective,
+        responsibleParty: 'Customer fabric tear batch 1',
+        faultParty: 'customer',
+      );
+      expect(s1.quantity, 4.0);
+
+      // Second customer scrap: 6 units (4 + 6 == 10 <= 10) -> must succeed!
+      final s2 = await scrapDao.recordOrderScrapWithPolicy(
+        orderId: orderId,
+        productId: printedShirtId,
+        quantity: 6.0,
+        reason: ManufacturingScrapReason.wrongSpec,
+        responsibleParty: 'Customer fabric tear batch 2',
+        faultParty: 'customer',
+      );
+      expect(s2.quantity, 6.0);
+
+      // Third scrap pushing total to 11 (> 10) -> must throw StateError with no write
+      await expectLater(
+        () => scrapDao.recordOrderScrapWithPolicy(
+          orderId: orderId,
+          productId: printedShirtId,
+          quantity: 1.0,
+          reason: ManufacturingScrapReason.defective,
+          responsibleParty: 'Extra defect',
+          faultParty: 'customer',
+        ),
+        throwsStateError,
+      );
+
+      final scraps = await scrapDao.getForOrder(orderId);
+      expect(scraps.length, 2);
+
+      final lostMoves = await (db.select(db.inventoryMovements)
+            ..where(
+              (m) =>
+                  m.productId.equals(printedShirtId) &
+                  m.movementType.equals('manufacturing_scrap'),
+            ))
+          .get();
+      expect(lostMoves.length, 2);
+      expect(lostMoves.map((m) => m.quantity).toList(), [-4, -6]);
+    });
+  });
 }
 

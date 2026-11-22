@@ -91,6 +91,16 @@ class ManufacturingOrders extends Table {
   RealColumn get targetMarginPercent =>
       real().nullable().withDefault(const Constant(0.0))();
 
+  /// ── Phase 1 (FEAT-039): ProductionCompleted separate from OrderStatus ──
+  /// Filled on production completion (after Material Reconciliation gates pass).
+  /// Allows partial delivery without closing the order — keep nullable for
+  /// backward compatibility with pre-v82 rows.
+  DateTimeColumn get productionCompletedAt => dateTime().nullable()();
+
+  /// ── Phase 2 (FEAT-039 v84): Frozen routing copy snapshot per order (§3.3) ──
+  IntColumn get routingTemplateId => integer().nullable()();
+  TextColumn get routingCode => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }

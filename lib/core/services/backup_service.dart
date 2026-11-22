@@ -473,6 +473,17 @@ class BackupService {
       'manufacturing_scrap',
       'manufacturing_stages',
       'manufacturing_stage_outputs',
+      // ── Phase 1 (FEAT-039): Reconciliation & Routing execution (v82) ──
+      'consumption_records',
+      'stage_yields',
+      'external_operation_records',
+      // ── Phases 2/3/4 (FEAT-039 v84): Universal Routing, Costing & Inspections ──
+      'routing_templates',
+      'routing_template_nodes',
+      'manufacturing_rework_records',
+      'manufacturing_cost_snapshots',
+      'extra_material_approvals',
+      'manufacturing_inspections',
       // ── Manufacturing for Others (Phase B1 - v76) ──
       'customer_material_receipts',
       'customer_material_receipt_items',
@@ -591,6 +602,23 @@ class BackupService {
       'manufacturing_scrap',
       'manufacturing_stages',
       'manufacturing_stage_outputs',
+      // ── Phases 2/3/4 (FEAT-039 v84): Universal Routing, Costing & Inspections ──
+      // FK order: routing_templates -> routing_template_nodes (needs products above);
+      // rework_records, cost_snapshots, extra_material_approvals, inspections
+      // need manufacturing_orders + manufacturing_stages + products (restored above).
+      'routing_templates',
+      'routing_template_nodes',
+      'manufacturing_rework_records',
+      'manufacturing_cost_snapshots',
+      'extra_material_approvals',
+      'manufacturing_inspections',
+      // ── Phase 1 (FEAT-039): Reconciliation & Routing execution (v82/v83) ──
+      // FK order: external_operation_records & stage_yields need
+      // manufacturing_orders + manufacturing_stages (restored above);
+      // consumption_records is restored after customer_stock_movements below
+      // because it references both inventory_movements and customer_stock_movements.
+      'external_operation_records',
+      'stage_yields',
       // ── Manufacturing for Others (Phase B1 - v76) ──
       // FK order:
       // customers and products are restored above;
@@ -604,6 +632,8 @@ class BackupService {
       'customer_material_receipt_items',
       'customer_stock_balances',
       'customer_stock_movements',
+      // Restored after customer_stock_movements (v83 customer_stock_movement_id FK).
+      'consumption_records',
       'manufacturing_deliveries',
       'manufacturing_delivery_items',
       // ── Foundation: Accounting & Equity ──

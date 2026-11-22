@@ -82,6 +82,19 @@ import 'package:pos_offline_desktop/core/database/tables/manufacturing_deliverie
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_delivery_dao.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_stages_table.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_stage_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/consumption_record_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/stage_yield_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/external_operation_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/reconciliation_dao.dart';
+import 'package:pos_offline_desktop/core/database/tables/consumption_record.dart';
+import 'package:pos_offline_desktop/core/database/tables/stage_yield.dart';
+import 'package:pos_offline_desktop/core/database/tables/external_operation_records.dart';
+import 'package:pos_offline_desktop/core/database/tables/routing_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_costing_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_inspections_table.dart';
+import 'package:pos_offline_desktop/core/database/dao/routing_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/manufacturing_costing_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/manufacturing_inspection_dao.dart';
 import 'customer_status_fix.dart';
 import 'customer_opening_balance_fix.dart';
 import 'supplier_ledger_backfill.dart';
@@ -176,6 +189,17 @@ part 'app_database.g.dart';
     ProductVariants,
     ManufacturingStages,
     ManufacturingStageOutputs,
+    // ── Phase 1 (FEAT-039): Reconciliation & Routing execution records ──
+    ConsumptionRecords,
+    StageYieldRecords,
+    ExternalOperationRecords,
+    // ── Phases 2/3/4 (FEAT-039 v84): Universal Routing, Costing & Inspections ──
+    RoutingTemplates,
+    RoutingTemplateNodes,
+    ManufacturingReworkRecords,
+    ManufacturingCostSnapshots,
+    ExtraMaterialApprovals,
+    ManufacturingInspections,
     Accounts,
     JournalEntries,
     JournalLines,
@@ -223,6 +247,15 @@ part 'app_database.g.dart';
     EquityDao,
     ProductVariantDao,
     ManufacturingStageDao,
+    // ── Phase 1 (FEAT-039): Material Reconciliation — execution DAOs ──
+    ConsumptionRecordDao,
+    StageYieldDao,
+    ExternalOperationDao,
+    ReconciliationDao,
+    // ── Phases 2/3/4 (FEAT-039 v84): Universal Routing, Costing & Inspections ──
+    RoutingDao,
+    ManufacturingCostingDao,
+    ManufacturingInspectionDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -233,7 +266,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 81;
+  int get schemaVersion => 84;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -245,6 +278,9 @@ class AppDatabase extends _$AppDatabase {
       await _ensureAttendanceUniqueIndex();
       await _ensureV80IndexesAndSeed();
       await _ensureV81Indexes();
+      await _ensureV82Indexes();
+      await _ensureV83Indexes();
+      await _ensureV84Indexes();
     },
     onUpgrade: (Migrator m, int from, int to) async {
       log('Migration: from $from to $to');
@@ -446,6 +482,21 @@ class AppDatabase extends _$AppDatabase {
       // Schema v81 — Manufacturing stages, multi-variant outputs, sellable scrap
       if (from < 81) {
         await _runV81ManufacturingStagesAndVariants(m);
+      }
+
+      // Schema v82 — Reconciliation records (FEAT-039 Phase 1)
+      if (from < 82) {
+        await _runV82ManufacturingReconciliation(m);
+      }
+
+      // Schema v83 — customer_stock_movement_id FK on consumption_records (FEAT-039 Phase 1 Batch 3)
+      if (from < 83) {
+        await _runV83ConsumptionCustodyLink(m);
+      }
+
+      // Schema v84 — Universal Routing, Costing & Inspections (FEAT-039 Phases 2/3/4)
+      if (from < 84) {
+        await _runV84UniversalManufacturing(m);
       }
 
       // 6. Special data fixes
@@ -4191,6 +4242,327 @@ class AppDatabase extends _$AppDatabase {
       ''');
     } catch (e) {
       log('v81: _ensureV81Indexes warning: $e');
+    }
+  }
+
+  /// Schema v82 — reconciliation records (FEAT-039 Phase 1).
+  /// Additive and idempotent: 3 new tables, 2 new nullable columns, indexes.
+  Future<void> _runV82ManufacturingReconciliation(Migrator m) async {
+    await _logMigrationStep(82, 'v82_reconciliation_records', 'started');
+    try {
+      // 1. consumption_records — actual consumption per order/BOM line/stage.
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS consumption_records (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          manufacturing_order_id INTEGER NOT NULL REFERENCES manufacturing_orders(id) ON DELETE CASCADE,
+          bom_item_id INTEGER REFERENCES bom_items(id) ON DELETE SET NULL,
+          operation_id INTEGER REFERENCES manufacturing_stages(id) ON DELETE SET NULL,
+          material_product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          ownership_type TEXT NOT NULL,
+          unit TEXT,
+          planned_qty REAL,
+          actual_qty REAL,
+          unit_cost_snapshot REAL,
+          stock_movement_id INTEGER REFERENCES inventory_movements(id) ON DELETE SET NULL,
+          performed_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      // 2. stage_yields — encoded Stage Yield metric per completed stage.
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS stage_yields (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          manufacturing_order_id INTEGER NOT NULL REFERENCES manufacturing_orders(id) ON DELETE CASCADE,
+          stage_id INTEGER NOT NULL REFERENCES manufacturing_stages(id) ON DELETE CASCADE,
+          input_quantity REAL NOT NULL DEFAULT 0.0,
+          accepted_output REAL NOT NULL DEFAULT 0.0,
+          yield_percent REAL NOT NULL DEFAULT 0.0,
+          recorded_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      // 3. external_operation_records — routed work done outside the factory.
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS external_operation_records (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          manufacturing_order_id INTEGER NOT NULL REFERENCES manufacturing_orders(id) ON DELETE CASCADE,
+          operation_id INTEGER REFERENCES manufacturing_stages(id) ON DELETE SET NULL,
+          vendor TEXT NOT NULL,
+          sent_qty REAL NOT NULL DEFAULT 0.0,
+          received_qty REAL NOT NULL DEFAULT 0.0,
+          scrap_qty REAL NOT NULL DEFAULT 0.0,
+          cost REAL NOT NULL DEFAULT 0.0,
+          sent_at INTEGER,
+          received_at INTEGER
+        );
+      ''');
+
+      // 4. Safe additive columns (Feature 6: order.productionCompletedAt + stage_outputs.disposition)
+      Future<void> safeAddColumn(String table, String column, String typeDef) async {
+        try {
+          final pragma = await customSelect('PRAGMA table_info($table)').get();
+          final exists = pragma.any((col) => col.data['name'] == column);
+          if (!exists) {
+            await customStatement('ALTER TABLE $table ADD COLUMN $column $typeDef;');
+          }
+        } catch (e) {
+          log('v82: safeAddColumn ($table.$column) error: $e');
+        }
+      }
+
+      await safeAddColumn('manufacturing_orders', 'production_completed_at', 'INTEGER');
+      await safeAddColumn('manufacturing_stage_outputs', 'disposition', "TEXT DEFAULT 'produced'");
+
+      await _ensureV82Indexes();
+
+      await _logMigrationStep(82, 'v82_reconciliation_records', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        82,
+        'v82_reconciliation_records',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> _ensureV82Indexes() async {
+    try {
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_consumption_records_order
+        ON consumption_records(manufacturing_order_id);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_consumption_records_product
+        ON consumption_records(material_product_id);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_stage_yields_order
+        ON stage_yields(manufacturing_order_id);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_stage_yields_stage
+        ON stage_yields(stage_id);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_external_ops_order
+        ON external_operation_records(manufacturing_order_id);
+      ''');
+    } catch (e) {
+      log('v82: _ensureV82Indexes warning: $e');
+    }
+  }
+
+  /// Schema v83 — add customer_stock_movement_id FK column on consumption_records
+  /// so customer-owned consumption links cleanly to customer_stock_movements
+  /// instead of inventory_movements (FEAT-039 Phase 1 Batch 3).
+  Future<void> _runV83ConsumptionCustodyLink(Migrator m) async {
+    await _logMigrationStep(83, 'v83_consumption_custody_link', 'started');
+    try {
+      final pragma =
+          await customSelect('PRAGMA table_info(consumption_records)').get();
+      final exists = pragma.any(
+        (col) => col.data['name'] == 'customer_stock_movement_id',
+      );
+      if (!exists) {
+        await customStatement(
+          'ALTER TABLE consumption_records '
+          'ADD COLUMN customer_stock_movement_id INTEGER '
+          'REFERENCES customer_stock_movements(id) ON DELETE SET NULL;',
+        );
+      }
+
+      await _ensureV83Indexes();
+      await _logMigrationStep(83, 'v83_consumption_custody_link', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        83,
+        'v83_consumption_custody_link',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> _ensureV83Indexes() async {
+    try {
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_consumption_records_custody_move
+        ON consumption_records(customer_stock_movement_id);
+      ''');
+    } catch (e) {
+      log('v83: _ensureV83Indexes warning: $e');
+    }
+  }
+
+  /// Schema v84 — Universal Routing (Templates/Nodes/Rework), Costing
+  /// (CostSnapshots/ExtraMaterialApprovals), and Inspections (FEAT-039 Phases 2/3/4).
+  Future<void> _runV84UniversalManufacturing(Migrator m) async {
+    await _logMigrationStep(84, 'v84_universal_manufacturing', 'started');
+    try {
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS routing_templates (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          code TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          notes TEXT,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS routing_template_nodes (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          template_id INTEGER NOT NULL REFERENCES routing_templates(id) ON DELETE CASCADE,
+          parent_node_id INTEGER,
+          stage_order INTEGER NOT NULL DEFAULT 1,
+          name TEXT NOT NULL,
+          operation_type TEXT NOT NULL DEFAULT 'generic',
+          technique TEXT,
+          parameters_json TEXT,
+          default_labor_rate REAL NOT NULL DEFAULT 0.0,
+          default_machine_rate REAL NOT NULL DEFAULT 0.0,
+          is_terminal INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'active'
+        );
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS manufacturing_rework_records (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          manufacturing_order_id INTEGER NOT NULL REFERENCES manufacturing_orders(id) ON DELETE CASCADE,
+          original_stage_id INTEGER NOT NULL REFERENCES manufacturing_stages(id) ON DELETE CASCADE,
+          rework_stage_id INTEGER,
+          quantity REAL NOT NULL,
+          reason TEXT NOT NULL,
+          disposition_note TEXT,
+          reworked_by TEXT,
+          reworked_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS manufacturing_cost_snapshots (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          manufacturing_order_id INTEGER NOT NULL REFERENCES manufacturing_orders(id) ON DELETE CASCADE,
+          material_cost REAL NOT NULL DEFAULT 0.0,
+          labor_cost REAL NOT NULL DEFAULT 0.0,
+          machine_cost REAL NOT NULL DEFAULT 0.0,
+          external_cost REAL NOT NULL DEFAULT 0.0,
+          other_cost REAL NOT NULL DEFAULT 0.0,
+          total_actual_cost REAL NOT NULL DEFAULT 0.0,
+          planned_cost REAL NOT NULL DEFAULT 0.0,
+          variance REAL NOT NULL DEFAULT 0.0,
+          delivered_revenue REAL NOT NULL DEFAULT 0.0,
+          extra_materials_revenue REAL NOT NULL DEFAULT 0.0,
+          scrap_compensation REAL NOT NULL DEFAULT 0.0,
+          actual_margin REAL NOT NULL DEFAULT 0.0,
+          is_frozen INTEGER NOT NULL DEFAULT 1,
+          snapshot_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+          notes TEXT
+        );
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS extra_material_approvals (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          manufacturing_order_id INTEGER NOT NULL REFERENCES manufacturing_orders(id) ON DELETE CASCADE,
+          product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          quantity REAL NOT NULL,
+          unit_cost_snapshot REAL NOT NULL DEFAULT 0.0,
+          margin_percent REAL NOT NULL DEFAULT 0.0,
+          approved_amount REAL NOT NULL DEFAULT 0.0,
+          status TEXT NOT NULL DEFAULT 'pending',
+          requested_by TEXT NOT NULL,
+          approved_by TEXT,
+          approved_at INTEGER,
+          authorization_ref TEXT,
+          notes TEXT,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+        );
+      ''');
+
+      await customStatement('''
+        CREATE TABLE IF NOT EXISTS manufacturing_inspections (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          manufacturing_order_id INTEGER NOT NULL REFERENCES manufacturing_orders(id) ON DELETE CASCADE,
+          stage_id INTEGER REFERENCES manufacturing_stages(id) ON DELETE SET NULL,
+          product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          inspected_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+          inspected_by TEXT NOT NULL,
+          result TEXT NOT NULL,
+          quantity REAL NOT NULL,
+          disposition_note TEXT,
+          photo_refs TEXT
+        );
+      ''');
+
+      Future<void> safeAddColumn(String table, String column, String typeDef) async {
+        final pragma = await customSelect('PRAGMA table_info($table)').get();
+        final exists = pragma.any((col) => col.data['name'] == column);
+        if (!exists) {
+          await customStatement('ALTER TABLE $table ADD COLUMN $column $typeDef;');
+        }
+      }
+
+      await safeAddColumn('manufacturing_orders', 'routing_template_id', 'INTEGER');
+      await safeAddColumn('manufacturing_orders', 'routing_code', 'TEXT');
+
+      await safeAddColumn('manufacturing_stages', 'routing_node_id', 'INTEGER');
+      await safeAddColumn('manufacturing_stages', 'parent_stage_id', 'INTEGER');
+      await safeAddColumn('manufacturing_stages', 'operation_type', "TEXT NOT NULL DEFAULT 'generic'");
+      await safeAddColumn('manufacturing_stages', 'technique', 'TEXT');
+      await safeAddColumn('manufacturing_stages', 'parameters_json', 'TEXT');
+      await safeAddColumn('manufacturing_stages', 'labor_hours', 'REAL NOT NULL DEFAULT 0.0');
+      await safeAddColumn('manufacturing_stages', 'labor_rate', 'REAL NOT NULL DEFAULT 0.0');
+      await safeAddColumn('manufacturing_stages', 'machine_hours', 'REAL NOT NULL DEFAULT 0.0');
+      await safeAddColumn('manufacturing_stages', 'machine_rate', 'REAL NOT NULL DEFAULT 0.0');
+      await safeAddColumn('manufacturing_stages', 'is_terminal', 'INTEGER NOT NULL DEFAULT 0');
+
+      await safeAddColumn('manufacturing_stage_outputs', 'output_type', "TEXT NOT NULL DEFAULT 'primary'");
+
+      await _ensureV84Indexes();
+      await _logMigrationStep(84, 'v84_universal_manufacturing', 'completed');
+    } catch (e) {
+      await _logMigrationStep(
+        84,
+        'v84_universal_manufacturing',
+        'failed',
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> _ensureV84Indexes() async {
+    try {
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_routing_nodes_template
+        ON routing_template_nodes(template_id);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_rework_records_order
+        ON manufacturing_rework_records(manufacturing_order_id);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_cost_snapshots_order
+        ON manufacturing_cost_snapshots(manufacturing_order_id);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_extra_approvals_order
+        ON extra_material_approvals(manufacturing_order_id);
+      ''');
+      await customStatement('''
+        CREATE INDEX IF NOT EXISTS idx_inspections_order
+        ON manufacturing_inspections(manufacturing_order_id);
+      ''');
+    } catch (e) {
+      log('v84: _ensureV84Indexes warning: $e');
     }
   }
 

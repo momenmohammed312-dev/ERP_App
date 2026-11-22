@@ -157,6 +157,11 @@ class _MoListScreenState extends State<MoListScreen> {
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadMeta, tooltip: 'تحديث البيانات'),
           IconButton(
+            icon: const Icon(Icons.alt_route),
+            onPressed: () => context.push('/manufacturing/routings'),
+            tooltip: 'مسارات الإنتاج',
+          ),
+          IconButton(
             icon: const Icon(Icons.list_alt_outlined),
             onPressed: () => context.push('/manufacturing/bom'),
             tooltip: 'الوصفات (BOM)',
@@ -192,6 +197,12 @@ class _MoListScreenState extends State<MoListScreen> {
                     onPressed: () {},
                     icon: const Icon(Icons.precision_manufacturing, size: 18),
                     label: const Text('أوامر التصنيع'),
+                  ),
+                  const Gap(8),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/manufacturing/routings'),
+                    icon: const Icon(Icons.alt_route, size: 18),
+                    label: const Text('مسارات الإنتاج'),
                   ),
                   const Gap(8),
                   OutlinedButton.icon(

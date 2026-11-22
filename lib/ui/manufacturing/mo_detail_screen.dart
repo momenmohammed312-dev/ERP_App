@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
@@ -6,12 +8,17 @@ import 'package:pdf/pdf.dart' show PdfPageFormat;
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_order_dao.dart';
 import 'package:pos_offline_desktop/core/database/dao/manufacturing_delivery_dao.dart';
+import 'package:pos_offline_desktop/core/database/dao/reconciliation_dao.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_stages_table.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart'
     as ups;
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/cost_component_editor.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/widgets/mo_costing_approvals_section.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/widgets/mo_reconciliation_section.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/widgets/mo_routing_quality_section.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/searchable_product_picker.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/widgets/mo_form_dialog.dart';
 import 'package:printing/printing.dart';
@@ -39,6 +46,11 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
   final Map<int, String> _balanceProductNames = {};
   // FEAT-009: product ids with movements linked to THIS order
   Set<int> _orderBalanceIds = {};
+  // FEAT-039 Phase 1 Batch 3: per-material reconciliation + analytical log
+  ReconciliationSummary? _reconciliationSummary;
+  List<String> _custodyViolations = [];
+  List<ConsumptionRecord> _consumptionRecords = [];
+  List<ManufacturingStage> _stages = [];
   bool _isLoading = true;
   String? _error;
 
@@ -77,6 +89,9 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       List<CustomerStockBalance> customerBalances = [];
       Map<int, String> balanceNames = {};
       Set<int> orderProductIds = {};
+      ReconciliationSummary? reconSummary;
+      List<String> custodyViolations = [];
+      List<ConsumptionRecord> consumptionRecords = [];
 
       if (order.customerId != null && order.customerId!.isNotEmpty) {
         customer = await widget.db.customerDao.getCustomerById(
@@ -88,7 +103,13 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
             .getTotalDeliveredQuantity(order.id);
         orderMovements = await (widget.db.select(
           widget.db.customerStockMovements,
-        )..where((m) => m.referenceId.equals(order.orderNumber))).get();
+        )..where(
+                (m) => m.referenceId.isIn([
+                  order.orderNumber,
+                  order.id.toString(),
+                ]),
+              ))
+            .get();
         // FEAT-009: the order-scoped view of custody starts from the
         // product ids this order actually moved in/out of the customer's
         // custody (issue, delivery, scrap, defect return)
@@ -104,6 +125,29 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         }
       }
 
+      final stages =
+          await widget.db.manufacturingStageDao.getStagesForOrder(order.id);
+
+      if (order.orderType != 'internal') {
+        reconSummary = await widget.db.reconciliationDao.reconcile(order.id);
+        custodyViolations =
+            await widget.db.reconciliationDao.checkCustodyEquations(order.id);
+        consumptionRecords =
+            await widget.db.consumptionRecordDao.getForOrder(order.id);
+        final approvals =
+            await widget.db.manufacturingCostingDao.getApprovalsForOrder(order.id);
+        final extraIds = <int>{
+          ...reconSummary.custody.keys,
+          ...consumptionRecords.map((r) => r.materialProductId),
+          ...approvals.map((a) => a.productId),
+        };
+        for (final pid in extraIds) {
+          if (balanceNames.containsKey(pid)) continue;
+          final p = await widget.db.productDao.getProductById(pid);
+          balanceNames[pid] = p?.name ?? '#$pid';
+        }
+      }
+
       setState(() {
         _order = order;
         _bom = bom;
@@ -115,6 +159,10 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
         _orderMovements = orderMovements;
         _customerBalances = customerBalances;
         _orderBalanceIds = orderProductIds;
+        _reconciliationSummary = reconSummary;
+        _custodyViolations = custodyViolations;
+        _consumptionRecords = consumptionRecords;
+        _stages = stages;
         _balanceProductNames
           ..clear()
           ..addAll(balanceNames);
@@ -184,7 +232,11 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
               .where((b) => linkedIds.contains(b.productId))
               .toList();
     final totalConsumed = _orderMovements
-        .where((m) => m.movementType == 'issued_to_order')
+        .where(
+          (m) =>
+              m.movementType == 'issued_to_order' ||
+              m.movementType == 'manufacturing_consumption',
+        )
         .fold<double>(0, (s, m) => s + m.quantity.abs());
     final totalOnHand = scopedBalances.fold<double>(
       0,
@@ -197,6 +249,12 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
           return 'استلام عهدة';
         case 'issued_to_order':
           return 'صرف للأمر';
+        case 'manufacturing_consumption':
+          return 'استهلاك للتصنيع';
+        case 'return_excess':
+          return 'إرجاع فائض للعهدة';
+        case 'return_custody':
+          return 'رد خامات للعميل';
         case 'delivered':
           return 'تسليم للعميل';
         case 'return_defect':
@@ -235,7 +293,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       for (final s in orderScraps)
         {
           'date': DateFormat('yyyy/MM/dd').format(s.createdAt),
-          'productName': _balanceProductNames[s.productId] ?? '#\${s.productId}',
+          'productName': _balanceProductNames[s.productId] ?? '#${s.productId}',
           'quantity': s.quantity,
           'reason': ManufacturingScrapReason.label(s.reason),
           'faultParty': s.faultParty == 'factory'
@@ -314,43 +372,47 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       if (!mounted) return;
       await showDialog<void>(
         context: context,
-        builder: (dialogCtx) => Dialog(
-          insetPadding: const EdgeInsets.all(24),
-          child: SizedBox(
-            width: 900,
-            height: 750,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'بطاقة الإنتاج/الصرف — ${mo.orderNumber}',
-                          style: Theme.of(dialogCtx).textTheme.titleMedium,
+        builder: (dialogCtx) {
+          final screen = MediaQuery.sizeOf(dialogCtx);
+          final isNarrow = screen.width < 600;
+          return Dialog(
+            insetPadding: EdgeInsets.all(isNarrow ? 8 : 24),
+            child: SizedBox(
+              width: math.min(900.0, screen.width - (isNarrow ? 16 : 48)),
+              height: math.min(750.0, screen.height - (isNarrow ? 32 : 64)),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'بطاقة الإنتاج/الصرف — ${mo.orderNumber}',
+                            style: Theme.of(dialogCtx).textTheme.titleMedium,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(dialogCtx),
-                      ),
-                    ],
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(dialogCtx),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: PdfPreview(
-                    build: (format) => pdf.save(),
-                    allowPrinting: true,
-                    allowSharing: true,
-                    initialPageFormat: PdfPageFormat.a4,
-                    pdfFileName: 'mo_${mo.orderNumber}.pdf',
+                  Expanded(
+                    child: PdfPreview(
+                      build: (format) => pdf.save(),
+                      allowPrinting: true,
+                      allowSharing: true,
+                      initialPageFormat: PdfPageFormat.a4,
+                      pdfFileName: 'mo_${mo.orderNumber}.pdf',
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       );
     } catch (e) {
       ScaffoldMessenger.of(
@@ -431,43 +493,47 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
       if (!mounted) return;
       await showDialog<void>(
         context: context,
-        builder: (dialogCtx) => Dialog(
-          insetPadding: const EdgeInsets.all(24),
-          child: SizedBox(
-            width: 900,
-            height: 750,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'تقرير مراحل وتكاليف أمر التصنيع — ${mo.orderNumber}',
-                          style: Theme.of(dialogCtx).textTheme.titleMedium,
+        builder: (dialogCtx) {
+          final screen = MediaQuery.sizeOf(dialogCtx);
+          final isNarrow = screen.width < 600;
+          return Dialog(
+            insetPadding: EdgeInsets.all(isNarrow ? 8 : 24),
+            child: SizedBox(
+              width: math.min(900.0, screen.width - (isNarrow ? 16 : 48)),
+              height: math.min(750.0, screen.height - (isNarrow ? 32 : 64)),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'تقرير مراحل وتكاليف أمر التصنيع — ${mo.orderNumber}',
+                            style: Theme.of(dialogCtx).textTheme.titleMedium,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(dialogCtx),
-                      ),
-                    ],
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(dialogCtx),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: PdfPreview(
-                    build: (format) => pdf.save(),
-                    allowPrinting: true,
-                    allowSharing: true,
-                    initialPageFormat: PdfPageFormat.a4,
-                    pdfFileName: 'report_${mo.orderNumber}.pdf',
+                  Expanded(
+                    child: PdfPreview(
+                      build: (format) => pdf.save(),
+                      allowPrinting: true,
+                      allowSharing: true,
+                      initialPageFormat: PdfPageFormat.a4,
+                      pdfFileName: 'report_${mo.orderNumber}.pdf',
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       );
     } catch (e) {
       if (mounted) {
@@ -2949,194 +3015,6 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
     );
   }
 
-  Widget _buildReconciliationCard() {
-    final mo = _order!;
-    final theme = Theme.of(context);
-    // FEAT-009: prefer the order-scoped balances; only when the order has
-    // not moved anything yet show the full customer custody list
-    final linkedBalances = _customerBalances
-        .where((b) => _orderBalanceIds.contains(b.productId))
-        .toList();
-    final scoped = linkedBalances.isNotEmpty;
-
-    double totalConsumed = 0.0;
-    for (final m in _orderMovements) {
-      if (m.movementType == 'issued_to_order') {
-        totalConsumed += m.quantity.abs();
-      }
-    }
-
-    double totalOnHand = 0.0;
-    for (final b in _customerBalances) {
-      totalOnHand += b.quantityOnHand;
-    }
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.compare_arrows, color: theme.colorScheme.primary),
-                const Gap(8),
-                Text(
-                  'بطاقة مطابقة الخامات والتشغيل (Reconciliation)',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            Wrap(
-              spacing: 20,
-              runSpacing: 12,
-              children: [
-                _stat(
-                  context,
-                  'العميل صاحب العهدة',
-                  _customer?.name ?? '—',
-                  Icons.person,
-                ),
-                _stat(
-                  context,
-                  'الكمية المنتجة',
-                  '${mo.producedQuantity} وحدة',
-                  Icons.check_circle_outline,
-                ),
-                _stat(
-                  context,
-                  'المسلم للعميل',
-                  '$_deliveredQty وحدة',
-                  Icons.local_shipping_outlined,
-                ),
-                _stat(
-                  context,
-                  'المتبقي للتسليم',
-                  '${mo.producedQuantity - _deliveredQty} وحدة',
-                  Icons.hourglass_bottom,
-                ),
-                _stat(
-                  context,
-                  'المستهلك من العهدة',
-                  '$totalConsumed وحدة',
-                  Icons.remove_circle_outline,
-                ),
-                _stat(
-                  context,
-                  'رصيد العهدة بالمخزن',
-                  '$totalOnHand وحدة',
-                  Icons.warehouse_outlined,
-                ),
-              ],
-            ),
-            if (_customerBalances.isNotEmpty) ...[
-              const Gap(16),
-              Text(
-                scoped
-                    ? 'أرصدة عهدة العميل المرتبطة بهذا الأمر:'
-                    : 'أرصدة عهدة العميل الحالية بالمخزن — دي كامل عهدته، لسه مفيش حركة عهدة على الأمر ده:',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-              const Gap(8),
-              Table(
-                border: TableBorder.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                ),
-                columnWidths: const {
-                  0: FlexColumnWidth(3),
-                  1: FlexColumnWidth(2),
-                  2: FlexColumnWidth(2),
-                  3: FlexColumnWidth(2),
-                },
-                children: [
-                  TableRow(
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                    ),
-                    children: const [
-                      Padding(
-                        padding: EdgeInsets.all(6),
-                        child: Text(
-                          'الصنف',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.all(6),
-                        child: Text(
-                          'الرصيد المتاح',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.all(6),
-                        child: Text(
-                          'المحجوز',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.all(6),
-                        child: Text(
-                          'اللون / المقاس',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  for (final b in (scoped ? linkedBalances : _customerBalances))
-                    TableRow(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Text(
-                            _balanceProductNames[b.productId] ??
-                                '#${b.productId}',
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Text(
-                            '${b.quantityOnHand}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green,
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Text('${b.quantityAllocated}'),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Text(
-                            '${b.color ?? ''} ${b.size ?? ''}'.trim().isEmpty
-                                ? '—'
-                                : '${b.color ?? ''} ${b.size ?? ''}'.trim(),
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _costRow(
     String label,
     String value, {
@@ -3276,40 +3154,51 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            Icons.precision_manufacturing,
-                            color: color,
-                            size: 32,
-                          ),
-                        ),
-                        const Gap(16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                mo.orderNumber,
-                                style: theme.textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                    SizedBox(
+                      width: double.infinity,
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        alignment: WrapAlignment.spaceBetween,
+                        children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                              const Gap(4),
-                              Text(
-                                '${product?.name ?? '#${mo.finishedProductId}'} • وصفة: ${bom?.name ?? '#${mo.bomId}'}',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
+                              child: Icon(
+                                Icons.precision_manufacturing,
+                                color: color,
+                                size: 32,
                               ),
-                            ],
-                          ),
+                            ),
+                            const Gap(16),
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    mo.orderNumber,
+                                    style: theme.textTheme.headlineSmall?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const Gap(4),
+                                  Text(
+                                    '${product?.name ?? '#${mo.finishedProductId}'} • وصفة: ${bom?.name ?? '#${mo.bomId}'}',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -3330,6 +3219,7 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                           ),
                         ),
                       ],
+                    ),
                     ),
                     const Divider(height: 32),
                     Wrap(
@@ -3423,15 +3313,19 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.15),
+                          color: MadarColors.warning.withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: Colors.amber.withValues(alpha: 0.4),
+                            color: MadarColors.warning.withValues(alpha: 0.45),
                           ),
                         ),
                         child: Text(
                           'ملاحظات: ${mo.notes!}',
-                          style: TextStyle(color: Colors.amber.shade800),
+                          style: TextStyle(
+                            color: context.isDarkMode
+                                ? const Color(0xFFFDE68A)
+                                : const Color(0xFF78350F),
+                          ),
                         ),
                       ),
                     ],
@@ -3630,26 +3524,59 @@ class _MoDetailScreenState extends State<MoDetailScreen> {
             if (mo.orderType != 'internal') ...[
               _buildDeliveriesSection(),
               const Gap(24),
-              _buildReconciliationCard(),
+              MoReconciliationSection(
+                db: widget.db,
+                order: mo,
+                customer: _customer,
+                deliveredQty: _deliveredQty,
+                orderMovements: _orderMovements,
+                customerBalances: _customerBalances,
+                orderBalanceIds: _orderBalanceIds,
+                balanceProductNames: _balanceProductNames,
+                reconciliationSummary: _reconciliationSummary,
+                custodyViolations: _custodyViolations,
+                consumptionRecords: _consumptionRecords,
+                onDataChanged: _loadData,
+              ),
               const Gap(24),
             ],
-            Row(
-              children: [
-                Text(
-                  'مكونات الوصفة المطلوبة (للكمية المخططة)',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+            MoRoutingQualitySection(
+              db: widget.db,
+              order: mo,
+              stages: _stages,
+              onDataChanged: _loadData,
+            ),
+            const Gap(24),
+            MoCostingApprovalsSection(
+              db: widget.db,
+              order: mo,
+              balanceProductNames: _balanceProductNames,
+              onDataChanged: _loadData,
+            ),
+            const Gap(24),
+            SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                alignment: WrapAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'مكونات الوصفة المطلوبة (للكمية المخططة)',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const Spacer(),
-                if (mo.status != ManufacturingOrderStatus.completed &&
-                    mo.status != ManufacturingOrderStatus.cancelled)
-                  FilledButton.tonalIcon(
-                    onPressed: _openAddMaterialDialog,
-                    icon: const Icon(Icons.add_shopping_cart, size: 16),
-                    label: const Text('إضافة مادة خام للطلب'),
-                  ),
-              ],
+                  if (mo.status != ManufacturingOrderStatus.completed &&
+                      mo.status != ManufacturingOrderStatus.cancelled)
+                    FilledButton.tonalIcon(
+                      onPressed: _openAddMaterialDialog,
+                      icon: const Icon(Icons.add_shopping_cart, size: 16),
+                      label: const Text('إضافة مادة خام للطلب'),
+                    ),
+                ],
+              ),
             ),
             const Gap(12),
             if (_bomItems.isEmpty)

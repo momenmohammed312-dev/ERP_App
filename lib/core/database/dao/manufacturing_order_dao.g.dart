@@ -24,6 +24,8 @@ mixin _$ManufacturingOrderDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.customerStockMovements;
   $ManufacturingStagesTable get manufacturingStages =>
       attachedDatabase.manufacturingStages;
+  $ConsumptionRecordsTable get consumptionRecords =>
+      attachedDatabase.consumptionRecords;
   $ProductVariantsTable get productVariants => attachedDatabase.productVariants;
   $ManufacturingStageOutputsTable get manufacturingStageOutputs =>
       attachedDatabase.manufacturingStageOutputs;
@@ -86,6 +88,11 @@ class ManufacturingOrderDaoManager {
       $$ManufacturingStagesTableTableManager(
         _db.attachedDatabase,
         _db.manufacturingStages,
+      );
+  $$ConsumptionRecordsTableTableManager get consumptionRecords =>
+      $$ConsumptionRecordsTableTableManager(
+        _db.attachedDatabase,
+        _db.consumptionRecords,
       );
   $$ProductVariantsTableTableManager get productVariants =>
       $$ProductVariantsTableTableManager(

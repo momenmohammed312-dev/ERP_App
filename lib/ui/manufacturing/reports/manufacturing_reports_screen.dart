@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +10,7 @@ import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_stages_table.dart';
 import 'package:pos_offline_desktop/core/services/unified_print_service.dart' as ups;
+import 'package:pos_offline_desktop/ui/manufacturing/reports/widgets/manufacturing_yield_quality_tab.dart';
 
 /// Manufacturing reports screen with 4 tabs:
 /// 1. MO cost breakdown & pricing
@@ -29,7 +32,7 @@ class _ManufacturingReportsScreenState extends State<ManufacturingReportsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _range = DateTimeRange(
       start: DateTime.now().subtract(const Duration(days: 30)),
       end: DateTime.now(),
@@ -120,43 +123,47 @@ class _ManufacturingReportsScreenState extends State<ManufacturingReportsScreen>
       if (!mounted) return;
       await showDialog<void>(
         context: context,
-        builder: (ctx) => Dialog(
-          insetPadding: const EdgeInsets.all(24),
-          child: SizedBox(
-            width: 900,
-            height: 750,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'تقرير التصنيع الشامل PDF',
-                          style: Theme.of(ctx).textTheme.titleMedium,
+        builder: (ctx) {
+          final screen = MediaQuery.sizeOf(ctx);
+          final isNarrow = screen.width < 600;
+          return Dialog(
+            insetPadding: EdgeInsets.all(isNarrow ? 8 : 24),
+            child: SizedBox(
+              width: math.min(900.0, screen.width - (isNarrow ? 16 : 48)),
+              height: math.min(750.0, screen.height - (isNarrow ? 32 : 64)),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'تقرير التصنيع الشامل PDF',
+                            style: Theme.of(ctx).textTheme.titleMedium,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: PdfPreview(
-                    build: (format) => pdf.save(),
-                    allowPrinting: true,
-                    allowSharing: true,
-                    initialPageFormat: PdfPageFormat.a4,
-                    pdfFileName: 'manufacturing_report.pdf',
+                  Expanded(
+                    child: PdfPreview(
+                      build: (format) => pdf.save(),
+                      allowPrinting: true,
+                      allowSharing: true,
+                      initialPageFormat: PdfPageFormat.a4,
+                      pdfFileName: 'manufacturing_report.pdf',
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       );
     } catch (e) {
       if (mounted) {
@@ -181,6 +188,7 @@ class _ManufacturingReportsScreenState extends State<ManufacturingReportsScreen>
             Tab(icon: Icon(Icons.layers_outlined), text: 'المراحل والمقاسات'),
             Tab(icon: Icon(Icons.inventory), text: 'استهلاك الخامات'),
             Tab(icon: Icon(Icons.delete_sweep_outlined), text: 'الهالك والتوالف'),
+            Tab(icon: Icon(Icons.verified_outlined), text: 'الأداء والجودة والهوامش'),
           ],
         ),
         actions: [
@@ -213,6 +221,12 @@ class _ManufacturingReportsScreenState extends State<ManufacturingReportsScreen>
                   ),
                   const Gap(8),
                   OutlinedButton.icon(
+                    onPressed: () => context.push('/manufacturing/routings'),
+                    icon: const Icon(Icons.alt_route, size: 18),
+                    label: const Text('مسارات الإنتاج'),
+                  ),
+                  const Gap(8),
+                  OutlinedButton.icon(
                     onPressed: () => context.push('/manufacturing/bom'),
                     icon: const Icon(Icons.playlist_add_check, size: 18),
                     label: const Text('الوصفات (BOM)'),
@@ -238,12 +252,24 @@ class _ManufacturingReportsScreenState extends State<ManufacturingReportsScreen>
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-              child: Row(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  const Icon(Icons.calendar_today, size: 16),
-                  const Gap(8),
-                  Text('الفترة: ${DateFormat('yyyy/MM/dd').format(_range!.start)} → ${DateFormat('yyyy/MM/dd').format(_range!.end)}'),
-                  const Spacer(),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.calendar_today, size: 16),
+                      const Gap(8),
+                      Flexible(
+                        child: Text(
+                          'الفترة: ${DateFormat('yyyy/MM/dd').format(_range!.start)} → ${DateFormat('yyyy/MM/dd').format(_range!.end)}',
+                        ),
+                      ),
+                    ],
+                  ),
                   TextButton.icon(
                     onPressed: _pickRange,
                     icon: const Icon(Icons.edit_calendar, size: 16),
@@ -260,6 +286,7 @@ class _ManufacturingReportsScreenState extends State<ManufacturingReportsScreen>
                 _StagesAndVariantsTab(db: widget.db, range: _range),
                 _MaterialConsumptionTab(db: widget.db, range: _range),
                 _ScrapReportTab(db: widget.db, range: _range),
+                ManufacturingYieldQualityTab(db: widget.db, range: _range),
               ],
             ),
           ),

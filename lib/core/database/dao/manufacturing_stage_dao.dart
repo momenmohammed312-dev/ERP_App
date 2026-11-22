@@ -115,13 +115,21 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// تعديل بيانات مرحلة تصنيع (الاسم، الكمية الداخلة، التكلفة، الملاحظات)
+  /// تعديل بيانات مرحلة تصنيع (الاسم، الكمية الداخلة، التكلفة، الملاحظات، ومؤشرات التوجيه/التشغيل)
   Future<void> updateStage({
     required int stageId,
     required String stageName,
     double? inputQuantity,
     double? stageCost,
     String? notes,
+    String? operationType,
+    String? technique,
+    String? parametersJson,
+    double? laborHours,
+    double? laborRate,
+    double? machineHours,
+    double? machineRate,
+    bool? isTerminal,
   }) async {
     _requireLicense('تعديل مرحلة تصنيع');
     final stage = await getStageById(stageId);
@@ -133,6 +141,14 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
         inputQuantity: inputQuantity != null ? Value(inputQuantity) : const Value.absent(),
         stageCost: stageCost != null ? Value(stageCost) : const Value.absent(),
         notes: Value(notes),
+        operationType: operationType != null ? Value(operationType) : const Value.absent(),
+        technique: technique != null ? Value(technique) : const Value.absent(),
+        parametersJson: parametersJson != null ? Value(parametersJson) : const Value.absent(),
+        laborHours: laborHours != null ? Value(laborHours) : const Value.absent(),
+        laborRate: laborRate != null ? Value(laborRate) : const Value.absent(),
+        machineHours: machineHours != null ? Value(machineHours) : const Value.absent(),
+        machineRate: machineRate != null ? Value(machineRate) : const Value.absent(),
+        isTerminal: isTerminal != null ? Value(isTerminal) : const Value.absent(),
         updatedAt: Value(DateTime.now()),
       ),
     );
@@ -158,26 +174,50 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// تحديث حالة المرحلة
+  /// تحديث حالة المرحلة وتسجيل كفاءة المرحلة (StageYield) تلقائياً عند الإكمال
   Future<void> updateStageStatus({
     required int stageId,
     required String status,
     double? outputQuantity,
     double? scrapQuantity,
     double? stageCost,
+    double? laborHours,
+    double? machineHours,
   }) async {
     _requireLicense('تحديث مرحلة تصنيع');
-    final now = DateTime.now();
-    await (update(manufacturingStages)..where((s) => s.id.equals(stageId))).write(
-      ManufacturingStagesCompanion(
-        status: Value(status),
-        outputQuantity: outputQuantity != null ? Value(outputQuantity) : const Value.absent(),
-        scrapQuantity: scrapQuantity != null ? Value(scrapQuantity) : const Value.absent(),
-        stageCost: stageCost != null ? Value(stageCost) : const Value.absent(),
-        completedAt: status == ManufacturingStageStatus.completed ? Value(now) : const Value.absent(),
-        updatedAt: Value(now),
-      ),
-    );
+    await transaction(() async {
+      final stage = await getStageById(stageId);
+      if (stage == null) return;
+
+      final now = DateTime.now();
+      await (update(manufacturingStages)..where((s) => s.id.equals(stageId))).write(
+        ManufacturingStagesCompanion(
+          status: Value(status),
+          outputQuantity: outputQuantity != null ? Value(outputQuantity) : const Value.absent(),
+          scrapQuantity: scrapQuantity != null ? Value(scrapQuantity) : const Value.absent(),
+          stageCost: stageCost != null ? Value(stageCost) : const Value.absent(),
+          laborHours: laborHours != null ? Value(laborHours) : const Value.absent(),
+          machineHours: machineHours != null ? Value(machineHours) : const Value.absent(),
+          startedAt: status == ManufacturingStageStatus.inProgress && stage.startedAt == null
+              ? Value(now)
+              : const Value.absent(),
+          completedAt: status == ManufacturingStageStatus.completed ? Value(now) : const Value.absent(),
+          updatedAt: Value(now),
+        ),
+      );
+
+      if (status == ManufacturingStageStatus.completed) {
+        final effectiveAccepted = outputQuantity ?? stage.outputQuantity;
+        if (stage.inputQuantity >= 0 && effectiveAccepted >= 0) {
+          await db.stageYieldDao.recordStageYield(
+            manufacturingOrderId: stage.manufacturingOrderId,
+            stageId: stageId,
+            inputQuantity: stage.inputQuantity,
+            acceptedOutput: effectiveAccepted,
+          );
+        }
+      }
+    });
   }
 
   /// إضافة أو تحديث سطر مخرجات (مواصفة / جزء / مقاس) داخل مرحلة مع منع التكرار
@@ -188,6 +228,7 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
     required int productId,
     int? variantId,
     String? variantName,
+    String outputType = 'primary',
     required double plannedQuantity,
     double? producedQuantity,
     double scrapQuantity = 0.0,
@@ -227,6 +268,7 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
           ManufacturingStageOutputsCompanion(
             variantId: Value(variantId),
             variantName: Value(effectiveVariantName),
+            outputType: Value(outputType),
             plannedQuantity: Value(plannedQuantity),
             producedQuantity: Value(effectiveProduced),
             scrapQuantity: Value(scrapQuantity),
@@ -236,7 +278,7 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
           ),
         );
         await _recalcStageTotals(stageId);
-        return targetId!;
+        return targetId;
       } else {
         final newId = await into(manufacturingStageOutputs).insert(
           ManufacturingStageOutputsCompanion.insert(
@@ -245,6 +287,7 @@ class ManufacturingStageDao extends DatabaseAccessor<AppDatabase>
             productId: productId,
             variantId: Value(variantId),
             variantName: Value(effectiveVariantName),
+            outputType: Value(outputType),
             plannedQuantity: Value(plannedQuantity),
             producedQuantity: Value(effectiveProduced),
             scrapQuantity: Value(scrapQuantity),

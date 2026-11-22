@@ -31,6 +31,7 @@ import 'package:pos_offline_desktop/ui/manufacturing/bom_list_screen.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/mo_detail_screen.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/mo_list_screen.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/customer_material_receipt_list_screen.dart';
+import 'package:pos_offline_desktop/ui/manufacturing/routing_templates_screen.dart';
 import 'package:pos_offline_desktop/services/license_entitlement.dart';
 import 'package:pos_offline_desktop/ui/manufacturing/reports/manufacturing_reports_screen.dart';
 
@@ -208,6 +209,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/manufacturing/receipts',
         builder: (context, state) => CustomerMaterialReceiptListScreen(db: db),
+      ),
+      GoRoute(
+        path: '/manufacturing/routings',
+        builder: (context, state) => RoutingTemplatesScreen(db: db),
       ),
       GoRoute(
         path: '/barneka',

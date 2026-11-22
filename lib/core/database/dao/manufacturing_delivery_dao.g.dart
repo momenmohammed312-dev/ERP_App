@@ -28,6 +28,16 @@ mixin _$ManufacturingDeliveryDaoMixin on DatabaseAccessor<AppDatabase> {
   $InvoiceItemsTable get invoiceItems => attachedDatabase.invoiceItems;
   $LedgerTransactionsTable get ledgerTransactions =>
       attachedDatabase.ledgerTransactions;
+  $ManufacturingStagesTable get manufacturingStages =>
+      attachedDatabase.manufacturingStages;
+  $InventoryMovementsTable get inventoryMovements =>
+      attachedDatabase.inventoryMovements;
+  $ConsumptionRecordsTable get consumptionRecords =>
+      attachedDatabase.consumptionRecords;
+  $ExtraMaterialApprovalsTable get extraMaterialApprovals =>
+      attachedDatabase.extraMaterialApprovals;
+  $ManufacturingCostSnapshotsTable get manufacturingCostSnapshots =>
+      attachedDatabase.manufacturingCostSnapshots;
   ManufacturingDeliveryDaoManager get managers =>
       ManufacturingDeliveryDaoManager(this);
 }
@@ -97,5 +107,31 @@ class ManufacturingDeliveryDaoManager {
       $$LedgerTransactionsTableTableManager(
         _db.attachedDatabase,
         _db.ledgerTransactions,
+      );
+  $$ManufacturingStagesTableTableManager get manufacturingStages =>
+      $$ManufacturingStagesTableTableManager(
+        _db.attachedDatabase,
+        _db.manufacturingStages,
+      );
+  $$InventoryMovementsTableTableManager get inventoryMovements =>
+      $$InventoryMovementsTableTableManager(
+        _db.attachedDatabase,
+        _db.inventoryMovements,
+      );
+  $$ConsumptionRecordsTableTableManager get consumptionRecords =>
+      $$ConsumptionRecordsTableTableManager(
+        _db.attachedDatabase,
+        _db.consumptionRecords,
+      );
+  $$ExtraMaterialApprovalsTableTableManager get extraMaterialApprovals =>
+      $$ExtraMaterialApprovalsTableTableManager(
+        _db.attachedDatabase,
+        _db.extraMaterialApprovals,
+      );
+  $$ManufacturingCostSnapshotsTableTableManager
+  get manufacturingCostSnapshots =>
+      $$ManufacturingCostSnapshotsTableTableManager(
+        _db.attachedDatabase,
+        _db.manufacturingCostSnapshots,
       );
 }

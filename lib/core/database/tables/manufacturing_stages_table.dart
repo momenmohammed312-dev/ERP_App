@@ -8,8 +8,10 @@ abstract final class ManufacturingStageStatus {
   static const pending = 'pending';
   static const inProgress = 'in_progress';
   static const completed = 'completed';
+  static const rework = 'rework';
+  static const cancelled = 'cancelled';
 
-  static const all = [pending, inProgress, completed];
+  static const all = [pending, inProgress, completed, rework, cancelled];
 }
 
 /// Manufacturing Stage / Work Order Routing — تتبع مراحل أمر التصنيع (قص، تقفيل، كي وتغليف...).
@@ -45,6 +47,19 @@ class ManufacturingStages extends Table {
   /// المسؤول أو خط الإنتاج / الورشة
   TextColumn get assignedTo => text().nullable()();
 
+  /// ── Phase 2/3 (FEAT-039 v84): Universal routing, work hours & costing ──
+  IntColumn get routingNodeId => integer().nullable()();
+  IntColumn get parentStageId => integer().nullable()();
+  TextColumn get operationType =>
+      text().withDefault(const Constant('generic'))();
+  TextColumn get technique => text().nullable()();
+  TextColumn get parametersJson => text().nullable()();
+  RealColumn get laborHours => real().withDefault(const Constant(0.0))();
+  RealColumn get laborRate => real().withDefault(const Constant(0.0))();
+  RealColumn get machineHours => real().withDefault(const Constant(0.0))();
+  RealColumn get machineRate => real().withDefault(const Constant(0.0))();
+  BoolColumn get isTerminal => boolean().withDefault(const Constant(false))();
+
   TextColumn get notes => text().nullable()();
 
   DateTimeColumn get startedAt => dateTime().nullable()();
@@ -73,6 +88,15 @@ class ManufacturingStageOutputs extends Table {
 
   /// لقطة لاسم المقاس/اللون وقت الإنتاج (مثل: S, M, L, XL, أو أبيض - قطن)
   TextColumn get variantName => text().nullable()();
+
+  /// ── Phase 1 (FEAT-039): Single disposition per unit —
+  /// 'produced' | 'scrap' | 'returned_to_customer'
+  /// (by_products are tracked separately via ManufacturingScraps.isSellable)
+  TextColumn get disposition => text().withDefault(const Constant('produced'))();
+
+  /// ── Phase 2 (FEAT-039 v84): OutputType (§2.4) —
+  /// 'primary' | 'co_product' | 'by_product' | 'waste'
+  TextColumn get outputType => text().withDefault(const Constant('primary'))();
 
   /// الكمية المخططة لهذا المقاس
   RealColumn get plannedQuantity => real().withDefault(const Constant(0.0))();

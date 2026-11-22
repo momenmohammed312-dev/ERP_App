@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/services/license_entitlement.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_material_receipts_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/consumption_record.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/inventory_movements_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_cost_components_table.dart';
@@ -47,6 +48,7 @@ bool isCustomerOwnedBomLine({
     Products,
     CustomerStockBalances,
     CustomerStockMovements,
+    ConsumptionRecords,
     Customers,
     ManufacturingStages,
     ManufacturingStageOutputs,
@@ -491,6 +493,18 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           'Produced quantity rounds to 0 — increase quantity',
         );
 
+      // FEAT-039 — Order completion gate (plan §6.3 A2, correction):
+      // produced ≤ planned (for_others); JW-style (inputQuantity set): ≤ inputQuantity.
+      if (mo.orderType == 'for_others' || mo.inputQuantity != null) {
+        final productionCap = mo.inputQuantity ?? mo.plannedQuantity;
+        if (producedInt > productionCap + 0.001) {
+          throw StateError(
+            'Order completion gate (FEAT-039): produced $producedInt exceeds '
+            'planned $productionCap for ${mo.orderNumber}',
+          );
+        }
+      }
+
       final bomItems =
           await (select(db.bomItems)
                 ..where((i) => i.bomId.equals(bom.id))
@@ -841,6 +855,15 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         final effectiveScrap = scrapQuantity ?? 0.0;
         final effectiveUser = completedByUserId ?? performedBy ?? 'system';
 
+        // FEAT-039 — Order completion gate (plan §6.3 A2): produced ≤ inputQuantity (JW-style).
+        final productionCap = mo.inputQuantity ?? mo.plannedQuantity;
+        if (effectiveGood > productionCap + 0.001) {
+          throw StateError(
+            'Order completion gate (FEAT-039): produced $effectiveGood exceeds '
+            'planned $productionCap for ${mo.orderNumber}',
+          );
+        }
+
         final bal =
             await (select(customerStockBalances)..where(
                   (t) =>
@@ -871,6 +894,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           ]);
         }
 
+        final now = DateTime.now();
         final newOnHand = bal.quantityOnHand - mo.inputQuantity!;
         final newAlloc = bal.quantityAllocated - mo.inputQuantity!;
         await (update(
@@ -879,10 +903,11 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           CustomerStockBalancesCompanion(
             quantityOnHand: Value(newOnHand),
             quantityAllocated: Value(newAlloc < 0 ? 0 : newAlloc),
+            updatedAt: Value(now),
           ),
         );
 
-        await into(customerStockMovements).insert(
+        final custMoveId = await into(customerStockMovements).insert(
           CustomerStockMovementsCompanion.insert(
             customerId: mo.customerId!,
             productId: mo.inputProductId!,
@@ -896,6 +921,25 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
               'MO completion: $effectiveGood good, $effectiveScrap scrap',
             ),
             performedBy: Value(effectiveUser),
+            createdAt: Value(now),
+          ),
+        );
+
+        final inputProd = await (select(
+          products,
+        )..where((p) => p.id.equals(mo.inputProductId!))).getSingleOrNull();
+        // FEAT-039 D-03: analytical consumption linked to customer movement.
+        await into(consumptionRecords).insert(
+          ConsumptionRecordsCompanion.insert(
+            manufacturingOrderId: mo.id,
+            materialProductId: mo.inputProductId!,
+            ownershipType: 'customer_owned',
+            unit: Value(inputProd?.unit),
+            plannedQty: Value(mo.inputQuantity!),
+            actualQty: Value(mo.inputQuantity!),
+            unitCostSnapshot: const Value(0.0),
+            customerStockMovementId: Value(custMoveId),
+            performedAt: Value(now),
           ),
         );
 
@@ -905,8 +949,9 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           ManufacturingOrdersCompanion(
             status: const Value(ManufacturingOrderStatus.completed),
             producedQuantity: Value(effectiveGood),
-            completedAt: Value(DateTime.now()),
-            updatedAt: Value(DateTime.now()),
+            completedAt: Value(now),
+            productionCompletedAt: Value(now),
+            updatedAt: Value(now),
           ),
         );
 
@@ -966,6 +1011,15 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         throw ArgumentError(
           'Produced quantity rounds to 0 — increase quantity',
         );
+
+      // FEAT-039 — Order completion gate (plan §6.3 A2): produced ≤ planned (for_others).
+      if (orderType == 'for_others' &&
+          producedInt > mo.plannedQuantity + 0.001) {
+        throw StateError(
+          'Order completion gate (FEAT-039): produced $producedInt exceeds '
+          'planned ${mo.plannedQuantity} for ${mo.orderNumber}',
+        );
+      }
 
       final bomItemsList =
           await (select(bomItems)
@@ -1097,7 +1151,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           ),
         );
 
-        await into(customerStockMovements).insert(
+        final custMoveId = await into(customerStockMovements).insert(
           CustomerStockMovementsCompanion.insert(
             customerId: customerId,
             productId: cp.product.id,
@@ -1108,6 +1162,22 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
             notes: Value('صرف للتشغيل بأمر تصنيع ${mo.orderNumber}'),
             performedBy: Value(performedBy),
             createdAt: Value(now),
+          ),
+        );
+
+        // FEAT-039 D-03: customer-owned materials always have factory cost 0.0.
+        await into(consumptionRecords).insert(
+          ConsumptionRecordsCompanion.insert(
+            manufacturingOrderId: mo.id,
+            bomItemId: Value(cp.bomItem.id),
+            materialProductId: cp.product.id,
+            ownershipType: 'customer_owned',
+            unit: Value(cp.bomItem.unit ?? cp.product.unit),
+            plannedQty: Value(cp.requiredQty),
+            actualQty: Value(cp.requiredQty),
+            unitCostSnapshot: const Value(0.0),
+            customerStockMovementId: Value(custMoveId),
+            performedAt: Value(now),
           ),
         );
       }
@@ -1143,7 +1213,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
               updatedAt: Value(now),
             ),
           );
-          await into(customerStockMovements).insert(
+          final custMoveId = await into(customerStockMovements).insert(
             CustomerStockMovementsCompanion.insert(
               customerId: customerId,
               productId: mo.finishedProductId,
@@ -1158,6 +1228,22 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
               createdAt: Value(now),
             ),
           );
+          final finProd = await (select(
+            products,
+          )..where((p) => p.id.equals(mo.finishedProductId))).getSingleOrNull();
+          await into(consumptionRecords).insert(
+            ConsumptionRecordsCompanion.insert(
+              manufacturingOrderId: mo.id,
+              materialProductId: mo.finishedProductId,
+              ownershipType: 'customer_owned',
+              unit: Value(finProd?.unit),
+              plannedQty: Value(issueQty),
+              actualQty: Value(issueQty),
+              unitCostSnapshot: const Value(0.0),
+              customerStockMovementId: Value(custMoveId),
+              performedAt: Value(now),
+            ),
+          );
         }
       }
 
@@ -1170,7 +1256,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         )..where((t) => t.id.equals(fp.product.id))).write(
           ProductsCompanion(quantity: Value(next), updatedAt: Value(now)),
         );
-        await into(inventoryMovements).insert(
+        final invMoveId = await into(inventoryMovements).insert(
           InventoryMovementsCompanion.insert(
             productId: fp.product.id,
             movementType: 'manufacturing_consumption',
@@ -1190,6 +1276,20 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
             updatedAt: now,
           ),
         );
+        await into(consumptionRecords).insert(
+          ConsumptionRecordsCompanion.insert(
+            manufacturingOrderId: mo.id,
+            bomItemId: Value(fp.bomItem.id),
+            materialProductId: fp.product.id,
+            ownershipType: 'factory_owned',
+            unit: Value(fp.bomItem.unit ?? fp.product.unit),
+            plannedQty: Value(fp.requiredInt.toDouble()),
+            actualQty: Value(fp.requiredInt.toDouble()),
+            unitCostSnapshot: Value(fp.unitCost),
+            stockMovementId: Value(invMoveId),
+            performedAt: Value(now),
+          ),
+        );
       }
 
       // 6. Finished Product: NEVER increment factory stock for manufacturing-for-others
@@ -1207,6 +1307,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           status: const Value(ManufacturingOrderStatus.completed),
           producedQuantity: Value(effectiveProduced.toDouble()),
           completedAt: Value(now),
+          productionCompletedAt: Value(now),
           updatedAt: Value(now),
         ),
       );
