@@ -13,7 +13,8 @@ void main() {
       
       final uvResult = await db.customSelect('PRAGMA user_version').getSingle();
       final uv = uvResult.data['user_version'] as int;
-      expect(uv, 80, reason: 'Database schema version must be 80');
+      expect(uv, db.schemaVersion,
+          reason: 'Database schema version must equal the current schemaVersion');
 
       // 7 tables check
       final tablesResult = await db.customSelect("SELECT name FROM sqlite_master WHERE type='table'").get();
@@ -104,7 +105,8 @@ void main() {
         await db.customSelect('SELECT 1').get();
 
         final uvRes = await db.customSelect('PRAGMA user_version').getSingle();
-        expect(uvRes.data['user_version'], 80, reason: 'user_version must be upgraded to 80');
+        expect(uvRes.data['user_version'], db.schemaVersion,
+            reason: 'user_version must be upgraded to the current schemaVersion');
 
         final tablesRes = await db.customSelect("SELECT name FROM sqlite_master WHERE type='table'").get();
         final names = tablesRes.map((r) => r.data['name'] as String).toSet();
@@ -139,7 +141,8 @@ void main() {
 
         // 1. فحص user_version
         final uvRes = await db.customSelect('PRAGMA user_version').getSingle();
-        expect(uvRes.data['user_version'], 80, reason: 'Database must upgrade to v80');
+        expect(uvRes.data['user_version'], db.schemaVersion,
+            reason: 'Database must upgrade to the current schemaVersion');
 
         // 2. فحص السلامة الهيكلية PRAGMA integrity_check
         final integrityRes = await db.customSelect('PRAGMA integrity_check').getSingle();

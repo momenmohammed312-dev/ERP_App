@@ -14,7 +14,8 @@ void main() {
       // Trigger database opening and migrations
       final versionResult = await db.customSelect('PRAGMA user_version').getSingle();
       final version = versionResult.data['user_version'] as int;
-      expect(version, 79, reason: 'Database schema version must be 79');
+      expect(version, db.schemaVersion,
+          reason: 'Database schema version must equal the current schemaVersion');
 
       // Verify the 7 new tables exist
       final tablesResult = await db.customSelect("SELECT name FROM sqlite_master WHERE type='table'").get();
@@ -121,16 +122,20 @@ void main() {
       
       final postVersionRow = await migratedDb.customSelect('PRAGMA user_version').getSingle();
       final postVersion = postVersionRow.data['user_version'] as int;
-      expect(postVersion, 79, reason: 'Migrated database version must be 79');
+      expect(postVersion, migratedDb.schemaVersion,
+          reason: 'Migrated database version must be the current schemaVersion');
 
-      // 3. Verify row counts on all pre-existing business tables are 100% identical (zero row loss)
+      // 3. Verify zero row LOSS on all pre-existing business tables.
+      // v80+ seed new attendance_settings defaults, so counts may grow
+      // (INSERT OR IGNORE) — they must never decrease.
       for (final entry in preRowCounts.entries) {
         final table = entry.key;
         if (table == '_migration_log') continue;
         final expectedCount = entry.value;
         final countRow = await migratedDb.customSelect('SELECT COUNT(*) as c FROM "$table"').getSingle();
         final actualCount = countRow.data['c'] as int;
-        expect(actualCount, expectedCount, reason: 'Row count changed for table $table after v79 migration!');
+        expect(actualCount, greaterThanOrEqualTo(expectedCount),
+            reason: 'Row count decreased for table $table after v79 migration!');
       }
 
       // 4. Verify new tables exist and are healthy

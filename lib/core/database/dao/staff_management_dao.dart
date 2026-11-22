@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/core/database/tables/staff_management_tables.dart'
     as staff_tables;
+import 'package:pos_offline_desktop/services/attendance/attendance_deduction_calculator.dart';
 
 part 'staff_management_dao.g.dart';
 
@@ -23,7 +24,9 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
 
   // STAFF MANAGEMENT
 
-  Future<List<Staff>> getAllStaff() => select(staffTable).get();
+  Future<List<Staff>> getAllStaff() => (select(
+    staffTable,
+  )..where((s) => s.status.equals('deleted').not())).get();
 
   Future<Staff?> getStaffById(String staffId) => (select(
     staffTable,
@@ -38,20 +41,45 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> updateStaff(Staff entry) => update(staffTable).replace(entry);
 
-  Future<void> deleteStaff(String staffId) =>
-      (delete(staffTable)..where((s) => s.staffId.equals(staffId))).go();
+  Future<void> deleteStaff(String staffId) async {
+    // 1. فحص العهد المالية المفتوحة لمنع فقدان وسقوط العهد النشطة
+    final openCustodies = await (select(db.cashCustodies)
+      ..where((c) => c.staffId.equals(staffId) & c.status.equals('open')))
+      .get();
+    if (openCustodies.isNotEmpty) {
+      throw Exception('لا يمكن حذف الموظف لوجود عهدة مالية مفتوحة مسجلة باسمه');
+    }
+
+    // 2. تطبيق الحذف الآمن (Soft Delete) وإلغاء ربط أجهزة البصمة ذرياً
+    await db.transaction(() async {
+      await (update(staffTable)..where((s) => s.staffId.equals(staffId))).write(
+        StaffTableCompanion(
+          status: const Value('deleted'),
+          isActive: const Value(false),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+      await (delete(db.staffBiometricMappings)
+        ..where((m) => m.staffId.equals(staffId))).go();
+    });
+  }
 
   Future<int> getStaffCount() async {
     final countExp = staffTable.id.count();
     final result = await (selectOnly(
       staffTable,
-    )..addColumns([countExp])).getSingle();
+    )
+      ..where(staffTable.status.equals('deleted').not())
+      ..addColumns([countExp])).getSingle();
     return result.read(countExp) ?? 0;
   }
 
   // WATCH STREAMS FOR REAL-TIME UPDATES
 
-  Stream<List<Staff>> watchAllStaff() => select(staffTable).watch();
+  Stream<List<Staff>> watchAllStaff() => (select(
+    staffTable,
+  )..where((s) => s.status.equals('deleted').not())).watch();
 
   Stream<List<Staff>> watchActiveStaff() => (select(
     staffTable,
@@ -210,7 +238,38 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
     String? finalStatus = status;
 
     if (finalWorkingHours == null && record.checkInTime != null) {
-      final diffMinutes = now.difference(record.checkInTime!).inMinutes;
+      int diffMinutes = now.difference(record.checkInTime!).inMinutes;
+      try {
+        final restRow = await (db.select(db.attendanceSettings)
+              ..where((s) => s.settingKey.equals('rest_break_enabled')))
+            .getSingleOrNull();
+        if (restRow?.settingValue.toLowerCase() == 'true' && diffMinutes > 0) {
+          final startRow = await (db.select(db.attendanceSettings)
+                ..where((s) => s.settingKey.equals('rest_break_start')))
+              .getSingleOrNull();
+          final endRow = await (db.select(db.attendanceSettings)
+                ..where((s) => s.settingKey.equals('rest_break_end')))
+              .getSingleOrNull();
+          final startStr = startRow?.settingValue ?? '13:00';
+          final endStr = endRow?.settingValue ?? '14:00';
+          final sp = startStr.split(':');
+          final ep = endStr.split(':');
+          final rs = (int.tryParse(sp[0]) ?? 13) * 60 +
+              (int.tryParse(sp.length > 1 ? sp[1] : '0') ?? 0);
+          final re = (int.tryParse(ep[0]) ?? 14) * 60 +
+              (int.tryParse(ep.length > 1 ? ep[1] : '0') ?? 0);
+          final inM =
+              record.checkInTime!.hour * 60 + record.checkInTime!.minute;
+          final outM = now.hour * 60 + now.minute;
+          final overlap = AttendanceDeductionRules.calculateWindowOverlap(
+            windowAStart: inM,
+            windowAEnd: outM,
+            windowBStart: rs,
+            windowBEnd: re,
+          );
+          diffMinutes = (diffMinutes - overlap).clamp(0, diffMinutes);
+        }
+      } catch (_) {}
       finalWorkingHours = diffMinutes / 60.0;
     }
 
@@ -278,6 +337,25 @@ class StaffManagementDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> addAdvance(StaffAdvancesCompanion entry) =>
       into(staffAdvances).insert(entry);
+
+  Future<void> approveAdvance(int advanceId, [String? approvedBy]) =>
+      (update(staffAdvances)..where((a) => a.id.equals(advanceId))).write(
+        StaffAdvancesCompanion(
+          status: const Value('approved'),
+          approvedBy: Value(approvedBy),
+          approvedAt: Value(DateTime.now()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Future<void> rejectAdvance(int advanceId, [String? reason]) =>
+      (update(staffAdvances)..where((a) => a.id.equals(advanceId))).write(
+        StaffAdvancesCompanion(
+          status: const Value('rejected'),
+          rejectionReason: Value(reason),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
   // PAYROLL MANAGEMENT
 

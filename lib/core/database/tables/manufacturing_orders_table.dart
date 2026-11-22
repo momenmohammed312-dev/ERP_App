@@ -80,11 +80,26 @@ class ManufacturingOrders extends Table {
   TextColumn get notes => text().nullable()();
   TextColumn get createdBy => text().nullable()();
 
-  /// â”€â”€ Phase B1.5: Job Work (for_others) direct input tracking (v77) â”€â”€
+  /// ── Phase B1.5: Job Work (for_others) direct input tracking (v77) ──
   IntColumn get inputProductId => integer().nullable().references(Products, #id)();
   TextColumn get inputColor => text().nullable()();
   TextColumn get inputSize => text().nullable()();
   RealColumn get inputQuantity => real().nullable()();
+
+  /// ── FEAT-026: Multi-stage routing & pricing margins (v81) ──
+  TextColumn get currentStageName => text().nullable()();
+  RealColumn get targetMarginPercent =>
+      real().nullable().withDefault(const Constant(0.0))();
+
+  /// ── Phase 1 (FEAT-039): ProductionCompleted separate from OrderStatus ──
+  /// Filled on production completion (after Material Reconciliation gates pass).
+  /// Allows partial delivery without closing the order — keep nullable for
+  /// backward compatibility with pre-v82 rows.
+  DateTimeColumn get productionCompletedAt => dateTime().nullable()();
+
+  /// ── Phase 2 (FEAT-039 v84): Frozen routing copy snapshot per order (§3.3) ──
+  IntColumn get routingTemplateId => integer().nullable()();
+  TextColumn get routingCode => text().nullable()();
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();

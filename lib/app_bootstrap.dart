@@ -2,6 +2,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'dart:async';
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +15,8 @@ import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
 import 'package:pos_offline_desktop/core/provider/license_provider.dart';
 import 'package:pos_offline_desktop/core/router/go_router.dart';
 import 'package:pos_offline_desktop/core/config/theme.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
+import 'package:pos_offline_desktop/core/provider/theme_provider.dart';
 import 'package:pos_offline_desktop/core/platform/platform_utils.dart';
 import 'package:pos_offline_desktop/core/utils/logger.dart';
 import 'package:pos_offline_desktop/l10n/app_localizations.dart';
@@ -73,7 +76,8 @@ Future<void> bootstrapApp({Flavor? flavor}) async {
   // carries an EMPTY verification key, so LicenseManager._parseLease() rejects
   // every signed license and the customer sees "no license" with no cause. That
   // failure mode is invisible, so surface it once, loudly, at startup.
-  if (LicenseConfig.publicKey.isEmpty && !LicenseConfig.isFreeVersion) {
+  if (LicenseConfig.publicKey.isEmpty &&
+      (!LicenseConfig.isFreeVersion || LicenseConfig.isTimeLimitedTrial)) {
     debugPrint(
       '╔══════════════════════════════════════════════════════════════╗\n'
       '║ MADAR: LICENSE_PUBLIC_KEY is missing from this build.        ║\n'
@@ -152,7 +156,7 @@ Future<void> bootstrapApp({Flavor? flavor}) async {
   );
 }
 
-class PosApp extends ConsumerWidget {
+class PosApp extends ConsumerStatefulWidget {
   const PosApp({super.key});
 
   /// Build light theme with compact density and scaled text on mobile platforms.
@@ -169,8 +173,8 @@ class PosApp extends ConsumerWidget {
       textTheme: textTheme.apply(
         fontSizeFactor: PlatformUtils.isMobile ? 0.85 : 1.0,
         fontFamily: 'NotoSansArabic',
-        bodyColor: Colors.white,
-        displayColor: Colors.white,
+        bodyColor: MadarColors.lightTextPrimary,
+        displayColor: MadarColors.lightTextPrimary,
       ),
     );
   }
@@ -196,8 +200,60 @@ class PosApp extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PosApp> createState() => _PosAppState();
+}
+
+class _PosAppState extends ConsumerState<PosApp> with WidgetsBindingObserver {
+  Timer? _licenseRecheckTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    if (!LicenseConfig.isPermanentFreeVersion) {
+      _licenseRecheckTimer = Timer.periodic(
+        const Duration(seconds: 5),
+        (_) => _onLicenseTimerTick(),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _licenseRecheckTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        !LicenseConfig.isPermanentFreeVersion) {
+      _recheckLicense();
+    }
+  }
+
+  void _onLicenseTimerTick() {
+    if (!mounted || LicenseConfig.isPermanentFreeVersion) return;
+    final current = ref.read(currentLicenseProvider).valueOrNull;
+    // Check expiry in memory (zero disk I/O while active). Re-read disk only
+    // once expired or during minute-based QA trials so countdown stays live.
+    if (current == null ||
+        current.isExpired ||
+        LicenseConfig.freeTrialMinutes > 0) {
+      ref.invalidate(currentLicenseProvider);
+    }
+  }
+
+  void _recheckLicense() {
+    if (!mounted) return;
+    ref.invalidate(currentLicenseProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final licenseState = ref.watch(licenseStateProvider);
+    final themeMode = ref.watch(themeModeProvider);
 
     final isLicenseValid = licenseState.when(
       data: (valid) => valid,
@@ -214,9 +270,10 @@ class PosApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      theme: getLightTheme(),
-      darkTheme: getDarkTheme(),
-      themeMode: ThemeMode.dark,
+      theme: PosApp.getLightTheme(),
+      darkTheme: PosApp.getDarkTheme(),
+      themeMode: themeMode,
+      themeAnimationDuration: Duration.zero,
       supportedLocales: const [Locale('ar'), Locale('en')],
       locale: const Locale('ar'),
       routerConfig: isLicenseValid

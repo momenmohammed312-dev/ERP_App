@@ -184,35 +184,13 @@ class _BiometricEnrollmentPageState extends ConsumerState<BiometricEnrollmentPag
                     if (!formKey.currentState!.validate()) return;
                     if (selectedDevice == null) return;
                     
-                    final dao = ref.read(attendanceDeviceDaoProvider);
-                    
-                    // Check for existing mapping on this device
-                    final existing = await dao.getMappingByExternalId(
-                      selectedDevice!.id,
-                      externalIdController.text.trim(),
-                    );
-                    
-                    if (existing != null) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('هذا الرقم التعريفي مسجل بالفعل على هذا الجهاز'),
-                            backgroundColor: Colors.orange,
-                          ),
-                        );
-                      }
-                      return;
-                    }
-                    
                     try {
-                      await dao.addMapping(StaffBiometricMappingsCompanion.insert(
+                      await ref.read(attendanceSyncServiceProvider).reconcileAndLinkBiometricId(
                         staffId: widget.staff.staffId,
-                        deviceId: selectedDevice!.id,
                         externalUserId: externalIdController.text.trim(),
-                        enrollmentStatus: 'enrolled',
-                        createdAt: DateTime.now(),
-                        updatedAt: DateTime.now(),
-                      ));
+                        staffNameOnDevice: widget.staff.name,
+                        preferredDeviceId: selectedDevice!.id,
+                      );
                       
                       if (mounted) {
                         Navigator.pop(context);

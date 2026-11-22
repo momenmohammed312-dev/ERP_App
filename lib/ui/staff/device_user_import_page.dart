@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
@@ -143,41 +142,13 @@ class _DeviceUserImportPageState extends ConsumerState<DeviceUserImportPage> {
     DeviceEnrolledUser user,
     String staffId,
   ) async {
-    final dao = ref.read(attendanceDeviceDaoProvider);
-    final db = ref.read(appDatabaseProvider);
-    await db.transaction(() async {
-      final existing = await dao.getMappingRecordByExternalId(
-        widget.device.id,
-        user.externalUserId,
-      );
-      if (existing != null) {
-        await dao.updateMapping(
-          existing.copyWith(
-            staffId: staffId,
-            cardNumber: Value(user.cardNumber),
-            enrollmentStatus: 'enrolled',
-            updatedAt: DateTime.now(),
-          ),
+    await ref.read(attendanceSyncServiceProvider).reconcileAndLinkBiometricId(
+          staffId: staffId,
+          externalUserId: user.externalUserId,
+          staffNameOnDevice: user.name,
+          cardNumber: user.cardNumber,
+          preferredDeviceId: widget.device.id,
         );
-      } else {
-        await dao.addMapping(
-          StaffBiometricMappingsCompanion.insert(
-            staffId: staffId,
-            deviceId: widget.device.id,
-            externalUserId: user.externalUserId,
-            cardNumber: Value(user.cardNumber),
-            enrollmentStatus: 'enrolled',
-            enrolledAt: Value(DateTime.now()),
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ),
-        );
-      }
-      await dao.requeueUnmatchedEventsForExternalId(
-        widget.device.id,
-        user.externalUserId,
-      );
-    });
   }
 
   Future<void> _saveMapping(DeviceEnrolledUser user) async {

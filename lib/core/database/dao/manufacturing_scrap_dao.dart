@@ -97,6 +97,12 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
     int? bomItemId,
     String? dispositionNote,
     String? performedBy,
+    int? stageId,
+    int? variantId,
+    String? variantName,
+    bool isSellable = false,
+    double estimatedSellPrice = 0.0,
+    int? scrapProductId,
   }) {
     return transaction(() async {
       // ── 1. Validate. Nothing below this block writes anything. ──
@@ -221,6 +227,12 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
           responsibleParty: responsibleParty,
           dispositionNote: Value(dispositionNote),
           performedBy: Value(performedBy),
+          stageId: Value(stageId),
+          variantId: Value(variantId),
+          variantName: Value(variantName),
+          isSellable: Value(isSellable),
+          estimatedSellPrice: Value(estimatedSellPrice),
+          scrapProductId: Value(scrapProductId),
           createdAt: Value(now),
         ),
       );
@@ -259,6 +271,12 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
     int? bomItemId,
     String? dispositionNote,
     String? performedBy,
+    int? stageId,
+    int? variantId,
+    String? variantName,
+    bool isSellable = false,
+    double estimatedSellPrice = 0.0,
+    int? scrapProductId,
   }) {
     return transaction(() async {
       // 1. Basic validation
@@ -302,6 +320,26 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
       final policy = order.scrapPolicy ?? 'customer_bears';
       String compensationAction;
       double compensationAmount = 0.0;
+
+      // ── FEAT-039 (Phase 1) — finished-good scrap bounded by producedQuantity ──
+      // Pre-flight guard before any writes: matches recordScrap by capping
+      // cumulative scrap on the finished product at producedQuantity across all
+      // fault parties, allowing multiple scrap entries up to that cap.
+      if (productId == order.finishedProductId) {
+        final already = await scrappedQuantityFor(
+          orderId: orderId,
+          productId: productId,
+        );
+        final total = already + quantity;
+        if (total > order.producedQuantity + 0.001) {
+          throw StateError(
+            'Cannot scrap $total units of ${product.name}: the order produced '
+            'only ${order.producedQuantity}',
+          );
+        }
+      }
+
+      final customerLostMovement = faultParty == 'customer';
 
       // 2. Policy-specific validation and stock checks
       Product? replacementProduct;
@@ -381,9 +419,43 @@ class ManufacturingScrapDao extends DatabaseAccessor<AppDatabase>
           compensationAction: Value(compensationAction),
           compensationAmount: Value(compensationAmount),
           performedBy: Value(performedBy),
+          stageId: Value(stageId),
+          variantId: Value(variantId),
+          variantName: Value(variantName),
+          isSellable: Value(isSellable),
+          estimatedSellPrice: Value(estimatedSellPrice),
+          scrapProductId: Value(scrapProductId),
           createdAt: Value(now),
         ),
       );
+
+      if (customerLostMovement) {
+        // Lost trail per plan §2.3(e): every customer-fault scrap unit gets a
+        // manufacturing_scrap movement. Stock is not touched — the pieces are
+        // already consumed; this movement is the reconciliation trail.
+        await into(db.inventoryMovements).insert(
+          InventoryMovementsCompanion.insert(
+            productId: productId,
+            movementType: 'manufacturing_scrap',
+            quantity: -quantity.round(),
+            unitCost: product.costPrice ?? product.price,
+            totalValue:
+                quantity.round() * (product.costPrice ?? product.price),
+            movementDate: now,
+            reference: order.orderNumber,
+            referenceType: 'manufacturing_order',
+            previousQuantity: product.quantity,
+            newQuantity: product.quantity,
+            performedBy: Value(performedBy),
+            notes: Value(
+              'Lost (customer-fault scrap, FEAT-039 §2.3): '
+              '${ManufacturingScrapReason.label(reason)} — مسؤول الهالك: $responsibleParty',
+            ),
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+      }
 
       return (select(manufacturingScraps)..where((s) => s.id.equals(id))).getSingle();
     });

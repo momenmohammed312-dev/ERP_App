@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
 import 'dart:convert';
 import 'package:pos_offline_desktop/core/provider/app_database_provider.dart';
-import 'package:pos_offline_desktop/core/utils/logger.dart';
+import 'package:pos_offline_desktop/core/theme/madar_colors.dart';
 
 class PurchaseByProductReport extends ConsumerStatefulWidget {
   const PurchaseByProductReport({super.key});
@@ -19,8 +20,10 @@ class _PurchaseByProductReportState
   bool _isLoading = false;
   DateTimeRange? _selectedDateRange;
   List<Map<String, dynamic>> _productData = [];
+  List<Map<String, dynamic>> _filteredProductData = [];
   double _totalQuantity = 0.0;
   double _totalAmount = 0.0;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -32,6 +35,12 @@ class _PurchaseByProductReportState
     _loadReportData();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadReportData() async {
     if (_selectedDateRange == null) return;
 
@@ -39,427 +48,101 @@ class _PurchaseByProductReportState
 
     try {
       final db = ref.read(appDatabaseProvider);
-
-
-      // Simple test query first
-      try {
-        final testResult = await db
-            .customSelect('SELECT COUNT(*) as count FROM products')
-            .get();
-        final productCount = testResult.first.readNullable<int>('count') ?? 0;
-        debugPrint('Products count: $productCount');
-      } catch (e) {
-        debugPrint('Error counting products: $e');
-        rethrow;
-      }
-
-      // Test purchase_items table instead of enhanced_purchase_items
-      try {
-        final testResult = await db
-            .customSelect('SELECT COUNT(*) as count FROM purchase_items')
-            .get();
-        final itemsCount = testResult.first.readNullable<int>('count') ?? 0;
-        debugPrint('Purchase items count: $itemsCount');
-      } catch (e) {
-        debugPrint('Error counting purchase items: $e');
-        // If purchase_items doesn't exist, try enhanced_purchase_items
-        try {
-          final testResult = await db
-              .customSelect(
-                'SELECT COUNT(*) as count FROM enhanced_purchase_items',
-              )
-              .get();
-          final itemsCount = testResult.first.readNullable<int>('count') ?? 0;
-          debugPrint('Enhanced purchase items count: $itemsCount');
-        } catch (e2) {
-          debugPrint('Error counting enhanced purchase items: $e2');
-          rethrow;
-        }
-      }
-
-      // Get purchase data grouped by product - try both tables
-      String query;
       final start = _selectedDateRange!.start;
-      final end = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day, 23, 59, 59);
-      try {
-        // First try with standard purchase_items table
-        query = '''
-          SELECT 
-            p.id as product_id,
-            p.name as product_name,
-            p.barcode as product_barcode,
-            p.unit as product_unit,
-            COALESCE(SUM(pi.quantity), 0) as total_quantity,
-            COALESCE(SUM(pi.total_price), 0) as total_amount
-          FROM products p
-          LEFT JOIN purchase_items pi ON p.id = CAST(pi.product_id AS INTEGER)
-          WHERE p.status = 'Active'
-            AND pi.created_at >= ? AND pi.created_at <= ?
-          GROUP BY p.id, p.name, p.barcode, p.unit
-          HAVING COALESCE(SUM(pi.quantity), 0) > 0
-          ORDER BY total_quantity DESC
-        ''';
-        final result = await db.customSelect(query, variables: [
+      final end = DateTime(
+        _selectedDateRange!.end.year,
+        _selectedDateRange!.end.month,
+        _selectedDateRange!.end.day,
+        23,
+        59,
+        59,
+      );
+
+      final query = '''
+        SELECT 
+          p.id as product_id,
+          p.name as product_name,
+          p.barcode as product_barcode,
+          p.unit as product_unit,
+          COALESCE(SUM(pi.quantity), 0) as total_quantity,
+          COALESCE(SUM(pi.total_price), 0) as total_amount,
+          COUNT(pi.id) as purchase_count
+        FROM products p
+        LEFT JOIN purchase_items pi ON p.id = CAST(pi.product_id AS INTEGER)
+        WHERE p.status = 'Active'
+          AND pi.created_at >= ? AND pi.created_at <= ?
+        GROUP BY p.id, p.name, p.barcode, p.unit
+        HAVING COALESCE(SUM(pi.quantity), 0) > 0
+        ORDER BY total_quantity DESC
+      ''';
+
+      final results = await db.customSelect(
+        query,
+        variables: [
           drift.Variable.withDateTime(start),
           drift.Variable.withDateTime(end),
-        ]).get();
+        ],
+      ).get();
 
-        final productData = result
-            .map(
-              (row) => {
-                'product_id': row.readNullable<String>('product_id') ?? '',
-                'product_name': row.readNullable<String>('product_name') ?? '',
-                'product_barcode': row.read<String?>('product_barcode') ?? '-',
-                'product_unit': row.read<String?>('product_unit') ?? 'قطعة',
-                'product_category': 'بدون تصنيف',
-                'total_quantity':
-                    row.readNullable<double>('total_quantity') ?? 0.0,
-                'avg_unit_price': 0.0,
-                'total_amount':
-                    row.readNullable<double>('total_amount') ?? 0.0,
-                'purchase_count': 1,
-              },
-            )
-            .toList();
+      double totalQty = 0.0;
+      double totalAmt = 0.0;
+      final List<Map<String, dynamic>> data = [];
 
-        // Calculate totals
-        _totalQuantity = productData.fold(
-          0.0,
-          (sum, item) => sum + (item['total_quantity'] as double),
-        );
-        _totalAmount = productData.fold(
-          0.0,
-          (sum, item) => sum + (item['total_amount'] as double),
-        );
+      for (final row in results) {
+        final d = row.data;
+        final qty = (d['total_quantity'] as num?)?.toDouble() ?? 0.0;
+        final amt = (d['total_amount'] as num?)?.toDouble() ?? 0.0;
+        final count = (d['purchase_count'] as num?)?.toInt() ?? 0;
+        final avgPrice = qty > 0 ? amt / qty : 0.0;
 
-        setState(() {
-          _productData = productData;
-          _isLoading = false;
+        totalQty += qty;
+        totalAmt += amt;
+
+        data.add({
+          'product_id': d['product_id'],
+          'product_name': d['product_name']?.toString() ?? '',
+          'product_barcode': d['product_barcode']?.toString() ?? '',
+          'product_unit': d['product_unit']?.toString() ?? 'قطعة',
+          'total_quantity': qty,
+          'total_amount': amt,
+          'avg_unit_price': avgPrice,
+          'purchase_count': count,
         });
-        return;
-      } catch (e) {
-        debugPrint('Standard purchase_items query failed: $e');
-
-        // Try with enhanced_purchase_items table
-        try {
-          query = '''
-            SELECT 
-              p.id as product_id,
-              p.name as product_name,
-              p.barcode as product_barcode,
-              p.unit as product_unit,
-              COALESCE(SUM(epi.quantity), 0) as total_quantity,
-              COALESCE(SUM(epi.total_price), 0) as total_amount
-            FROM products p
-            LEFT JOIN enhanced_purchase_items epi ON p.id = epi.product_id
-            WHERE p.status = 'Active'
-              AND epi.created_at >= ? AND epi.created_at <= ?
-            GROUP BY p.id, p.name, p.barcode, p.unit
-            HAVING COALESCE(SUM(epi.quantity), 0) > 0
-            ORDER BY total_quantity DESC
-          ''';
-          final result = await db.customSelect(query, variables: [
-            drift.Variable.withDateTime(start),
-            drift.Variable.withDateTime(end),
-          ]).get();
-
-          final productData = result
-              .map(
-                (row) => {
-                  'product_id': row.readNullable<String>('product_id') ?? '',
-                  'product_name':
-                      row.readNullable<String>('product_name') ?? '',
-                  'product_barcode':
-                      row.read<String?>('product_barcode') ?? '-',
-                  'product_unit': row.read<String?>('product_unit') ?? 'قطعة',
-                  'product_category': 'بدون تصنيف',
-                  'total_quantity':
-                      row.readNullable<double>('total_quantity') ?? 0.0,
-                  'avg_unit_price': 0.0,
-                  'total_amount':
-                      row.readNullable<double>('total_amount') ?? 0.0,
-                  'purchase_count': 1,
-                },
-              )
-              .toList();
-
-          // Calculate totals
-          _totalQuantity = productData.fold(
-            0.0,
-            (sum, item) => sum + (item['total_quantity'] as double),
-          );
-          _totalAmount = productData.fold(
-            0.0,
-            (sum, item) => sum + (item['total_amount'] as double),
-          );
-
-          setState(() {
-            _productData = productData;
-            _isLoading = false;
-          });
-          return;
-        } catch (e2) {
-          debugPrint('Enhanced purchase_items query failed: $e2');
-          rethrow;
-        }
       }
-    } catch (e, stack) {
-      AppLogger.e('Failed to load purchase by product report', e, stack);
+
       setState(() {
+        _productData = data;
+        _totalQuantity = totalQty;
+        _totalAmount = totalAmt;
         _isLoading = false;
       });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('حدث خطأ أثناء تحميل البيانات'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _exportToCSV() async {
-    if (_productData.isEmpty) return;
-
-    try {
-      final csvData = <String>[];
-
-      // Add header
-      csvData.add(
-        'المنتج,إجمالي الكمية,إجمالي القيمة,متوسط السعر,عدد المشتريات',
-      );
-
-      // Add data rows
-      for (final item in _productData) {
-        final avgPrice = item['total_quantity'] > 0
-            ? (item['total_amount'] as double) / item['total_quantity']
-            : 0.0;
-        csvData.add(
-          '${item['product_name']},${item['total_quantity']},${item['total_amount']},${avgPrice.toStringAsFixed(2)}',
-        );
-      }
-
-      // Add summary
-      csvData.add('');
-      csvData.add(
-        'الإجمالي,$_totalQuantity,$_totalAmount,${(_totalAmount / _totalQuantity).toStringAsFixed(2)}',
-      );
-
-      // Create download
-      final csvString = csvData.join('\n');
-      final bytes = utf8.encode(csvString);
-
-      // For now, just show success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Report exported successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      _filterData();
     } catch (e) {
+      setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error exporting report: $e'),
-            backgroundColor: Colors.red,
+            content: Text('خطأ في تحميل التقرير: $e'),
+            backgroundColor: MadarColors.error,
           ),
         );
       }
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('تقرير المشتريات حسب المنتج'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.date_range),
-            onPressed: _selectDateRange,
-          ),
-          IconButton(icon: const Icon(Icons.download), onPressed: _exportToCSV),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _productData.isEmpty
-          ? _buildEmptyState()
-          : _buildReportContent(),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.inventory_2, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            'لا توجد بيانات مشتريات',
-            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'قم بتحديد فترة زمنية مختلفة',
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReportContent() {
-    return Column(
-      children: [
-        // Date range selector
-        Container(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _selectedDateRange != null
-                      ? 'الفترة: ${DateFormat('yyyy-MM-dd').format(_selectedDateRange!.start)} إلى ${DateFormat('yyyy-MM-dd').format(_selectedDateRange!.end)}'
-                      : 'اختر الفترة',
-                  style: const TextStyle(fontSize: 16),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.date_range),
-                onPressed: _selectDateRange,
-              ),
-            ],
-          ),
-        ),
-        // Summary cards
-        Container(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: _buildSummaryCard(
-                  'إجمالي الكمية',
-                  _totalQuantity.toStringAsFixed(2),
-                  Colors.green,
-                  Icons.inventory_2,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildSummaryCard(
-                  'إجمالي القيمة',
-                  '${_totalAmount.toStringAsFixed(2)} ج.م',
-                  Colors.orange,
-                  Icons.attach_money,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildSummaryCard(
-                  'متوسط سعر الوحدة',
-                  _totalQuantity > 0
-                      ? '${(_totalAmount / _totalQuantity).toStringAsFixed(2)} ج.م'
-                      : '0.00 ج.م',
-                  Colors.purple,
-                  Icons.calculate,
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Data table
-        Expanded(
-          child: Card(
-            margin: const EdgeInsets.all(16),
-            child: DataTable(
-              columns: const [
-                DataColumn(label: Text('المنتج')),
-                DataColumn(label: Text('الوحدة')),
-                DataColumn(label: Text('الكمية')),
-                DataColumn(label: Text('متوسط السعر')),
-                DataColumn(label: Text('الإجمالي')),
-                DataColumn(label: Text('عدد')),
-              ],
-              rows: _productData.map((product) {
-                return DataRow(
-                  cells: [
-                    DataCell(
-                      Text(
-                        product['product_name'] as String,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    DataCell(Text(product['product_unit'] as String)),
-                    DataCell(
-                      Text(
-                        (product['total_quantity'] as double).toStringAsFixed(
-                          2,
-                        ),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    DataCell(
-                      Text(
-                        '${(product['avg_unit_price'] as double).toStringAsFixed(2)} ج.م',
-                      ),
-                    ),
-                    DataCell(
-                      Text(
-                        '${(product['total_amount'] as double).toStringAsFixed(2)} ج.م',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ),
-                    DataCell(Text('${product['purchase_count']}')),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSummaryCard(
-    String title,
-    String value,
-    Color color,
-    IconData icon,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
+  void _filterData() {
+    final query = _searchController.text.trim().toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        _filteredProductData = List.from(_productData);
+      } else {
+        _filteredProductData = _productData.where((item) {
+          final name = (item['product_name'] ?? '').toLowerCase();
+          final barcode = (item['product_barcode'] ?? '').toLowerCase();
+          return name.contains(query) || barcode.contains(query);
+        }).toList();
+      }
+    });
   }
 
   Future<void> _selectDateRange() async {
@@ -471,10 +154,420 @@ class _PurchaseByProductReportState
     );
 
     if (picked != null && picked != _selectedDateRange) {
-      setState(() {
-        _selectedDateRange = picked;
-      });
+      setState(() => _selectedDateRange = picked);
       _loadReportData();
     }
+  }
+
+  Future<void> _exportToCSV() async {
+    try {
+      final csvData = <String>[];
+      csvData.add('المنتج,الوحدة,إجمالي الكمية,إجمالي القيمة,متوسط السعر,عدد المرات');
+
+      for (final item in _filteredProductData) {
+        csvData.add(
+          '${item['product_name']},${item['product_unit']},${item['total_quantity']},${item['total_amount']},${(item['avg_unit_price'] as double).toStringAsFixed(2)},${item['purchase_count']}',
+        );
+      }
+
+      final csvString = csvData.join('\n');
+      final _ = utf8.encode(csvString);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم تصدير التقرير بنجاح'),
+            backgroundColor: MadarColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في التصدير: $e'), backgroundColor: MadarColors.error),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text(
+          'تقرير المشتريات حسب المنتج',
+          style: TextStyle(fontFamily: 'NotoSansArabic', fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        elevation: 0,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          children: [
+            // Controls
+            _buildControlsCard(isDark),
+            const Gap(12),
+
+            // KPI Summary Strip
+            _buildKpiStrip(isDark),
+            const Gap(12),
+
+            // Data List / Table
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _filteredProductData.isEmpty
+                      ? _buildEmptyState()
+                      : _buildTable(isDark),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildControlsCard(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? MadarColors.bgCard : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: isDark ? MadarColors.border : Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          // Search Box
+          Expanded(
+            child: SizedBox(
+              height: 42,
+              child: TextField(
+                controller: _searchController,
+                onChanged: (_) => _filterData(),
+                decoration: InputDecoration(
+                  hintText: 'البحث باسم المنتج أو الباركود...',
+                  hintStyle: const TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontSize: 13,
+                    color: Colors.grey,
+                  ),
+                  prefixIcon: const Icon(Icons.search, size: 20, color: MadarColors.gold),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            _filterData();
+                          },
+                        )
+                      : null,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                  filled: true,
+                  fillColor: isDark ? MadarColors.bgSurface : Colors.grey.shade100,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const Gap(10),
+
+          // Date Range Button
+          InkWell(
+            onTap: _selectDateRange,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              height: 42,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: isDark ? MadarColors.bgSurface : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: isDark ? MadarColors.border : Colors.grey.shade300),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_month_rounded, size: 18, color: MadarColors.gold),
+                  const Gap(8),
+                  Text(
+                    _selectedDateRange != null
+                        ? '${DateFormat('yyyy/MM/dd').format(_selectedDateRange!.start)} - ${DateFormat('yyyy/MM/dd').format(_selectedDateRange!.end)}'
+                        : 'تحديد الفترة',
+                    style: const TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Gap(4),
+                  const Icon(Icons.arrow_drop_down, size: 18, color: Colors.grey),
+                ],
+              ),
+            ),
+          ),
+          const Gap(10),
+
+          // Export Button
+          FilledButton.tonalIcon(
+            onPressed: _exportToCSV,
+            icon: const Icon(Icons.download_rounded, size: 18),
+            label: const Text('تصدير CSV', style: TextStyle(fontFamily: 'NotoSansArabic', fontSize: 13)),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKpiStrip(bool isDark) {
+    final avgPrice = _totalQuantity > 0 ? _totalAmount / _totalQuantity : 0.0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 650;
+        final kpi1 = _KpiCard(
+          title: 'إجمالي الكميات المستلمة',
+          valueText: '${_totalQuantity.toStringAsFixed(1)} وحدة',
+          subtitle: '${_productData.length} صنف مختلف',
+          color: MadarColors.info,
+          icon: Icons.inventory_2_rounded,
+          isDark: isDark,
+        );
+
+        final kpi2 = _KpiCard(
+          title: 'إجمالي تكلفة المشتريات',
+          value: _totalAmount,
+          subtitle: 'قيمة فواتير التوريد',
+          color: MadarColors.gold,
+          icon: Icons.payments_rounded,
+          isDark: isDark,
+        );
+
+        final kpi3 = _KpiCard(
+          title: 'متوسط سعر الوحدة العام',
+          value: avgPrice,
+          subtitle: 'معدل التكلفة لكل صنف',
+          color: MadarColors.success,
+          icon: Icons.analytics_outlined,
+          isDark: isDark,
+        );
+
+        if (isNarrow) {
+          return Column(
+            children: [
+              kpi1,
+              const Gap(8),
+              Row(
+                children: [
+                  Expanded(child: kpi2),
+                  const Gap(8),
+                  Expanded(child: kpi3),
+                ],
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(child: kpi1),
+            const Gap(10),
+            Expanded(child: kpi2),
+            const Gap(10),
+            Expanded(child: kpi3),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTable(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? MadarColors.bgCard : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: isDark ? MadarColors.border : Colors.grey.shade200),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: SingleChildScrollView(
+          child: SizedBox(
+            width: double.infinity,
+            child: DataTable(
+              columnSpacing: 16,
+              headingRowColor: WidgetStateProperty.all(
+                isDark ? MadarColors.bgSurface : Colors.grey.shade100,
+              ),
+              columns: const [
+                DataColumn(label: Text('اسم الصنف / المنتج', style: TextStyle(fontFamily: 'NotoSansArabic', fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('الوحدة', style: TextStyle(fontFamily: 'NotoSansArabic', fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('إجمالي الكمية', style: TextStyle(fontFamily: 'NotoSansArabic', fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('متوسط السعر', style: TextStyle(fontFamily: 'NotoSansArabic', fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('إجمالي القيمة', style: TextStyle(fontFamily: 'NotoSansArabic', fontWeight: FontWeight.bold))),
+                DataColumn(label: Text('عدد التوريدات', style: TextStyle(fontFamily: 'NotoSansArabic', fontWeight: FontWeight.bold))),
+              ],
+              rows: _filteredProductData.map((item) {
+                return DataRow(
+                  cells: [
+                    DataCell(Text(
+                      item['product_name'] ?? '',
+                      style: const TextStyle(fontFamily: 'NotoSansArabic', fontWeight: FontWeight.bold),
+                    )),
+                    DataCell(Text(
+                      item['product_unit'] ?? '',
+                      style: const TextStyle(fontFamily: 'NotoSansArabic'),
+                    )),
+                    DataCell(Text(
+                      (item['total_quantity'] as double).toStringAsFixed(2),
+                      style: const TextStyle(fontFamily: 'NotoSansArabic', fontWeight: FontWeight.bold),
+                    )),
+                    DataCell(Text(
+                      '${(item['avg_unit_price'] as double).toStringAsFixed(2)} ج.م',
+                      style: const TextStyle(fontFamily: 'NotoSansArabic'),
+                    )),
+                    DataCell(Text(
+                      '${(item['total_amount'] as double).toStringAsFixed(2)} ج.م',
+                      style: const TextStyle(
+                        fontFamily: 'NotoSansArabic',
+                        fontWeight: FontWeight.bold,
+                        color: MadarColors.gold,
+                      ),
+                    )),
+                    DataCell(Text(
+                      '${item['purchase_count']}',
+                      style: const TextStyle(fontFamily: 'NotoSansArabic'),
+                    )),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.inventory_2_outlined, size: 56, color: Colors.grey),
+          const Gap(12),
+          Text(
+            _searchController.text.isNotEmpty
+                ? 'لا توجد منتجات مطابقة للبحث'
+                : 'لا توجد حركات مشتريات مسجلة في هذه الفترة',
+            style: TextStyle(
+              fontFamily: 'NotoSansArabic',
+              fontSize: 14,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KpiCard extends StatelessWidget {
+  final String title;
+  final double? value;
+  final String? valueText;
+  final String subtitle;
+  final Color color;
+  final IconData icon;
+  final bool isDark;
+
+  const _KpiCard({
+    required this.title,
+    this.value,
+    this.valueText,
+    required this.subtitle,
+    required this.color,
+    required this.icon,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final display = valueText ?? '${value?.toStringAsFixed(2) ?? '0.00'} ج.م';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? MadarColors.bgCard : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? MadarColors.border : Colors.grey.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const Gap(10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontSize: 11,
+                    color: isDark ? MadarColors.textSecondary : Colors.grey.shade600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const Gap(2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    display,
+                    style: TextStyle(
+                      fontFamily: 'NotoSansArabic',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: color,
+                    ),
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontFamily: 'NotoSansArabic',
+                    fontSize: 10,
+                    color: isDark ? MadarColors.textMuted : Colors.grey.shade500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

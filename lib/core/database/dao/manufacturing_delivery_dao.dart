@@ -1,11 +1,13 @@
 import 'dart:math';
 import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
+import 'package:pos_offline_desktop/core/database/tables/consumption_record.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_material_receipts_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/invoice_items_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/invoice_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/ledger_transactions_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_costing_tables.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_deliveries_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
@@ -47,6 +49,9 @@ class DeliveryItemInput {
   Products,
   BillOfMaterials,
   BomItems,
+  ConsumptionRecords,
+  ExtraMaterialApprovals,
+  ManufacturingCostSnapshots,
 ])
 class ManufacturingDeliveryDao extends DatabaseAccessor<AppDatabase>
     with _$ManufacturingDeliveryDaoMixin {
@@ -300,15 +305,14 @@ class ManufacturingDeliveryDao extends DatabaseAccessor<AppDatabase>
       final pricingMode = order.pricingMode ?? 'inclusive';
 
       // ── Calculate Service / Material Amounts ──
-      double grossServiceTotal = 0.0;
-      final invoiceLines = <InvoiceItemsCompanion>[];
+      double baseServiceTotal = 0.0;
 
       if (pricingMode == 'inclusive') {
         // Inclusive: delivered quantity * service unit price
-        grossServiceTotal = double.parse((deliveredQty * serviceUnitPrice).toStringAsFixed(2));
+        baseServiceTotal = double.parse((deliveredQty * serviceUnitPrice).toStringAsFixed(2));
       } else {
         // Separate: service fee on delivered goods + factory material costs for mixed orders
-        grossServiceTotal = double.parse((deliveredQty * serviceUnitPrice).toStringAsFixed(2));
+        baseServiceTotal = double.parse((deliveredQty * serviceUnitPrice).toStringAsFixed(2));
 
         if (type == 'mixed') {
           // Read factory BOM items and calculate factory materials consumed
@@ -324,11 +328,30 @@ class ManufacturingDeliveryDao extends DatabaseAccessor<AppDatabase>
               final unitPrice = factoryProd?.price ?? 0.0;
               final consumedQty = bi.quantityRequired * order.producedQuantity;
               final lineTotal = double.parse((consumedQty * unitPrice).toStringAsFixed(2));
-              grossServiceTotal += lineTotal;
+              baseServiceTotal += lineTotal;
             }
           }
         }
       }
+
+      // ── FEAT-039 D-04 / D-05 / D-08: Customer-approved extra factory materials ──
+      // Allowed in BOTH 'inclusive' and 'separate' ONLY when explicitly approved.
+      final approvedExtras = await (select(extraMaterialApprovals)
+            ..where(
+              (a) =>
+                  a.manufacturingOrderId.equals(orderId) &
+                  a.status.equals('approved'),
+            )
+            ..orderBy([(a) => OrderingTerm.asc(a.id)]))
+          .get();
+      final extraMaterialsTotal = double.parse(
+        approvedExtras
+            .fold<double>(0.0, (sum, a) => sum + a.approvedAmount)
+            .toStringAsFixed(2),
+      );
+      final grossServiceTotal = double.parse(
+        (baseServiceTotal + extraMaterialsTotal).toStringAsFixed(2),
+      );
 
       // ── Calculate Scrap Compensation Deductions ──
       final scraps = await (select(manufacturingScraps)..where((s) => s.manufacturingOrderId.equals(orderId))).get();
@@ -373,18 +396,35 @@ class ManufacturingDeliveryDao extends DatabaseAccessor<AppDatabase>
       );
 
       // ── Insert Invoice Items via db.invoiceDao (generates syncId and enqueues to sync_queue) ──
-      // 1. Service line
+      // 1. Service line (base service fee without double-counting extra materials)
       await db.invoiceDao.insertInvoiceItem(
         InvoiceItemsCompanion(
           invoiceId: Value(invoiceId),
           productId: Value(order.finishedProductId),
           quantity: Value(deliveredQty.round() > 0 ? deliveredQty.round() : 1),
           price: Value((deliveredQty > 0)
-              ? double.parse((grossServiceTotal / (deliveredQty.round() > 0 ? deliveredQty.round() : 1)).toStringAsFixed(2))
-              : grossServiceTotal),
+              ? double.parse((baseServiceTotal / (deliveredQty.round() > 0 ? deliveredQty.round() : 1)).toStringAsFixed(2))
+              : baseServiceTotal),
           discount: Value(totalCompensation),
         ),
       );
+
+      // 2. Approved extra factory material lines (D-04, D-05, D-08)
+      for (final extra in approvedExtras) {
+        final extraQtyInt = extra.quantity.round() > 0 ? extra.quantity.round() : 1;
+        final unitExtraPrice = double.parse(
+          (extra.approvedAmount / extraQtyInt).toStringAsFixed(2),
+        );
+        await db.invoiceDao.insertInvoiceItem(
+          InvoiceItemsCompanion(
+            invoiceId: Value(invoiceId),
+            productId: Value(extra.productId),
+            quantity: Value(extraQtyInt),
+            price: Value(unitExtraPrice),
+            discount: const Value(0.0),
+          ),
+        );
+      }
 
       // ── Insert Customer Ledger Transaction ──
       // Matches exact fields and format used in InvoiceService.createInvoice:
@@ -422,6 +462,16 @@ class ManufacturingDeliveryDao extends DatabaseAccessor<AppDatabase>
           updatedAt: Value(now),
         ),
       );
+
+      // FEAT-039 Phase 3: Freeze internal cost & margin snapshot if not already frozen.
+      final existingSnapshot =
+          await db.manufacturingCostingDao.getLatestSnapshot(orderId);
+      if (existingSnapshot == null) {
+        await db.manufacturingCostingDao.freezeCostSnapshot(
+          orderId,
+          notes: 'Auto-frozen on invoice $canonicalNumber',
+        );
+      }
 
       return (select(invoices)..where((i) => i.id.equals(invoiceId))).getSingle();
     });

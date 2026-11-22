@@ -55,7 +55,7 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
       appBar: AppBar(
         title: Text('مرتبات: ${widget.staff.name}'),
         actions: [
-          ElevatedButton.icon(
+          IconButton(
             onPressed: () {
               final latestPeriod = _payrollHistory.isNotEmpty
                   ? _payrollHistory.first.payrollPeriod
@@ -69,13 +69,8 @@ class _PayrollPageState extends ConsumerState<PayrollPage> {
                 ),
               );
             },
-            icon: const Icon(Icons.receipt_long, size: 18),
-            label: const Text('طباعة القسائم / كشف الصرف'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-            ),
+            icon: const Icon(Icons.receipt_long),
+            tooltip: 'طباعة القسائم / كشف الصرف',
           ),
           const SizedBox(width: 8),
         ],

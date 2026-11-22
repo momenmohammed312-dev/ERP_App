@@ -167,6 +167,7 @@ class User {
   /// Convert User to JSON
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'username': username,
       'passwordHash': passwordHash,
       'fullName': fullName,
@@ -188,6 +189,7 @@ class User {
   /// Create User from JSON
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
+      id: json['id'] as int?,
       username: json['username'],
       passwordHash: json['passwordHash'],
       fullName: json['fullName'],

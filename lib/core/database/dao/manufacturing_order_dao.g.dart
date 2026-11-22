@@ -22,6 +22,15 @@ mixin _$ManufacturingOrderDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.customerStockBalances;
   $CustomerStockMovementsTable get customerStockMovements =>
       attachedDatabase.customerStockMovements;
+  $ManufacturingStagesTable get manufacturingStages =>
+      attachedDatabase.manufacturingStages;
+  $ConsumptionRecordsTable get consumptionRecords =>
+      attachedDatabase.consumptionRecords;
+  $ProductVariantsTable get productVariants => attachedDatabase.productVariants;
+  $ManufacturingStageOutputsTable get manufacturingStageOutputs =>
+      attachedDatabase.manufacturingStageOutputs;
+  $ManufacturingScrapsTable get manufacturingScraps =>
+      attachedDatabase.manufacturingScraps;
   ManufacturingOrderDaoManager get managers =>
       ManufacturingOrderDaoManager(this);
 }
@@ -74,5 +83,30 @@ class ManufacturingOrderDaoManager {
       $$CustomerStockMovementsTableTableManager(
         _db.attachedDatabase,
         _db.customerStockMovements,
+      );
+  $$ManufacturingStagesTableTableManager get manufacturingStages =>
+      $$ManufacturingStagesTableTableManager(
+        _db.attachedDatabase,
+        _db.manufacturingStages,
+      );
+  $$ConsumptionRecordsTableTableManager get consumptionRecords =>
+      $$ConsumptionRecordsTableTableManager(
+        _db.attachedDatabase,
+        _db.consumptionRecords,
+      );
+  $$ProductVariantsTableTableManager get productVariants =>
+      $$ProductVariantsTableTableManager(
+        _db.attachedDatabase,
+        _db.productVariants,
+      );
+  $$ManufacturingStageOutputsTableTableManager get manufacturingStageOutputs =>
+      $$ManufacturingStageOutputsTableTableManager(
+        _db.attachedDatabase,
+        _db.manufacturingStageOutputs,
+      );
+  $$ManufacturingScrapsTableTableManager get manufacturingScraps =>
+      $$ManufacturingScrapsTableTableManager(
+        _db.attachedDatabase,
+        _db.manufacturingScraps,
       );
 }

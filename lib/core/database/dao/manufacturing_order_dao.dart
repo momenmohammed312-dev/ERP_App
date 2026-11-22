@@ -3,11 +3,15 @@ import 'package:drift/drift.dart';
 import 'package:pos_offline_desktop/core/database/app_database.dart';
 import 'package:pos_offline_desktop/services/license_entitlement.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_material_receipts_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/consumption_record.dart';
 import 'package:pos_offline_desktop/core/database/tables/customer_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/inventory_movements_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_cost_components_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_orders_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/manufacturing_tables.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_stages_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/manufacturing_scrap_table.dart';
+import 'package:pos_offline_desktop/core/database/tables/product_variants_table.dart';
 import 'package:pos_offline_desktop/core/database/tables/product_table.dart';
 
 part 'manufacturing_order_dao.g.dart';
@@ -44,7 +48,12 @@ bool isCustomerOwnedBomLine({
     Products,
     CustomerStockBalances,
     CustomerStockMovements,
+    ConsumptionRecords,
     Customers,
+    ManufacturingStages,
+    ManufacturingStageOutputs,
+    ManufacturingScraps,
+    ProductVariants,
   ],
 )
 class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
@@ -98,7 +107,10 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
   static void _requireLicense(String operation) => LicenseEntitlement.instance
       .require('manufacturing', operation: operation);
 
-  Future<int> createOrder(ManufacturingOrdersCompanion entry) async {
+  Future<int> createOrder(
+    ManufacturingOrdersCompanion entry, {
+    String? initialStageName,
+  }) async {
     _requireLicense('إنشاء أمر تصنيع');
     // Basic validation
     if (!entry.bomId.present || entry.bomId.value == 0) {
@@ -111,20 +123,59 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
       throw ArgumentError('plannedQuantity must be > 0');
     }
     // Auto-generate orderNumber if not provided
-    final companion = entry.orderNumber.present
+    var companion = entry.orderNumber.present
         ? entry
         : entry.copyWith(
             orderNumber: Value('MO-${DateTime.now().millisecondsSinceEpoch}'),
           );
 
-    return into(manufacturingOrders).insert(companion);
+    if (initialStageName != null && initialStageName.trim().isNotEmpty) {
+      companion = companion.copyWith(
+        currentStageName: Value(initialStageName.trim()),
+      );
+    }
+
+    return transaction(() async {
+      final orderId = await into(manufacturingOrders).insert(companion);
+      if (initialStageName != null && initialStageName.trim().isNotEmpty) {
+        await into(db.manufacturingStages).insert(
+          ManufacturingStagesCompanion.insert(
+            manufacturingOrderId: orderId,
+            stageName: initialStageName.trim(),
+            stageOrder: const Value(1),
+            status: const Value(ManufacturingStageStatus.inProgress),
+            inputQuantity: Value(planned),
+            startedAt: Value(DateTime.now()),
+          ),
+        );
+      }
+      return orderId;
+    });
   }
 
   // ── Update (header fields only, not status via this path) ──
 
-  Future<bool> updateOrder(ManufacturingOrder order) {
+  Future<bool> updateOrder(ManufacturingOrder order) async {
     _requireLicense('تعديل أمر تصنيع');
-    return update(manufacturingOrders).replace(order);
+    return transaction(() async {
+      final old = await getById(order.id);
+      final ok = await update(manufacturingOrders).replace(order);
+      if (ok && old != null && old.plannedQuantity != order.plannedQuantity) {
+        final stages = await db.manufacturingStageDao.getStagesForOrder(order.id);
+        if (stages.isNotEmpty) {
+          final firstStage = stages.first;
+          if (firstStage.outputQuantity == 0.0) {
+            await (update(db.manufacturingStages)..where((s) => s.id.equals(firstStage.id))).write(
+              ManufacturingStagesCompanion(
+                inputQuantity: Value(order.plannedQuantity),
+                updatedAt: Value(DateTime.now()),
+              ),
+            );
+          }
+        }
+      }
+      return ok;
+    });
   }
 
   // ── Status transitions ──
@@ -156,6 +207,8 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
     double? pieceUnitValue,
     double? serviceUnitPrice,
     String? notes,
+    String? initialStageName,
+    double? targetMarginPercent,
   }) async {
     _requireLicense('إنشاء أمر عمل تصنيع');
     if (bomId == null && (inputProductId == null || inputQuantity == null)) {
@@ -175,7 +228,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         throw ArgumentError('finished product cannot be resolved');
       }
 
-      return into(manufacturingOrders).insert(
+      final orderId = await into(manufacturingOrders).insert(
         ManufacturingOrdersCompanion.insert(
           orderNumber: orderNumber,
           orderType: Value(orderType),
@@ -187,6 +240,12 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           pricingMode: pricingMode == null
               ? const Value.absent()
               : Value(pricingMode),
+          targetMarginPercent: targetMarginPercent == null
+              ? const Value.absent()
+              : Value(targetMarginPercent),
+          currentStageName: (initialStageName != null && initialStageName.trim().isNotEmpty)
+              ? Value(initialStageName.trim())
+              : const Value.absent(),
           scrapPolicy: scrapPolicy == null
               ? const Value.absent()
               : Value(scrapPolicy),
@@ -203,6 +262,19 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           inputSize: Value(inputSize),
         ),
       );
+      if (initialStageName != null && initialStageName.trim().isNotEmpty) {
+        await into(db.manufacturingStages).insert(
+          ManufacturingStagesCompanion.insert(
+            manufacturingOrderId: orderId,
+            stageName: initialStageName.trim(),
+            stageOrder: const Value(1),
+            status: const Value(ManufacturingStageStatus.inProgress),
+            inputQuantity: Value(plannedQuantity ?? inputQuantity ?? 0),
+            startedAt: Value(DateTime.now()),
+          ),
+        );
+      }
+      return orderId;
     });
   }
 
@@ -421,6 +493,18 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           'Produced quantity rounds to 0 — increase quantity',
         );
 
+      // FEAT-039 — Order completion gate (plan §6.3 A2, correction):
+      // produced ≤ planned (for_others); JW-style (inputQuantity set): ≤ inputQuantity.
+      if (mo.orderType == 'for_others' || mo.inputQuantity != null) {
+        final productionCap = mo.inputQuantity ?? mo.plannedQuantity;
+        if (producedInt > productionCap + 0.001) {
+          throw StateError(
+            'Order completion gate (FEAT-039): produced $producedInt exceeds '
+            'planned $productionCap for ${mo.orderNumber}',
+          );
+        }
+      }
+
       final bomItems =
           await (select(db.bomItems)
                 ..where((i) => i.bomId.equals(bom.id))
@@ -552,19 +636,61 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         );
       }
 
-      // 6. Increment finished product + output movement
+      // 6. Increment finished product (or variants) + output movement
       final finishedProduct = await (select(
         db.products,
       )..where((p) => p.id.equals(mo.finishedProductId))).getSingleOrNull();
       if (finishedProduct == null)
         throw StateError('Finished product #${mo.finishedProductId} not found');
       final prevFinished = finishedProduct.quantity;
-      final nextFinished = prevFinished + producedInt;
-      await (update(
-        db.products,
-      )..where((t) => t.id.equals(finishedProduct.id))).write(
-        ProductsCompanion(quantity: Value(nextFinished), updatedAt: Value(now)),
-      );
+
+      final stageOutputs = await (select(db.manufacturingStageOutputs)
+            ..where((o) =>
+                o.manufacturingOrderId.equals(orderId) & o.variantId.isNotNull()))
+          .get();
+
+      int nextFinished;
+      if (stageOutputs.isNotEmpty) {
+        final Map<int, double> variantProduced = {};
+        for (final out in stageOutputs) {
+          if (out.variantId != null && out.producedQuantity > 0) {
+            variantProduced[out.variantId!] =
+                (variantProduced[out.variantId!] ?? 0.0) + out.producedQuantity;
+          }
+        }
+        for (final entry in variantProduced.entries) {
+          final varRow = await (select(db.productVariants)
+                ..where((v) => v.id.equals(entry.key)))
+              .getSingleOrNull();
+          if (varRow != null) {
+            final newVarQty = varRow.quantity + entry.value.round();
+            await (update(db.productVariants)
+                  ..where((v) => v.id.equals(entry.key)))
+                .write(
+              ProductVariantsCompanion(
+                quantity: Value(newVarQty),
+                updatedAt: Value(now),
+              ),
+            );
+          }
+        }
+        final totalVariantsQty = await db.productVariantDao
+            .getTotalQuantityByProduct(finishedProduct.id);
+        nextFinished = totalVariantsQty;
+        await (update(
+          db.products,
+        )..where((t) => t.id.equals(finishedProduct.id))).write(
+          ProductsCompanion(quantity: Value(nextFinished), updatedAt: Value(now)),
+        );
+      } else {
+        nextFinished = prevFinished + producedInt;
+        await (update(
+          db.products,
+        )..where((t) => t.id.equals(finishedProduct.id))).write(
+          ProductsCompanion(quantity: Value(nextFinished), updatedAt: Value(now)),
+        );
+      }
+
       await into(db.inventoryMovements).insert(
         InventoryMovementsCompanion.insert(
           productId: finishedProduct.id,
@@ -583,6 +709,47 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           updatedAt: now,
         ),
       );
+
+      // 6b. Recover sellable scrap (second-choice / remnants) into inventory
+      final sellableScraps = await (select(db.manufacturingScraps)
+            ..where((s) =>
+                s.manufacturingOrderId.equals(orderId) &
+                s.isSellable.equals(true) &
+                s.scrapProductId.isNotNull()))
+          .get();
+      for (final sc in sellableScraps) {
+        final scProduct = await (select(db.products)
+              ..where((p) => p.id.equals(sc.scrapProductId!)))
+            .getSingleOrNull();
+        if (scProduct != null) {
+          final scQty = sc.quantity.round();
+          final prevSc = scProduct.quantity;
+          final nextSc = prevSc + scQty;
+          await (update(db.products)..where((p) => p.id.equals(scProduct.id)))
+              .write(
+            ProductsCompanion(quantity: Value(nextSc), updatedAt: Value(now)),
+          );
+          await into(db.inventoryMovements).insert(
+            InventoryMovementsCompanion.insert(
+              productId: scProduct.id,
+              movementType: 'manufacturing_scrap_recovery',
+              quantity: scQty,
+              unitCost: sc.estimatedSellPrice ?? 0.0,
+              totalValue: scQty * (sc.estimatedSellPrice ?? 0.0),
+              movementDate: now,
+              reference: mo.orderNumber,
+              referenceType: 'manufacturing_scrap_recovery',
+              previousQuantity: prevSc,
+              newQuantity: nextSc,
+              performedBy: Value(performedBy),
+              notes: Value(
+                  'استرداد هالك قابل للبيع (فرز ثاني) من أمر ${mo.orderNumber}'),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+        }
+      }
 
       // 7. Freeze computedAmount on cost components
       for (var i = 0; i < components.length; i++) {
@@ -688,6 +855,15 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         final effectiveScrap = scrapQuantity ?? 0.0;
         final effectiveUser = completedByUserId ?? performedBy ?? 'system';
 
+        // FEAT-039 — Order completion gate (plan §6.3 A2): produced ≤ inputQuantity (JW-style).
+        final productionCap = mo.inputQuantity ?? mo.plannedQuantity;
+        if (effectiveGood > productionCap + 0.001) {
+          throw StateError(
+            'Order completion gate (FEAT-039): produced $effectiveGood exceeds '
+            'planned $productionCap for ${mo.orderNumber}',
+          );
+        }
+
         final bal =
             await (select(customerStockBalances)..where(
                   (t) =>
@@ -718,6 +894,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           ]);
         }
 
+        final now = DateTime.now();
         final newOnHand = bal.quantityOnHand - mo.inputQuantity!;
         final newAlloc = bal.quantityAllocated - mo.inputQuantity!;
         await (update(
@@ -726,10 +903,11 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           CustomerStockBalancesCompanion(
             quantityOnHand: Value(newOnHand),
             quantityAllocated: Value(newAlloc < 0 ? 0 : newAlloc),
+            updatedAt: Value(now),
           ),
         );
 
-        await into(customerStockMovements).insert(
+        final custMoveId = await into(customerStockMovements).insert(
           CustomerStockMovementsCompanion.insert(
             customerId: mo.customerId!,
             productId: mo.inputProductId!,
@@ -743,6 +921,25 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
               'MO completion: $effectiveGood good, $effectiveScrap scrap',
             ),
             performedBy: Value(effectiveUser),
+            createdAt: Value(now),
+          ),
+        );
+
+        final inputProd = await (select(
+          products,
+        )..where((p) => p.id.equals(mo.inputProductId!))).getSingleOrNull();
+        // FEAT-039 D-03: analytical consumption linked to customer movement.
+        await into(consumptionRecords).insert(
+          ConsumptionRecordsCompanion.insert(
+            manufacturingOrderId: mo.id,
+            materialProductId: mo.inputProductId!,
+            ownershipType: 'customer_owned',
+            unit: Value(inputProd?.unit),
+            plannedQty: Value(mo.inputQuantity!),
+            actualQty: Value(mo.inputQuantity!),
+            unitCostSnapshot: const Value(0.0),
+            customerStockMovementId: Value(custMoveId),
+            performedAt: Value(now),
           ),
         );
 
@@ -752,8 +949,9 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           ManufacturingOrdersCompanion(
             status: const Value(ManufacturingOrderStatus.completed),
             producedQuantity: Value(effectiveGood),
-            completedAt: Value(DateTime.now()),
-            updatedAt: Value(DateTime.now()),
+            completedAt: Value(now),
+            productionCompletedAt: Value(now),
+            updatedAt: Value(now),
           ),
         );
 
@@ -813,6 +1011,15 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         throw ArgumentError(
           'Produced quantity rounds to 0 — increase quantity',
         );
+
+      // FEAT-039 — Order completion gate (plan §6.3 A2): produced ≤ planned (for_others).
+      if (orderType == 'for_others' &&
+          producedInt > mo.plannedQuantity + 0.001) {
+        throw StateError(
+          'Order completion gate (FEAT-039): produced $producedInt exceeds '
+          'planned ${mo.plannedQuantity} for ${mo.orderNumber}',
+        );
+      }
 
       final bomItemsList =
           await (select(bomItems)
@@ -944,7 +1151,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           ),
         );
 
-        await into(customerStockMovements).insert(
+        final custMoveId = await into(customerStockMovements).insert(
           CustomerStockMovementsCompanion.insert(
             customerId: customerId,
             productId: cp.product.id,
@@ -955,6 +1162,22 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
             notes: Value('صرف للتشغيل بأمر تصنيع ${mo.orderNumber}'),
             performedBy: Value(performedBy),
             createdAt: Value(now),
+          ),
+        );
+
+        // FEAT-039 D-03: customer-owned materials always have factory cost 0.0.
+        await into(consumptionRecords).insert(
+          ConsumptionRecordsCompanion.insert(
+            manufacturingOrderId: mo.id,
+            bomItemId: Value(cp.bomItem.id),
+            materialProductId: cp.product.id,
+            ownershipType: 'customer_owned',
+            unit: Value(cp.bomItem.unit ?? cp.product.unit),
+            plannedQty: Value(cp.requiredQty),
+            actualQty: Value(cp.requiredQty),
+            unitCostSnapshot: const Value(0.0),
+            customerStockMovementId: Value(custMoveId),
+            performedAt: Value(now),
           ),
         );
       }
@@ -990,7 +1213,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
               updatedAt: Value(now),
             ),
           );
-          await into(customerStockMovements).insert(
+          final custMoveId = await into(customerStockMovements).insert(
             CustomerStockMovementsCompanion.insert(
               customerId: customerId,
               productId: mo.finishedProductId,
@@ -1005,6 +1228,22 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
               createdAt: Value(now),
             ),
           );
+          final finProd = await (select(
+            products,
+          )..where((p) => p.id.equals(mo.finishedProductId))).getSingleOrNull();
+          await into(consumptionRecords).insert(
+            ConsumptionRecordsCompanion.insert(
+              manufacturingOrderId: mo.id,
+              materialProductId: mo.finishedProductId,
+              ownershipType: 'customer_owned',
+              unit: Value(finProd?.unit),
+              plannedQty: Value(issueQty),
+              actualQty: Value(issueQty),
+              unitCostSnapshot: const Value(0.0),
+              customerStockMovementId: Value(custMoveId),
+              performedAt: Value(now),
+            ),
+          );
         }
       }
 
@@ -1017,7 +1256,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
         )..where((t) => t.id.equals(fp.product.id))).write(
           ProductsCompanion(quantity: Value(next), updatedAt: Value(now)),
         );
-        await into(inventoryMovements).insert(
+        final invMoveId = await into(inventoryMovements).insert(
           InventoryMovementsCompanion.insert(
             productId: fp.product.id,
             movementType: 'manufacturing_consumption',
@@ -1037,6 +1276,20 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
             updatedAt: now,
           ),
         );
+        await into(consumptionRecords).insert(
+          ConsumptionRecordsCompanion.insert(
+            manufacturingOrderId: mo.id,
+            bomItemId: Value(fp.bomItem.id),
+            materialProductId: fp.product.id,
+            ownershipType: 'factory_owned',
+            unit: Value(fp.bomItem.unit ?? fp.product.unit),
+            plannedQty: Value(fp.requiredInt.toDouble()),
+            actualQty: Value(fp.requiredInt.toDouble()),
+            unitCostSnapshot: Value(fp.unitCost),
+            stockMovementId: Value(invMoveId),
+            performedAt: Value(now),
+          ),
+        );
       }
 
       // 6. Finished Product: NEVER increment factory stock for manufacturing-for-others
@@ -1054,6 +1307,7 @@ class ManufacturingOrderDao extends DatabaseAccessor<AppDatabase>
           status: const Value(ManufacturingOrderStatus.completed),
           producedQuantity: Value(effectiveProduced.toDouble()),
           completedAt: Value(now),
+          productionCompletedAt: Value(now),
           updatedAt: Value(now),
         ),
       );
